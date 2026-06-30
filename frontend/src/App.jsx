@@ -5,6 +5,9 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import RoomsPage from './pages/RoomsPage'; // Add this line
 import GuestsPage from './pages/GuestsPage'; // Add this line
+import ReservationsPage from './pages/ReservationsPage'; // Add this line
+import PaymentsPage from './pages/PaymentsPage'; // Add this line
+import ReportsPage from './pages/ReportsPage';
 
 function App() {
   return (
@@ -26,9 +29,9 @@ function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="rooms" element={<RoomsPage />} />
           <Route path="guests" element={<GuestsPage />} />
-          <Route path="reservations" element={<div className="text-2xl font-bold">Reservations Page (Coming in Phase 5)</div>} />
-          <Route path="payments" element={<div className="text-2xl font-bold">Payments Page (Coming in Phase 6)</div>} />
-          <Route path="reports" element={<div className="text-2xl font-bold">Reports Page (Coming in Phase 6)</div>} />
+          <Route path="reservations" element={<ReservationsPage />} />
+          <Route path="payments" element={<PaymentsPage />} />
+          <Route path="reports" element={<ReportsPage />} />
         </Route>
         
         {/* Fallback */}

@@ -10,3 +10,8 @@ export const getRooms = (propertyId, filters = {}) => {
 export const updateRoomStatus = (roomId, statusData) => {
   return api.patch(`/rooms/${roomId}/status`, statusData);
 };
+
+// Fetch rooms available for specific dates
+export const getAvailableRooms = (checkInDate, checkOutDate, propertyId) => {
+  return api.get(`/rooms/available?checkInDate=${checkInDate}&checkOutDate=${checkOutDate}&propertyId=${propertyId}`);
+};
