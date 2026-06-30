@@ -19,3 +19,23 @@ export const checkOutReservation = (id) => {
 export const cancelReservation = (id) => {
   return api.delete(`/reservations/${id}`);
 };
+
+// Get full details of a single reservation
+export const getReservationById = (id) => {
+  return api.get(`/reservations/${id}`);
+};
+
+// Get financial and stay stats for a specific reservation
+export const getReservationStats = (id) => {
+  return api.get(`/reservations/${id}/stats`);
+};
+
+// Update reservation details (e.g., notes, source)
+export const updateReservation = (id, data) => {
+  return api.put(`/reservations/${id}`, data);
+};
+
+// Get reservations overlapping a specific date range (For Calendar)
+export const getReservationsByDateRange = (fromDate, toDate, propertyId) => {
+  return api.get('/reservations/date-range', { params: { fromDate, toDate, propertyId } });
+};

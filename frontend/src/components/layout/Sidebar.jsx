@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { 
-  LayoutDashboard, BedDouble, Users, CalendarDays, CreditCard, BarChart3, 
+  LayoutDashboard, BedDouble, Users, CalendarDays, Calendar , CreditCard, BarChart3, 
   LogOut, Settings, Layers, Tags, Building2 
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 const operationItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/reservations', icon: CalendarDays, label: 'Reservations' },
+  { to: '/calendar', icon: Calendar, label: 'Calendar View' },
   { to: '/rooms', icon: BedDouble, label: 'Rooms & Inventory' },
   { to: '/guests', icon: Users, label: 'Guests' },
   { to: '/payments', icon: CreditCard, label: 'Payments' },

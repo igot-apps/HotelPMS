@@ -8,10 +8,11 @@ import GuestsPage from './pages/GuestsPage';
 import ReservationsPage from './pages/ReservationsPage';
 import PaymentsPage from './pages/PaymentsPage';
 import ReportsPage from './pages/ReportsPage';
-import RoomTypesPage from './pages/RoomTypesPage'; // Add this line
-import RatePlansPage from './pages/RatePlansPage'; // Add this line
-import PropertiesPage from './pages/PropertiesPage'; // Add this line
-
+import RoomTypesPage from './pages/RoomTypesPage';
+import RatePlansPage from './pages/RatePlansPage';
+import PropertiesPage from './pages/PropertiesPage';
+import ReservationDetailsPage from './pages/ReservationDetailsPage';
+import CalendarPage from './pages/CalendarPage';
 
 function App() {
   return (
@@ -29,21 +30,29 @@ function App() {
             </ProtectedRoute>
           }
         >
+          {/* Default Route */}
           <Route index element={<Navigate to="/dashboard" replace />} />
+          
+          {/* Core Operations */}
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="rooms" element={<RoomsPage />} />
           <Route path="guests" element={<GuestsPage />} />
           <Route path="reservations" element={<ReservationsPage />} />
+          
+          {/* FIX: Reservation Details is now correctly nested as a child route */}
+          <Route path="reservations/:id" element={<ReservationDetailsPage />} />
+          
           <Route path="payments" element={<PaymentsPage />} />
           <Route path="reports" element={<ReportsPage />} />
+          <Route path="calendar" element={<CalendarPage />} />        
           
-          {/* NEW: Routes for the Configuration Pages */}
+          {/* Configuration Pages */}
           <Route path="room-types" element={<RoomTypesPage />} />
           <Route path="rate-plans" element={<RatePlansPage />} />
           <Route path="properties" element={<PropertiesPage />} />
         </Route>
         
-        {/* Fallback */}
+        {/* Fallback Route */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>

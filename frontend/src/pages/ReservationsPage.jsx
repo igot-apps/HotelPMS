@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getReservations, createReservation, checkInReservation, checkOutReservation, cancelReservation } from '../api/reservations';
 import { useAuthStore } from '../store/authStore';
 import ReservationModal from '../components/reservations/ReservationModal';
-import { Search, Plus, CalendarDays, AlertCircle, LogIn, LogOut, XCircle, Filter } from 'lucide-react';
+import { Search, Plus, CalendarDays, AlertCircle, LogIn, LogOut, XCircle, Filter,ChevronLeft, ChevronRight, Eye } from 'lucide-react';
+
 
 export default function ReservationsPage() {
   const user = useAuthStore((state) => state.user);
@@ -191,7 +193,16 @@ export default function ReservationsPage() {
                         {parseFloat(res.totalAmount || 0).toFixed(2)} GHS
                       </td>
                       <td className="px-6 py-4 text-right">
-                        {actions || <span className="text-xs text-text-muted">-</span>}
+                        <div className="flex items-center justify-end gap-2">
+                          {actions}
+                          <Link 
+                            to={`/reservations/${res.reservationId}`} 
+                            className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" 
+                            title="View Details"
+                          >
+                            <Eye size={16} />
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   );
