@@ -9,32 +9,9 @@ import ReservationsPage from './pages/ReservationsPage';
 import PaymentsPage from './pages/PaymentsPage';
 import ReportsPage from './pages/ReportsPage';
 import RoomTypesPage from './pages/RoomTypesPage'; // Add this line
+import RatePlansPage from './pages/RatePlansPage'; // Add this line
+import PropertiesPage from './pages/PropertiesPage'; // Add this line
 
-// ==========================================
-// NEW: Temporary Placeholder Components
-// (We will build the real pages in Phase 8)
-// ==========================================
-// const RoomTypesPage = () => (
-//   <div className="bg-surface p-8 rounded-xl border border-border shadow-sm">
-//     <h1 className="text-2xl font-bold text-text">Room Types</h1>
-//     <p className="text-text-muted mt-2">This page is coming in Phase 8. Here you will manage categories like "Standard", "Deluxe", and "Suite".</p>
-//   </div>
-// );
-
-const RatePlansPage = () => (
-  <div className="bg-surface p-8 rounded-xl border border-border shadow-sm">
-    <h1 className="text-2xl font-bold text-text">Rate Plans</h1>
-    <p className="text-text-muted mt-2">This page is coming in Phase 8. Here you will manage pricing rules like "Weekend Special" or "Corporate Discount".</p>
-  </div>
-);
-
-const PropertiesPage = () => (
-  <div className="bg-surface p-8 rounded-xl border border-border shadow-sm">
-    <h1 className="text-2xl font-bold text-text">Properties</h1>
-    <p className="text-text-muted mt-2">This page is coming in Phase 8. Here you will manage different hotel locations.</p>
-  </div>
-);
-// ==========================================
 
 function App() {
   return (
