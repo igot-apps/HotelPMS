@@ -1,0 +1,300 @@
+# Hotel PMS Backend Setup Progress Summary (Updated)
+
+## Project Goal
+
+I am building a **multi-tenant Hotel Property Management System (PMS) backend** using:
+
+* Node.js
+* TypeScript
+* Express
+* PostgreSQL
+* Prisma ORM
+* Docker
+* pgAdmin
+
+The system will eventually support:
+
+* Multiple hotels (multi-tenant architecture)
+* Reservations and bookings
+* Room management
+* Guest management
+* Check-in / check-out workflows
+* Staff and role management
+* Reporting dashboards
+* Online booking support
+
+At this stage, the focus is on **backend infrastructure setup and tooling stability** before implementing business logic.
+
+---
+
+## Backend Structure
+
+I built an Express + TypeScript API with:
+
+* Express server setup
+* Helmet security middleware
+* CORS enabled
+* Morgan logging (dev only)
+* dotenv configuration
+* Health check endpoint (`/health`)
+* Root endpoint (`/`)
+* Global error handling middleware
+
+### Server Start Logic
+
+The server uses:
+
+```ts
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
+    console.log(`📊 Environment: ${process.env.NODE_ENV}`);
+  });
+}
+```
+
+This ensures:
+
+* The server only starts when the file is executed directly
+* Prevents auto-start when imported in tests or other modules
+
+---
+
+## Docker Setup (Completed)
+
+### Issues Faced
+
+Initially, Docker was not installed:
+
+```bash
+docker-compose up -d → command not found
+```
+
+### Steps Completed
+
+1. Installed Docker Desktop
+2. Installed WSL2 (Ubuntu)
+3. Created Linux user in WSL
+4. Enabled Docker Engine
+5. Enabled WSL integration
+
+Docker now runs successfully:
+
+```bash
+docker --version → Docker version 29.5.3
+```
+
+---
+
+## Docker Compose Configuration
+
+Services configured:
+
+### PostgreSQL
+
+* Image: postgres:15-alpine
+* Database: hotel_pms
+* User: postgres / postgres
+* Port: 5432
+
+### pgAdmin
+
+* Email: [admin@hotelpms.com](mailto:admin@hotelpms.com)
+* Password: admin
+* Port: 5050
+
+### Status
+
+Containers successfully started:
+
+```text
+✔ hotel_pms_db started
+✔ hotel_pms_pgadmin started
+```
+
+---
+
+## WSL (Ubuntu) Setup
+
+WSL2 installed automatically by Docker Desktop.
+
+Created Linux user:
+
+```
+Username: legend
+Password: (user-defined)
+```
+
+This account is only used for Linux terminal operations and is NOT related to:
+
+* PostgreSQL credentials
+* pgAdmin credentials
+* Docker credentials
+
+---
+
+## Prisma Setup
+
+### Migration Status
+
+```bash
+npx prisma migrate dev --name init
+```
+
+Result:
+
+* Database connection successful
+* PostgreSQL running inside Docker
+* Schema already in sync
+* No migrations required
+
+Prisma Client generated successfully:
+
+```text
+Generated Prisma Client (v6.19.3)
+```
+
+---
+
+## Prisma Version Decision
+
+Installed:
+
+* Prisma CLI: 6.19.3
+
+Update notice:
+
+* Prisma 7 available but not used due to breaking changes
+
+Decision:
+
+* Stay on Prisma 6 for stability and compatibility with existing tutorials
+
+---
+
+## Critical Error Encountered (TypeScript)
+
+When running:
+
+```bash
+npm run dev
+```
+
+The server crashed with TypeScript error:
+
+### Error Type
+
+```
+TS6133: 'req' is declared but its value is never read
+```
+
+### Affected files
+
+* `/health` route
+* `/` root route
+* error middleware (`app.use`)
+
+---
+
+## Fix Applied
+
+TypeScript strict mode required unused parameters to be handled properly.
+
+### Solution
+
+Prefixed unused parameters with `_`:
+
+### Before
+
+```ts
+(req: Request, res: Response)
+```
+
+### After
+
+```ts
+(_req: Request, res: Response)
+```
+
+### Error middleware fix:
+
+```ts
+(err: any, _req: Request, res: Response, _next: any)
+```
+
+---
+
+## Result After Fix
+
+After applying the fix:
+
+```bash
+npm run dev
+```
+
+Expected behavior:
+
+* Server compiles successfully
+* Nodemon starts Express app
+* No TypeScript errors
+* API runs on:
+
+```
+http://localhost:3000
+```
+
+---
+
+## Current Project Status
+
+### Completed
+
+* Docker installed and running
+* WSL2 configured
+* PostgreSQL container running
+* pgAdmin running
+* Express TypeScript API created
+* Prisma connected to PostgreSQL
+* Prisma Client generated
+* First migration executed successfully
+* TypeScript compilation errors fixed
+
+---
+
+### Current Blockers
+
+None
+
+---
+
+## Next Planned Steps
+
+1. Test API endpoints:
+
+   * `/health`
+   * `/`
+
+2. Design database schema:
+
+   * Users
+   * Hotels (multi-tenant core)
+   * Rooms
+   * Reservations
+
+3. Implement authentication system
+
+4. Build multi-tenant architecture layer
+
+5. Add business logic modules (rooms, bookings, guests)
+
+---
+
+## Overall Status
+
+The backend foundation is now:
+
+✔ Stable
+✔ Dockerized
+✔ Database connected
+✔ TypeScript working
+✔ Ready for feature development

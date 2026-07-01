@@ -1,0 +1,334 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum RoomStatus {
+  AVAILABLE
+  OCCUPIED
+  MAINTENANCE
+  CLEANING
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  CHECK_IN
+  CHECK_OUT
+}
+
+// ==========================================
+// CORE MULTI-TENANCY & AUTH
+// ==========================================
+
+model Tenant {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  name      String
+  address   String?
+  phone     String?
+  email     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  properties   Property[]
+  users        User[]
+  roles        Role[]
+  guests       Guest[]
+  reservations Reservation[]
+  auditLogs    AuditLog[]
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  tenantId     Int
+  propertyId   Int?     // Null if user works across all properties for the tenant
+  roleId       Int
+  username     String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  email        String   @unique
+  phone        String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  property     Property?    @relation(fields: [propertyId], references: [id])
+  role         Role         @relation(fields: [roleId], references: [id])
+  reservations Reservation[] // Reservations handled by this staff
+  auditLogs    AuditLog[]
+
+  @@index([tenantId])
+  @@index([propertyId])
+}
+
+model Role {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant      Tenant     @relation(fields: [tenantId], references: [id])
+  users       User[]
+  permissions RolePermission[]
+
+  @@unique([tenantId, name])
+}
+
+model Permission {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique // e.g., 'reservation.create'
+  description String?
+  
+  // Relations
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       Int
+  permissionId Int
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+// ==========================================
+// PROPERTY & INVENTORY
+// ==========================================
+
+model Property {
+  id        Int      @id @default(autoincrement())
+  tenantId  Int
+  name      String
+  address   String
+  city      String
+  country   String
+  phone     String?
+  email     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  users      User[]
+  roomTypes  RoomType[]
+  rooms      Room[]
+  ratePlans  RatePlan[]
+  reservations Reservation[]
+
+  @@index([tenantId])
+}
+
+model RoomType {
+  id          Int      @id @default(autoincrement())
+  propertyId  Int
+  name        String   // e.g., Deluxe King, Standard Twin
+  description String?
+  basePrice   Decimal  @db.Decimal(10, 2)
+  capacity    Int      // Max guests
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  property   Property   @relation(fields: [propertyId], references: [id])
+  rooms      Room[]
+  ratePlans  RatePlan[]
+
+  @@index([propertyId])
+}
+
+model Room {
+  id         Int        @id @default(autoincrement())
+  propertyId Int
+  roomTypeId Int
+  number     String     // e.g., "101", "Suite A"
+  floor      Int
+  status     RoomStatus @default(AVAILABLE)
+  isActive   Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  // Relations
+  property   Property   @relation(fields: [propertyId], references: [id])
+  roomType   RoomType   @relation(fields: [roomTypeId], references: [id])
+  reservationRooms ReservationRoom[]
+
+  @@unique([propertyId, number])
+  @@index([propertyId])
+  @@index([status])
+}
+
+model RatePlan {
+  id          Int      @id @default(autoincrement())
+  propertyId  Int
+  roomTypeId  Int
+  name        String   // e.g., "Summer Special", "Corporate Rate"
+  price       Decimal  @db.Decimal(10, 2)
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  property   Property   @relation(fields: [propertyId], references: [id])
+  roomType   RoomType   @relation(fields: [roomTypeId], references: [id])
+  reservationRooms ReservationRoom[]
+
+  @@index([propertyId])
+  @@index([roomTypeId])
+}
+
+// ==========================================
+// GUESTS & RESERVATIONS
+// ==========================================
+
+model Guest {
+  id         Int      @id @default(autoincrement())
+  tenantId   Int
+  firstName  String
+  lastName   String
+  email      String?
+  phone      String?
+  idNumber   String?  // Passport/National ID
+  address    String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  reservations Reservation[]
+
+  @@index([tenantId])
+  @@index([email])
+  @@index([phone])
+}
+
+model Reservation {
+  id            Int               @id @default(autoincrement())
+  tenantId      Int
+  propertyId    Int
+  guestId       Int
+  staffId       Int               // User who created/managed it
+  checkIn       DateTime
+  checkOut      DateTime
+  status        ReservationStatus @default(PENDING)
+  totalAmount   Decimal           @db.Decimal(10, 2) @default(0)
+  notes         String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  // Relations
+  tenant        Tenant            @relation(fields: [tenantId], references: [id])
+  property      Property          @relation(fields: [propertyId], references: [id])
+  guest         Guest             @relation(fields: [guestId], references: [id])
+  staff         User              @relation(fields: [staffId], references: [id])
+  rooms         ReservationRoom[]
+  payments      Payment[]
+
+  @@index([tenantId])
+  @@index([propertyId])
+  @@index([guestId])
+  @@index([checkIn, checkOut])
+  @@index([status])
+}
+
+// Join table to allow multiple rooms per reservation
+model ReservationRoom {
+  id           Int     @id @default(autoincrement())
+  reservationId Int
+  roomId       Int
+  ratePlanId   Int
+  agreedPrice  Decimal @db.Decimal(10, 2) // Price at the time of booking
+
+  // Relations
+  reservation  Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  room         Room        @relation(fields: [roomId], references: [id])
+  ratePlan     RatePlan    @relation(fields: [ratePlanId], references: [id])
+
+  @@index([reservationId])
+  @@index([roomId])
+}
+
+// ==========================================
+// PAYMENTS & AUDIT
+// ==========================================
+
+model Payment {
+  id            Int           @id @default(autoincrement())
+  reservationId Int
+  amount        Decimal       @db.Decimal(10, 2)
+  method        String        // e.g., CASH, CREDIT_CARD, MOBILE_MONEY
+  status        PaymentStatus @default(PENDING)
+  transactionRef String?      // External gateway reference
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  reservation   Reservation   @relation(fields: [reservationId], references: [id])
+
+  @@index([reservationId])
+}
+
+model AuditLog {
+  id        Int         @id @default(autoincrement())
+  tenantId  Int
+  userId    Int?        // Null if system-generated
+  action    AuditAction
+  entity    String      // e.g., "Reservation", "Room"
+  entityId  Int?
+  details   Json?       // Store before/after state or specific details
+  ipAddress String?
+  createdAt DateTime    @default(now())
+
+  // Relations
+  tenant    Tenant      @relation(fields: [tenantId], references: [id])
+  user      User?       @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+}

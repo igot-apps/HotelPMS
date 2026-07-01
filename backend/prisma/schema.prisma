@@ -1,0 +1,360 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// CORE - TENANCY & AUTH
+// ============================================================
+
+model Tenant {
+  tenantId          Int       @id @default(autoincrement())
+  tenantCode        String    @unique @db.VarChar(20)
+  businessName      String    @db.VarChar(200)
+  legalName         String?   @db.VarChar(200)
+  subscriptionPlan  String    @default("Starter") @db.VarChar(50)
+  subscriptionStatus String   @default("Active") @db.VarChar(20)
+  currency          String    @default("GHS") @db.VarChar(10)
+  timezone          String    @default("Africa/Accra") @db.VarChar(50)
+  country           String    @db.VarChar(100)
+  logo              String?   @db.Text
+  primaryEmail      String?   @db.VarChar(200)
+  primaryPhone      String?   @db.VarChar(50)
+  createdDate       DateTime  @default(now())
+  updatedDate       DateTime  @updatedAt
+  isActive          Boolean   @default(true)
+
+  // ✅ FIXED: All reverse relations
+  properties        Property[]
+  users             User[]
+  guests            Guest[]
+  roomTypes         RoomType[]
+  rooms             Room[]
+  ratePlans         RatePlan[]
+  reservations      Reservation[]
+  payments          Payment[]
+  reservationRooms  ReservationRoom[]
+  auditLogs         AuditLog[]
+
+  @@map("tenants")
+}
+
+model Property {
+  propertyId        Int       @id @default(autoincrement())
+  tenantId          Int
+  propertyName      String    @db.VarChar(200)
+  propertyCode      String    @db.VarChar(50)
+  propertyType      String    @db.VarChar(50)
+  address           String?   @db.Text
+  city              String?   @db.VarChar(100)
+  country           String?   @db.VarChar(100)
+  gpsCoordinates    String?   @db.VarChar(100)
+  totalRooms        Int       @default(0)
+  checkInTime       String    @default("14:00") @db.VarChar(10)
+  checkOutTime      String    @default("11:00") @db.VarChar(10)
+  status            String    @default("Active") @db.VarChar(20)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  tenant            Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  users             User[]
+  roomTypes         RoomType[]
+  rooms             Room[]
+  ratePlans         RatePlan[]
+  reservations      Reservation[]
+
+  @@unique([tenantId, propertyCode])
+  @@map("properties")
+}
+
+// ============================================================
+// RBAC - USERS, ROLES, PERMISSIONS
+// ============================================================
+
+model User {
+  userId            Int       @id @default(autoincrement())
+  tenantId          Int
+  propertyId        Int?
+  fullName          String    @db.VarChar(200)
+  username          String    @unique
+  email             String?   @unique @db.VarChar(200)
+  passwordHash      String    @db.Text
+  roleId            Int
+  isActive          Boolean   @default(true)
+  lastLoginAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  tenant            Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  property          Property? @relation(fields: [propertyId], references: [propertyId])
+  role              Role      @relation(fields: [roleId], references: [roleId])
+  reservations      Reservation[] @relation("staffReservations")
+  payments          Payment[] @relation("receivedPayments")
+  // ✅ FIXED: Reverse relation for audit logs
+  auditLogs         AuditLog[]
+
+  @@unique([tenantId, username])
+  @@map("users")
+}
+
+model Role {
+  roleId            Int       @id @default(autoincrement())
+  roleName          String    @unique @db.VarChar(50)
+  description       String?   @db.Text
+  isSystem          Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  users             User[]
+  rolePermissions   RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  permissionId      Int       @id @default(autoincrement())
+  code              String    @unique @db.VarChar(100)
+  name              String    @db.VarChar(100)
+  description       String?   @db.Text
+  category          String?   @db.VarChar(50)
+  createdAt         DateTime  @default(now())
+
+  rolePermissions   RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  rolePermissionId  Int       @id @default(autoincrement())
+  roleId            Int
+  permissionId      Int
+
+  role              Role      @relation(fields: [roleId], references: [roleId], onDelete: Cascade)
+  permission        Permission @relation(fields: [permissionId], references: [permissionId], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// ============================================================
+// GUESTS
+// ============================================================
+
+model Guest {
+  guestId           Int       @id @default(autoincrement())
+  tenantId          Int
+  fullName          String    @db.VarChar(200)
+  phone             String?   @db.VarChar(50)
+  email             String?   @db.VarChar(200)
+  idNumber          String?   @db.VarChar(50)
+  address           String?   @db.Text
+  city              String?   @db.VarChar(100)
+  country           String?   @db.VarChar(100)
+  username          String?   @unique
+  passwordHash      String?   @db.Text
+  dateRegistered    DateTime  @default(now())
+  lastStayDate      DateTime?
+  totalStays        Int       @default(0)
+  notes             String?   @db.Text
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  tenant            Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  reservations      Reservation[]
+
+  @@unique([tenantId, email])
+  @@map("guests")
+}
+
+// ============================================================
+// ROOM INVENTORY
+// ============================================================
+
+model RoomType {
+  roomTypeId        Int       @id @default(autoincrement())
+  tenantId          Int
+  propertyId        Int
+  typeName          String    @db.VarChar(100)
+  description       String?   @db.Text
+  basePrice         Decimal   @db.Decimal(10, 2)
+  maxOccupancy      Int       @default(1)
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  tenant            Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  property          Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
+  rooms             Room[]
+  ratePlans         RatePlan[]
+  reservationRooms  ReservationRoom[]
+
+  @@unique([tenantId, propertyId, typeName])
+  @@map("room_types")
+}
+
+model Room {
+  roomId            Int       @id @default(autoincrement())
+  tenantId          Int
+  propertyId        Int
+  roomNumber        String    @db.VarChar(20)
+  roomTypeId        Int
+  floor             Int?
+  operationalStatus String    @default("Available") @db.VarChar(20)
+  housekeepingStatus String  @default("Clean") @db.VarChar(20)
+  notes             String?   @db.Text
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  tenant            Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  property          Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
+  roomType          RoomType  @relation(fields: [roomTypeId], references: [roomTypeId])
+  reservationRooms  ReservationRoom[]
+
+  @@unique([tenantId, propertyId, roomNumber])
+  @@map("rooms")
+}
+
+model RatePlan {
+  ratePlanId        Int       @id @default(autoincrement())
+  tenantId          Int
+  propertyId        Int
+  roomTypeId        Int
+  planName          String    @db.VarChar(100)
+  description       String?   @db.Text
+  isPublic          Boolean   @default(true)
+  minStay           Int       @default(1)
+  maxStay           Int?      @default(14)
+  discountPercent   Decimal?  @db.Decimal(5, 2)
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  tenant            Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  property          Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
+  roomType          RoomType  @relation(fields: [roomTypeId], references: [roomTypeId])
+  reservationRooms  ReservationRoom[]
+
+  @@unique([tenantId, propertyId, roomTypeId, planName])
+  @@map("rate_plans")
+}
+
+// ============================================================
+// RESERVATIONS
+// ============================================================
+
+model Reservation {
+  reservationId     Int       @id @default(autoincrement())
+  tenantId          Int
+  propertyId        Int
+  guestId           Int
+  staffId           Int?
+  source            String    @default("Website") @db.VarChar(50)
+  checkInDate       DateTime
+  checkOutDate      DateTime
+  status            String    @default("Pending") @db.VarChar(20)
+  notes             String?   @db.Text
+  totalAmount       Decimal?  @db.Decimal(10, 2)
+  amountPaid        Decimal?  @db.Decimal(10, 2)
+  balanceDue        Decimal?  @db.Decimal(10, 2)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  tenant            Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  property          Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
+  guest             Guest     @relation(fields: [guestId], references: [guestId], onDelete: Cascade)
+  staff             User?     @relation("staffReservations", fields: [staffId], references: [userId])
+  reservationRooms  ReservationRoom[]
+  payments          Payment[]
+
+  @@index([tenantId, propertyId])
+  @@index([guestId])
+  @@index([status])
+  @@index([checkInDate, checkOutDate])
+  @@map("reservations")
+}
+
+model ReservationRoom {
+  reservationRoomId Int       @id @default(autoincrement())
+  tenantId          Int
+  reservationId     Int
+  roomId            Int
+  roomTypeId        Int
+  ratePlanId        Int?
+  checkInDate       DateTime
+  checkOutDate      DateTime
+  agreedPricePerNight Decimal @db.Decimal(10, 2)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  tenant            Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  reservation       Reservation @relation(fields: [reservationId], references: [reservationId], onDelete: Cascade)
+  room              Room      @relation(fields: [roomId], references: [roomId])
+  roomType          RoomType  @relation(fields: [roomTypeId], references: [roomTypeId])
+  ratePlan          RatePlan? @relation(fields: [ratePlanId], references: [ratePlanId])
+
+  @@unique([reservationId, roomId])
+  @@index([reservationId])
+  @@index([roomId])
+  @@index([checkInDate, checkOutDate])
+  @@map("reservation_rooms")
+}
+
+// ============================================================
+// PAYMENTS
+// ============================================================
+
+model Payment {
+  paymentId         Int       @id @default(autoincrement())
+  tenantId          Int
+  reservationId     Int
+  amount            Decimal   @db.Decimal(10, 2)
+  paymentMethod     String    @db.VarChar(50)
+  paymentDate       DateTime  @default(now())
+  gatewayReference  String?   @db.VarChar(200)
+  receivedBy        Int?
+  status            String    @default("Completed") @db.VarChar(20)
+  notes             String?   @db.Text
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  tenant            Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  reservation       Reservation @relation(fields: [reservationId], references: [reservationId], onDelete: Cascade)
+  receiver          User?     @relation("receivedPayments", fields: [receivedBy], references: [userId])
+
+  @@index([reservationId])
+  @@index([paymentDate])
+  @@map("payments")
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+
+model AuditLog {
+  auditLogId        Int       @id @default(autoincrement())
+  tenantId          Int?
+  userId            Int?
+  action            String    @db.VarChar(100)
+  entityType        String    @db.VarChar(50)
+  entityId          Int?
+  oldData           Json?
+  newData           Json?
+  ipAddress         String?   @db.VarChar(50)
+  userAgent         String?   @db.Text
+  createdAt         DateTime  @default(now())
+
+  // ✅ FIXED: Both sides of the relation now exist
+  tenant            Tenant?   @relation(fields: [tenantId], references: [tenantId], onDelete: SetNull)
+  user              User?     @relation(fields: [userId], references: [userId], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

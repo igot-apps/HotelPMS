@@ -1,0 +1,23 @@
+PROBLEM SUMMARY & FIX
+
+Issue:
+- Express routes like POST /test and /api/auth/login returned "Cannot POST"
+- Root route worked but new routes did not
+- Request logs were not showing
+
+Root Cause:
+- A separate old Node.js process (PID 2636) was still running on port 3000
+- Requests were going to that zombie process instead of the current nodemon server
+- This caused mismatch between running code and edited code
+
+Fix:
+1. Identified port usage with: netstat -ano | findstr :3000
+2. Found stuck process PID 2636 using Node.js
+3. Terminated it with: taskkill /PID 2636 /F
+4. Restarted nodemon server cleanly
+5. Verified routes now work and logs appear correctly
+
+Result:
+- Express routes started working normally
+- Request logging functioned correctly
+- No more "Cannot POST" mismatches
