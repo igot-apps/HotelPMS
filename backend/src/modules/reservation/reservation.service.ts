@@ -166,7 +166,11 @@ export const checkInGuest = async (reservationId: number) => {
   // Update reservation status
   await reservationRepository.updateReservationStatus(reservationId, 'CheckedIn');
 
-  // Rooms are already marked as Occupied during creation
+  // ✅ FIX: Update room status to Occupied during check-in
+  for (const rr of reservation.reservationRooms) {
+    await updateRoomStatus(rr.roomId, 'Occupied');
+  }
+
   // Update guest last stay
   await updateGuestLastStay(reservation.guestId);
 

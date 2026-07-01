@@ -142,7 +142,9 @@ export const findAvailableRooms = async (
     where: {
       tenantId,
       propertyId,
-      operationalStatus: 'Available',
+      operationalStatus: {
+        not: 'Maintenance',
+      },
       ...(roomTypeId && { roomTypeId }),
       reservationRooms: {
         none: {
