@@ -21,6 +21,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
     roomTypeId: '',
     agreedPrice: '',
     amountPaid: '0',
+    paymentMethod: 'Cash',
     notes: '',
   });
 
@@ -90,10 +91,31 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
         agreedPricePerNight: parseFloat(formData.agreedPrice),
       }],
       amountPaid: parseFloat(formData.amountPaid) || 0,
+      paymentMethod: formData.paymentMethod,
       notes: formData.notes,
     };
     onSubmit(payload);
   };
+
+  // ==========================================
+  // NEW: Calculate Booking Summary Dynamically
+  // ==========================================
+  const calculateNights = () => {
+    if (formData.checkInDate && formData.checkOutDate) {
+      const start = new Date(formData.checkInDate);
+      const end = new Date(formData.checkOutDate);
+      const diffTime = end - start;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays > 0 ? diffDays : 0;
+    }
+    return 0;
+  };
+
+  const nights = calculateNights();
+  const pricePerNight = parseFloat(formData.agreedPrice) || 0;
+  const totalCost = nights * pricePerNight;
+  const amountPaid = parseFloat(formData.amountPaid) || 0;
+  const balanceDue = totalCost - amountPaid;
 
   if (!isOpen) return null;
 
@@ -197,7 +219,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
             )}
           </div>
 
-          {/* Pricing & Notes */}
+          {/* Pricing, Method & Notes */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-semibold text-text mb-1.5">Agreed Price (GHS) *</label>
@@ -209,12 +231,52 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
               <input type="number" step="0.01" name="amountPaid" value={formData.amountPaid} onChange={handleChange}
                 className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition" />
             </div>
+            
+            {/* Payment Method Dropdown */}
             <div>
-              <label className="block text-sm font-semibold text-text mb-1.5">Notes</label>
-              <input type="text" name="notes" value={formData.notes} onChange={handleChange} placeholder="Special requests..."
-                className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition" />
+              <label className="block text-sm font-semibold text-text mb-1.5">Payment Method</label>
+              <select name="paymentMethod" value={formData.paymentMethod} onChange={handleChange}
+                className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition">
+                <option value="Cash">Cash</option>
+                <option value="Card">Credit/Debit Card</option>
+                <option value="MobileMoney">Mobile Money</option>
+                <option value="Online">Online Transfer</option>
+              </select>
             </div>
           </div>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-sm font-semibold text-text mb-1.5">Notes</label>
+            <input type="text" name="notes" value={formData.notes} onChange={handleChange} placeholder="Special requests..."
+              className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition" />
+          </div>
+
+          {/* ========================================== */}
+          {/* NEW: Dynamic Booking Summary Card          */}
+          {/* ========================================== */}
+          {formData.agreedPrice && nights > 0 && (
+            <div className="bg-secondary-50 border border-border rounded-xl p-4 space-y-2">
+              <h3 className="text-sm font-bold text-text mb-2">Booking Summary</h3>
+              
+              <div className="flex justify-between text-sm">
+                <span className="text-text-muted">{nights} Night(s) × {pricePerNight.toFixed(2)} GHS</span>
+                <span className="font-semibold text-text">{totalCost.toFixed(2)} GHS</span>
+              </div>
+              
+              <div className="flex justify-between text-sm">
+                <span className="text-text-muted">Initial Payment</span>
+                <span className="font-semibold text-success-600">- {amountPaid.toFixed(2)} GHS</span>
+              </div>
+              
+              <div className="border-t border-border pt-2 flex justify-between text-base">
+                <span className="font-bold text-text">Balance Due</span>
+                <span className={`font-bold ${balanceDue > 0 ? 'text-danger-600' : 'text-success-600'}`}>
+                  {balanceDue.toFixed(2)} GHS
+                </span>
+              </div>
+            </div>
+          )}
         </form>
 
         {/* Footer */}

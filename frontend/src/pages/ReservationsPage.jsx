@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getReservations, createReservation, checkInReservation, checkOutReservation, cancelReservation } from '../api/reservations';
+import { recordPayment } from '../api/payments'; // NEW: Import the payment API
 import { useAuthStore } from '../store/authStore';
 import ReservationModal from '../components/reservations/ReservationModal';
-import { Search, Plus, CalendarDays, AlertCircle, LogIn, LogOut, XCircle, Filter,ChevronLeft, ChevronRight, Eye } from 'lucide-react';
-
+import { Search, Plus, CalendarDays, AlertCircle, LogIn, LogOut, XCircle, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export default function ReservationsPage() {
   const user = useAuthStore((state) => state.user);
@@ -15,12 +15,12 @@ export default function ReservationsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
 
-  // 1. Fetch Reservations
   const { data, isLoading, error } = useQuery({
-    queryKey: ['reservations', propertyId, statusFilter],
+    queryKey: ['reservations', propertyId, statusFilter, page],
     queryFn: () => {
-      const params = { propertyId, limit: 50 };
+      const params = { propertyId, limit: 10, page };
       if (statusFilter !== 'all') params.status = statusFilter;
       return getReservations(params).then(res => res.data);
     },
@@ -28,13 +28,47 @@ export default function ReservationsPage() {
   });
 
   const reservations = data?.data || [];
+  const pagination = data?.pagination || { page: 1, totalPages: 1, total: 0 };
 
-  // 2. Mutations
+  // UPDATED: Two-Step Mutation
+    // UPDATED: Two-Step Mutation with Debugging
   const createMutation = useMutation({
-    mutationFn: createReservation,
+    mutationFn: async (payload) => {
+      // 1. Create the reservation first
+      const resResponse = await createReservation(payload);
+      const newReservation = resResponse.data.data;
+
+      // 2. If an initial payment was made, record it immediately!
+      if (payload.amountPaid > 0) {
+        const paymentPayload = {
+          reservationId: newReservation.reservationId,
+          amount: payload.amountPaid,
+          paymentMethod: payload.paymentMethod,
+          propertyId: payload.propertyId, // Added for multi-tenant security
+          gatewayReference: null,         // Explicitly null to prevent validation errors
+          notes: 'Initial payment for reservation'
+        };
+
+        console.log("🔍 Attempting to record payment with payload:", paymentPayload);
+
+        try {
+          const payResponse = await recordPayment(paymentPayload);
+          console.log("✅ Payment recorded successfully:", payResponse.data);
+        } catch (err) {
+          console.error('❌ Failed to record initial payment:', err);
+          
+          // 🚨 SURFACE THE ERROR: Show exactly what the backend said
+          const errorMsg = err.response?.data?.message || err.message || 'Unknown error';
+          alert(`⚠️ Reservation created, but payment failed!\n\nBackend Error: ${errorMsg}`);
+        }
+      }
+      
+      return resResponse;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
-      queryClient.invalidateQueries({ queryKey: ['rooms'] }); // Refresh room availability
+      queryClient.invalidateQueries({ queryKey: ['rooms'] }); 
+      queryClient.invalidateQueries({ queryKey: ['payments'] }); 
       setIsModalOpen(false);
     },
   });
@@ -51,13 +85,13 @@ export default function ReservationsPage() {
     },
   });
 
-  // 3. Handlers
   const handleAction = (id, action, confirmMsg) => {
     if (confirmMsg && !window.confirm(confirmMsg)) return;
     actionMutation.mutate({ id, action });
   };
 
-  // Filter by search (client-side for simplicity, or pass to API)
+  const handleFilterChange = (newFilter) => { setStatusFilter(newFilter); setPage(1); };
+
   const filteredReservations = reservations.filter(res => 
     res.guest?.fullName?.toLowerCase().includes(search.toLowerCase()) ||
     res.reservationRooms?.some(r => r.room?.roomNumber?.includes(search))
@@ -73,40 +107,34 @@ export default function ReservationsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-text tracking-tight">Reservations</h1>
-          <p className="text-text-muted text-sm mt-1">Manage bookings, check-ins, and check-outs.</p>
+          <p className="text-text-muted text-sm mt-1">
+            Manage bookings. (Total for this property: <span className="font-bold text-text">{pagination.total}</span>)
+          </p>
         </div>
         <button onClick={() => setIsModalOpen(true)} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm">
           <Plus size={16} /> New Booking
         </button>
       </div>
 
-      {/* Toolbar */}
       <div className="bg-surface border border-border rounded-xl p-2 flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
-          <input
-            type="text" placeholder="Search by guest name or room number..."
-            value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-lg text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
-          />
+          <input type="text" placeholder="Search by guest name or room number..." value={search} onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-lg text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
         </div>
         <div className="flex items-center gap-1 bg-background p-1 rounded-lg border border-border">
           {filters.map(f => (
-            <button key={f.id} onClick={() => setStatusFilter(f.id)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${
-                statusFilter === f.id ? 'bg-surface text-text shadow-sm border border-border' : 'text-text-muted hover:text-text'
-              }`}>
+            <button key={f.id} onClick={() => handleFilterChange(f.id)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${statusFilter === f.id ? 'bg-surface text-text shadow-sm border border-border' : 'text-text-muted hover:text-text'}`}>
               {f.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Data Table */}
       <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
         {isLoading ? (
           <div className="p-12 text-center text-text-muted animate-pulse">Loading reservations...</div>
@@ -137,14 +165,12 @@ export default function ReservationsPage() {
                   const checkIn = new Date(res.checkInDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                   const checkOut = new Date(res.checkOutDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                   
-                  // Status Badges
                   let statusClass = 'bg-secondary-100 text-secondary-700';
                   if (res.status === 'Confirmed') statusClass = 'bg-primary-50 text-primary-700 ring-1 ring-primary-600/20';
                   if (res.status === 'CheckedIn') statusClass = 'bg-success-50 text-success-700 ring-1 ring-success-600/20';
                   if (res.status === 'CheckedOut') statusClass = 'bg-secondary-100 text-secondary-600';
                   if (res.status === 'Cancelled') statusClass = 'bg-danger-50 text-danger-700 ring-1 ring-danger-600/20';
 
-                  // Actions
                   let actions = null;
                   if (res.status === 'Confirmed') {
                     actions = (
@@ -181,27 +207,15 @@ export default function ReservationsPage() {
                         <p className="text-sm font-semibold text-text">{res.guest?.fullName}</p>
                       </td>
                       <td className="px-6 py-4 text-sm text-text font-medium">{rooms}</td>
-                      <td className="px-6 py-4 text-sm text-text-muted">
-                        {checkIn} <span className="mx-1">→</span> {checkOut}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold ${statusClass}`}>
-                          {res.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm font-bold text-text text-right">
-                        {parseFloat(res.totalAmount || 0).toFixed(2)} GHS
-                      </td>
+                      <td className="px-6 py-4 text-sm text-text-muted">{checkIn} <span className="mx-1">→</span> {checkOut}</td>
+                      <td className="px-6 py-4"><span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold ${statusClass}`}>{res.status}</span></td>
+                      <td className="px-6 py-4 text-sm font-bold text-text text-right">{parseFloat(res.totalAmount || 0).toFixed(2)} GHS</td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {actions}
-                          <Link 
-                            to={`/reservations/${res.reservationId}`} 
-                            className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" 
-                            title="View Details"
-                          >
+                          <Link to={`/reservations/${res.reservationId}`} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" title="View Details">
                             <Eye size={16} />
                           </Link>
+                          {actions || <span className="text-xs text-text-muted">-</span>}
                         </div>
                       </td>
                     </tr>
@@ -211,14 +225,32 @@ export default function ReservationsPage() {
             </table>
           </div>
         )}
+
+        {pagination.totalPages > 1 && (
+          <div className="px-6 py-3 border-t border-border bg-secondary-50/30 flex items-center justify-between">
+            <p className="text-xs text-text-muted">
+              Showing <span className="font-semibold text-text">{reservations.length}</span> of <span className="font-semibold text-text">{pagination.total}</span> reservations
+            </p>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                className="p-1.5 rounded-lg border border-border bg-surface hover:bg-secondary-50 disabled:opacity-40 disabled:cursor-not-allowed transition">
+                <ChevronLeft size={16} />
+              </button>
+              <span className="px-3 text-xs font-semibold text-text">Page {pagination.page} of {pagination.totalPages}</span>
+              <button onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))} disabled={page === pagination.totalPages}
+                className="p-1.5 rounded-lg border border-border bg-surface hover:bg-secondary-50 disabled:opacity-40 disabled:cursor-not-allowed transition">
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Modal */}
       <ReservationModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSubmit={(data) => createMutation.mutate(data)}
-        isLoading={createMutation.isLoading}
+        isLoading={createMutation.isPending}
       />
     </div>
   );
