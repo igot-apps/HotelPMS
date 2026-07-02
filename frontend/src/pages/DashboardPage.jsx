@@ -33,15 +33,6 @@ export default function DashboardPage() {
     <div className="space-y-8">
       {/* Page Header */}
       <div>
-       
-
-// ... inside your component's return statement, add this button:
-<button 
-  onClick={() => toast.error('🚨 MANUAL TEST: If you see this, the toast system is working perfectly!')}
-  className="fixed bottom-4 right-4 px-4 py-2 bg-danger-600 text-white rounded-lg shadow-lg z-50"
->
-  Test Toast System
-</button>
         <h1 className="text-2xl font-bold text-text">Dashboard Overview</h1>
         <p className="text-text-muted">Here is what's happening at {user?.tenantName || 'your property'} today.</p>
       </div>

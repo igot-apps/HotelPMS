@@ -30,7 +30,7 @@ export default function RoomsPage() {
   // 3. Handlers
   const handleToggleHousekeeping = (room) => {
     const newStatus = room.housekeepingStatus?.toUpperCase() === 'CLEAN' ? 'Dirty' : 'Clean';
-    statusMutation.mutate({ roomId: room.roomId, payload: { housekeepingStatus: newStatus } });
+    statusMutation.mutate({ roomId: room.roomId, payload: { operationalStatus: room.operationalStatus, housekeepingStatus: newStatus } });
   };
 
   const handleToggleOperational = (room) => {

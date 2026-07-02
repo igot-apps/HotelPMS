@@ -172,34 +172,19 @@ async function main() {
   // ============================================================
   const roles = await Promise.all([
     prisma.role.upsert({
-      where: { roleName: 'Super Admin' },
+      where: { roleName: 'Manager' },
       update: {},
-      create: { roleName: 'Super Admin', description: 'Full system access', isSystem: true },
+      create: { roleName: 'Manager', description: 'Full hotel access', isSystem: true },
     }),
     prisma.role.upsert({
-      where: { roleName: 'General Manager' },
+      where: { roleName: 'Receptionist' },
       update: {},
-      create: { roleName: 'General Manager', description: 'Full hotel access', isSystem: true },
-    }),
-    prisma.role.upsert({
-      where: { roleName: 'Front Desk' },
-      update: {},
-      create: { roleName: 'Front Desk', description: 'Reception and reservations', isSystem: true },
-    }),
-    prisma.role.upsert({
-      where: { roleName: 'Reservations Agent' },
-      update: {},
-      create: { roleName: 'Reservations Agent', description: 'Create and manage reservations', isSystem: true },
-    }),
-    prisma.role.upsert({
-      where: { roleName: 'Accountant' },
-      update: {},
-      create: { roleName: 'Accountant', description: 'Financial transactions and reports', isSystem: true },
+      create: { roleName: 'Receptionist', description: 'Manage reservations, check-in, check-out, and guest services', isSystem: true },
     }),
     prisma.role.upsert({
       where: { roleName: 'Housekeeping' },
       update: {},
-      create: { roleName: 'Housekeeping', description: 'Room cleaning and status', isSystem: true },
+      create: { roleName: 'Housekeeping', description: 'Manage room cleaning and room status', isSystem: true },
     }),
   ]);
 
@@ -212,11 +197,13 @@ async function main() {
     return await bcrypt.hash(password, 10);
   };
 
-  const userPassword = await hashPassword('reception123');
+  const ReceptionistPassword = await hashPassword('reception123');
   const managerPassword = await hashPassword('manager123');
+  const housekeepingPassword = await hashPassword('housekeeping123');
 
-  const frontDeskRole = roles.find(r => r.roleName === 'Front Desk');
-  const managerRole = roles.find(r => r.roleName === 'General Manager');
+  const ReceptionistRole = roles.find(r => r.roleName === 'Receptionist');
+  const managerRole = roles.find(r => r.roleName === 'Manager');
+  const housekeepingRole = roles.find(r => r.roleName === 'Housekeeping');
 
   // Brassfield staff
   await prisma.user.upsert({
@@ -228,8 +215,8 @@ async function main() {
       fullName: 'John Mensah',
       username: 'jmensah',
       email: 'john.mensah@brassfieldhotel.com',
-      passwordHash: userPassword,
-      roleId: frontDeskRole.roleId,
+      passwordHash: ReceptionistPassword,
+      roleId: ReceptionistRole.roleId,
       isActive: true,
     },
   });
@@ -250,16 +237,46 @@ async function main() {
   });
 
   await prisma.user.upsert({
-    where: { username: 'aadjei' },
+    where: { username: 'sakoto' },
+    update: {},
+    create: {
+      tenantId: brassfield.tenantId,
+      propertyId: brassfieldProperty.propertyId,
+      fullName: 'Sandra Akoto',
+      username: 'sakoto',
+      email: 'sandra.akoto@brassfieldhotel.com',
+      passwordHash: housekeepingPassword,
+      roleId: housekeepingRole.roleId,
+      isActive: true,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { username: 'dkwakye' },
+    update: {},
+    create: {
+      tenantId: brassfield.tenantId,
+      propertyId: brassfieldProperty.propertyId,
+      fullName: 'Daniel Kwakye',
+      username: 'dkwakye',
+      email: 'daniel.kwakye@brassfieldhotel.com',
+      passwordHash: housekeepingPassword,
+      roleId: housekeepingRole.roleId,
+      isActive: true,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { username: 'samed' },
     update: {},
     create: {
       tenantId: brassfield.tenantId,
       propertyId: brassfieldAirport.propertyId,
-      fullName: 'Adjei Adjei',
-      username: 'aadjei',
-      email: 'adjei@brassfieldhotel.com',
-      passwordHash: userPassword,
-      roleId: frontDeskRole.roleId,
+      fullName: 'Sakina Amed',
+      username: 'samed',
+      email: 'sakina.amed@brassfieldhotel.com',
+      passwordHash: ReceptionistPassword,
+      roleId: ReceptionistRole.roleId,
       isActive: true,
     },
   });
@@ -274,8 +291,8 @@ async function main() {
       fullName: 'Efua Osu',
       username: 'efosu',
       email: 'efua.osu@goldcoastresort.com',
-      passwordHash: userPassword,
-      roleId: frontDeskRole.roleId,
+      passwordHash: ReceptionistPassword,
+      roleId: ReceptionistRole.roleId,
       isActive: true,
     },
   });
@@ -305,8 +322,8 @@ async function main() {
       fullName: 'Esi Appiah',
       username: 'eappiah',
       email: 'esi.appiah@sunsetbeach.com',
-      passwordHash: userPassword,
-      roleId: frontDeskRole.roleId,
+      passwordHash: ReceptionistPassword,
+      roleId: ReceptionistRole.roleId,
       isActive: true,
     },
   });
