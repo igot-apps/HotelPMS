@@ -1,63 +1,112 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { getReservations, createReservation, checkInReservation, checkOutReservation, cancelReservation } from '../api/reservations';
-import { recordPayment } from '../api/payments'; // NEW: Import the payment API
+import { recordPayment } from '../api/payments';
 import { useAuthStore } from '../store/authStore';
 import ReservationModal from '../components/reservations/ReservationModal';
-import { Search, Plus, CalendarDays, AlertCircle, LogIn, LogOut, XCircle, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { 
+  Search, Plus, CalendarDays, AlertCircle, LogIn, LogOut, XCircle, 
+  ChevronLeft, ChevronRight, Eye, X 
+} from 'lucide-react';
 
 export default function ReservationsPage() {
   const user = useAuthStore((state) => state.user);
   const propertyId = user?.propertyId;
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
+  const [localSearch, setLocalSearch] = useState(searchParams.get('search') || '');
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['reservations', propertyId, statusFilter, page],
+  // ==========================================
+  // 1. URL Synchronization & State Extraction
+  // ==========================================
+  const page = parseInt(searchParams.get('page') || '1');
+  const limit = parseInt(searchParams.get('limit') || '10');
+  const search = searchParams.get('search') || '';
+  const status = searchParams.get('status') || 'all';
+  const fromDate = searchParams.get('fromDate') || '';
+  const toDate = searchParams.get('toDate') || '';
+
+  const updateParams = (updates) => {
+    const newParams = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === '' || value === null || value === undefined || value === 'all') {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, String(value));
+      }
+    });
+    setSearchParams(newParams, { replace: true });
+  };
+
+  // ==========================================
+  // 2. Debounced Search Logic (500ms)
+  // ==========================================
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localSearch !== search) {
+        updateParams({ search: localSearch, page: 1 });
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [localSearch]);
+
+  // ==========================================
+  // 3. React Query Setup (Server-Side State)
+  // ==========================================
+  const { data, isLoading, isPlaceholderData } = useQuery({
+    queryKey: ['reservations', propertyId, status, page, limit, search, fromDate, toDate],
     queryFn: () => {
-      const params = { propertyId, limit: 10, page };
-      if (statusFilter !== 'all') params.status = statusFilter;
+      const params = { propertyId, limit, page };
+      if (status !== 'all') params.status = status;
+      if (search) params.search = search;
+      
+      // NEW: Pass Date Filters to Backend
+      if (fromDate) params.fromDate = fromDate;
+      if (toDate) params.toDate = toDate;
+      
       return getReservations(params).then(res => res.data);
     },
+    placeholderData: keepPreviousData,
     enabled: !!propertyId,
   });
 
   const reservations = data?.data || [];
   const pagination = data?.pagination || { page: 1, totalPages: 1, total: 0 };
+  const totalPages = Math.ceil(pagination.total / limit);
+  const startItem = pagination.total > 0 ? (page - 1) * limit + 1 : 0;
+  const endItem = Math.min(page * limit, pagination.total);
 
-  // UPDATED: Two-Step Mutation
-    // UPDATED: Two-Step Mutation with Debugging
+  // Client-side search filter (Applied to the current page's data as a fallback)
+  const filteredReservations = reservations.filter(res => 
+    res.guest?.fullName?.toLowerCase().includes(search.toLowerCase()) ||
+    res.reservationRooms?.some(r => r.room?.roomNumber?.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  // ==========================================
+  // 4. Mutations (Two-Step Payment Logic Preserved)
+  // ==========================================
   const createMutation = useMutation({
     mutationFn: async (payload) => {
-      // 1. Create the reservation first
       const resResponse = await createReservation(payload);
       const newReservation = resResponse.data.data;
 
-      // 2. If an initial payment was made, record it immediately!
       if (payload.amountPaid > 0) {
         const paymentPayload = {
           reservationId: newReservation.reservationId,
           amount: payload.amountPaid,
           paymentMethod: payload.paymentMethod,
-          propertyId: payload.propertyId, // Added for multi-tenant security
-          gatewayReference: null,         // Explicitly null to prevent validation errors
+          propertyId: payload.propertyId,
+          gatewayReference: null,
           notes: 'Initial payment for reservation'
         };
 
-        console.log("🔍 Attempting to record payment with payload:", paymentPayload);
-
         try {
-          const payResponse = await recordPayment(paymentPayload);
-          console.log("✅ Payment recorded successfully:", payResponse.data);
+          await recordPayment(paymentPayload);
         } catch (err) {
           console.error('❌ Failed to record initial payment:', err);
-          
-          // 🚨 SURFACE THE ERROR: Show exactly what the backend said
           const errorMsg = err.response?.data?.message || err.message || 'Unknown error';
           alert(`⚠️ Reservation created, but payment failed!\n\nBackend Error: ${errorMsg}`);
         }
@@ -85,33 +134,33 @@ export default function ReservationsPage() {
     },
   });
 
+  // ==========================================
+  // 5. Handlers
+  // ==========================================
   const handleAction = (id, action, confirmMsg) => {
     if (confirmMsg && !window.confirm(confirmMsg)) return;
     actionMutation.mutate({ id, action });
   };
 
-  const handleFilterChange = (newFilter) => { setStatusFilter(newFilter); setPage(1); };
+  const handleFilterChange = (key, value) => {
+    updateParams({ [key]: value, page: 1 }); // Reset to page 1 when filters change
+  };
 
-  const filteredReservations = reservations.filter(res => 
-    res.guest?.fullName?.toLowerCase().includes(search.toLowerCase()) ||
-    res.reservationRooms?.some(r => r.room?.roomNumber?.includes(search))
-  );
+  const clearFilters = () => {
+    updateParams({ search: '', status: '', fromDate: '', toDate: '', page: 1 });
+    setLocalSearch('');
+  };
 
-  const filters = [
-    { id: 'all', label: 'All' },
-    { id: 'Confirmed', label: 'Confirmed' },
-    { id: 'CheckedIn', label: 'Checked In' },
-    { id: 'CheckedOut', label: 'Checked Out' },
-    { id: 'Cancelled', label: 'Cancelled' },
-  ];
+  const hasActiveFilters = status !== 'all' || fromDate || toDate;
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-text tracking-tight">Reservations</h1>
           <p className="text-text-muted text-sm mt-1">
-            Manage bookings. (Total for this property: <span className="font-bold text-text">{pagination.total}</span>)
+            Manage bookings. (Total matching filters: <span className="font-bold text-text">{pagination.total}</span>)
           </p>
         </div>
         <button onClick={() => setIsModalOpen(true)} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm">
@@ -119,48 +168,90 @@ export default function ReservationsPage() {
         </button>
       </div>
 
-      <div className="bg-surface border border-border rounded-xl p-2 flex flex-col sm:flex-row gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
-          <input type="text" placeholder="Search by guest name or room number..." value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-lg text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
+      {/* ========================================== */}
+      {/* Toolbar: Search, Status & Date Filters     */}
+      {/* ========================================== */}
+      <div className="bg-surface border border-border rounded-xl p-4 space-y-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* Search */}
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
+            <input 
+              type="text" 
+              placeholder="Search by guest name or room number..." 
+              value={localSearch} 
+              onChange={(e) => setLocalSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-lg text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" 
+            />
+          </div>
+          
+          {/* Status Dropdown */}
+          <select 
+            value={status} 
+            onChange={(e) => handleFilterChange('status', e.target.value)}
+            className="px-3 py-2 bg-background border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+          >
+            <option value="all">All Statuses</option>
+            <option value="Confirmed">Confirmed</option>
+            <option value="CheckedIn">Checked In</option>
+            <option value="CheckedOut">Checked Out</option>
+            <option value="Cancelled">Cancelled</option>
+          </select>
         </div>
-        <div className="flex items-center gap-1 bg-background p-1 rounded-lg border border-border">
-          {filters.map(f => (
-            <button key={f.id} onClick={() => handleFilterChange(f.id)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${statusFilter === f.id ? 'bg-surface text-text shadow-sm border border-border' : 'text-text-muted hover:text-text'}`}>
-              {f.label}
+
+        {/* NEW: Date Range Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-border">
+          <div>
+            <label className="block text-xs font-semibold text-text-muted mb-1">Check-in From</label>
+            <input 
+              type="date" 
+              value={fromDate} 
+              onChange={(e) => handleFilterChange('fromDate', e.target.value)} 
+              className="w-full px-3 py-1.5 bg-background border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20" 
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-text-muted mb-1">Check-out To</label>
+            <input 
+              type="date" 
+              value={toDate} 
+              onChange={(e) => handleFilterChange('toDate', e.target.value)} 
+              className="w-full px-3 py-1.5 bg-background border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20" 
+            />
+          </div>
+        </div>
+
+        {/* Clear Filters Button */}
+        {hasActiveFilters && (
+          <div className="flex justify-end">
+            <button onClick={clearFilters} className="inline-flex items-center gap-1 text-xs font-semibold text-danger-600 hover:text-danger-700 transition">
+              <X size={14} /> Clear All Filters
             </button>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
 
+      {/* Data Table */}
       <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
-        {isLoading ? (
-          <div className="p-12 text-center text-text-muted animate-pulse">Loading reservations...</div>
-        ) : error ? (
-          <div className="p-12 text-center text-danger-600 flex flex-col items-center gap-2">
-            <AlertCircle size={24} /> <p className="font-semibold">Failed to load reservations</p>
-          </div>
-        ) : filteredReservations.length === 0 ? (
-          <div className="p-12 text-center text-text-muted flex flex-col items-center gap-2">
-            <CalendarDays size={24} /> <p className="font-semibold">No reservations found</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-secondary-50/50 border-b border-border">
-                <tr>
-                  <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">ID / Guest</th>
-                  <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Room(s)</th>
-                  <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Dates</th>
-                  <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider text-right">Amount</th>
-                  <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredReservations.map((res) => {
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-secondary-50/50 border-b border-border">
+              <tr>
+                <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">ID / Guest</th>
+                <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Room(s)</th>
+                <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Dates</th>
+                <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider text-right">Amount</th>
+                <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                <tr><td colSpan="6" className="p-12 text-center text-text-muted animate-pulse">Loading reservations...</td></tr>
+              ) : filteredReservations.length === 0 ? (
+                <tr><td colSpan="6" className="p-12 text-center text-text-muted flex flex-col items-center gap-2"><CalendarDays size={24} /> <p className="font-semibold">No reservations found</p></td></tr>
+              ) : (
+                filteredReservations.map((res) => {
                   const rooms = res.reservationRooms?.map(r => r.room?.roomNumber).join(', ') || 'N/A';
                   const checkIn = new Date(res.checkInDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                   const checkOut = new Date(res.checkOutDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -220,32 +311,45 @@ export default function ReservationsPage() {
                       </td>
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
 
-        {pagination.totalPages > 1 && (
-          <div className="px-6 py-3 border-t border-border bg-secondary-50/30 flex items-center justify-between">
-            <p className="text-xs text-text-muted">
-              Showing <span className="font-semibold text-text">{reservations.length}</span> of <span className="font-semibold text-text">{pagination.total}</span> reservations
+        {/* Enterprise Pagination Footer */}
+        <div className="px-6 py-4 border-t border-border bg-secondary-50/30 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <p className="text-sm text-text-muted">
+              Showing <span className="font-semibold text-text">{startItem}</span> to <span className="font-semibold text-text">{endItem}</span> of <span className="font-semibold text-text">{pagination.total}</span> records
             </p>
-            <div className="flex items-center gap-1">
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                className="p-1.5 rounded-lg border border-border bg-surface hover:bg-secondary-50 disabled:opacity-40 disabled:cursor-not-allowed transition">
-                <ChevronLeft size={16} />
-              </button>
-              <span className="px-3 text-xs font-semibold text-text">Page {pagination.page} of {pagination.totalPages}</span>
-              <button onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))} disabled={page === pagination.totalPages}
-                className="p-1.5 rounded-lg border border-border bg-surface hover:bg-secondary-50 disabled:opacity-40 disabled:cursor-not-allowed transition">
-                <ChevronRight size={16} />
-              </button>
-            </div>
+            <select 
+              value={limit} 
+              onChange={(e) => updateParams({ limit: e.target.value, page: 1 })}
+              className="text-sm border border-border rounded-lg px-2 py-1 bg-surface text-text outline-none focus:ring-2 focus:ring-primary-500/20"
+            >
+              <option value="10">10 / page</option>
+              <option value="25">25 / page</option>
+              <option value="50">50 / page</option>
+              <option value="100">100 / page</option>
+            </select>
           </div>
-        )}
+          
+          <div className="flex items-center gap-1">
+            <button onClick={() => updateParams({ page: 1 })} disabled={page === 1 || isPlaceholderData} className="px-2 py-1 text-sm font-medium rounded-lg border border-border bg-surface hover:bg-secondary-50 disabled:opacity-40 disabled:cursor-not-allowed transition">First</button>
+            <button onClick={() => updateParams({ page: page - 1 })} disabled={page === 1 || isPlaceholderData} className="px-2 py-1 text-sm font-medium rounded-lg border border-border bg-surface hover:bg-secondary-50 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1"><ChevronLeft size={16} /> Prev</button>
+            
+            <span className="px-3 py-1 text-sm font-semibold text-text bg-background border border-border rounded-lg min-w-[100px] text-center">
+              Page {page} of {totalPages || 1}
+            </span>
+            
+            <button onClick={() => updateParams({ page: page + 1 })} disabled={page === totalPages || !pagination.total || isPlaceholderData} className="px-2 py-1 text-sm font-medium rounded-lg border border-border bg-surface hover:bg-secondary-50 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1">Next <ChevronRight size={16} /></button>
+            <button onClick={() => updateParams({ page: totalPages })} disabled={page === totalPages || !pagination.total || isPlaceholderData} className="px-2 py-1 text-sm font-medium rounded-lg border border-border bg-surface hover:bg-secondary-50 disabled:opacity-40 disabled:cursor-not-allowed transition">Last</button>
+          </div>
+        </div>
       </div>
 
+      {/* Modal */}
       <ReservationModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
