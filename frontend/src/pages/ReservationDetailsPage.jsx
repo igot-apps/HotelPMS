@@ -6,9 +6,10 @@ import { recordPayment } from '../api/payments';
 import { useAuthStore } from '../store/authStore';
 import { 
   ArrowLeft, User, BedDouble, CreditCard, FileText, Edit2, X, Loader2, 
-  CalendarDays, DollarSign, Clock, CheckCircle2, AlertCircle, Plus, Printer
+  CalendarDays, DollarSign, Clock, CheckCircle2, AlertCircle, Plus, Printer,ChevronDown
 } from 'lucide-react';
 import ReceiptModal from '../components/reservations/ReceiptModal';
+import ThermalReceiptModal from '../components/reservations/ThermalReceiptModal';
 
 export default function ReservationDetailsPage() {
   const { id } = useParams();
@@ -20,6 +21,7 @@ export default function ReservationDetailsPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false); // Receipt Modal State
+  const [isThermalReceiptOpen, setIsThermalReceiptOpen] = useState(false);
   
   // States for Form Data
   const [editData, setEditData] = useState({ notes: '', source: '' });
@@ -115,9 +117,29 @@ export default function ReservationDetailsPage() {
           }`}>
             {resData.status}
           </span>
-          <button onClick={() => setIsReceiptOpen(true)} className="inline-flex items-center gap-2 px-4 py-2 bg-surface border border-border text-text text-sm font-semibold rounded-lg hover:bg-secondary-50 transition">
-            <Printer size={16} /> Print Receipt
-          </button>
+                    {/* Print Options Dropdown */}
+          <div className="relative group">
+            <button className="inline-flex items-center gap-2 px-4 py-2 bg-surface border border-border text-text text-sm font-semibold rounded-lg hover:bg-secondary-50 transition">
+              <Printer size={16} /> Print <ChevronDown size={14} />
+            </button>
+            {/* Dropdown Menu */}
+            <div className="absolute right-0 mt-2 w-56 bg-surface border border-border rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+              <button 
+                onClick={() => setIsReceiptOpen(true)} 
+                className="w-full text-left px-4 py-3 text-sm text-text hover:bg-secondary-50 transition flex flex-col border-b border-border"
+              >
+                <span className="font-semibold">A4 Guest Folio</span>
+                <span className="text-xs text-text-muted">Detailed invoice for standard printers</span>
+              </button>
+              <button 
+                onClick={() => setIsThermalReceiptOpen(true)} 
+                className="w-full text-left px-4 py-3 text-sm text-text hover:bg-secondary-50 transition flex flex-col"
+              >
+                <span className="font-semibold">80mm Thermal Receipt</span>
+                <span className="text-xs text-text-muted">Compact format for front desk printers</span>
+              </button>
+            </div>
+          </div>
           <button onClick={openEditModal} className="inline-flex items-center gap-2 px-4 py-2 bg-surface border border-border text-text text-sm font-semibold rounded-lg hover:bg-secondary-50 transition">
             <Edit2 size={16} /> Edit Details
           </button>
@@ -315,9 +337,18 @@ export default function ReservationDetailsPage() {
       {/* ========================================== */}
       {/* 👇 3. RECEIPT MODAL (CORRECTLY PLACED) 👇  */}
       {/* ========================================== */}
+            {/* A4 Guest Folio Modal */}
       <ReceiptModal 
         isOpen={isReceiptOpen} 
         onClose={() => setIsReceiptOpen(false)} 
+        reservation={resData} 
+        stats={statsData} 
+      />
+
+      {/* 👇 NEW: 80mm Thermal Receipt Modal 👇 */}
+      <ThermalReceiptModal 
+        isOpen={isThermalReceiptOpen} 
+        onClose={() => setIsThermalReceiptOpen(false)} 
         reservation={resData} 
         stats={statsData} 
       />
