@@ -35,7 +35,7 @@ export default function RoomsPage() {
 
   const handleToggleOperational = (room) => {
     const newStatus = room.operationalStatus?.toUpperCase() === 'MAINTENANCE' ? 'Available' : 'Maintenance';
-    statusMutation.mutate({ roomId: room.roomId, payload: { operationalStatus: newStatus } });
+    statusMutation.mutate({ roomId: room.roomId, payload: { operationalStatus: newStatus, housekeepingStatus: room.housekeepingStatus } });
   };
 
   // 4. Data Processing

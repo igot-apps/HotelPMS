@@ -193,7 +193,16 @@ export const checkOutGuest = async (reservationId: number) => {
   // Release rooms
   for (const rr of reservation.reservationRooms) {
     await updateRoomStatus(rr.roomId, 'Available', 'Dirty');
+    
   }
+
+
+    // ✅ FIX: Update room status to Occupied during check-in
+  for (const rr of reservation.reservationRooms) {
+    await updateRoomStatus(rr.roomId, 'Occupied');
+  }
+
+
 
   return reservationRepository.findReservationById(reservationId);
 };
