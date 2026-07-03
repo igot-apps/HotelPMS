@@ -48,20 +48,25 @@ export const createReservation = async (data: any) => {
   }
 
   // Create reservation
-  const reservation = await reservationRepository.createReservation({
-    tenantId: data.tenantId,
-    propertyId: data.propertyId,
-    guestId: data.guestId,
-    staffId: data.staffId,
-    source: data.source || 'Website',
-    checkInDate: checkIn,
-    checkOutDate: checkOut,
-    status: 'Confirmed',
-    notes: data.notes,
-    totalAmount,
-    amountPaid: data.amountPaid || 0,
-    balanceDue: totalAmount - (data.amountPaid || 0),
-  });
+    const reservation = await reservationRepository.createReservation({
+        tenantId: data.tenantId,
+        propertyId: data.propertyId,
+        guestId: data.guestId,
+        staffId: data.staffId,
+        source: data.source || 'Website',
+        checkInDate: checkIn,
+        checkOutDate: checkOut,
+        status: 'Confirmed',
+        notes: data.notes,
+        totalAmount,
+        
+        // 🛡️ ENTERPRISE FIX: Single Source of Truth
+        // We IGNORE data.amountPaid here. 
+        // The reservation ALWAYS starts at 0 paid.
+        // The Payment table will handle all money movement and update these totals atomically.
+        amountPaid: 0, 
+        balanceDue: totalAmount, 
+      });
 
   // Create reservation rooms
   for (const roomData of data.rooms) {
