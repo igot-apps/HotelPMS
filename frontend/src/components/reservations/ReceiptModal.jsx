@@ -4,18 +4,20 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
   if (!isOpen || !reservation) return null;
 
   const handlePrint = () => {
-    window.print();
+    // Small timeout ensures the DOM is fully ready before triggering the print dialog
+    setTimeout(() => {
+      window.print();
+    }, 100);
   };
 
   const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const formatCurrency = (val) => parseFloat(val || 0).toFixed(2);
 
-  // Calculate nights
   const nights = Math.ceil((new Date(reservation.checkOutDate) - new Date(reservation.checkInDate)) / (1000 * 60 * 60 * 24));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm print:bg-white print:static print:p-0 print:flex-none">
-      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col print:shadow-none print:rounded-none print:max-h-none print:h-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm print-modal-wrapper">
+      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col print-modal-wrapper">
         
         {/* Screen-only Header (Hidden when printing) */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 print:hidden">
@@ -30,9 +32,11 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
           </div>
         </div>
 
-        {/* Receipt Content (This is what gets printed) */}
-        <div className="flex-1 overflow-y-auto p-8 print:p-0 print:overflow-visible" id="receipt-content">
-          <div className="max-w-md mx-auto font-sans text-gray-800">
+        {/* Scrollable Area */}
+        <div className="flex-1 overflow-y-auto p-8 print-scroll-area">
+          
+          {/* THE ACTUAL RECEIPT CONTENT (This ID is targeted by the CSS) */}
+          <div className="max-w-md mx-auto font-sans text-gray-800" id="print-receipt-content">
             
             {/* Hotel Header */}
             <div className="text-center border-b-2 border-gray-800 pb-4 mb-6">
@@ -99,7 +103,7 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
                       <tr key={rr.reservationRoomId} className="border-b border-gray-100">
                         <td className="py-2">
                           <p className="font-semibold text-gray-900">Room {rr.room?.roomNumber}</p>
-                          <p className="text-xs text-gray-500">{rr.roomType?.typeName}</p>
+                          <p className="text-xs text-gray-500">{rr.roomType?.typeName || rr.room?.roomType?.typeName}</p>
                         </td>
                         <td className="text-center py-2 text-gray-700">{nights}</td>
                         <td className="text-right py-2 text-gray-700">{formatCurrency(rate)}</td>
@@ -174,26 +178,62 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
         </div>
       </div>
 
-      {/* 🖨️ PRINT STYLES: Hides the app UI and forces colors to print */}
+      {/* 🖨️ BULLETPROOF PRINT STYLES */}
       <style>{`
         @media print {
+          /* 1. Hide EVERYTHING on the screen */
           body * {
-            visibility: hidden;
+            visibility: hidden !important;
           }
-          #receipt-content, #receipt-content * {
-            visibility: visible;
-            /* Forces browser to print background colors and borders */
+          
+          /* 2. Show ONLY the receipt and its children */
+          #print-receipt-content, #print-receipt-content * {
+            visibility: visible !important;
+          }
+          
+          /* 3. Break the receipt out of the modal overlay and place it at the top of the page */
+          #print-receipt-content {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 20px !important;
+            background: white !important;
+            box-shadow: none !important;
+            border: none !important;
+            overflow: visible !important;
+            height: auto !important;
+            max-height: none !important;
+            display: block !important;
+          }
+
+          /* 4. Force ALL parent modal containers to stop acting as fixed overlays or clipping content */
+          .print-modal-wrapper, .print-scroll-area {
+            position: static !important;
+            inset: auto !important;
+            background: transparent !important;
+            backdrop-filter: none !important;
+            display: block !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            box-shadow: none !important;
+            border: none !important;
+            transform: none !important;
+          }
+          
+          /* 5. Force browsers to print background colors and borders */
+          * {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
             color-adjust: exact !important;
           }
-          #receipt-content {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            padding: 20px;
-          }
+
           @page {
             margin: 1.5cm;
             size: A4;
