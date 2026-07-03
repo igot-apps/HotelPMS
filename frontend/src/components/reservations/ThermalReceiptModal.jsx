@@ -49,7 +49,7 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
             <div className="text-center mb-2">
               <h1 className="text-base font-bold uppercase tracking-wider">{reservation.property?.propertyName || 'Hotel PMS'}</h1>
               <p className="text-[10px]">{reservation.property?.address || 'Address'}</p>
-              <p className="text-[10px]">{reservation.property?.phone || 'Tel: 000-000-000'}</p>
+              <p className="text-[10px]">{reservation.property?.primaryPhone || 'Tel: 000-000-000'}</p>
             </div>
 
             <div className="border-t border-dashed border-black my-2"></div>
@@ -145,46 +145,66 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
         </div>
       </div>
 
-      {/* 🖨️ THERMAL PRINT STYLES */}
+      {/* 🖨️ BULLETPROOF THERMAL PRINT STYLES */}
       <style>{`
         @media print {
-          /* Set exact 80mm paper size, auto height (continuous roll) */
-          @page {
-            size: 80mm auto;
-            margin: 0;
+          /* 1. Hide EVERYTHING on the screen */
+          body * {
+            visibility: hidden !important;
           }
           
-          body * { visibility: hidden !important; }
-          
-          #thermal-receipt-content, #thermal-receipt-content * { 
-            visibility: visible !important; 
+          /* 2. Show ONLY the receipt and its children */
+          #thermal-receipt-content, #thermal-receipt-content * {
+            visibility: visible !important;
           }
           
+          /* 3. Break the receipt out of the modal overlay */
           #thermal-receipt-content {
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
             width: 80mm !important;
+            max-width: 80mm !important;
+            margin: 0 !important;
+            padding: 2mm !important;
             background: white !important;
             color: black !important;
             box-shadow: none !important;
-            margin: 0 !important;
-            /* Thermal printers don't use color, force B&W */
+            border: none !important;
+            overflow: visible !important;
+            height: auto !important;
+            max-height: none !important;
+            display: block !important;
+            /* Force B&W for thermal */
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+            color-adjust: exact !important;
           }
 
-          .thermal-modal-wrapper, .thermal-scroll-area {
+          /* 4. Force ALL parent modal containers to stop acting as fixed overlays */
+          .thermal-modal-wrapper, .thermal-scroll-area, .thermal-paper {
             position: static !important;
-            display: block !important;
-            width: auto !important;
-            height: auto !important;
-            overflow: visible !important;
+            inset: auto !important;
             background: transparent !important;
-            box-shadow: none !important;
-            border: none !important;
+            backdrop-filter: none !important;
+            display: block !important;
             padding: 0 !important;
             margin: 0 !important;
+            width: auto !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            box-shadow: none !important;
+            border: none !important;
+            transform: none !important;
+          }
+
+          /* 5. Page setup */
+          @page {
+            margin: 0;
+            /* FIX: Removed 'size: 80mm auto;' because Chrome/Edge fails to render 
+               PDFs when the page height is 'auto'. The content width is locked to 
+               80mm above. When printing, set the paper size in your OS/Printer settings. */
           }
         }
       `}</style>
