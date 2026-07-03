@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getReservationById, getReservationStats, updateReservation } from '../api/reservations';
-import { recordPayment } from '../api/payments'; // NEW: Import payment API
+import { recordPayment } from '../api/payments';
 import { useAuthStore } from '../store/authStore';
 import { 
   ArrowLeft, User, BedDouble, CreditCard, FileText, Edit2, X, Loader2, 
-  CalendarDays, DollarSign, Clock, CheckCircle2, AlertCircle, Plus // NEW: Added Plus icon
+  CalendarDays, DollarSign, Clock, CheckCircle2, AlertCircle, Plus, Printer
 } from 'lucide-react';
+import ReceiptModal from '../components/reservations/ReceiptModal';
 
 export default function ReservationDetailsPage() {
   const { id } = useParams();
@@ -18,6 +19,7 @@ export default function ReservationDetailsPage() {
   // States for Modals
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isReceiptOpen, setIsReceiptOpen] = useState(false); // Receipt Modal State
   
   // States for Form Data
   const [editData, setEditData] = useState({ notes: '', source: '' });
@@ -48,15 +50,12 @@ export default function ReservationDetailsPage() {
     },
   });
 
-  // NEW: Payment Mutation
   const paymentMutation = useMutation({
     mutationFn: (data) => recordPayment({ ...data, reservationId: parseInt(id) }),
     onSuccess: () => {
-      // Refresh reservation details and stats to show updated balance and new payment
       queryClient.invalidateQueries({ queryKey: ['reservation', id] });
       queryClient.invalidateQueries({ queryKey: ['reservationStats', id] });
       setIsPaymentModalOpen(false);
-      // Reset form
       setPaymentData({ amount: '', paymentMethod: 'Cash', gatewayReference: '', notes: '' });
     },
   });
@@ -116,6 +115,9 @@ export default function ReservationDetailsPage() {
           }`}>
             {resData.status}
           </span>
+          <button onClick={() => setIsReceiptOpen(true)} className="inline-flex items-center gap-2 px-4 py-2 bg-surface border border-border text-text text-sm font-semibold rounded-lg hover:bg-secondary-50 transition">
+            <Printer size={16} /> Print Receipt
+          </button>
           <button onClick={openEditModal} className="inline-flex items-center gap-2 px-4 py-2 bg-surface border border-border text-text text-sm font-semibold rounded-lg hover:bg-secondary-50 transition">
             <Edit2 size={16} /> Edit Details
           </button>
@@ -179,10 +181,9 @@ export default function ReservationDetailsPage() {
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-text flex items-center gap-2"><CreditCard size={18} /> Payment History</h3>
           
-          {/* NEW: Record Payment Button */}
           <button 
             onClick={() => setIsPaymentModalOpen(true)} 
-            disabled={balanceDue <= 0 && resData.status !== 'CheckedIn'} // Disable if fully paid and checked out
+            disabled={balanceDue <= 0 && resData.status !== 'CheckedIn'}
             className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus size={16} /> Record Payment
@@ -222,7 +223,7 @@ export default function ReservationDetailsPage() {
       </div>
 
       {/* ========================================== */}
-      {/* NEW: Record Payment Modal                  */}
+      {/* 1. Record Payment Modal                    */}
       {/* ========================================== */}
       {isPaymentModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -245,40 +246,24 @@ export default function ReservationDetailsPage() {
 
               <div>
                 <label className="block text-sm font-semibold text-text mb-1.5">Amount (GHS) *</label>
-                <input 
-                  type="number" step="0.01" name="amount" value={paymentData.amount} onChange={handlePaymentChange} required
-                  placeholder={fmt(balanceDue)}
-                  className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" 
-                />
+                <input type="number" step="0.01" name="amount" value={paymentData.amount} onChange={handlePaymentChange} required placeholder={fmt(balanceDue)} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
               </div>
-
               <div>
                 <label className="block text-sm font-semibold text-text mb-1.5">Payment Method *</label>
-                <select name="paymentMethod" value={paymentData.paymentMethod} onChange={handlePaymentChange} required
-                  className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition">
+                <select name="paymentMethod" value={paymentData.paymentMethod} onChange={handlePaymentChange} required className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition">
                   <option value="Cash">Cash</option>
                   <option value="Card">Credit/Debit Card</option>
                   <option value="MobileMoney">Mobile Money</option>
                   <option value="Online">Online Transfer</option>
                 </select>
               </div>
-
               <div>
                 <label className="block text-sm font-semibold text-text mb-1.5">Gateway Reference</label>
-                <input 
-                  type="text" name="gatewayReference" value={paymentData.gatewayReference} onChange={handlePaymentChange}
-                  placeholder="e.g., MM-REF-12345 (Optional)"
-                  className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" 
-                />
+                <input type="text" name="gatewayReference" value={paymentData.gatewayReference} onChange={handlePaymentChange} placeholder="e.g., MM-REF-12345 (Optional)" className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
               </div>
-
               <div>
                 <label className="block text-sm font-semibold text-text mb-1.5">Notes</label>
-                <input 
-                  type="text" name="notes" value={paymentData.notes} onChange={handlePaymentChange}
-                  placeholder="e.g., Partial payment (Optional)"
-                  className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" 
-                />
+                <input type="text" name="notes" value={paymentData.notes} onChange={handlePaymentChange} placeholder="e.g., Partial payment (Optional)" className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-border">
@@ -292,7 +277,9 @@ export default function ReservationDetailsPage() {
         </div>
       )}
 
-      {/* Edit Notes Modal (Existing) */}
+      {/* ========================================== */}
+      {/* 2. Edit Notes Modal                        */}
+      {/* ========================================== */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-surface w-full max-w-md rounded-2xl shadow-xl border border-border overflow-hidden">
@@ -324,10 +311,24 @@ export default function ReservationDetailsPage() {
           </div>
         </div>
       )}
+
+      {/* ========================================== */}
+      {/* 👇 3. RECEIPT MODAL (CORRECTLY PLACED) 👇  */}
+      {/* ========================================== */}
+      <ReceiptModal 
+        isOpen={isReceiptOpen} 
+        onClose={() => setIsReceiptOpen(false)} 
+        reservation={resData} 
+        stats={statsData} 
+      />
+
     </div>
   );
 }
 
+// ==========================================
+// Helper Component (No changes here)
+// ==========================================
 function StatCard({ icon: Icon, label, value, color }) {
   const colorMap = {
     primary: 'bg-primary-50 text-primary-600', success: 'bg-success-50 text-success-600',

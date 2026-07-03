@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Loader2, AlertCircle, Check, ChevronLeft, ChevronRight, User, Calendar, BedDouble, CreditCard, Building2 } from 'lucide-react';
+import { X, Loader2, AlertCircle, Check, ChevronLeft, ChevronRight, CreditCard } from 'lucide-react';
 import { getAvailableRooms } from '../../api/rooms';
 import { getGuests } from '../../api/guests';
 import { useAuthStore } from '../../store/authStore';
@@ -27,7 +27,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
     gatewayReference: '',
   });
 
-  // Reset everything when modal opens/closes
+  // Reset everything when modal opens
   useEffect(() => {
     if (isOpen) {
       const today = new Date().toISOString().split('T')[0];
@@ -116,6 +116,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
       })),
       amountPaid: formData.recordPayment ? parseFloat(formData.amountPaid) || 0 : 0,
       paymentMethod: formData.paymentMethod,
+      gatewayReference: formData.gatewayReference || null,
     };
     onSubmit(payload);
   };
@@ -259,7 +260,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
           {currentStep === 3 && (
             <div className="space-y-6 max-w-3xl mx-auto">
               <div className="bg-secondary-50 p-5 rounded-xl border border-border">
-                <h3 className="text-sm font-bold text-text mb-3 flex items-center gap-2"><Building2 size={16} /> Booking Info</h3>
+                <h3 className="text-sm font-bold text-text mb-3 flex items-center gap-2">Booking Info</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                   <div><p className="text-xs text-text-muted">Guest</p><p className="font-semibold text-text">{guests.find(g => g.guestId == formData.guestId)?.fullName}</p></div>
                   <div><p className="text-xs text-text-muted">Handled By</p><p className="font-semibold text-text">{user?.fullName} ({user?.role})</p></div>
@@ -309,32 +310,63 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
               {/* Payment Section */}
               <div className="bg-surface border border-border rounded-xl p-5 space-y-4">
                 <div className="flex items-center gap-3">
-                  <input type="checkbox" id="recordPayment" checked={formData.recordPayment} onChange={(e) => setFormData({...formData, recordPayment: e.target.checked, amountPaid: e.target.checked ? totalDue.toFixed(2) : '0'})}
-                    className="w-4 h-4 rounded border-border text-primary-600 focus:ring-primary-500" />
-                  <label htmlFor="recordPayment" className="text-sm font-bold text-text cursor-pointer flex items-center gap-2"><CreditCard size={16} /> Record payment now</label>
+                  <input 
+                    type="checkbox" 
+                    id="recordPayment" 
+                    checked={formData.recordPayment} 
+                    onChange={(e) => {
+                      const isChecked = e.target.checked;
+                      setFormData({
+                        ...formData, 
+                        recordPayment: isChecked, 
+                        amountPaid: isChecked ? totalDue.toFixed(2) : '0' 
+                      });
+                    }}
+                    className="w-4 h-4 rounded border-border text-primary-600 focus:ring-primary-500" 
+                  />
+                  <label htmlFor="recordPayment" className="text-sm font-bold text-text cursor-pointer flex items-center gap-2">
+                    <CreditCard size={16} /> Record Initial Payment now
+                  </label>
                 </div>
 
                 {formData.recordPayment && (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-border">
-                    <div>
-                      <label className="block text-xs font-semibold text-text-muted mb-1">Amount (GH₵)</label>
-                      <input type="number" step="0.01" name="amountPaid" value={formData.amountPaid} onChange={handleChange} required
-                        className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
+                  <div className="space-y-3 pt-2 border-t border-border">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-text-muted mb-1">Initial Payment Amount (GH₵)</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          name="amountPaid" 
+                          value={formData.amountPaid} 
+                          onChange={handleChange} 
+                          required
+                          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-text-muted mb-1">Payment Method</label>
+                        <select name="paymentMethod" value={formData.paymentMethod} onChange={handleChange}
+                          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20">
+                          <option value="Cash">Cash</option>
+                          <option value="Card">Credit/Debit Card</option>
+                          <option value="MobileMoney">Mobile Money</option>
+                          <option value="Online">Online Transfer</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-text-muted mb-1">Reference (optional)</label>
+                        <input type="text" name="gatewayReference" value={formData.gatewayReference} onChange={handleChange} placeholder="e.g. transaction ID"
+                          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-text-muted mb-1">Payment Method</label>
-                      <select name="paymentMethod" value={formData.paymentMethod} onChange={handleChange}
-                        className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20">
-                        <option value="Cash">Cash</option>
-                        <option value="Card">Credit/Debit Card</option>
-                        <option value="MobileMoney">Mobile Money</option>
-                        <option value="Online">Online Transfer</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-text-muted mb-1">Reference (optional)</label>
-                      <input type="text" name="gatewayReference" value={formData.gatewayReference} onChange={handleChange} placeholder="e.g. transaction ID"
-                        className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
+
+                    {/* LIVE REMAINING BALANCE CALCULATOR */}
+                    <div className="flex justify-between items-center p-3 bg-secondary-50 rounded-lg border border-border">
+                      <span className="text-sm font-semibold text-text">Remaining Balance to Collect:</span>
+                      <span className={`text-lg font-bold ${ (totalDue - parseFloat(formData.amountPaid || 0)) > 0 ? 'text-danger-600' : 'text-success-600' }`}>
+                        GH₵ {formatCurrency(totalDue - parseFloat(formData.amountPaid || 0))}
+                      </span>
                     </div>
                   </div>
                 )}
