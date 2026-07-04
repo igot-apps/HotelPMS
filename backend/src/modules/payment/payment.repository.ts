@@ -240,3 +240,18 @@ export const getPaymentStats = async (tenantId: number) => {
     })),
   };
 };
+
+export const calculateAccumulatedPayment = async (reservationId: number): Promise<number> => {
+  const result = await prisma.payment.aggregate({
+    where: {
+      reservationId: reservationId,
+      status: 'Completed', // Only count successful payments
+    },
+    _sum: {
+      amount: true,
+    },
+  });
+
+  // Prisma returns a Decimal object, convert to standard JS Number
+  return result._sum.amount ? Number(result._sum.amount) : 0;
+};
