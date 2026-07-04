@@ -100,7 +100,7 @@ export default function RoomManagementPage() {
     if (editingType) {
       typeMutation.mutate({ id: editingType.roomTypeId, data });
     } else {
-      typeMutation.mutate({ data });
+      typeMutation.mutate({ data: { ...data, propertyId } });
     }
   };
 
