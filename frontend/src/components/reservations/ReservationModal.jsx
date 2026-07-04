@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react'; 
 import { X, Loader2, AlertCircle, Check, ChevronLeft, ChevronRight, CreditCard, UserPlus } from 'lucide-react';
 import { getAvailableRooms } from '../../api/rooms';
 import { getGuests, createGuest } from '../../api/guests'; // Added createGuest
 import { useAuthStore } from '../../store/authStore';
 import toast from 'react-hot-toast'; // For success feedback
+
 
 export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading }) {
   const user = useAuthStore((state) => state.user);
@@ -165,15 +166,17 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6">
           {currentStep === 1 && (
             <div className="space-y-5 max-w-2xl mx-auto">
-              <div>
+                            <div>
                 <label className="block text-sm font-semibold text-text mb-1.5">Guest *</label>
                 <div className="flex gap-2">
-                  <select name="guestId" value={formData.guestId} onChange={handleChange} required className="flex-1 px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition">
-                    <option value="">— Select an existing guest —</option>
-                    {guests.map(g => <option key={g.guestId} value={g.guestId}>{g.fullName} ({g.phone})</option>)}
-                  </select>
+                  {/* NEW: Searchable Guest Combobox */}
+                  <SearchableGuestSelect 
+                    guests={guests} 
+                    value={formData.guestId} 
+                    onChange={(id) => setFormData(prev => ({ ...prev, guestId: id }))} 
+                  />
                   
-                  {/* NEW: Quick Add Guest Button */}
+                  {/* Quick Add Guest Button */}
                   <button 
                     type="button" 
                     onClick={() => setIsAddGuestOpen(true)} 
@@ -183,7 +186,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
                     <UserPlus size={18} /> Add Guest
                   </button>
                 </div>
-                <p className="text-xs text-text-muted mt-1">Only registered guests can be booked. Click "Add Guest" to quickly create a new profile.</p>
+                <p className="text-xs text-text-muted mt-1">Search by name or phone. Click "Add Guest" to quickly create a new profile.</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -403,6 +406,93 @@ function StepIndicator({ num, label, active, completed }) {
         {completed ? <Check size={14} /> : num}
       </div>
       <span className={`text-xs font-semibold hidden sm:block ${active ? 'text-text' : 'text-text-muted'}`}>{label}</span>
+    </div>
+  );
+}
+
+
+// ==========================================
+// Custom Searchable Guest Dropdown
+// ==========================================
+function SearchableGuestSelect({ guests, value, onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const wrapperRef = useRef(null);
+
+  // Filter guests based on search term (Name or Phone)
+  const filteredGuests = guests.filter(g => 
+    g.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (g.phone && g.phone.includes(searchTerm))
+  );
+
+  // Find the currently selected guest to display their name
+  const selectedGuest = guests.find(g => String(g.guestId) === String(value));
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+        setIsOpen(false);
+        // Reset search term when closing so the input shows the selected name cleanly
+        setSearchTerm(''); 
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSelect = (guestId) => {
+    onChange(String(guestId));
+    setIsOpen(false);
+    setSearchTerm('');
+  };
+
+  return (
+    <div ref={wrapperRef} className="relative flex-1">
+      <input
+        type="text"
+        // Show search term while typing, otherwise show selected guest's name
+        value={isOpen ? searchTerm : (selectedGuest ? `${selectedGuest.fullName} (${selectedGuest.phone})` : '')}
+        onChange={(e) => { 
+          setSearchTerm(e.target.value); 
+          if (!isOpen) setIsOpen(true);
+          // If they delete the text, clear the selection
+          if (!e.target.value) onChange(''); 
+        }}
+        onFocus={() => setIsOpen(true)}
+        placeholder="Search by name or phone..."
+        className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text placeholder:text-text-muted focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition"
+      />
+      
+      {/* Dropdown List */}
+      {isOpen && (
+        <div className="absolute z-20 w-full mt-1 bg-surface border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
+          {filteredGuests.length > 0 ? (
+            filteredGuests.map(g => (
+              <button
+                key={g.guestId}
+                type="button"
+                onClick={() => handleSelect(g.guestId)}
+                className={`w-full text-left px-4 py-2.5 text-sm transition flex justify-between items-center ${
+                  String(g.guestId) === String(value) 
+                    ? 'bg-primary-50 text-primary-700 font-semibold' 
+                    : 'text-text hover:bg-secondary-50'
+                }`}
+              >
+                <span>{g.fullName}</span>
+                <span className="text-xs text-text-muted">{g.phone}</span>
+              </button>
+            ))
+          ) : (
+            <div className="px-4 py-3 text-sm text-text-muted text-center">
+              No guests found. <br/>
+              <button type="button" onClick={() => setIsOpen(false)} className="text-primary-600 font-semibold hover:underline mt-1">
+                Click "Add Guest" to create one.
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
