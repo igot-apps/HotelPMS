@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { 
-  LayoutDashboard, BedDouble, Users, CalendarDays, CreditCard, BarChart3, 
+  LayoutDashboard, Search, BedDouble, Users, CalendarDays, CreditCard, BarChart3, 
   LogOut, Settings, Layers, Tags, Building2, X // Added X icon
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 
 const operationItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/availability', icon: Search, label: 'Check Availability' },
   { to: '/reservations', icon: CalendarDays, label: 'Reservations' },
   { to: '/rooms', icon: BedDouble, label: 'Rooms & Inventory' },
   { to: '/guests', icon: Users, label: 'Guests' },
