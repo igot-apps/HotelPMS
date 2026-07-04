@@ -276,7 +276,7 @@ async function main() {
   console.log('✅ Users created (9)');
 
 // ============================================================
-// 5. Create Permissions (Updated with all Room & Reservation permissions)
+// 5. Create Permissions (Updated with Room Inventory Permissions)
 // ============================================================
 const permissions = [
   // Reservations
@@ -284,9 +284,8 @@ const permissions = [
   { code: 'CanCancelReservation', name: 'Cancel Reservation', category: 'Reservations' },
   { code: 'CanCheckInGuest', name: 'Check In Guest', category: 'Reservations' },
   { code: 'CanCheckOutGuest', name: 'Check Out Guest', category: 'Reservations' },
-  { code: 'CanViewReservations', name: 'View Reservations', category: 'Reservations' }, // 🚨 Added for Details Page
   
-  // Inventory (Rooms & Types)
+  // Inventory (NEW: Room & Room Type Management)
   { code: 'CanViewRooms', name: 'View Room Inventory', category: 'Inventory' },
   { code: 'CanCreateRoom', name: 'Create Room', category: 'Inventory' },
   { code: 'CanUpdateRoom', name: 'Update Room Details', category: 'Inventory' },
@@ -294,13 +293,13 @@ const permissions = [
   { code: 'CanCreateRoomType', name: 'Create Room Type', category: 'Inventory' },
   { code: 'CanUpdateRoomType', name: 'Update Room Type', category: 'Inventory' },
   { code: 'CanDeleteRoomType', name: 'Delete Room Type', category: 'Inventory' },
-  { code: 'CanUpdateRoomStatus', name: 'Update Room Status', category: 'Inventory' },
+  { code: 'CanUpdateRoomStatus', name: 'Update Room Status (Housekeeping/Maintenance)', category: 'Inventory' },
   { code: 'CanManageRates', name: 'Manage Rates', category: 'Inventory' },
   
-  // Payments & Reports
+  // Reports & Payments
+  { code: 'CanViewFinancialReports', name: 'View Financial Reports', category: 'Reports' },
   { code: 'CanProcessPayments', name: 'Process Payments', category: 'Payments' },
   { code: 'CanIssueRefunds', name: 'Issue Refunds', category: 'Payments' },
-  { code: 'CanViewFinancialReports', name: 'View Financial Reports', category: 'Reports' },
   
   // Operations & Admin
   { code: 'CanManageHousekeeping', name: 'Manage Housekeeping', category: 'Operations' },
@@ -335,7 +334,6 @@ const rolePermissions = [
   { roleId: getRoleId('Receptionist'), permissionId: getPermId('CanCancelReservation') },
   { roleId: getRoleId('Receptionist'), permissionId: getPermId('CanCheckInGuest') },
   { roleId: getRoleId('Receptionist'), permissionId: getPermId('CanCheckOutGuest') },
-  { roleId: getRoleId('Receptionist'), permissionId: getPermId('CanViewReservations') },
   { roleId: getRoleId('Receptionist'), permissionId: getPermId('CanProcessPayments') },
   { roleId: getRoleId('Receptionist'), permissionId: getPermId('CanViewFinancialReports') },
   { roleId: getRoleId('Receptionist'), permissionId: getPermId('CanViewRooms') },

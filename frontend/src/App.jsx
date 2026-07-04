@@ -15,6 +15,7 @@ import PropertiesPage from './pages/PropertiesPage';
 import ReservationDetailsPage from './pages/ReservationDetailsPage';
 import CalendarPage from './pages/CalendarPage';
 import AvailabilityPage from './pages/AvailabilityPage';
+import RoomManagementPage from './pages/RoomManagementPage';
 
 function App() {
   return (
@@ -96,7 +97,7 @@ function App() {
           <Route path="reports" element={<ReportsPage />} />
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="availability" element={<AvailabilityPage />} />
-          
+          <Route path="room-management" element={<RoomManagementPage />} />
           {/* Configuration Pages */}
           <Route path="room-types" element={<RoomTypesPage />} />
           <Route path="rate-plans" element={<RatePlansPage />} />

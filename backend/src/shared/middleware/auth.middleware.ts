@@ -1,10 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken, JwtPayload } from '../utils/jwt';
+import { PrismaClient } from '../../generated/prisma'; // Adjust path if your generated folder is elsewhere
 
+const prisma = new PrismaClient();
+
+// Extend the AuthRequest interface to include permissions for this request lifecycle
 export interface AuthRequest extends Request {
   user?: JwtPayload;
+  userPermissions?: string[]; // 🚨 NEW: Stores permissions so we don't query the DB multiple times per request
 }
 
+// ==========================================
+// 1. AUTHENTICATION (Unchanged)
+// ==========================================
 export const authenticate = (
   req: AuthRequest,
   res: Response,
@@ -35,6 +43,9 @@ export const authenticate = (
   next();
 };
 
+// ==========================================
+// 2. ROLE CHECK (Unchanged)
+// ==========================================
 export const requireRole = (allowedRoleIds: number[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
@@ -57,11 +68,76 @@ export const requireRole = (allowedRoleIds: number[]) => {
   };
 };
 
-export const requirePermission = (_permissionCode: string) => {
-  // ✅ FIX: Added underscore to unused parameter
-  return async (_req: AuthRequest, _res: Response, next: NextFunction): Promise<void> => {
-    // This will be implemented when we add the permission checking
-    // For now, just pass through
-    next();
+// ==========================================
+// 3. PERMISSION CHECK (Fully Implemented)
+// ==========================================
+export const requirePermission = (...requiredPermissions: string[]) => {
+  return async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    try {
+      // 🚀 OPTIMIZATION: Check if permissions are already loaded in this request lifecycle
+      let userPermissions = req.userPermissions;
+
+      if (!userPermissions) {
+        // Fetch the role and its permissions from the database
+        const roleWithPermissions = await prisma.role.findUnique({
+          where: { roleId: req.user.roleId },
+          include: {
+            rolePermissions: {
+              include: {
+                permission: true,
+              },
+            },
+          },
+        });
+
+        if (!roleWithPermissions) {
+          res.status(403).json({
+            success: false,
+            message: 'Access denied. Role not found.',
+          });
+          return;
+        }
+
+        // Extract just the permission codes (e.g., ['CanCreateRoom', 'CanViewRooms'])
+        userPermissions = roleWithPermissions.rolePermissions.map(
+          (rp) => rp.permission.code
+        );
+        
+        // 🚀 Cache on the request object so subsequent middlewares don't hit the DB again
+        req.userPermissions = userPermissions;
+      }
+
+      // Check if the user has ALL the required permissions for this route
+      const hasPermission = requiredPermissions.every((perm) =>
+        userPermissions!.includes(perm)
+      );
+
+      if (!hasPermission) {
+        res.status(403).json({
+          success: false,
+          message: `Access denied. Missing required permission(s): ${requiredPermissions.join(', ')}`,
+        });
+        return;
+      }
+
+      next();
+    } catch (error) {
+      console.error('Authorization error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error during authorization.',
+      });
+    }
   };
 };
+
+// Optional: Alias for convenience if you prefer the name 'authorize' in your routes
+export const authorize = requirePermission;
