@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { X, Loader2, AlertCircle, Check, ChevronLeft, ChevronRight, CreditCard } from 'lucide-react';
+import { X, Loader2, AlertCircle, Check, ChevronLeft, ChevronRight, CreditCard, UserPlus } from 'lucide-react';
 import { getAvailableRooms } from '../../api/rooms';
-import { getGuests } from '../../api/guests';
+import { getGuests, createGuest } from '../../api/guests'; // Added createGuest
 import { useAuthStore } from '../../store/authStore';
+import toast from 'react-hot-toast'; // For success feedback
 
 export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading }) {
   const user = useAuthStore((state) => state.user);
@@ -13,6 +14,13 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
   const [availableRooms, setAvailableRooms] = useState([]);
   const [isFetchingRooms, setIsFetchingRooms] = useState(false);
   
+  // NEW: Quick Add Guest States
+  const [isAddGuestOpen, setIsAddGuestOpen] = useState(false);
+  const [isSavingGuest, setIsSavingGuest] = useState(false);
+  const [newGuestData, setNewGuestData] = useState({
+    fullName: '', phone: '', email: '', idNumber: ''
+  });
+
   const [formData, setFormData] = useState({
     guestId: '', checkInDate: '', checkOutDate: '', source: 'Walk-in', notes: '',
     selectedRooms: [], recordPayment: true, amountPaid: '', paymentMethod: 'Cash', gatewayReference: '',
@@ -66,15 +74,50 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
   const nights = calculateNights();
   const totalDue = formData.selectedRooms.reduce((acc, room) => acc + (parseFloat(room.roomType.basePrice) * nights), 0);
 
+  // ==========================================
+  // NEW: Quick Add Guest Handler
+  // ==========================================
+  const handleQuickAddGuest = async (e) => {
+    e.preventDefault();
+    if (!newGuestData.fullName || !newGuestData.phone) {
+      toast.error('Full Name and Phone are required.');
+      return;
+    }
+
+    setIsSavingGuest(true);
+    try {
+      // 1. Create the guest via API
+      const res = await createGuest(newGuestData);
+      const createdGuest = res.data.data;
+      
+      // 2. Add to the top of the local dropdown list
+      setGuests(prev => [createdGuest, ...prev]);
+      
+      // 3. AUTO-SELECT the newly created guest in the main form
+      setFormData(prev => ({ ...prev, guestId: String(createdGuest.guestId) }));
+      
+      // 4. Close modal and reset
+      setIsAddGuestOpen(false);
+      setNewGuestData({ fullName: '', phone: '', email: '', idNumber: '' });
+      
+      toast.success(`${createdGuest.fullName} added and selected!`);
+    } catch (err) {
+      // The global Axios interceptor will show the error toast (e.g., "Phone already exists")
+      console.error('Failed to create guest:', err);
+    } finally {
+      setIsSavingGuest(false);
+    }
+  };
+
   const nextStep = () => {
     if (currentStep === 1) {
       if (!formData.guestId || !formData.checkInDate || !formData.checkOutDate) {
-        alert('Please fill in Guest, Check-in, and Check-out dates.'); return;
+        toast.error('Please fill in Guest, Check-in, and Check-out dates.'); return;
       }
-      if (nights <= 0) { alert('Check-out date must be after check-in date.'); return; }
+      if (nights <= 0) { toast.error('Check-out date must be after check-in date.'); return; }
     }
     if (currentStep === 2 && formData.selectedRooms.length === 0) {
-      alert('Please select at least one room.'); return;
+      toast.error('Please select at least one room.'); return;
     }
     setCurrentStep(prev => prev + 1);
   };
@@ -83,32 +126,16 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    
-    // 🛡️ FIX: Calculate exact values to avoid floating point errors
     const exactTotal = parseFloat(totalDue.toFixed(2));
     const exactPaid = formData.recordPayment ? parseFloat(parseFloat(formData.amountPaid || 0).toFixed(2)) : 0;
 
     const payload = {
-      propertyId,
-      guestId: parseInt(formData.guestId),
-      staffId: user?.userId,
-      source: formData.source,
-      checkInDate: formData.checkInDate,
-      checkOutDate: formData.checkOutDate,
-      notes: formData.notes,
+      propertyId, guestId: parseInt(formData.guestId), staffId: user?.userId, source: formData.source,
+      checkInDate: formData.checkInDate, checkOutDate: formData.checkOutDate, notes: formData.notes,
       rooms: formData.selectedRooms.map(room => ({
-        roomId: room.roomId,
-        roomTypeId: room.roomTypeId,
-        agreedPricePerNight: parseFloat(room.roomType.basePrice),
+        roomId: room.roomId, roomTypeId: room.roomTypeId, agreedPricePerNight: parseFloat(room.roomType.basePrice),
       })),
-      
-      // 🛡️ ENTERPRISE FIX: We send 0 to the reservation creation.
-      // The recordPayment API will handle the actual money movement.
-      amountPaid: 0, 
-      initialPayment: exactPaid, // The actual amount to record via POST /payments
-      
-      paymentMethod: formData.paymentMethod,
-      gatewayReference: formData.gatewayReference || null,
+      amountPaid: 0, initialPayment: exactPaid, paymentMethod: formData.paymentMethod, gatewayReference: formData.gatewayReference || null,
     };
     onSubmit(payload);
   };
@@ -140,11 +167,25 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
             <div className="space-y-5 max-w-2xl mx-auto">
               <div>
                 <label className="block text-sm font-semibold text-text mb-1.5">Guest *</label>
-                <select name="guestId" value={formData.guestId} onChange={handleChange} required className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition">
-                  <option value="">— Select an existing guest —</option>
-                  {guests.map(g => <option key={g.guestId} value={g.guestId}>{g.fullName} ({g.phone})</option>)}
-                </select>
+                <div className="flex gap-2">
+                  <select name="guestId" value={formData.guestId} onChange={handleChange} required className="flex-1 px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition">
+                    <option value="">— Select an existing guest —</option>
+                    {guests.map(g => <option key={g.guestId} value={g.guestId}>{g.fullName} ({g.phone})</option>)}
+                  </select>
+                  
+                  {/* NEW: Quick Add Guest Button */}
+                  <button 
+                    type="button" 
+                    onClick={() => setIsAddGuestOpen(true)} 
+                    className="px-4 py-2.5 bg-primary-50 text-primary-600 border border-primary-100 rounded-lg hover:bg-primary-100 transition flex items-center gap-2 font-semibold text-sm whitespace-nowrap"
+                    title="Add New Guest"
+                  >
+                    <UserPlus size={18} /> Add Guest
+                  </button>
+                </div>
+                <p className="text-xs text-text-muted mt-1">Only registered guests can be booked. Click "Add Guest" to quickly create a new profile.</p>
               </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-text mb-1.5">Check-in Date *</label>
@@ -270,14 +311,12 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
                       </div>
                     </div>
 
-                    {/* 🛡️ FIX: Bulletproof Remaining Balance Calculator */}
                     <div className="flex justify-between items-center p-3 bg-secondary-50 rounded-lg border border-border">
                       <span className="text-sm font-semibold text-text">Remaining Balance to Collect:</span>
                       {(() => {
                         const paid = parseFloat(formData.amountPaid || 0);
                         const remaining = totalDue - paid;
-                        const isOverdue = remaining > 0.01; // Ignore floating point ghosts
-                        
+                        const isOverdue = remaining > 0.01; 
                         return (
                           <span className={`text-lg font-bold ${isOverdue ? 'text-danger-600' : 'text-success-600'}`}>
                             GH₵ {formatCurrency(Math.max(0, remaining))}
@@ -307,6 +346,52 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
           )}
         </div>
       </div>
+
+      {/* ========================================== */}
+      {/* NEW: Nested Quick Add Guest Modal          */}
+      {/* ========================================== */}
+      {isAddGuestOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-surface w-full max-w-md rounded-2xl shadow-2xl border border-border overflow-hidden">
+            <div className="p-5 border-b border-border flex justify-between items-center bg-primary-50/30">
+              <h3 className="text-lg font-bold text-text flex items-center gap-2"><UserPlus size={20} className="text-primary-600" /> Quick Add Guest</h3>
+              <button type="button" onClick={() => setIsAddGuestOpen(false)} className="p-1.5 rounded-lg hover:bg-secondary-100 text-text-muted transition"><X size={20} /></button>
+            </div>
+            
+            <form onSubmit={handleQuickAddGuest} className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-text-muted mb-1">Full Name *</label>
+                <input type="text" value={newGuestData.fullName} onChange={(e) => setNewGuestData({...newGuestData, fullName: e.target.value})} required placeholder="e.g. Kwame Asante"
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-text-muted mb-1">Phone Number *</label>
+                  <input type="tel" value={newGuestData.phone} onChange={(e) => setNewGuestData({...newGuestData, phone: e.target.value})} required placeholder="0244123456"
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-text-muted mb-1">ID Number</label>
+                  <input type="text" value={newGuestData.idNumber} onChange={(e) => setNewGuestData({...newGuestData, idNumber: e.target.value})} placeholder="GHA-001"
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-text-muted mb-1">Email Address</label>
+                <input type="email" value={newGuestData.email} onChange={(e) => setNewGuestData({...newGuestData, email: e.target.value})} placeholder="guest@email.com"
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-border">
+                <button type="button" onClick={() => setIsAddGuestOpen(false)} className="px-4 py-2 text-sm font-semibold text-text bg-surface border border-border rounded-lg hover:bg-secondary-50">Cancel</button>
+                <button type="submit" disabled={isSavingGuest} className="px-4 py-2 text-sm font-semibold text-text-inverted bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2">
+                  {isSavingGuest && <Loader2 className="animate-spin" size={14} />} Save & Select
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
