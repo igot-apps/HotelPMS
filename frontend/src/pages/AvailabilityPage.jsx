@@ -1,19 +1,25 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAvailableRooms } from '../api/rooms';
+import { createReservation } from '../api/reservations';
+import { recordPayment } from '../api/payments';
 import { useAuthStore } from '../store/authStore';
-import { Link } from 'react-router-dom';
-import { Search, Calendar, BedDouble, TrendingUp, AlertCircle, Check, ChevronRight, Users } from 'lucide-react';
+import ReservationModal from '../components/reservations/ReservationModal';
+import { Search, Calendar, BedDouble, TrendingUp, AlertCircle, Check, ChevronRight, Users, ShoppingCart } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function AvailabilityPage() {
   const user = useAuthStore((state) => state.user);
   const propertyId = user?.propertyId;
+  const queryClient = useQueryClient();
 
   const [checkInDate, setCheckInDate] = useState('');
   const [checkOutDate, setCheckOutDate] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
+  const [selectedRooms, setSelectedRooms] = useState([]);
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false); // NEW: Modal state
 
-  // Set default dates (Today to Tomorrow)
+  // Set default dates
   useState(() => {
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
@@ -21,7 +27,6 @@ export default function AvailabilityPage() {
     setCheckOutDate(tomorrow);
   }, []);
 
-  // Fetch available rooms when dates are set and user clicks search
   const { data, isLoading, error } = useQuery({
     queryKey: ['availability', checkInDate, checkOutDate, hasSearched],
     queryFn: () => getAvailableRooms(checkInDate, checkOutDate, propertyId).then(res => res.data.data),
@@ -30,169 +35,134 @@ export default function AvailabilityPage() {
 
   const availableRooms = data || [];
   
-  // Calculate stats
-  const totalAvailable = availableRooms.length;
-  const roomTypeCount = {};
-  availableRooms.forEach(room => {
-    const type = room.roomType?.typeName || 'Unknown';
-    roomTypeCount[type] = (roomTypeCount[type] || 0) + 1;
-  });
+  const nights = Math.max(1, Math.ceil((new Date(checkOutDate) - new Date(checkInDate)) / (1000 * 60 * 60 * 24)));
+  const estimatedTotal = selectedRooms.reduce((acc, r) => acc + (parseFloat(r.roomType?.basePrice || 0) * nights), 0);
+
+  const toggleRoomSelection = (room) => {
+    const isSelected = selectedRooms.some(r => r.roomId === room.roomId);
+    if (isSelected) {
+      setSelectedRooms(selectedRooms.filter(r => r.roomId !== room.roomId));
+    } else {
+      setSelectedRooms([...selectedRooms, room]);
+    }
+  };
 
   const handleSearch = (e) => {
     e.preventDefault();
     if (checkInDate && checkOutDate) {
       setHasSearched(true);
+      setSelectedRooms([]);
     }
   };
 
-  const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString('en-GB', { 
-    weekday: 'short', 
-    day: '2-digit', 
-    month: 'short', 
-    year: 'numeric' 
-  });
+  // NEW: Open booking modal directly
+  const handleProceedToBooking = () => {
+    if (selectedRooms.length === 0) return;
+    setIsBookingModalOpen(true);
+  };
 
+  // NEW: Handle booking submission
+  const handleBookingSubmit = async (payload) => {
+    try {
+      // 1. Create reservation
+      const resResponse = await createReservation(payload);
+      const newReservation = resResponse.data.data;
+
+      // 2. Record initial payment if applicable
+      if (payload.initialPayment > 0.01) {
+        const paymentPayload = {
+          reservationId: newReservation.reservationId,
+          amount: payload.initialPayment,
+          paymentMethod: payload.paymentMethod,
+          propertyId: payload.propertyId,
+          gatewayReference: payload.gatewayReference || null,
+          notes: 'Initial payment for reservation'
+        };
+        await recordPayment(paymentPayload);
+      }
+
+      // 3. Success feedback
+      toast.success('Reservation created successfully!');
+      
+      // 4. Close modal and refresh availability
+      setIsBookingModalOpen(false);
+      setSelectedRooms([]);
+      queryClient.invalidateQueries({ queryKey: ['availability'] });
+      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+      
+    } catch (err) {
+      console.error('Booking failed:', err);
+      // Global toast will handle the error message
+    }
+  };
+
+  const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' });
   const formatCurrency = (val) => parseFloat(val || 0).toFixed(2);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-6 pb-24">
       <div>
         <h1 className="text-2xl font-bold text-text tracking-tight flex items-center gap-2">
           <Search size={24} className="text-primary-500" /> Availability Search
         </h1>
-        <p className="text-text-muted text-sm mt-1">
-          Check which rooms are free for a date range — this uses the same overlap validation as bookings.
-        </p>
+        <p className="text-text-muted text-sm mt-1">Select multiple rooms and proceed to batch booking.</p>
       </div>
 
       {/* Search Form */}
       <div className="bg-surface border border-border rounded-xl p-6 shadow-sm">
-        <form onSubmit={handleSearch} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-text mb-1.5">
-                <Calendar size={16} className="inline mr-1.5" />
-                Check-in Date *
-              </label>
-              <input 
-                type="date" 
-                value={checkInDate} 
-                onChange={(e) => setCheckInDate(e.target.value)} 
-                required
-                className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition" 
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-text mb-1.5">
-                <Calendar size={16} className="inline mr-1.5" />
-                Check-out Date *
-              </label>
-              <input 
-                type="date" 
-                value={checkOutDate} 
-                onChange={(e) => setCheckOutDate(e.target.value)} 
-                required
-                className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition" 
-              />
-            </div>
-            <div className="flex items-end">
-              <button 
-                type="submit" 
-                className="w-full px-4 py-2.5 bg-primary-600 text-text-inverted font-semibold rounded-lg hover:bg-primary-700 transition flex items-center justify-center gap-2 shadow-sm"
-              >
-                <Search size={18} /> Search Availability
-              </button>
-            </div>
+        <form onSubmit={handleSearch} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-semibold text-text mb-1.5"><Calendar size={16} className="inline mr-1.5" />Check-in</label>
+            <input type="date" value={checkInDate} onChange={(e) => setCheckInDate(e.target.value)} required className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition" />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-text mb-1.5"><Calendar size={16} className="inline mr-1.5" />Check-out</label>
+            <input type="date" value={checkOutDate} onChange={(e) => setCheckOutDate(e.target.value)} required className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition" />
+          </div>
+          <div className="flex items-end">
+            <button type="submit" className="w-full px-4 py-2.5 bg-primary-600 text-text-inverted font-semibold rounded-lg hover:bg-primary-700 transition flex items-center justify-center gap-2 shadow-sm">
+              <Search size={18} /> Search Availability
+            </button>
           </div>
         </form>
       </div>
 
-      {/* Results Section */}
+      {/* Results */}
       {hasSearched && (
         <div className="space-y-4">
-          {/* Stats Bar */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-surface border border-border rounded-xl p-4 flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-success-50 text-success-600">
-                <Check size={20} />
-              </div>
-              <div>
-                <p className="text-xs text-text-muted uppercase font-semibold">Available Rooms</p>
-                <p className="text-2xl font-bold text-text">{totalAvailable}</p>
-              </div>
-            </div>
-            
-            <div className="bg-surface border border-border rounded-xl p-4 flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary-50 text-primary-600">
-                <BedDouble size={20} />
-              </div>
-              <div>
-                <p className="text-xs text-text-muted uppercase font-semibold">Room Types</p>
-                <p className="text-2xl font-bold text-text">{Object.keys(roomTypeCount).length}</p>
-              </div>
-            </div>
-
-            <div className="bg-surface border border-border rounded-xl p-4 flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-warning-50 text-warning-600">
-                <TrendingUp size={20} />
-              </div>
-              <div>
-                <p className="text-xs text-text-muted uppercase font-semibold">Date Range</p>
-                <p className="text-sm font-bold text-text">{formatDate(checkInDate)} → {formatDate(checkOutDate)}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Room Type Summary */}
-          {Object.keys(roomTypeCount).length > 0 && (
-            <div className="bg-surface border border-border rounded-xl p-4">
-              <h3 className="text-sm font-bold text-text mb-3">Availability by Room Type</h3>
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(roomTypeCount).map(([type, count]) => (
-                  <div key={type} className="px-3 py-1.5 bg-secondary-50 border border-border rounded-lg text-sm">
-                    <span className="font-semibold text-text">{type}:</span>
-                    <span className="ml-1 text-primary-600 font-bold">{count} available</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Available Rooms List */}
           {isLoading ? (
-            <div className="bg-surface border border-border rounded-xl p-12 text-center">
-              <div className="animate-pulse flex flex-col items-center gap-3">
-                <div className="w-12 h-12 bg-secondary-200 rounded-full"></div>
-                <p className="text-text-muted">Searching available rooms...</p>
-              </div>
-            </div>
-          ) : error ? (
-            <div className="bg-surface border border-border rounded-xl p-12 text-center text-danger-600">
-              <AlertCircle size={24} className="mx-auto mb-2" />
-              <p className="font-semibold">Failed to load availability</p>
-            </div>
+            <div className="bg-surface border border-border rounded-xl p-12 text-center text-text-muted animate-pulse">Searching available rooms...</div>
           ) : availableRooms.length === 0 ? (
             <div className="bg-surface border border-border rounded-xl p-12 text-center">
-              <div className="flex flex-col items-center gap-3">
-                <div className="p-3 rounded-full bg-warning-50 text-warning-600">
-                  <AlertCircle size={32} />
-                </div>
-                <div>
-                  <p className="text-lg font-bold text-text">No Rooms Available</p>
-                  <p className="text-sm text-text-muted mt-1">
-                    All rooms are booked for this date range. Try different dates.
-                  </p>
-                </div>
-              </div>
+              <AlertCircle size={32} className="mx-auto mb-2 text-warning-600" />
+              <p className="text-lg font-bold text-text">No Rooms Available</p>
+              <p className="text-sm text-text-muted mt-1">All rooms are booked for this date range.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {availableRooms.map((room) => (
-                <div key={room.roomId} className="bg-surface border border-border rounded-xl p-5 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="p-2 rounded-lg bg-primary-50 text-primary-600">
+              {availableRooms.map((room) => {
+                const isSelected = selectedRooms.some(r => r.roomId === room.roomId);
+                const roomTotal = parseFloat(room.roomType?.basePrice || 0) * nights;
+
+                return (
+                  <button 
+                    type="button"
+                    key={room.roomId} 
+                    onClick={() => toggleRoomSelection(room)}
+                    className={`relative text-left bg-surface border rounded-xl p-5 transition-all hover:shadow-md ${
+                      isSelected 
+                        ? 'border-primary-500 ring-2 ring-primary-500/20 bg-primary-50/30' 
+                        : 'border-border hover:border-primary-300'
+                    }`}
+                  >
+                    <div className={`absolute top-3 right-3 w-6 h-6 rounded-full flex items-center justify-center transition ${
+                      isSelected ? 'bg-primary-600 text-white' : 'bg-secondary-100 text-text-muted border border-border'
+                    }`}>
+                      {isSelected && <Check size={14} />}
+                    </div>
+
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className={`p-2 rounded-lg ${isSelected ? 'bg-primary-100 text-primary-600' : 'bg-secondary-50 text-secondary-600'}`}>
                         <BedDouble size={18} />
                       </div>
                       <div>
@@ -200,60 +170,65 @@ export default function AvailabilityPage() {
                         <p className="text-xs text-text-muted">Floor {room.floor}</p>
                       </div>
                     </div>
-                    <span className="px-2 py-1 bg-success-50 text-success-700 text-xs font-bold rounded">
-                      Available
-                    </span>
-                  </div>
 
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center gap-2 text-sm text-text-muted">
-                      <Users size={14} />
-                      <span>{room.roomType?.maxOccupancy || 2} Guests</span>
+                    <div className="space-y-1 mb-4 text-sm text-text-muted">
+                      <p><Users size={14} className="inline mr-1.5" />{room.roomType?.maxOccupancy || 2} Guests</p>
+                      <p><BedDouble size={14} className="inline mr-1.5" />{room.roomType?.typeName}</p>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-text-muted">
-                      <BedDouble size={14} />
-                      <span>{room.roomType?.typeName}</span>
-                    </div>
-                  </div>
 
-                  <div className="border-t border-border pt-3 mb-4">
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-xs text-text-muted">Rate per night</span>
-                      <span className="text-lg font-bold text-primary-600">
-                        GH₵ {formatCurrency(room.roomType?.basePrice)}
-                      </span>
+                    <div className="border-t border-border pt-3 flex justify-between items-baseline">
+                      <span className="text-xs text-text-muted">GH₵ {formatCurrency(room.roomType?.basePrice)} × {nights} nights</span>
+                      <span className="text-lg font-bold text-primary-600">GH₵ {formatCurrency(roomTotal)}</span>
                     </div>
-                  </div>
-
-                  <Link 
-                    to={`/reservations/new?roomId=${room.roomId}&checkIn=${checkInDate}&checkOut=${checkOutDate}`}
-                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-600 text-text-inverted font-semibold rounded-lg hover:bg-primary-700 transition text-sm"
-                  >
-                    Book This Room <ChevronRight size={16} />
-                  </Link>
-                </div>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
       )}
 
-      {/* Initial State */}
-      {!hasSearched && (
-        <div className="bg-surface border border-border rounded-xl p-12 text-center">
-          <div className="flex flex-col items-center gap-3 max-w-md mx-auto">
-            <div className="p-4 rounded-full bg-secondary-50 text-secondary-600">
-              <Search size={40} />
+      {/* Sticky Bottom Action Bar */}
+      {hasSearched && availableRooms.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 bg-surface border-t border-border shadow-2xl z-40 p-4 flex items-center justify-between backdrop-blur-md bg-surface/95">
+          <div className="flex items-center gap-4">
+            <div className="p-2 rounded-full bg-primary-100 text-primary-600">
+              <ShoppingCart size={20} />
             </div>
             <div>
-              <p className="text-lg font-bold text-text">Search for Available Rooms</p>
-              <p className="text-sm text-text-muted mt-1">
-                Select your check-in and check-out dates above to see which rooms are available.
+              <p className="text-sm font-bold text-text">
+                {selectedRooms.length} Room{selectedRooms.length !== 1 ? 's' : ''} Selected
+              </p>
+              <p className="text-xs text-text-muted">
+                Estimated Total: <span className="font-bold text-primary-600">GH₵ {formatCurrency(estimatedTotal)}</span>
               </p>
             </div>
           </div>
+          
+          <button 
+            onClick={handleProceedToBooking}
+            disabled={selectedRooms.length === 0}
+            className="px-6 py-3 bg-success-600 text-text-inverted font-bold rounded-lg hover:bg-success-700 transition flex items-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Proceed to Booking <ChevronRight size={18} />
+          </button>
         </div>
       )}
+
+      {/* ========================================== */}
+      {/* NEW: Booking Modal (Directly on this page) */}
+      {/* ========================================== */}
+      <ReservationModal
+        isOpen={isBookingModalOpen}
+        onClose={() => setIsBookingModalOpen(false)}
+        onSubmit={handleBookingSubmit}
+        isLoading={false}
+        initialData={{
+          checkInDate,
+          checkOutDate,
+          roomIds: selectedRooms.map(r => r.roomId),
+        }}
+      />
     </div>
   );
 }
