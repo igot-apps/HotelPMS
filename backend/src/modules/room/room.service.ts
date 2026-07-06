@@ -58,6 +58,11 @@ export const getAvailableRooms = async (
 
 export const updateRoom = async (roomId: number, data: any) => {
   const room = await roomRepository.findRoomById(roomId);
+  
+  if(data.housekeepingStatus === 'OutOfService'){
+    data.operationalStatus = 'Maintenance';
+  }
+
   if (!room) throw new Error('Room not found');
   return roomRepository.updateRoom(roomId, data);
 };
