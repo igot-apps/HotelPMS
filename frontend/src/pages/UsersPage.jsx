@@ -5,7 +5,7 @@ import { getUsers, createUser, updateUser, deactivateUser } from '../api/users';
 import UserModal from '../components/users/UserModal';
 import RequirePermission from '../components/RequirePermission';
 import toast from 'react-hot-toast';
-import { Users as UsersIcon, Plus, Edit2, Trash2, Search, Shield, Building2 } from 'lucide-react';
+import { Shield, Plus, Edit2, Trash2, Search, Building2 } from 'lucide-react';
 
 export default function UsersPage() {
   const queryClient = useQueryClient();
@@ -19,7 +19,6 @@ export default function UsersPage() {
   });
 
   const users = usersData || [];
-  
   const filteredUsers = users.filter(u => 
     u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||

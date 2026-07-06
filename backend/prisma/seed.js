@@ -1,7 +1,6 @@
 // prisma/seed.js
 const { PrismaClient } = require('../src/generated/prisma');
 const bcrypt = require('bcryptjs');
-
 const prisma = new PrismaClient();
 
 async function main() {
@@ -155,13 +154,13 @@ async function main() {
     update: {},
     create: { roleName: 'Manager', description: 'Full hotel access', isSystem: true },
   });
-  
+
   const receptionistRole = await prisma.role.upsert({
     where: { roleName: 'Receptionist' },
     update: {},
     create: { roleName: 'Receptionist', description: 'Manage reservations, check-in, check-out, and guest services', isSystem: true },
   });
-  
+
   const housekeepingRole = await prisma.role.upsert({
     where: { roleName: 'Housekeeping' },
     update: {},
@@ -174,7 +173,6 @@ async function main() {
   // 4. Create Users
   // ============================================================
   const hashPassword = async (password) => await bcrypt.hash(password, 10);
-
   const ReceptionistPassword = await hashPassword('reception123');
   const managerPassword = await hashPassword('manager123');
   const housekeepingPassword = await hashPassword('housekeeping123');
@@ -276,7 +274,7 @@ async function main() {
   console.log('✅ Users created (9)');
 
 // ============================================================
-// 5. Create Permissions (Updated with all Room & Reservation permissions)
+// 5. Create Permissions
 // ============================================================
 const permissions = [
   // Reservations
@@ -284,17 +282,17 @@ const permissions = [
   { code: 'CanCancelReservation', name: 'Cancel Reservation', category: 'Reservations' },
   { code: 'CanCheckInGuest', name: 'Check In Guest', category: 'Reservations' },
   { code: 'CanCheckOutGuest', name: 'Check Out Guest', category: 'Reservations' },
-  { code: 'CanViewReservations', name: 'View Reservations', category: 'Reservations' }, // 🚨 Added for Details Page
+  { code: 'CanViewReservations', name: 'View Reservations', category: 'Reservations' },
   
-  // Inventory (Rooms & Types)
+  // Inventory (Rooms & Rates)
   { code: 'CanViewRooms', name: 'View Room Inventory', category: 'Inventory' },
   { code: 'CanCreateRoom', name: 'Create Room', category: 'Inventory' },
   { code: 'CanUpdateRoom', name: 'Update Room Details', category: 'Inventory' },
   { code: 'CanDeleteRoom', name: 'Delete Room', category: 'Inventory' },
+  { code: 'CanUpdateRoomStatus', name: 'Update Room Status', category: 'Inventory' },
   { code: 'CanCreateRoomType', name: 'Create Room Type', category: 'Inventory' },
   { code: 'CanUpdateRoomType', name: 'Update Room Type', category: 'Inventory' },
   { code: 'CanDeleteRoomType', name: 'Delete Room Type', category: 'Inventory' },
-  { code: 'CanUpdateRoomStatus', name: 'Update Room Status', category: 'Inventory' },
   { code: 'CanManageRates', name: 'Manage Rates', category: 'Inventory' },
   
   // Payments & Reports
@@ -305,7 +303,7 @@ const permissions = [
   // Operations & Admin
   { code: 'CanManageHousekeeping', name: 'Manage Housekeeping', category: 'Operations' },
   { code: 'CanManageMaintenance', name: 'Manage Maintenance', category: 'Operations' },
-  { code: 'CanManageStaffAndRoles', name: 'Manage Staff & Roles', category: 'Admin' },
+  { code: 'CanManageStaffAndRoles', name: 'Manage Staff & Roles', category: 'Admin' }, // 🚨 Critical for User Management
 ];
 
 for (const perm of permissions) {
@@ -318,14 +316,13 @@ console.log(`✅ Permissions created (${permissions.length})`);
 // ============================================================
 console.log('🔗 Mapping roles to permissions...');
 
-// Fetch the created roles and permissions to get their IDs
+// Fetch IDs for mapping
 const allRoles = await prisma.role.findMany();
 const allPermissions = await prisma.permission.findMany();
 
 const getRoleId = (name) => allRoles.find(r => r.roleName === name)?.roleId;
 const getPermId = (code) => allPermissions.find(p => p.code === code)?.permissionId;
 
-// Define the Access Matrix
 const rolePermissions = [
   // 1. MANAGER: Gets EVERYTHING
   ...allPermissions.map(p => ({ roleId: getRoleId('Manager'), permissionId: p.permissionId })),
@@ -335,20 +332,18 @@ const rolePermissions = [
   { roleId: getRoleId('Receptionist'), permissionId: getPermId('CanCancelReservation') },
   { roleId: getRoleId('Receptionist'), permissionId: getPermId('CanCheckInGuest') },
   { roleId: getRoleId('Receptionist'), permissionId: getPermId('CanCheckOutGuest') },
-  { roleId: getRoleId('Receptionist'), permissionId: getPermId('CanViewReservations') },
   { roleId: getRoleId('Receptionist'), permissionId: getPermId('CanProcessPayments') },
   { roleId: getRoleId('Receptionist'), permissionId: getPermId('CanViewFinancialReports') },
   { roleId: getRoleId('Receptionist'), permissionId: getPermId('CanViewRooms') },
   { roleId: getRoleId('Receptionist'), permissionId: getPermId('CanUpdateRoomStatus') },
 
-  // 3. HOUSEKEEPING: Can only view rooms and update their status (Clean/Dirty/Maintenance)
+  // 3. HOUSEKEEPING: Can only view rooms and update their status
   { roleId: getRoleId('Housekeeping'), permissionId: getPermId('CanManageHousekeeping') },
   { roleId: getRoleId('Housekeeping'), permissionId: getPermId('CanManageMaintenance') },
   { roleId: getRoleId('Housekeeping'), permissionId: getPermId('CanViewRooms') },
   { roleId: getRoleId('Housekeeping'), permissionId: getPermId('CanUpdateRoomStatus') },
 ];
 
-// Insert the mappings into the database
 for (const rp of rolePermissions) {
   if (rp.roleId && rp.permissionId) {
     await prisma.rolePermission.upsert({
@@ -392,6 +387,7 @@ console.log(`✅ Role-Permission mappings created (${rolePermissions.length})`);
     });
     createdRoomTypes.push(created);
   }
+
   console.log(`✅ Room Types created (${createdRoomTypes.length})`);
 
   // Helper to get RoomType ID dynamically
@@ -415,7 +411,6 @@ console.log(`✅ Role-Permission mappings created (${rolePermissions.length})`);
     { tenantId: brassfield.tenantId, propertyId: brassfieldProperty.propertyId, roomNumber: '302', roomTypeId: getRoomTypeId(brassfieldProperty.propertyId, 'Family Room'), floor: 3, operationalStatus: 'Available', housekeepingStatus: 'Clean' },
     { tenantId: brassfield.tenantId, propertyId: brassfieldProperty.propertyId, roomNumber: '303', roomTypeId: getRoomTypeId(brassfieldProperty.propertyId, 'Family Room'), floor: 3, operationalStatus: 'Available', housekeepingStatus: 'Clean' },
     { tenantId: brassfield.tenantId, propertyId: brassfieldProperty.propertyId, roomNumber: '401', roomTypeId: getRoomTypeId(brassfieldProperty.propertyId, 'Executive Suite'), floor: 4, operationalStatus: 'Available', housekeepingStatus: 'Clean' },
-
     // Brassfield Airport Hotel (15 rooms)
     { tenantId: brassfield.tenantId, propertyId: brassfieldAirport.propertyId, roomNumber: 'A101', roomTypeId: getRoomTypeId(brassfieldAirport.propertyId, 'Single'), floor: 1, operationalStatus: 'Available', housekeepingStatus: 'Clean' },
     { tenantId: brassfield.tenantId, propertyId: brassfieldAirport.propertyId, roomNumber: 'A102', roomTypeId: getRoomTypeId(brassfieldAirport.propertyId, 'Single'), floor: 1, operationalStatus: 'Available', housekeepingStatus: 'Clean' },
@@ -432,7 +427,6 @@ console.log(`✅ Role-Permission mappings created (${rolePermissions.length})`);
     { tenantId: brassfield.tenantId, propertyId: brassfieldAirport.propertyId, roomNumber: 'A501', roomTypeId: getRoomTypeId(brassfieldAirport.propertyId, 'Double'), floor: 5, operationalStatus: 'Available', housekeepingStatus: 'Clean' },
     { tenantId: brassfield.tenantId, propertyId: brassfieldAirport.propertyId, roomNumber: 'A502', roomTypeId: getRoomTypeId(brassfieldAirport.propertyId, 'Double'), floor: 5, operationalStatus: 'Available', housekeepingStatus: 'Clean' },
     { tenantId: brassfield.tenantId, propertyId: brassfieldAirport.propertyId, roomNumber: 'A503', roomTypeId: getRoomTypeId(brassfieldAirport.propertyId, 'Suite'), floor: 5, operationalStatus: 'Available', housekeepingStatus: 'Clean' },
-
     // Gold Coast Resort (8 rooms)
     { tenantId: goldcoast.tenantId, propertyId: goldcoastProperty.propertyId, roomNumber: 'G101', roomTypeId: getRoomTypeId(goldcoastProperty.propertyId, 'Garden View'), floor: 1, operationalStatus: 'Available', housekeepingStatus: 'Clean' },
     { tenantId: goldcoast.tenantId, propertyId: goldcoastProperty.propertyId, roomNumber: 'G102', roomTypeId: getRoomTypeId(goldcoastProperty.propertyId, 'Garden View'), floor: 1, operationalStatus: 'Available', housekeepingStatus: 'Clean' },
@@ -442,7 +436,6 @@ console.log(`✅ Role-Permission mappings created (${rolePermissions.length})`);
     { tenantId: goldcoast.tenantId, propertyId: goldcoastProperty.propertyId, roomNumber: 'G203', roomTypeId: getRoomTypeId(goldcoastProperty.propertyId, 'Ocean Suite'), floor: 2, operationalStatus: 'Available', housekeepingStatus: 'Clean' },
     { tenantId: goldcoast.tenantId, propertyId: goldcoastProperty.propertyId, roomNumber: 'G301', roomTypeId: getRoomTypeId(goldcoastProperty.propertyId, 'Ocean Suite'), floor: 3, operationalStatus: 'Available', housekeepingStatus: 'Clean' },
     { tenantId: goldcoast.tenantId, propertyId: goldcoastProperty.propertyId, roomNumber: 'G302', roomTypeId: getRoomTypeId(goldcoastProperty.propertyId, 'Ocean Suite'), floor: 3, operationalStatus: 'Available', housekeepingStatus: 'Clean' },
-
     // Sunset Beach Resort (12 rooms)
     { tenantId: sunset.tenantId, propertyId: sunsetProperty.propertyId, roomNumber: 'S101', roomTypeId: getRoomTypeId(sunsetProperty.propertyId, 'Beach View'), floor: 1, operationalStatus: 'Available', housekeepingStatus: 'Clean' },
     { tenantId: sunset.tenantId, propertyId: sunsetProperty.propertyId, roomNumber: 'S102', roomTypeId: getRoomTypeId(sunsetProperty.propertyId, 'Beach View'), floor: 1, operationalStatus: 'Available', housekeepingStatus: 'Clean' },
@@ -465,6 +458,7 @@ console.log(`✅ Role-Permission mappings created (${rolePermissions.length})`);
       create: room,
     });
   }
+
   console.log(`✅ Rooms created (${rooms.length})`);
 
   // ============================================================
@@ -475,15 +469,12 @@ console.log(`✅ Role-Permission mappings created (${rolePermissions.length})`);
     { tenantId: brassfield.tenantId, propertyId: brassfieldProperty.propertyId, roomTypeId: getRoomTypeId(brassfieldProperty.propertyId, 'Standard Double'), planName: 'Standard Rate', minStay: 1, maxStay: 14, isActive: true },
     { tenantId: brassfield.tenantId, propertyId: brassfieldProperty.propertyId, roomTypeId: getRoomTypeId(brassfieldProperty.propertyId, 'Executive Suite'), planName: 'Premium Rate', minStay: 2, maxStay: 14, isActive: true },
     { tenantId: brassfield.tenantId, propertyId: brassfieldProperty.propertyId, roomTypeId: getRoomTypeId(brassfieldProperty.propertyId, 'Family Room'), planName: 'Family Rate', minStay: 2, maxStay: 7, discountPercent: 10, isActive: true },
-    
     { tenantId: brassfield.tenantId, propertyId: brassfieldAirport.propertyId, roomTypeId: getRoomTypeId(brassfieldAirport.propertyId, 'Single'), planName: 'Standard Rate', minStay: 1, maxStay: 14, isActive: true },
     { tenantId: brassfield.tenantId, propertyId: brassfieldAirport.propertyId, roomTypeId: getRoomTypeId(brassfieldAirport.propertyId, 'Double'), planName: 'Standard Rate', minStay: 1, maxStay: 14, isActive: true },
     { tenantId: brassfield.tenantId, propertyId: brassfieldAirport.propertyId, roomTypeId: getRoomTypeId(brassfieldAirport.propertyId, 'Suite'), planName: 'Corporate Rate', minStay: 3, maxStay: 30, discountPercent: 15, isActive: true },
-    
     { tenantId: goldcoast.tenantId, propertyId: goldcoastProperty.propertyId, roomTypeId: getRoomTypeId(goldcoastProperty.propertyId, 'Garden View'), planName: 'Standard Rate', minStay: 2, maxStay: 14, isActive: true },
     { tenantId: goldcoast.tenantId, propertyId: goldcoastProperty.propertyId, roomTypeId: getRoomTypeId(goldcoastProperty.propertyId, 'Ocean View'), planName: 'Premium Rate', minStay: 2, maxStay: 14, isActive: true },
     { tenantId: goldcoast.tenantId, propertyId: goldcoastProperty.propertyId, roomTypeId: getRoomTypeId(goldcoastProperty.propertyId, 'Ocean Suite'), planName: 'Luxury Rate', minStay: 3, maxStay: 21, discountPercent: 5, isActive: true },
-    
     { tenantId: sunset.tenantId, propertyId: sunsetProperty.propertyId, roomTypeId: getRoomTypeId(sunsetProperty.propertyId, 'Beach View'), planName: 'Standard Rate', minStay: 1, maxStay: 14, isActive: true },
     { tenantId: sunset.tenantId, propertyId: sunsetProperty.propertyId, roomTypeId: getRoomTypeId(sunsetProperty.propertyId, 'Beach Suite'), planName: 'Premium Rate', minStay: 2, maxStay: 14, isActive: true },
     { tenantId: sunset.tenantId, propertyId: sunsetProperty.propertyId, roomTypeId: getRoomTypeId(sunsetProperty.propertyId, 'Family Villa'), planName: 'Family Rate', minStay: 3, maxStay: 21, discountPercent: 12, isActive: true },
@@ -496,6 +487,7 @@ console.log(`✅ Role-Permission mappings created (${rolePermissions.length})`);
       create: rp,
     });
   }
+
   console.log(`✅ Rate Plans created (${ratePlans.length})`);
 
   // ============================================================
@@ -507,10 +499,8 @@ console.log(`✅ Role-Permission mappings created (${rolePermissions.length})`);
     { tenantId: brassfield.tenantId, fullName: 'Yaw Boateng', phone: '0277654321', email: 'yaw.b@email.com', idNumber: 'GHA-003', address: 'Takoradi, Ghana', username: 'yboateng', passwordHash: await hashPassword('guest123'), isActive: true },
     { tenantId: brassfield.tenantId, fullName: 'Akua Sarpong', phone: '0244888888', email: 'akua.s@email.com', idNumber: 'GHA-007', address: 'Tema, Ghana', username: 'asarpong', passwordHash: await hashPassword('guest123'), isActive: true },
     { tenantId: brassfield.tenantId, fullName: 'Kofi Antwi', phone: '0509999999', email: 'kofi.a@email.com', idNumber: 'GHA-008', address: 'Cape Coast, Ghana', username: 'kannan', passwordHash: await hashPassword('guest123'), isActive: true },
-    
     { tenantId: goldcoast.tenantId, fullName: 'Yaa Pokua', phone: '0209998888', email: 'yaa.p@email.com', idNumber: 'GHA-004', address: 'Takoradi, Ghana', username: 'ynkrumah', passwordHash: await hashPassword('guest123'), isActive: true },
     { tenantId: goldcoast.tenantId, fullName: 'Kwesi Agyeman', phone: '0244777777', email: 'kwesi.a@email.com', idNumber: 'GHA-009', address: 'Sekondi, Ghana', username: 'kmensah', passwordHash: await hashPassword('guest123'), isActive: true },
-    
     { tenantId: sunset.tenantId, fullName: 'Ama Serwaa', phone: '0244666666', email: 'ama.s@email.com', idNumber: 'GHA-010', address: 'Cape Coast, Ghana', username: 'aserwaa', passwordHash: await hashPassword('guest123'), isActive: true },
     { tenantId: sunset.tenantId, fullName: 'Kwaku Doe', phone: '0201111111', email: 'kwaku.d@email.com', idNumber: 'GHA-011', address: 'Elmina, Ghana', username: 'jdoe', passwordHash: await hashPassword('guest123'), isActive: true },
   ];
@@ -518,6 +508,7 @@ console.log(`✅ Role-Permission mappings created (${rolePermissions.length})`);
   for (const guest of guests) {
     await prisma.guest.upsert({ where: { username: guest.username }, update: {}, create: guest });
   }
+
   console.log(`✅ Guests created (${guests.length})`);
 
   // ============================================================
@@ -527,12 +518,10 @@ console.log(`✅ Role-Permission mappings created (${rolePermissions.length})`);
 
   const allGuests = await prisma.guest.findMany();
   const allRooms = await prisma.room.findMany();
-
   const getGuest = (username) => allGuests.find(g => g.username === username);
 
   // --- Brassfield Reservations ---
   const brassfieldRooms = allRooms.filter(r => r.propertyId === brassfieldProperty.propertyId);
-  
   if (brassfieldRooms.length >= 4) {
     const res1 = await prisma.reservation.create({
       data: {
@@ -649,16 +638,17 @@ console.log(`✅ Role-Permission mappings created (${rolePermissions.length})`);
   console.log('✅ All reservations and payments created');
   console.log('\n🎉 Seeding complete!');
   console.log('📊 Summary:');
-  console.log(`   - 3 Tenants`);
-  console.log(`   - 4 Properties`);
-  console.log(`   - 3 Roles`);
-  console.log(`   - 9 Users`);
-  console.log(`   - 11 Permissions`);
-  console.log(`   - ${createdRoomTypes.length} Room Types`);
-  console.log(`   - ${rooms.length} Rooms`);
-  console.log(`   - ${ratePlans.length} Rate Plans`);
-  console.log(`   - ${guests.length} Guests`);
-  console.log(`   - 9 Reservations with Payments`);
+  console.log(`- 3 Tenants`);
+  console.log(`- 4 Properties`);
+  console.log(`- 3 Roles`);
+  console.log(`- 9 Users`);
+  console.log(`- ${permissions.length} Permissions`);
+  console.log(`- ${rolePermissions.length} Role-Permission mappings`);
+  console.log(`- ${createdRoomTypes.length} Room Types`);
+  console.log(`- ${rooms.length} Rooms`);
+  console.log(`- ${ratePlans.length} Rate Plans`);
+  console.log(`- ${guests.length} Guests`);
+  console.log(`- 9 Reservations with Payments`);
 }
 
 main()

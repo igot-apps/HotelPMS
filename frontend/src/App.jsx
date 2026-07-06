@@ -16,6 +16,10 @@ import ReservationDetailsPage from './pages/ReservationDetailsPage';
 import CalendarPage from './pages/CalendarPage';
 import AvailabilityPage from './pages/AvailabilityPage';
 import RoomManagementPage from './pages/RoomManagementPage';
+import UsersPage from './pages/UsersPage';
+
+
+   
 
 function App() {
   return (
@@ -102,6 +106,7 @@ function App() {
           <Route path="room-types" element={<RoomTypesPage />} />
           <Route path="rate-plans" element={<RatePlansPage />} />
           <Route path="properties" element={<PropertiesPage />} />
+          <Route path="users" element={<UsersPage />} />
         </Route>
         
         {/* Fallback Route */}

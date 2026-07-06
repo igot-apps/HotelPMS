@@ -5,14 +5,11 @@ const prisma = new PrismaClient();
 
 export const findUsers = async (tenantId: number, propertyId?: number) => {
   const where: any = { tenantId };
-  if (propertyId) where.propertyId = propertyId;
+  if (propertyId) where.propertyId = parseInt(String(propertyId));
 
   return prisma.user.findMany({
     where,
-    include: {
-      role: true,
-      property: true,
-    },
+    include: { role: true, property: true },
     orderBy: { createdAt: 'desc' },
   });
 };
@@ -41,10 +38,7 @@ export const createUser = async (data: any) => {
 };
 
 export const updateUser = async (userId: number, data: any) => {
-  return prisma.user.update({
-    where: { userId },
-    data,
-  });
+  return prisma.user.update({ where: { userId }, data });
 };
 
 export const deactivateUser = async (userId: number) => {
@@ -52,4 +46,8 @@ export const deactivateUser = async (userId: number) => {
     where: { userId },
     data: { isActive: false },
   });
+};
+
+export const findAllRoles = async () => {
+  return prisma.role.findMany({ orderBy: { roleName: 'asc' } });
 };

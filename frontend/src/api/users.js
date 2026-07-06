@@ -7,5 +7,5 @@ export const createUser = (data) => api.post('/users', data);
 export const updateUser = (id, data) => api.put(`/users/${id}`, data);
 export const deactivateUser = (id) => api.delete(`/users/${id}`);
 
-// 🚨 NEW: For the Role dropdown in the User Modal
+// Fetch roles for the dropdown
 export const getRoles = () => api.get('/users/roles');

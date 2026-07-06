@@ -10,8 +10,7 @@ const router = Router();
 router.use(authenticate);
 router.use(authorize(PERMISSIONS.CAN_MANAGE_STAFF_AND_ROLES));
 
-// 🚨 NEW: Get all roles for the dropdown
-// MUST be placed BEFORE /:id so Express doesn't treat "roles" as an ID parameter!
+// 🚨 GET ROLES MUST BE BEFORE /:id
 router.get('/roles', userController.getRoles);
 
 router.get('/', userController.getUsers);

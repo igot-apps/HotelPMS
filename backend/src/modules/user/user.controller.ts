@@ -1,27 +1,11 @@
 // backend/src/modules/user/user.controller.ts
-import { Response } from 'express'; // Removed unused 'Request'
-import * as userService from './user.service';
+import { Response } from 'express';
 import { AuthRequest } from '../../shared/middleware/auth.middleware';
-import { PrismaClient } from '../../generated/prisma';
+import * as userService from './user.service';
 
-const prisma = new PrismaClient();
-
-// 🚨 ONLY THIS FUNCTION USES _req (Because it doesn't need req.user or req.params)
-export const getRoles = async (_req: AuthRequest, res: Response) => {
-  try {
-    const roles = await prisma.role.findMany({ orderBy: { roleName: 'asc' } });
-    res.json({ success: true, data: roles });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// ✅ THESE FUNCTIONS MUST USE 'req' BECAUSE THEY READ req.user, req.params, OR req.query
 export const getUsers = async (req: AuthRequest, res: Response) => {
   try {
-    const propertyIdQuery = req.query.propertyId;
-    const propertyId = propertyIdQuery ? parseInt(String(propertyIdQuery)) : undefined;
-    
+   const propertyId = req.query.propertyId ? parseInt(String(req.query.propertyId)) : undefined;
     const users = await userService.getUsers(req.user!.tenantId, propertyId);
     res.json({ success: true, data: users });
   } catch (error: any) {
@@ -36,6 +20,16 @@ export const getUserById = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: user });
   } catch (error: any) {
     res.status(404).json({ success: false, message: error.message });
+  }
+};
+
+// 🚨 NEW: Get all roles for the frontend dropdown
+export const getRoles = async (_req: AuthRequest, res: Response) => {
+  try {
+    const roles = await userService.getRoles();
+    res.json({ success: true, data: roles });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 

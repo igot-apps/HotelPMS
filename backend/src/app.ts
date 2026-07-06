@@ -15,6 +15,7 @@ import guestRoutes from './modules/guest/guest.routes';
 import reservationRoutes from './modules/reservation/reservation.routes';
 import paymentRoutes from './modules/payment/payment.routes';
 import reportRoutes from './modules/reports/report.routes';
+import userRoutes from './modules/user/user.routes';
 
 // Load environment variables
 dotenv.config();
@@ -70,7 +71,8 @@ app.get('/', (_req: Request, res: Response) => {
  app.use('/api/reservations', reservationRoutes);
  app.use('/api/payments', paymentRoutes);
  app.use('/api/reports', reportRoutes);
-
+ app.use('/api/users', userRoutes);
+ 
 // 404 handler
 app.use((_req: Request, res: Response) => {
   res.status(404).json({

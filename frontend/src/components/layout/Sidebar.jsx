@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { 
   LayoutDashboard, Search, BedDouble, Users, CalendarDays, CreditCard, BarChart3, 
-  LogOut, Settings, Layers, Tags, Building2, X 
+  LogOut, Settings, Layers, Tags, Building2, X , Shield 
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
@@ -20,6 +20,7 @@ const operationItems = [
 const configItems = [
   // 🚨 NEW: Room Management link (Visible only to Managers who have 'CanCreateRoom')
   { to: '/room-management', icon: Settings, label: 'Room Management', permission: 'CanCreateRoom' },
+    { to: '/users', icon: Shield, label: 'Staff Management', permission: 'CanManageStaffAndRoles' },
   
   { to: '/room-types', icon: Layers, label: 'Room Types', permission: 'CanCreateRoomType' },
   { to: '/rate-plans', icon: Tags, label: 'Rate Plans', permission: 'CanManageRates' },
