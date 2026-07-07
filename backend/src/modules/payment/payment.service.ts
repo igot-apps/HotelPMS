@@ -18,12 +18,18 @@ export const recordPayment = async (data: any) => {
     throw new Error('Cannot record payment for cancelled reservation');
   }
 
-  const currentBalance = Number(reservation.balanceDue || 0);
+  //const currentBalance = Number(reservation.balanceDue || 0);
   const amount = Number(data.amount);
 
-  if (amount > currentBalance + Number(reservation.amountPaid || 0)) {
+  const accummulatedPayments = await paymentRepository.calculateAccumulatedPayment(
+    data.reservationId
+  );
+
+  if (amount + accummulatedPayments >  Number(reservation.totalAmount)) {
     throw new Error('Payment amount exceeds total reservation amount');
   }
+
+
 
   // Create payment
   const payment = await paymentRepository.createPayment({
