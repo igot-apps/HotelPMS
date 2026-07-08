@@ -71,9 +71,6 @@ export const getPayments = async (
   const fromDate = filters.fromDate ? new Date(filters.fromDate) : undefined;
   const toDate = filters.toDate ? new Date(filters.toDate) : undefined;
 
-  console.log("from service");
-  console.log(filters);
-
     return paymentRepository.findPayments(
     tenantId,
     {

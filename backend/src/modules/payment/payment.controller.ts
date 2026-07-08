@@ -38,8 +38,6 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
 };
 
 export const getPayments = async (req: AuthRequest, res: Response) => {
-  console.log("🟢 from controller - getPayments");
-  console.log("🟢 Query params received:", req.query); // 🚨 Log query instead of body for GET requests
 
   try {
     const page = parseInt(req.query.page as string) || 1;

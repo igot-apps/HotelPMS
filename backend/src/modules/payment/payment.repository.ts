@@ -66,7 +66,6 @@ export const findPayments = async (
   page: number = 1,
   limit: number = 10
 ) => {
-  console.log("🔥 from repository - filters received:", filters);
   
   const skip = (page - 1) * limit;
   const where: any = { tenantId };
@@ -101,7 +100,6 @@ export const findPayments = async (
     if (filters.toDate) where.paymentDate.lte = filters.toDate;
   }
 
-  console.log("🚀 FINAL PRISMA WHERE CLAUSE:", JSON.stringify(where, null, 2));
 
   const [payments, total] = await Promise.all([
     prisma.payment.findMany({
