@@ -202,9 +202,9 @@ export const checkOutGuest = async (reservationId: number) => {
   }
 
 
-    // ✅ FIX: Update room status to Occupied during check-in
+    // ✅ FIX: Update room status to Available during check-out
   for (const rr of reservation.reservationRooms) {
-    await updateRoomStatus(rr.roomId, 'Occupied');
+    await updateRoomStatus(rr.roomId, 'Available');
   }
 
 

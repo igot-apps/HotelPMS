@@ -19,6 +19,8 @@ export default function RoomsPage() {
     enabled: !!propertyId,
   });
 
+  console.log('Rooms Data:', roomsData); // Debugging line to check the fetched data
+
   // 2. Mutation
   const statusMutation = useMutation({
     mutationFn: ({ roomId, payload }) => updateRoomStatus(roomId, payload),
