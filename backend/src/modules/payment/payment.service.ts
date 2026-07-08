@@ -57,22 +57,27 @@ export const recordPayment = async (data: any) => {
 
 export const getPayments = async (
   tenantId: number,
-  filters: {
-    reservationId?: number;
-    paymentMethod?: string;
-    status?: string;
-    fromDate?: string;
-    toDate?: string;
-  },
+ filters: {
+  reservationId?: number;
+  paymentMethod?: string;
+  status?: string;
+  fromDate?: string;
+  toDate?: string;
+  search?: string;
+},
   page: number = 1,
   limit: number = 10
 ) => {
   const fromDate = filters.fromDate ? new Date(filters.fromDate) : undefined;
   const toDate = filters.toDate ? new Date(filters.toDate) : undefined;
 
-  return paymentRepository.findPayments(
+  console.log("from service");
+  console.log(filters);
+
+    return paymentRepository.findPayments(
     tenantId,
     {
+      search: filters.search, // 🚨 THIS IS THE MISSING LINE!
       reservationId: filters.reservationId,
       paymentMethod: filters.paymentMethod,
       status: filters.status,

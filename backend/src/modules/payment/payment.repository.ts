@@ -61,20 +61,47 @@ export const findPayments = async (
     status?: string;
     fromDate?: Date;
     toDate?: Date;
+    search?: string;
   },
   page: number = 1,
   limit: number = 10
 ) => {
+  console.log("🔥 from repository - filters received:", filters);
+  
   const skip = (page - 1) * limit;
   const where: any = { tenantId };
 
+  // 🚨 1. SEARCH LOGIC (The missing piece!)
+  if (filters.search) {
+    const searchStr = String(filters.search);
+    const searchNum = parseInt(searchStr);
+
+    // Build the OR array to search across multiple fields
+    where.OR = [
+      { gatewayReference: { contains: searchStr, mode: 'insensitive' } },
+      { reservation: { guest: { fullName: { contains: searchStr, mode: 'insensitive' } } } },
+      { reservation: { guest: { phone: { contains: searchStr } } } },
+    ];
+
+    // If the search term is a valid number, also search by Reservation ID
+    if (!isNaN(searchNum)) {
+      where.OR.push({ reservationId: searchNum });
+    }
+  }
+
+  // 2. Standard Filters
   if (filters.reservationId) where.reservationId = filters.reservationId;
   if (filters.paymentMethod) where.paymentMethod = filters.paymentMethod;
   if (filters.status) where.status = filters.status;
-  if (filters.fromDate) where.paymentDate = { gte: filters.fromDate };
-  if (filters.toDate) {
-    where.paymentDate = { ...where.paymentDate, lte: filters.toDate };
+  
+  // 3. Date Filters
+  if (filters.fromDate || filters.toDate) {
+    where.paymentDate = {};
+    if (filters.fromDate) where.paymentDate.gte = filters.fromDate;
+    if (filters.toDate) where.paymentDate.lte = filters.toDate;
   }
+
+  console.log("🚀 FINAL PRISMA WHERE CLAUSE:", JSON.stringify(where, null, 2));
 
   const [payments, total] = await Promise.all([
     prisma.payment.findMany({

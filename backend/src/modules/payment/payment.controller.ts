@@ -38,12 +38,18 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
 };
 
 export const getPayments = async (req: AuthRequest, res: Response) => {
+  console.log("🟢 from controller - getPayments");
+  console.log("🟢 Query params received:", req.query); // 🚨 Log query instead of body for GET requests
+
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const tenantId = req.user?.tenantId!;
 
     const filters = {
+      // 🚨 THIS IS THE MISSING LINE THAT FIXES EVERYTHING:
+      search: req.query.search as string | undefined, 
+      
       reservationId: req.query.reservationId
         ? parseInt(req.query.reservationId as string)
         : undefined,
@@ -54,6 +60,7 @@ export const getPayments = async (req: AuthRequest, res: Response) => {
     };
 
     const result = await paymentService.getPayments(tenantId, filters, page, limit);
+    
     return res.status(200).json({
       success: true,
       data: result.payments,
