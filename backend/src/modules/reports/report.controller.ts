@@ -1,188 +1,101 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import * as reportService from './report.service';
 import { AuthRequest } from '../../shared/middleware/auth.middleware';
 
-export const getOccupancyReport = async (req: AuthRequest, res: Response) => {
+// Helper to extract common query parameters
+const extractReportParams = (req: Request) => {
+  const propertyId = req.query.propertyId ? parseInt(req.query.propertyId as string) : undefined;
+  const startDate = req.query.startDate as string | undefined;
+  const endDate = req.query.endDate as string | undefined;
+  return { propertyId, startDate, endDate };
+};
+
+// ==========================================
+// 🌟 1. THE "ONE-CALL" DASHBOARD CONTROLLER
+// ==========================================
+// This is the master endpoint. The frontend will call this ONCE to get all dashboard data.
+export const getFullDashboardReport = async (req: AuthRequest, res: Response) => {
   try {
-    const { propertyId, fromDate, toDate } = req.query;
     const tenantId = req.user?.tenantId!;
+    const { propertyId, startDate, endDate } = extractReportParams(req);
 
-    if (!propertyId || !fromDate || !toDate) {
-      return res.status(400).json({
-        success: false,
-        message: 'propertyId, fromDate, and toDate are required',
-      });
-    }
-
-    const report = await reportService.getOccupancyReport(
-      tenantId,
-      parseInt(propertyId as string),
-      fromDate as string,
-      toDate as string
+    const reportData = await reportService.getFullDashboardReport(
+      tenantId, 
+      propertyId, 
+      startDate, 
+      endDate
     );
 
     return res.status(200).json({
       success: true,
-      data: report,
+      data: reportData,
     });
   } catch (error: any) {
     return res.status(400).json({
       success: false,
-      message: error.message,
+      message: error.message || 'Failed to generate full dashboard report',
     });
   }
 };
 
-export const getRevenueReport = async (req: AuthRequest, res: Response) => {
+// ==========================================
+// 2. INDIVIDUAL REPORT CONTROLLERS
+// ==========================================
+// These are useful if the frontend only needs to refresh a specific chart (e.g., just the Time Series)
+
+export const getFinancialSummary = async (req: AuthRequest, res: Response) => {
   try {
-    const { propertyId, fromDate, toDate } = req.query;
     const tenantId = req.user?.tenantId!;
+    const { propertyId, startDate, endDate } = extractReportParams(req);
 
-    if (!propertyId || !fromDate || !toDate) {
-      return res.status(400).json({
-        success: false,
-        message: 'propertyId, fromDate, and toDate are required',
-      });
-    }
-
-    const report = await reportService.getRevenueReport(
-      tenantId,
-      parseInt(propertyId as string),
-      fromDate as string,
-      toDate as string
-    );
+    const reportData = await reportService.getFinancialSummary(tenantId, propertyId, startDate, endDate);
 
     return res.status(200).json({
       success: true,
-      data: report,
+      data: reportData,
     });
   } catch (error: any) {
     return res.status(400).json({
       success: false,
-      message: error.message,
+      message: error.message || 'Failed to generate financial summary',
     });
   }
 };
 
-export const getReservationReport = async (req: AuthRequest, res: Response) => {
+export const getRevenueTimeSeries = async (req: AuthRequest, res: Response) => {
   try {
-    const { propertyId, fromDate, toDate } = req.query;
     const tenantId = req.user?.tenantId!;
+    const { propertyId, startDate, endDate } = extractReportParams(req);
 
-    if (!propertyId || !fromDate || !toDate) {
-      return res.status(400).json({
-        success: false,
-        message: 'propertyId, fromDate, and toDate are required',
-      });
-    }
-
-    const report = await reportService.getReservationReport(
-      tenantId,
-      parseInt(propertyId as string),
-      fromDate as string,
-      toDate as string
-    );
+    const reportData = await reportService.getRevenueTimeSeries(tenantId, propertyId, startDate, endDate);
 
     return res.status(200).json({
       success: true,
-      data: report,
+      data: reportData,
     });
   } catch (error: any) {
     return res.status(400).json({
       success: false,
-      message: error.message,
+      message: error.message || 'Failed to generate revenue time series',
     });
   }
 };
 
-export const getGuestReport = async (req: AuthRequest, res: Response) => {
+export const getCategoryBreakdowns = async (req: AuthRequest, res: Response) => {
   try {
-    const { propertyId, fromDate, toDate } = req.query;
     const tenantId = req.user?.tenantId!;
+    const { propertyId, startDate, endDate } = extractReportParams(req);
 
-    if (!propertyId || !fromDate || !toDate) {
-      return res.status(400).json({
-        success: false,
-        message: 'propertyId, fromDate, and toDate are required',
-      });
-    }
-
-    const report = await reportService.getGuestReport(
-      tenantId,
-      parseInt(propertyId as string),
-      fromDate as string,
-      toDate as string
-    );
+    const reportData = await reportService.getCategoryBreakdowns(tenantId, propertyId, startDate, endDate);
 
     return res.status(200).json({
       success: true,
-      data: report,
+      data: reportData,
     });
   } catch (error: any) {
     return res.status(400).json({
       success: false,
-      message: error.message,
-    });
-  }
-};
-
-export const getDailySummary = async (req: AuthRequest, res: Response) => {
-  try {
-    const { propertyId, date } = req.query;
-    const tenantId = req.user?.tenantId!;
-
-    if (!propertyId || !date) {
-      return res.status(400).json({
-        success: false,
-        message: 'propertyId and date are required',
-      });
-    }
-
-    const report = await reportService.getDailySummary(
-      tenantId,
-      parseInt(propertyId as string),
-      date as string
-    );
-
-    return res.status(200).json({
-      success: true,
-      data: report,
-    });
-  } catch (error: any) {
-    return res.status(400).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-export const getMonthlySummary = async (req: AuthRequest, res: Response) => {
-  try {
-    const { propertyId, month, year } = req.query;
-    const tenantId = req.user?.tenantId!;
-
-    if (!propertyId || !month || !year) {
-      return res.status(400).json({
-        success: false,
-        message: 'propertyId, month, and year are required',
-      });
-    }
-
-    const report = await reportService.getMonthlySummary(
-      tenantId,
-      parseInt(propertyId as string),
-      parseInt(month as string),
-      parseInt(year as string)
-    );
-
-    return res.status(200).json({
-      success: true,
-      data: report,
-    });
-  } catch (error: any) {
-    return res.status(400).json({
-      success: false,
-      message: error.message,
+      message: error.message || 'Failed to generate category breakdowns',
     });
   }
 };

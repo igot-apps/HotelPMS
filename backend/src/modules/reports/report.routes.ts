@@ -4,15 +4,23 @@ import * as reportController from './report.controller';
 
 const router = Router();
 
-// All routes require authentication
+// 🛡️ All report routes require the user to be authenticated
 router.use(authenticate);
 
-// Report routes
-router.get('/occupancy', reportController.getOccupancyReport);
-router.get('/revenue', reportController.getRevenueReport);
-router.get('/reservations', reportController.getReservationReport);
-router.get('/guests', reportController.getGuestReport);
-router.get('/daily-summary', reportController.getDailySummary);
-router.get('/monthly-summary', reportController.getMonthlySummary);
+// ==========================================
+// 🌟 MASTER ENDPOINT
+// ==========================================
+// Fetches Financials, Time-Series, and Categories all in ONE single request.
+// This is what your main Reports Page will call.
+router.get('/', reportController.getFullDashboardReport);
+
+// ==========================================
+// INDIVIDUAL ENDPOINTS
+// ==========================================
+// These are useful if you want to build a highly interactive dashboard where 
+// only one specific chart refreshes when the user changes a filter.
+router.get('/financial', reportController.getFinancialSummary);
+router.get('/time-series', reportController.getRevenueTimeSeries);
+router.get('/categories', reportController.getCategoryBreakdowns);
 
 export default router;

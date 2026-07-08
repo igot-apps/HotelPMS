@@ -1,124 +1,89 @@
 import * as reportRepository from './report.repository';
-import { getPropertyById } from '../property/property.service';
 
-export const getOccupancyReport = async (
-  tenantId: number,
-  propertyId: number,
-  fromDate: string,
-  toDate: string
-) => {
-  const from = new Date(fromDate);
-  const to = new Date(toDate);
-
-  if (from >= to) {
-    throw new Error('From date must be before to date');
-  }
-
-  // Validate property belongs to tenant
-  const property = await getPropertyById(propertyId);
-  if (property.tenantId !== tenantId) {
-    throw new Error('Property not found for this tenant');
-  }
-
-  return reportRepository.getOccupancyReport(tenantId, propertyId, from, to);
+// Helper to get default date range (Current Month)
+const getDefaultDates = () => {
+  const now = new Date();
+  const startDate = new Date(now.getFullYear(), now.getMonth(), 1); // 1st day of current month
+  const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0); // Last day of current month
+  return { startDate, endDate };
 };
 
-export const getRevenueReport = async (
+// ==========================================
+// 1. FINANCIAL SUMMARY SERVICE
+// ==========================================
+export const getFinancialSummary = async (
   tenantId: number,
-  propertyId: number,
-  fromDate: string,
-  toDate: string
+  propertyId?: number,
+  startDate?: string,
+  endDate?: string
 ) => {
-  const from = new Date(fromDate);
-  const to = new Date(toDate);
+  const start = startDate ? new Date(startDate) : getDefaultDates().startDate;
+  const end = endDate ? new Date(endDate) : getDefaultDates().endDate;
 
-  if (from >= to) {
-    throw new Error('From date must be before to date');
-  }
+  if (start > end) throw new Error('Start date must be before or equal to end date');
 
-  const property = await getPropertyById(propertyId);
-  if (property.tenantId !== tenantId) {
-    throw new Error('Property not found for this tenant');
-  }
-
-  return reportRepository.getRevenueReport(tenantId, propertyId, from, to);
+  return reportRepository.getFinancialSummary(tenantId, propertyId, start, end);
 };
 
-export const getReservationReport = async (
+// ==========================================
+// 2. TIME-SERIES SERVICE (For Charts)
+// ==========================================
+export const getRevenueTimeSeries = async (
   tenantId: number,
-  propertyId: number,
-  fromDate: string,
-  toDate: string
+  propertyId?: number,
+  startDate?: string,
+  endDate?: string
 ) => {
-  const from = new Date(fromDate);
-  const to = new Date(toDate);
+  const start = startDate ? new Date(startDate) : getDefaultDates().startDate;
+  const end = endDate ? new Date(endDate) : getDefaultDates().endDate;
 
-  if (from >= to) {
-    throw new Error('From date must be before to date');
-  }
+  if (start > end) throw new Error('Start date must be before or equal to end date');
 
-  const property = await getPropertyById(propertyId);
-  if (property.tenantId !== tenantId) {
-    throw new Error('Property not found for this tenant');
-  }
-
-  return reportRepository.getReservationReport(tenantId, propertyId, from, to);
+  return reportRepository.getRevenueTimeSeries(tenantId, propertyId, start, end);
 };
 
-export const getGuestReport = async (
+// ==========================================
+// 3. CATEGORY BREAKDOWNS SERVICE
+// ==========================================
+export const getCategoryBreakdowns = async (
   tenantId: number,
-  propertyId: number,
-  fromDate: string,
-  toDate: string
+  propertyId?: number,
+  startDate?: string,
+  endDate?: string
 ) => {
-  const from = new Date(fromDate);
-  const to = new Date(toDate);
+  const start = startDate ? new Date(startDate) : getDefaultDates().startDate;
+  const end = endDate ? new Date(endDate) : getDefaultDates().endDate;
 
-  if (from >= to) {
-    throw new Error('From date must be before to date');
-  }
+  if (start > end) throw new Error('Start date must be before or equal to end date');
 
-  const property = await getPropertyById(propertyId);
-  if (property.tenantId !== tenantId) {
-    throw new Error('Property not found for this tenant');
-  }
-
-  return reportRepository.getGuestReport(tenantId, propertyId, from, to);
+  return reportRepository.getCategoryBreakdowns(tenantId, propertyId, start, end);
 };
 
-export const getDailySummary = async (
+// ==========================================
+// 🌟 4. THE "ONE-CALL" DASHBOARD AGGREGATOR
+// ==========================================
+// This fetches all 3 reports in parallel, saving the frontend from making 3 separate HTTP requests!
+export const getFullDashboardReport = async (
   tenantId: number,
-  propertyId: number,
-  date: string
+  propertyId?: number,
+  startDate?: string,
+  endDate?: string
 ) => {
-  const targetDate = new Date(date);
-  
-  const property = await getPropertyById(propertyId);
-  if (property.tenantId !== tenantId) {
-    throw new Error('Property not found for this tenant');
-  }
+  const start = startDate ? new Date(startDate) : getDefaultDates().startDate;
+  const end = endDate ? new Date(endDate) : getDefaultDates().endDate;
 
-  return reportRepository.getDailySummary(tenantId, propertyId, targetDate);
-};
+  if (start > end) throw new Error('Start date must be before or equal to end date');
 
-export const getMonthlySummary = async (
-  tenantId: number,
-  propertyId: number,
-  month: number,
-  year: number
-) => {
-  if (month < 1 || month > 12) {
-    throw new Error('Month must be between 1 and 12');
-  }
+  // Fetch all data simultaneously
+  const [financials, timeSeries, categories] = await Promise.all([
+    reportRepository.getFinancialSummary(tenantId, propertyId, start, end),
+    reportRepository.getRevenueTimeSeries(tenantId, propertyId, start, end),
+    reportRepository.getCategoryBreakdowns(tenantId, propertyId, start, end),
+  ]);
 
-  if (year < 2000 || year > 2100) {
-    throw new Error('Year must be between 2000 and 2100');
-  }
-
-  const property = await getPropertyById(propertyId);
-  if (property.tenantId !== tenantId) {
-    throw new Error('Property not found for this tenant');
-  }
-
-  return reportRepository.getMonthlySummary(tenantId, propertyId, month, year);
+  return {
+    summary: financials,
+    timeSeries,
+    categories,
+  };
 };
