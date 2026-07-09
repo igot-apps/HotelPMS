@@ -7,29 +7,41 @@ import { useAuthStore } from '../store/authStore';
 import { 
   UserPlus, UserMinus, BedDouble, Sparkles, AlertTriangle, 
   Calendar, Search, CreditCard, RefreshCw, LayoutGrid, ArrowRight,
-  Phone, Loader2
+  Loader2, Building2
 } from 'lucide-react';
 
 export default function DashboardPage() {
   const user = useAuthStore((state) => state.user);
-  const [propertyId, setPropertyId] = useState('');
+  
+  // 🚨 CHECK IF USER IS TIED TO A SPECIFIC PROPERTY
+  const userPropertyId = user?.propertyId;
+  const isPropertySpecific = !!userPropertyId;
 
-  // Fetch Properties for filter
+  // Initialize state with user's property ID if they have one
+  const [propertyId, setPropertyId] = useState(userPropertyId || '');
+
+  // Fetch Properties (Only needed if user is a Manager and can switch)
   const { data: propsData } = useQuery({
     queryKey: ['properties'],
     queryFn: () => getProperties().then(res => res.data.data || res.data || []),
+    enabled: !isPropertySpecific, // 🚨 Don't fetch if user is property-specific
   });
   const properties = propsData || [];
 
+  // Find the property name for the header
+  const currentPropertyName = isPropertySpecific 
+    ? (properties.find(p => p.propertyId === userPropertyId)?.propertyName || 'Your Property')
+    : (propertyId ? properties.find(p => p.propertyId === parseInt(propertyId))?.propertyName : 'All Properties');
+
   // Fetch Operational Data
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['operationalOverview', propertyId],
     queryFn: () => {
       const params = {};
       if (propertyId) params.propertyId = propertyId;
       return getOperationalOverview(params).then(res => res.data.data);
     },
-    refetchInterval: 60000, // Auto-refresh every 60 seconds for live updates!
+    refetchInterval: 60000, 
   });
 
   const arrivals = data?.arrivals || [];
@@ -49,20 +61,38 @@ export default function DashboardPage() {
       {/* ========================================== */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-text tracking-tight">
+          <h1 className="text-2xl font-bold text-text tracking-tight flex items-center gap-2 flex-wrap">
             {greeting}, {user?.fullName?.split(' ')[0] || 'Team'}! 👋
+            {/* 🚨 SHOW PROPERTY NAME IF SPECIFIC */}
+            {isPropertySpecific && (
+              <span className="text-lg font-semibold text-primary-600 bg-primary-50 px-3 py-1 rounded-lg border border-primary-100">
+                <Building2 size={16} className="inline mr-1 -mt-1" />
+                {currentPropertyName}
+              </span>
+            )}
           </h1>
           <p className="text-text-muted text-sm mt-1">{todayStr} • Here is your shift overview.</p>
         </div>
         
         <div className="flex items-center gap-3">
-          <button onClick={() => refetch()} className="inline-flex items-center gap-2 px-3 py-2 bg-surface border border-border text-text text-sm font-semibold rounded-lg hover:bg-secondary-50 transition shadow-sm">
-            <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} /> Refresh
+          <button 
+            onClick={() => refetch()} 
+            className="inline-flex items-center gap-2 px-3 py-2 bg-surface border border-border text-text text-sm font-semibold rounded-lg hover:bg-secondary-50 transition shadow-sm"
+          >
+            <RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} /> Refresh
           </button>
-          <select value={propertyId} onChange={e => setPropertyId(e.target.value)} className="px-3 py-2.5 bg-surface border border-border rounded-xl text-sm text-text focus:ring-2 focus:ring-primary-500/20 outline-none min-w-[160px] shadow-sm">
-            <option value="">All Properties</option>
-            {properties.map(p => <option key={p.propertyId} value={p.propertyId}>{p.propertyName}</option>)}
-          </select>
+          
+          {/* 🚨 ONLY SHOW DROPDOWN IF USER IS NOT PROPERTY-SPECIFIC (e.g. Manager) */}
+          {!isPropertySpecific && (
+            <select 
+              value={propertyId} 
+              onChange={e => setPropertyId(e.target.value)} 
+              className="px-3 py-2.5 bg-surface border border-border rounded-xl text-sm text-text focus:ring-2 focus:ring-primary-500/20 outline-none min-w-[160px] shadow-sm"
+            >
+              <option value="">All Properties</option>
+              {properties.map(p => <option key={p.propertyId} value={p.propertyId}>{p.propertyName}</option>)}
+            </select>
+          )}
         </div>
       </div>
 
