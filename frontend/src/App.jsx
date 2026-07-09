@@ -3,7 +3,7 @@ import { Toaster } from 'react-hot-toast';
 import AppLayout from './components/layout/AppLayout';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
-// import DashboardPage from './pages/DashboardPage';
+import DashboardPage from './pages/DashboardPage';
 import RoomsPage from './pages/RoomsPage';
 import GuestsPage from './pages/GuestsPage';
 import ReservationsPage from './pages/ReservationsPage';
@@ -89,7 +89,7 @@ function App() {
           {/* <Route index element={<Navigate to="/dashboard" replace />} /> */}
           
           {/* Core Operations */}
-          {/* <Route path="dashboard" element={<DashboardPage />} /> */}
+          <Route path="dashboard" element={<DashboardPage />} />
           <Route path="rooms" element={<RoomsPage />} />
           <Route path="guests" element={<GuestsPage />} />
           <Route path="reservations" element={<ReservationsPage />} />

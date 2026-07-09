@@ -16,6 +16,7 @@ import reservationRoutes from './modules/reservation/reservation.routes';
 import paymentRoutes from './modules/payment/payment.routes';
 import reportRoutes from './modules/reports/report.routes';
 import userRoutes from './modules/user/user.routes';
+import dashboardRoutes from './modules/dashboard/dashboard.routes';
 
 // Load environment variables
 dotenv.config();
@@ -72,6 +73,7 @@ app.get('/', (_req: Request, res: Response) => {
  app.use('/api/payments', paymentRoutes);
  app.use('/api/reports', reportRoutes);
  app.use('/api/users', userRoutes);
+app.use('/api/dashboard', dashboardRoutes);
  
 // 404 handler
 app.use((_req: Request, res: Response) => {
