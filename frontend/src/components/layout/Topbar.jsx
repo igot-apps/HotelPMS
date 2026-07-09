@@ -1,5 +1,5 @@
 import { useAuthStore } from '../../store/authStore';
-import { Menu, Building2 } from 'lucide-react'; // Added Building2 icon
+import { Menu, Building2 } from 'lucide-react';
 
 export default function Topbar({ onMenuClick }) {
   const user = useAuthStore((state) => state.user);
@@ -18,11 +18,15 @@ export default function Topbar({ onMenuClick }) {
           <Menu size={24} />
         </button>
         
-        {/* NEW: Current Property Indicator Badge */}
+        {/* 🚨 UPDATED: Current Property Indicator Badge */}
         <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary-50 border border-border rounded-lg">
           <Building2 size={16} className="text-primary-600" />
-          <span className="text-sm font-semibold text-text truncate max-w-[150px] md:max-w-none" title={user?.tenantName}>
-            {user?.tenantName || 'No Property'}
+          <span 
+            className="text-sm font-semibold text-text truncate max-w-[150px] md:max-w-none" 
+            title={user?.propertyName || user?.tenantName}
+          >
+            {/* 🚨 CHANGED: Show propertyName, fallback to tenantName if null */}
+            {user?.propertyName || user?.tenantName || 'No Property'}
           </span>
         </div>
       </div>

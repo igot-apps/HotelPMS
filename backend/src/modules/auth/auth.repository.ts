@@ -1,5 +1,4 @@
 import { PrismaClient } from '../../../src/generated/prisma';
-
 const prisma = new PrismaClient();
 
 export const findUserByUsername = async (username: string) => {
@@ -7,6 +6,7 @@ export const findUserByUsername = async (username: string) => {
     where: { username },
     include: {
       tenant: true,
+      property: true, // 🚨 ADDED: Fetch the property relation
       role: {
         include: {
           rolePermissions: {
@@ -25,6 +25,7 @@ export const findUserById = async (userId: number) => {
     where: { userId },
     include: {
       tenant: true,
+      property: true, // 🚨 ADDED: Fetch the property relation
       role: true,
     },
   });
@@ -37,12 +38,12 @@ export const updateLastLogin = async (userId: number) => {
   });
 };
 
-// ✅ Add this if needed for permission checking
 export const findUserWithPermissions = async (userId: number) => {
   return prisma.user.findUnique({
     where: { userId },
     include: {
       tenant: true,
+      property: true, // 🚨 ADDED: Fetch the property relation
       role: {
         include: {
           rolePermissions: {

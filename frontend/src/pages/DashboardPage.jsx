@@ -29,9 +29,8 @@ export default function DashboardPage() {
   const properties = propsData || [];
 
   // Find the property name for the header
-  const currentPropertyName = isPropertySpecific 
-    ? (properties.find(p => p.propertyId === userPropertyId)?.propertyName || 'Your Property')
-    : (propertyId ? properties.find(p => p.propertyId === parseInt(propertyId))?.propertyName : 'All Properties');
+// ✅ REPLACE WITH THIS:
+const currentPropertyName = user?.propertyName || 'All Properties';
 
   // Fetch Operational Data
   const { data, isLoading, isError, refetch, isFetching } = useQuery({

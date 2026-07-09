@@ -15,6 +15,7 @@ export interface LoginResponse {
     tenantId: number;
     tenantName: string;
     propertyId: number | null;
+    propertyName: string | null; // 🚨 ADDED THIS LINE
     permissions: string[];
   };
   message?: string;
@@ -78,6 +79,7 @@ export const loginUser = async (
       tenantId: user.tenantId,
       tenantName: user.tenant.businessName,
       propertyId: user.propertyId || null,
+      propertyName: user.property?.propertyName || null, 
       permissions,
     },
   };
@@ -136,6 +138,7 @@ export const getUserById = async (userId: number) => {
     tenantId: user.tenantId,
     tenantName: user.tenant.businessName,
     propertyId: user.propertyId,
+    propertyName: (user as any).property?.propertyName || null,
     isActive: user.isActive,
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,
