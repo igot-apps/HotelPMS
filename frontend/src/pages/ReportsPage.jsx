@@ -2,12 +2,19 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getFullDashboardReport } from '../api/reports';
 import { getProperties } from '../api/properties';
+import { useAuthStore } from '../store/authStore'; // 🚨 ADD THIS
 import { 
   TrendingUp, TrendingDown, DollarSign, BedDouble, Percent, 
   Calendar, BarChart3, PieChart, Loader2, Building2, Wallet, Activity
 } from 'lucide-react';
 
 export default function ReportsPage() {
+  const user = useAuthStore((state) => state.user);
+  
+  // 🚨 CHECK IF USER IS TIED TO A SPECIFIC PROPERTY
+  const userPropertyId = user?.propertyId;
+  const isPropertySpecific = !!userPropertyId;
+
   // Default to Current Month
   const [startDate, setStartDate] = useState(() => {
     const d = new Date(); d.setDate(1);
@@ -19,14 +26,21 @@ export default function ReportsPage() {
     return d.toISOString().split('T')[0];
   });
 
-  const [propertyId, setPropertyId] = useState('');
+  // Initialize propertyId with user's property if they have one
+  const [propertyId, setPropertyId] = useState(userPropertyId || '');
 
-  // Fetch Properties for the filter dropdown
+  // Fetch Properties (Only needed if user is a Manager and can switch)
   const { data: propsData } = useQuery({
     queryKey: ['properties'],
     queryFn: () => getProperties().then(res => res.data.data || res.data || []),
+    enabled: !isPropertySpecific, // 🚨 Don't fetch if user is property-specific
   });
   const properties = propsData || [];
+
+  // Find the property name for the header badge
+  const currentPropertyName = isPropertySpecific 
+    ? (properties.find(p => p.propertyId === userPropertyId)?.propertyName || 'Your Property')
+    : (propertyId ? properties.find(p => p.propertyId === parseInt(propertyId))?.propertyName : 'All Properties');
 
   // Fetch the Master Report
   const { data, isLoading, isError } = useQuery({
@@ -52,8 +66,15 @@ export default function ReportsPage() {
       {/* Header & Filters */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-text tracking-tight flex items-center gap-2">
-            <BarChart3 size={24} className="text-primary-500" /> Analytics & Reports
+          <h1 className="text-2xl font-bold text-text tracking-tight flex items-center gap-2 flex-wrap">
+            Analytics & Reports
+            {/* 🚨 SHOW PROPERTY NAME IF SPECIFIC */}
+            {isPropertySpecific && (
+              <span className="text-lg font-semibold text-primary-600 bg-primary-50 px-3 py-1 rounded-lg border border-primary-100">
+                <Building2 size={16} className="inline mr-1 -mt-1" />
+                {currentPropertyName}
+              </span>
+            )}
           </h1>
           <p className="text-text-muted text-sm mt-1">Enterprise KPIs, revenue trends, and operational performance.</p>
         </div>
@@ -65,10 +86,18 @@ export default function ReportsPage() {
             <span className="text-text-muted text-sm">to</span>
             <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="px-2 py-1.5 bg-background border border-border rounded-lg text-sm text-text focus:ring-2 focus:ring-primary-500/20 outline-none" />
           </div>
-          <select value={propertyId} onChange={e => setPropertyId(e.target.value)} className="px-3 py-1.5 bg-background border border-border rounded-lg text-sm text-text focus:ring-2 focus:ring-primary-500/20 outline-none min-w-[150px]">
-            <option value="">All Properties</option>
-            {properties.map(p => <option key={p.propertyId} value={p.propertyId}>{p.propertyName}</option>)}
-          </select>
+          
+          {/* 🚨 ONLY SHOW DROPDOWN IF USER IS NOT PROPERTY-SPECIFIC (e.g. Manager) */}
+          {!isPropertySpecific && (
+            <select 
+              value={propertyId} 
+              onChange={e => setPropertyId(e.target.value)} 
+              className="px-3 py-1.5 bg-background border border-border rounded-lg text-sm text-text focus:ring-2 focus:ring-primary-500/20 outline-none min-w-[150px]"
+            >
+              <option value="">All Properties</option>
+              {properties.map(p => <option key={p.propertyId} value={p.propertyId}>{p.propertyName}</option>)}
+            </select>
+          )}
         </div>
       </div>
 
