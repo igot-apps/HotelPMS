@@ -12,10 +12,8 @@ export interface LoginResponse {
     username: string;
     email: string | null;
     role: string;
-    tenantId: number;
-    tenantName: string;
-    propertyId: number | null;
-    propertyName: string | null; // 🚨 ADDED THIS LINE
+    propertyId: number | null; // ✅ Allow null to satisfy TS
+    propertyName: string | null; // ✅ Allow null to satisfy TS
     permissions: string[];
   };
   message?: string;
@@ -26,35 +24,25 @@ export const loginUser = async (
   password: string
 ): Promise<LoginResponse> => {
   const user = await authRepository.findUserByUsername(username);
-
+  
   if (!user) {
-    return {
-      success: false,
-      message: 'Invalid username or password',
-    };
+    return { success: false, message: 'Invalid username or password' };
   }
-
   if (!user.isActive) {
-    return {
-      success: false,
-      message: 'Account is deactivated',
-    };
+    return { success: false, message: 'Account is deactivated' };
   }
-
+  
   const isPasswordValid = await comparePassword(password, user.passwordHash);
-
   if (!isPasswordValid) {
-    return {
-      success: false,
-      message: 'Invalid username or password',
-    };
+    return { success: false, message: 'Invalid username or password' };
   }
 
   await authRepository.updateLastLogin(user.userId);
 
+  // 🚨 JWT PAYLOAD: propertyId is now the root scope. Fallback to 0 if null.
   const payload = {
     userId: user.userId,
-    tenantId: user.tenantId,
+    propertyId: user.propertyId || 0, 
     roleId: user.roleId,
     username: user.username,
   };
@@ -76,69 +64,50 @@ export const loginUser = async (
       username: user.username,
       email: user.email || null,
       role: user.role.roleName,
-      tenantId: user.tenantId,
-      tenantName: user.tenant.businessName,
       propertyId: user.propertyId || null,
-      propertyName: user.property?.propertyName || null, 
+      propertyName: (user as any).property?.propertyName || null, // ✅ Safe navigation
       permissions,
     },
   };
 };
 
 export const refreshAccessToken = async (refreshToken: string) => {
-  // ✅ FIX: Dynamic import to avoid circular dependency
   const { verifyRefreshToken } = require('../../shared/utils/jwt');
   const decoded = verifyRefreshToken(refreshToken);
   
   if (!decoded) {
-    return {
-      success: false,
-      message: 'Invalid refresh token',
-    };
+    return { success: false, message: 'Invalid refresh token' };
   }
-
+  
   const user = await authRepository.findUserById(decoded.userId);
-
   if (!user || !user.isActive) {
-    return {
-      success: false,
-      message: 'User not found or inactive',
-    };
+    return { success: false, message: 'User not found or inactive' };
   }
 
+  // 🚨 JWT PAYLOAD: Fallback to 0 if null
   const payload = {
     userId: user.userId,
-    tenantId: user.tenantId,
+    propertyId: user.propertyId || 0,
     roleId: user.roleId,
     username: user.username,
   };
 
   const accessToken = generateAccessToken(payload);
-
-  return {
-    success: true,
-    accessToken,
-  };
+  return { success: true, accessToken };
 };
 
-// ✅ EXPORT THIS FUNCTION - it was missing!
 export const getUserById = async (userId: number) => {
   const user = await authRepository.findUserById(userId);
+  if (!user) return null;
   
-  if (!user) {
-    return null;
-  }
-
   return {
     userId: user.userId,
     fullName: user.fullName,
     username: user.username,
     email: user.email,
     role: user.role.roleName,
-    tenantId: user.tenantId,
-    tenantName: user.tenant.businessName,
-    propertyId: user.propertyId,
-    propertyName: (user as any).property?.propertyName || null,
+    propertyId: user.propertyId || null,
+    propertyName: (user as any).property?.propertyName || null, // ✅ Safe navigation
     isActive: user.isActive,
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,

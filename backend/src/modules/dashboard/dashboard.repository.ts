@@ -1,13 +1,14 @@
 import { PrismaClient } from '../../../src/generated/prisma';
 const prisma = new PrismaClient();
 
-export const getOperationalOverview = async (tenantId: number, propertyId?: number) => {
+export const getOperationalOverview = async (propertyId: number) => { // ✅ REMOVED tenantId
   // 1. Define "Today" boundaries
   const now = new Date();
   const startOfDay = new Date(now.setHours(0, 0, 0, 0));
   const endOfDay = new Date(now.setHours(23, 59, 59, 999));
-
-  const baseWhere = { tenantId, ...(propertyId && { propertyId }) };
+  
+  // ✅ Property is now the root scope
+  const baseWhere = { propertyId };
 
   // 2. Fetch Today's Arrivals (Check-ins)
   const arrivals = await prisma.reservation.findMany({
@@ -43,7 +44,7 @@ export const getOperationalOverview = async (tenantId: number, propertyId?: numb
     where: baseWhere,
     _count: true,
   });
-  
+
   // Format room stats into a clean object: { Available: 10, Occupied: 5, Maintenance: 1 }
   const roomStats = roomStatsRaw.reduce((acc, curr) => {
     acc[curr.operationalStatus] = curr._count;

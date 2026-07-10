@@ -12,18 +12,17 @@ const calculateNights = (checkIn: Date, checkOut: Date): number => {
 // 1. FINANCIAL & KPI SUMMARY
 // ==========================================
 export const getFinancialSummary = async (
-  tenantId: number,
-  propertyId: number | undefined,
+  propertyId: number, // ✅ REMOVED tenantId
   startDate: Date,
   endDate: Date
 ) => {
   // 1. Get Total Revenue & Transactions for the current period
   const currentPeriod = await prisma.payment.aggregate({
     where: {
-      tenantId,
+      // ✅ Filter via reservation relation
       status: 'Completed',
       paymentDate: { gte: startDate, lte: endDate },
-      ...(propertyId && { reservation: { propertyId } }),
+      reservation: { propertyId }, 
     },
     _sum: { amount: true },
     _count: true,
@@ -33,13 +32,13 @@ export const getFinancialSummary = async (
   const periodLength = endDate.getTime() - startDate.getTime();
   const prevStartDate = new Date(startDate.getTime() - periodLength);
   const prevEndDate = new Date(startDate.getTime() - 1); // Day before current start
-
+  
   const previousPeriod = await prisma.payment.aggregate({
     where: {
-      tenantId,
+      // ✅ Filter via reservation relation
       status: 'Completed',
       paymentDate: { gte: prevStartDate, lte: prevEndDate },
-      ...(propertyId && { reservation: { propertyId } }),
+      reservation: { propertyId }, 
     },
     _sum: { amount: true },
   });
@@ -47,19 +46,25 @@ export const getFinancialSummary = async (
   // 3. Calculate Occupancy & Room Nights for ADR/RevPAR
   const daysInRange = calculateNights(startDate, endDate) + 1;
   
-  const roomWhere = { tenantId, ...(propertyId && { propertyId }) };
-  const totalRooms = await prisma.room.count({ where: roomWhere });
+  // ✅ Room has direct propertyId
+  const totalRooms = await prisma.room.count({ where: { propertyId } });
   const totalAvailableNights = totalRooms * daysInRange;
 
+  // ✅ Filter ReservationRoom via reservation relation
   const occupiedRooms = await prisma.reservationRoom.findMany({
     where: {
-      tenantId,
-      ...(propertyId && { reservation: { propertyId } }),
+      reservation: { 
+        propertyId,
+        status: { notIn: ['Cancelled'] } 
+      },
       checkInDate: { lte: endDate },
       checkOutDate: { gte: startDate },
-      reservation: { status: { notIn: ['Cancelled'] } }
     },
-    select: { checkInDate: true, checkOutDate: true, agreedPricePerNight: true }
+    select: { 
+      checkInDate: true, 
+      checkOutDate: true, 
+      agreedPricePerNight: true 
+    }
   });
 
   let actualOccupiedNights = 0;
@@ -83,7 +88,7 @@ export const getFinancialSummary = async (
 
   return {
     currentRevenue,
-    previousRevenue: prevRevenue, // 🚨 FIXED: Changed from `previousRevenue` to `prevRevenue`
+    previousRevenue: prevRevenue, 
     revenueGrowth: parseFloat(revenueGrowth.toFixed(2)),
     totalTransactions: currentPeriod._count,
     occupancyRate: parseFloat(occupancyRate.toFixed(2)),
@@ -98,17 +103,16 @@ export const getFinancialSummary = async (
 // 2. TIME-SERIES DATA (For Charts)
 // ==========================================
 export const getRevenueTimeSeries = async (
-  tenantId: number,
-  propertyId: number | undefined,
+  propertyId: number, // ✅ REMOVED tenantId
   startDate: Date,
   endDate: Date
 ) => {
   const payments = await prisma.payment.findMany({
     where: {
-      tenantId,
+      // ✅ Filter via reservation relation
       status: 'Completed',
       paymentDate: { gte: startDate, lte: endDate },
-      ...(propertyId && { reservation: { propertyId } }),
+      reservation: { propertyId }, 
     },
     select: {
       paymentDate: true,
@@ -117,7 +121,7 @@ export const getRevenueTimeSeries = async (
     orderBy: { paymentDate: 'asc' },
   });
 
-  // Group by Date in Node.js (Much easier than Prisma raw SQL date truncation)
+  // Group by Date in Node.js
   const grouped: Record<string, number> = {};
   
   // Initialize all dates in range to 0 so the chart line doesn't break
@@ -147,8 +151,7 @@ export const getRevenueTimeSeries = async (
 // 3. CATEGORY BREAKDOWNS
 // ==========================================
 export const getCategoryBreakdowns = async (
-  tenantId: number,
-  propertyId: number | undefined,
+  propertyId: number, // ✅ REMOVED tenantId
   startDate: Date,
   endDate: Date
 ) => {
@@ -156,24 +159,25 @@ export const getCategoryBreakdowns = async (
   const byMethod = await prisma.payment.groupBy({
     by: ['paymentMethod'],
     where: {
-      tenantId,
+      // ✅ Filter via reservation relation
       status: 'Completed',
       paymentDate: { gte: startDate, lte: endDate },
-      ...(propertyId && { reservation: { propertyId } }),
+      reservation: { propertyId }, 
     },
     _sum: { amount: true },
     _count: true,
   });
 
-  // 🚨 DELETED: The unused `byRoomType` prisma.roomType.groupBy block is gone.
-
-  // 2. Direct query for Room Type revenue (This is the accurate one we actually use)
+  // 2. Direct query for Room Type revenue
   const roomTypeRevenue = await prisma.reservationRoom.findMany({
     where: {
-      tenantId,
+      // ✅ Filter via reservation relation
       checkInDate: { lte: endDate },
       checkOutDate: { gte: startDate },
-      reservation: { status: { notIn: ['Cancelled'] }, ...(propertyId && { propertyId }) },
+      reservation: { 
+        status: { notIn: ['Cancelled'] }, 
+        propertyId 
+      },
     },
     select: {
       roomType: { select: { typeName: true } },

@@ -1,9 +1,8 @@
 import { PrismaClient } from '../../../src/generated/prisma';
-
 const prisma = new PrismaClient();
 
 export const createGuest = async (data: {
-  tenantId: number;
+  propertyId: number; // ✅ Replaced tenantId
   fullName: string;
   phone?: string;
   email?: string;
@@ -17,7 +16,7 @@ export const createGuest = async (data: {
 }) => {
   return prisma.guest.create({
     data: {
-      tenantId: data.tenantId,
+      propertyId: data.propertyId, // ✅ Replaced tenantId
       fullName: data.fullName,
       phone: data.phone,
       email: data.email,
@@ -34,14 +33,14 @@ export const createGuest = async (data: {
 };
 
 export const findGuests = async (
-  tenantId: number,
+  propertyId: number, // ✅ Replaced tenantId
   searchTerm?: string,
   page: number = 1,
   limit: number = 10
 ) => {
   const skip = (page - 1) * limit;
-  const where: any = { tenantId, isActive: true };
-
+  const where: any = { propertyId, isActive: true }; // ✅ Replaced tenantId
+  
   if (searchTerm) {
     where.OR = [
       { fullName: { contains: searchTerm, mode: 'insensitive' } },
@@ -106,10 +105,11 @@ export const findGuestById = async (guestId: number) => {
   });
 };
 
-export const findGuestByEmail = async (tenantId: number, email: string) => {
+// ✅ Updated to use propertyId instead of tenantId
+export const findGuestByEmail = async (propertyId: number, email: string) => {
   return prisma.guest.findFirst({
     where: {
-      tenantId,
+      propertyId, // ✅ Replaced tenantId
       email,
       isActive: true,
     },
@@ -176,7 +176,6 @@ export const getGuestStats = async (guestId: number) => {
 
   const totalSpent = guest.reservations.reduce((sum, r) => {
     const paid = r.payments.reduce((ps, p) => {
-      // Convert Decimal to number if needed
       const amount = typeof p.amount === 'number' ? p.amount : Number(p.amount);
       return ps + amount;
     }, 0);

@@ -1,24 +1,22 @@
 import * as roomRepository from './room.repository';
 
 export const createRoom = async (data: any) => {
-  if (!data.tenantId) throw new Error('Tenant ID is required');
+  // ✅ Removed tenantId check
   if (!data.propertyId) throw new Error('Property ID is required');
   if (!data.roomNumber) throw new Error('Room number is required');
   if (!data.roomTypeId) throw new Error('Room type ID is required');
-
+  
   return roomRepository.createRoom(data);
 };
 
 export const getRooms = async (
-  tenantId?: number,
-  propertyId?: number,
+  propertyId?: number, // ✅ Removed tenantId
   roomTypeId?: number,
   operationalStatus?: string,
   page: number = 1,
   limit: number = 10
 ) => {
   return roomRepository.findRooms(
-    tenantId,
     propertyId,
     roomTypeId,
     operationalStatus,
@@ -34,8 +32,7 @@ export const getRoomById = async (roomId: number) => {
 };
 
 export const getAvailableRooms = async (
-  tenantId: number,
-  propertyId: number,
+  propertyId: number, // ✅ Removed tenantId
   checkInDate: string,
   checkOutDate: string,
   roomTypeId?: number
@@ -46,9 +43,8 @@ export const getAvailableRooms = async (
   if (checkIn >= checkOut) {
     throw new Error('Check-in date must be before check-out date');
   }
-
+  
   return roomRepository.findAvailableRooms(
-    tenantId,
     propertyId,
     checkIn,
     checkOut,
@@ -57,13 +53,13 @@ export const getAvailableRooms = async (
 };
 
 export const updateRoom = async (roomId: number, data: any) => {
-  const room = await roomRepository.findRoomById(roomId);
-  
-  if(data.housekeepingStatus === 'OutOfService'){
+  if (data.housekeepingStatus === 'OutOfService') {
     data.operationalStatus = 'Maintenance';
   }
-
+  
+  const room = await roomRepository.findRoomById(roomId);
   if (!room) throw new Error('Room not found');
+  
   return roomRepository.updateRoom(roomId, data);
 };
 
@@ -74,11 +70,13 @@ export const updateRoomStatus = async (
 ) => {
   const room = await roomRepository.findRoomById(roomId);
   if (!room) throw new Error('Room not found');
+  
   return roomRepository.updateRoomStatus(roomId, operationalStatus, housekeepingStatus);
 };
 
 export const deleteRoom = async (roomId: number) => {
   const room = await roomRepository.findRoomById(roomId);
   if (!room) throw new Error('Room not found');
+  
   return roomRepository.deleteRoom(roomId);
 };

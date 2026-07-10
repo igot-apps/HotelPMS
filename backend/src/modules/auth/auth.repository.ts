@@ -5,8 +5,7 @@ export const findUserByUsername = async (username: string) => {
   return prisma.user.findUnique({
     where: { username },
     include: {
-      tenant: true,
-      property: true, // 🚨 ADDED: Fetch the property relation
+      property: true, // ✅ Property is now the root entity
       role: {
         include: {
           rolePermissions: {
@@ -24,8 +23,7 @@ export const findUserById = async (userId: number) => {
   return prisma.user.findUnique({
     where: { userId },
     include: {
-      tenant: true,
-      property: true, // 🚨 ADDED: Fetch the property relation
+      property: true, // ✅ Property is now the root entity
       role: true,
     },
   });
@@ -42,8 +40,7 @@ export const findUserWithPermissions = async (userId: number) => {
   return prisma.user.findUnique({
     where: { userId },
     include: {
-      tenant: true,
-      property: true, // 🚨 ADDED: Fetch the property relation
+      property: true, // ✅ Property is now the root entity
       role: {
         include: {
           rolePermissions: {

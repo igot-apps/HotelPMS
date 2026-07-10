@@ -3,8 +3,7 @@ import { PrismaClient } from '../../../src/generated/prisma';
 const prisma = new PrismaClient();
 
 export const createRoom = async (data: {
-  tenantId: number;
-  propertyId: number;
+  propertyId: number; // ✅ Removed tenantId
   roomNumber: string;
   roomTypeId: number;
   floor?: number;
@@ -14,8 +13,7 @@ export const createRoom = async (data: {
 }) => {
   return prisma.room.create({
     data: {
-      tenantId: data.tenantId,
-      propertyId: data.propertyId,
+      propertyId: data.propertyId, // ✅ Removed tenantId
       roomNumber: data.roomNumber,
       roomTypeId: data.roomTypeId,
       floor: data.floor,
@@ -37,8 +35,7 @@ export const createRoom = async (data: {
 };
 
 export const findRooms = async (
-  tenantId?: number,
-  propertyId?: number,
+  propertyId?: number, // ✅ Removed tenantId
   roomTypeId?: number,
   operationalStatus?: string,
   page: number = 1,
@@ -47,8 +44,7 @@ export const findRooms = async (
   const skip = (page - 1) * limit;
   const where: any = {};
   
-  if (tenantId) where.tenantId = tenantId;
-  if (propertyId) where.propertyId = propertyId;
+  if (propertyId) where.propertyId = propertyId; // ✅ Removed tenantId check
   if (roomTypeId) where.roomTypeId = roomTypeId;
   if (operationalStatus) where.operationalStatus = operationalStatus;
 
@@ -98,7 +94,7 @@ export const findRoomById = async (roomId: number) => {
           propertyId: true,
           propertyName: true,
           propertyCode: true,
-          tenantId: true,
+          // ✅ Removed tenantId from select
         },
       },
       reservationRooms: {
@@ -131,17 +127,16 @@ export const findRoomById = async (roomId: number) => {
   });
 };
 
+// 🚨 THIS IS THE FUNCTION THAT FIXES YOUR TYPESCRIPT ERROR!
 export const findAvailableRooms = async (
-  tenantId: number,
-  propertyId: number,
+  propertyId: number, // ✅ Removed tenantId (Now the 1st argument)
   checkInDate: Date,
   checkOutDate: Date,
   roomTypeId?: number
 ) => {
   return prisma.room.findMany({
     where: {
-      tenantId,
-      propertyId,
+      propertyId, // ✅ Removed tenantId
       operationalStatus: {
         not: 'Maintenance',
       },

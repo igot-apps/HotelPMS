@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getUsers, createUser, updateUser, deactivateUser } from '../api/users';
+import { useAuthStore } from '../store/authStore'; // ✅ ADDED: To get the current user's propertyId
 import UserModal from '../components/users/UserModal';
 import RequirePermission from '../components/RequirePermission';
 import toast from 'react-hot-toast';
@@ -9,6 +10,8 @@ import { Shield, Plus, Edit2, Trash2, Search, Building2 } from 'lucide-react';
 
 export default function UsersPage() {
   const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user); // ✅ ADDED: Get logged-in user data
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -19,7 +22,8 @@ export default function UsersPage() {
   });
 
   const users = usersData || [];
-  const filteredUsers = users.filter(u => 
+
+  const filteredUsers = users.filter(u =>
     u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.role?.roleName.toLowerCase().includes(searchTerm.toLowerCase())
@@ -48,7 +52,9 @@ export default function UsersPage() {
     if (editingUser) {
       mutation.mutate({ id: editingUser.userId, data });
     } else {
-      mutation.mutate({ data });
+      // ✅ CRITICAL FIX: Inject the current user's propertyId so the backend knows which hotel this staff belongs to
+      const payload = { ...data, propertyId: user.propertyId };
+      mutation.mutate({ data: payload });
     }
   };
 
@@ -81,7 +87,6 @@ export default function UsersPage() {
             <input type="text" placeholder="Search staff..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-lg text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
           </div>
         </div>
-
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-secondary-50/50 border-b border-border">

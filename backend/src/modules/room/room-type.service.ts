@@ -1,7 +1,7 @@
 import * as roomTypeRepository from './room-type.repository';
 
 export const createRoomType = async (data: any) => {
-  if (!data.tenantId) throw new Error('Tenant ID is required');
+  // ✅ Removed tenantId check
   if (!data.propertyId) throw new Error('Property ID is required');
   if (!data.typeName) throw new Error('Room type name is required');
   if (!data.basePrice) throw new Error('Base price is required');
@@ -10,12 +10,11 @@ export const createRoomType = async (data: any) => {
 };
 
 export const getRoomTypes = async (
-  tenantId?: number,
-  propertyId?: number,
+  propertyId?: number, // ✅ Replaced tenantId
   page: number = 1,
   limit: number = 10
 ) => {
-  return roomTypeRepository.findRoomTypes(tenantId, propertyId, page, limit);
+  return roomTypeRepository.findRoomTypes(propertyId, page, limit);
 };
 
 export const getRoomTypeById = async (roomTypeId: number) => {

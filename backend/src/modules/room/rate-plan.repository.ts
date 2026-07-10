@@ -1,10 +1,8 @@
 import { PrismaClient } from '../../../src/generated/prisma';
-
 const prisma = new PrismaClient();
 
 export const createRatePlan = async (data: {
-  tenantId: number;
-  propertyId: number;
+  propertyId: number; // ✅ Removed tenantId
   roomTypeId: number;
   planName: string;
   description?: string;
@@ -16,8 +14,7 @@ export const createRatePlan = async (data: {
 }) => {
   return prisma.ratePlan.create({
     data: {
-      tenantId: data.tenantId,
-      propertyId: data.propertyId,
+      propertyId: data.propertyId, // ✅ Removed tenantId
       roomTypeId: data.roomTypeId,
       planName: data.planName,
       description: data.description,
@@ -34,8 +31,7 @@ export const createRatePlan = async (data: {
 };
 
 export const findRatePlans = async (
-  tenantId?: number,
-  propertyId?: number,
+  propertyId?: number, // ✅ Removed tenantId
   roomTypeId?: number,
   page: number = 1,
   limit: number = 10
@@ -43,7 +39,7 @@ export const findRatePlans = async (
   const skip = (page - 1) * limit;
   const where: any = {};
   
-  if (tenantId) where.tenantId = tenantId;
+  // ✅ Removed tenantId check
   if (propertyId) where.propertyId = propertyId;
   if (roomTypeId) where.roomTypeId = roomTypeId;
   where.isActive = true;
@@ -86,7 +82,7 @@ export const findRatePlanById = async (ratePlanId: number) => {
           propertyId: true,
           propertyName: true,
           propertyCode: true,
-          tenantId: true,
+          // ✅ Removed tenantId: true
         },
       },
     },

@@ -16,8 +16,9 @@ const getParamId = (req: Request): number => {
 
 export const createReservation = async (req: AuthRequest, res: Response) => {
   try {
-    if (req.user && !req.body.tenantId) {
-      req.body.tenantId = req.user.tenantId;
+    // ✅ Inject propertyId from token if not provided
+    if (req.user && !req.body.propertyId) {
+      req.body.propertyId = req.user.propertyId;
     }
     if (req.user && !req.body.staffId) {
       req.body.staffId = req.user.userId;
@@ -40,50 +41,44 @@ export const getReservations = async (req: AuthRequest, res: Response) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
-    const tenantId = req.user?.tenantId!;
-    const userId = req.user?.userId!;
     
-
-    // 🚨 ROLE-BASED SCOPING
-    const userRoleId = (req.user as any)?.roleId;
-    const isManager = userRoleId === 1; // Manager roleId is 1
-
-    const effectiveStaffId = isManager 
-      ? (req.query.staffId ? parseInt(req.query.staffId as string) : undefined)
-      : userId; // Force Receptionists to only see their own
-
+    // ✅ Removed tenantId extraction
     const filters = {
       propertyId: req.query.propertyId ? parseInt(req.query.propertyId as string) : undefined,
       guestId: req.query.guestId ? parseInt(req.query.guestId as string) : undefined,
-      staffId: effectiveStaffId, // 🚨 Pass the enforced staffId
       status: req.query.status as string | undefined,
       fromDate: req.query.fromDate as string | undefined,
       toDate: req.query.toDate as string | undefined,
     };
 
-    const result = await reservationService.getReservations(tenantId, filters, page, limit);
+    // ✅ Removed tenantId argument
+    const result = await reservationService.getReservations(filters, page, limit);
 
     return res.status(200).json({
       success: true,
       data: result.reservations,
       pagination: {
-        page: result.page, limit: result.limit, total: result.total,
+        page: result.page,
+        limit: result.limit,
+        total: result.total,
         totalPages: Math.ceil(result.total / result.limit),
       },
     });
   } catch (error: any) {
-    return res.status(400).json({ success: false, message: error.message });
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
 export const getReservationById = async (req: AuthRequest, res: Response) => {
   try {
     const reservationId = getParamId(req);
-    const reservation = await reservationService.getReservationById(
-      reservationId
-    );
+    const reservation = await reservationService.getReservationById(reservationId);
 
-    if (req.user && reservation.tenantId !== req.user.tenantId) {
+    // ✅ Changed security check from tenantId to propertyId
+    if (req.user && reservation.propertyId !== req.user.propertyId) {
       return res.status(403).json({
         success: false,
         message: 'You do not have access to this reservation',
@@ -105,21 +100,17 @@ export const getReservationById = async (req: AuthRequest, res: Response) => {
 export const updateReservation = async (req: AuthRequest, res: Response) => {
   try {
     const reservationId = getParamId(req);
+    const reservation = await reservationService.getReservationById(reservationId);
 
-    const reservation = await reservationService.getReservationById(
-      reservationId
-    );
-    if (req.user && reservation.tenantId !== req.user.tenantId) {
+    // ✅ Changed security check from tenantId to propertyId
+    if (req.user && reservation.propertyId !== req.user.propertyId) {
       return res.status(403).json({
         success: false,
         message: 'You do not have access to this reservation',
       });
     }
 
-    const updated = await reservationService.updateReservation(
-      reservationId,
-      req.body
-    );
+    const updated = await reservationService.updateReservation(reservationId, req.body);
     return res.status(200).json({
       success: true,
       data: updated,
@@ -135,11 +126,10 @@ export const updateReservation = async (req: AuthRequest, res: Response) => {
 export const cancelReservation = async (req: AuthRequest, res: Response) => {
   try {
     const reservationId = getParamId(req);
+    const reservation = await reservationService.getReservationById(reservationId);
 
-    const reservation = await reservationService.getReservationById(
-      reservationId
-    );
-    if (req.user && reservation.tenantId !== req.user.tenantId) {
+    // ✅ Changed security check from tenantId to propertyId
+    if (req.user && reservation.propertyId !== req.user.propertyId) {
       return res.status(403).json({
         success: false,
         message: 'You do not have access to this reservation',
@@ -162,11 +152,10 @@ export const cancelReservation = async (req: AuthRequest, res: Response) => {
 export const checkInGuest = async (req: AuthRequest, res: Response) => {
   try {
     const reservationId = getParamId(req);
+    const reservation = await reservationService.getReservationById(reservationId);
 
-    const reservation = await reservationService.getReservationById(
-      reservationId
-    );
-    if (req.user && reservation.tenantId !== req.user.tenantId) {
+    // ✅ Changed security check from tenantId to propertyId
+    if (req.user && reservation.propertyId !== req.user.propertyId) {
       return res.status(403).json({
         success: false,
         message: 'You do not have access to this reservation',
@@ -190,11 +179,10 @@ export const checkInGuest = async (req: AuthRequest, res: Response) => {
 export const checkOutGuest = async (req: AuthRequest, res: Response) => {
   try {
     const reservationId = getParamId(req);
+    const reservation = await reservationService.getReservationById(reservationId);
 
-    const reservation = await reservationService.getReservationById(
-      reservationId
-    );
-    if (req.user && reservation.tenantId !== req.user.tenantId) {
+    // ✅ Changed security check from tenantId to propertyId
+    if (req.user && reservation.propertyId !== req.user.propertyId) {
       return res.status(403).json({
         success: false,
         message: 'You do not have access to this reservation',
@@ -221,8 +209,8 @@ export const getReservationsByDateRange = async (
 ) => {
   try {
     const { fromDate, toDate, propertyId } = req.query;
-    const tenantId = req.user?.tenantId!;
-
+    
+    // ✅ Removed tenantId extraction
     if (!fromDate || !toDate || !propertyId) {
       return res.status(400).json({
         success: false,
@@ -230,8 +218,8 @@ export const getReservationsByDateRange = async (
       });
     }
 
+    // ✅ Removed tenantId argument
     const reservations = await reservationService.getReservationsByDateRange(
-      tenantId,
       parseInt(propertyId as string),
       fromDate as string,
       toDate as string

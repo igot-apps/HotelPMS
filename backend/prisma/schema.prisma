@@ -9,50 +9,28 @@ datasource db {
 }
 
 // ============================================================
-// CORE - TENANCY & AUTH
+// CORE - PROPERTY (Now the Root Entity / The Hotel)
 // ============================================================
-
-model Tenant {
-  tenantId          Int       @id @default(autoincrement())
-  tenantCode        String    @unique @db.VarChar(20)
-  businessName      String    @db.VarChar(200)
-  legalName         String?   @db.VarChar(200)
-  subscriptionPlan  String    @default("Starter") @db.VarChar(50)
-  subscriptionStatus String   @default("Active") @db.VarChar(20)
-  currency          String    @default("GHS") @db.VarChar(10)
-  timezone          String    @default("Africa/Accra") @db.VarChar(50)
-  country           String    @db.VarChar(100)
-  logo              String?   @db.Text
-  primaryEmail      String?   @db.VarChar(200)
-  primaryPhone      String?   @db.VarChar(50)
-  createdDate       DateTime  @default(now())
-  updatedDate       DateTime  @updatedAt
-  isActive          Boolean   @default(true)
-
-  // ✅ FIXED: All reverse relations
-  properties        Property[]
-  users             User[]
-  guests            Guest[]
-  roomTypes         RoomType[]
-  rooms             Room[]
-  ratePlans         RatePlan[]
-  reservations      Reservation[]
-  payments          Payment[]
-  reservationRooms  ReservationRoom[]
-  auditLogs         AuditLog[]
-
-  @@map("tenants")
-}
 
 model Property {
   propertyId        Int       @id @default(autoincrement())
-  tenantId          Int
+  propertyCode      String    @unique @db.VarChar(50) // Now globally unique
   propertyName      String    @db.VarChar(200)
-  propertyCode      String    @db.VarChar(50)
+  businessName      String    @db.VarChar(200) // Merged from Tenant
+  legalName         String?   @db.VarChar(200) // Merged from Tenant
+  subscriptionPlan  String    @default("Starter") @db.VarChar(50) // Merged from Tenant
+  subscriptionStatus String   @default("Active") @db.VarChar(20) // Merged from Tenant
+  currency          String    @default("GHS") @db.VarChar(10) // Merged from Tenant
+  timezone          String    @default("Africa/Accra") @db.VarChar(50) // Merged from Tenant
+  logo              String?   @db.Text // Merged from Tenant
+  primaryEmail      String?   @db.VarChar(200) // Merged from Tenant
+  primaryPhone      String?   @db.VarChar(50) // Merged from Tenant
+  isActive          Boolean   @default(true) // Merged from Tenant
+
   propertyType      String    @db.VarChar(50)
   address           String?   @db.Text
   city              String?   @db.VarChar(100)
-  country           String?   @db.VarChar(100)
+  country           String    @db.VarChar(100) 
   gpsCoordinates    String?   @db.VarChar(100)
   totalRooms        Int       @default(0)
   checkInTime       String    @default("14:00") @db.VarChar(10)
@@ -61,14 +39,14 @@ model Property {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  tenant            Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  // Reverse relations
   users             User[]
+  guests            Guest[] // Guests now belong directly to the Property
   roomTypes         RoomType[]
   rooms             Room[]
   ratePlans         RatePlan[]
   reservations      Reservation[]
 
-  @@unique([tenantId, propertyCode])
   @@map("properties")
 }
 
@@ -78,8 +56,7 @@ model Property {
 
 model User {
   userId            Int       @id @default(autoincrement())
-  tenantId          Int
-  propertyId        Int?
+  propertyId        Int // Replaces tenantId
   fullName          String    @db.VarChar(200)
   username          String    @unique
   email             String?   @unique @db.VarChar(200)
@@ -90,15 +67,12 @@ model User {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  tenant            Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
-  property          Property? @relation(fields: [propertyId], references: [propertyId])
+  property          Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
   role              Role      @relation(fields: [roleId], references: [roleId])
   reservations      Reservation[] @relation("staffReservations")
   payments          Payment[] @relation("receivedPayments")
-  // ✅ FIXED: Reverse relation for audit logs
   auditLogs         AuditLog[]
 
-  @@unique([tenantId, username])
   @@map("users")
 }
 
@@ -147,7 +121,7 @@ model RolePermission {
 
 model Guest {
   guestId           Int       @id @default(autoincrement())
-  tenantId          Int
+  propertyId        Int // Replaces tenantId
   fullName          String    @db.VarChar(200)
   phone             String?   @db.VarChar(50)
   email             String?   @db.VarChar(200)
@@ -165,10 +139,9 @@ model Guest {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  tenant            Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  property          Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
   reservations      Reservation[]
 
-  @@unique([tenantId, email])
   @@map("guests")
 }
 
@@ -178,8 +151,7 @@ model Guest {
 
 model RoomType {
   roomTypeId        Int       @id @default(autoincrement())
-  tenantId          Int
-  propertyId        Int
+  propertyId        Int // Replaces tenantId
   typeName          String    @db.VarChar(100)
   description       String?   @db.Text
   basePrice         Decimal   @db.Decimal(10, 2)
@@ -188,20 +160,18 @@ model RoomType {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  tenant            Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
   property          Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
   rooms             Room[]
   ratePlans         RatePlan[]
   reservationRooms  ReservationRoom[]
 
-  @@unique([tenantId, propertyId, typeName])
+  @@unique([propertyId, typeName])
   @@map("room_types")
 }
 
 model Room {
   roomId            Int       @id @default(autoincrement())
-  tenantId          Int
-  propertyId        Int
+  propertyId        Int // Replaces tenantId
   roomNumber        String    @db.VarChar(20)
   roomTypeId        Int
   floor             Int?
@@ -211,19 +181,17 @@ model Room {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  tenant            Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
   property          Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
   roomType          RoomType  @relation(fields: [roomTypeId], references: [roomTypeId])
   reservationRooms  ReservationRoom[]
 
-  @@unique([tenantId, propertyId, roomNumber])
+  @@unique([propertyId, roomNumber])
   @@map("rooms")
 }
 
 model RatePlan {
   ratePlanId        Int       @id @default(autoincrement())
-  tenantId          Int
-  propertyId        Int
+  propertyId        Int // Replaces tenantId
   roomTypeId        Int
   planName          String    @db.VarChar(100)
   description       String?   @db.Text
@@ -235,12 +203,11 @@ model RatePlan {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  tenant            Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
   property          Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
   roomType          RoomType  @relation(fields: [roomTypeId], references: [roomTypeId])
   reservationRooms  ReservationRoom[]
 
-  @@unique([tenantId, propertyId, roomTypeId, planName])
+  @@unique([propertyId, roomTypeId, planName])
   @@map("rate_plans")
 }
 
@@ -250,8 +217,7 @@ model RatePlan {
 
 model Reservation {
   reservationId     Int       @id @default(autoincrement())
-  tenantId          Int
-  propertyId        Int
+  propertyId        Int // Replaces tenantId
   guestId           Int
   staffId           Int?
   source            String    @default("Website") @db.VarChar(50)
@@ -265,14 +231,13 @@ model Reservation {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  tenant            Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
   property          Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
   guest             Guest     @relation(fields: [guestId], references: [guestId], onDelete: Cascade)
   staff             User?     @relation("staffReservations", fields: [staffId], references: [userId])
   reservationRooms  ReservationRoom[]
   payments          Payment[]
 
-  @@index([tenantId, propertyId])
+  @@index([propertyId])
   @@index([guestId])
   @@index([status])
   @@index([checkInDate, checkOutDate])
@@ -281,7 +246,6 @@ model Reservation {
 
 model ReservationRoom {
   reservationRoomId Int       @id @default(autoincrement())
-  tenantId          Int
   reservationId     Int
   roomId            Int
   roomTypeId        Int
@@ -292,7 +256,6 @@ model ReservationRoom {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  tenant            Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
   reservation       Reservation @relation(fields: [reservationId], references: [reservationId], onDelete: Cascade)
   room              Room      @relation(fields: [roomId], references: [roomId])
   roomType          RoomType  @relation(fields: [roomTypeId], references: [roomTypeId])
@@ -311,7 +274,6 @@ model ReservationRoom {
 
 model Payment {
   paymentId         Int       @id @default(autoincrement())
-  tenantId          Int
   reservationId     Int
   amount            Decimal   @db.Decimal(10, 2)
   paymentMethod     String    @db.VarChar(50)
@@ -323,7 +285,6 @@ model Payment {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  tenant            Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
   reservation       Reservation @relation(fields: [reservationId], references: [reservationId], onDelete: Cascade)
   receiver          User?     @relation("receivedPayments", fields: [receivedBy], references: [userId])
 
@@ -338,7 +299,6 @@ model Payment {
 
 model AuditLog {
   auditLogId        Int       @id @default(autoincrement())
-  tenantId          Int?
   userId            Int?
   action            String    @db.VarChar(100)
   entityType        String    @db.VarChar(50)
@@ -349,11 +309,8 @@ model AuditLog {
   userAgent         String?   @db.Text
   createdAt         DateTime  @default(now())
 
-  // ✅ FIXED: Both sides of the relation now exist
-  tenant            Tenant?   @relation(fields: [tenantId], references: [tenantId], onDelete: SetNull)
   user              User?     @relation(fields: [userId], references: [userId], onDelete: SetNull)
 
-  @@index([tenantId])
   @@index([userId])
   @@index([createdAt])
   @@map("audit_logs")

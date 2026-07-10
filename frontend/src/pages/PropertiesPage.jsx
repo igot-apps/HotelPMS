@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getProperties, createProperty, updateProperty, deleteProperty } from '../api/properties';
-import { useAuthStore } from '../store/authStore';
+// ✅ REMOVED: useAuthStore is no longer needed since we don't need to inject tenantId
 import PropertyModal from '../components/catalog/PropertyModal';
 import { Search, Plus, Edit2, Trash2, Building2, AlertCircle, MapPin, Clock } from 'lucide-react';
 
 export default function PropertiesPage() {
-  const user = useAuthStore((state) => state.user);
+  // ✅ REMOVED: const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
   
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -24,9 +24,11 @@ export default function PropertiesPage() {
   // 2. Mutations
   const saveMutation = useMutation({
     mutationFn: (payload) => {
-      // Backend requires tenantId for creation, we inject it from the logged-in user
-      const payloadWithTenant = { ...payload, tenantId: user.tenantId };
-      return editingProperty ? updateProperty(editingProperty.propertyId, payload) : createProperty(payloadWithTenant);
+      // ✅ FIXED: Backend no longer requires tenantId. Property is the root entity.
+      // We just send the payload directly!
+      return editingProperty 
+        ? updateProperty(editingProperty.propertyId, payload) 
+        : createProperty(payload); 
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['properties'] });
@@ -44,6 +46,7 @@ export default function PropertiesPage() {
   // 3. Handlers
   const openAddModal = () => { setEditingProperty(null); setIsModalOpen(true); };
   const openEditModal = (prop) => { setEditingProperty(prop); setIsModalOpen(true); };
+  
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingProperty(null);
@@ -51,7 +54,7 @@ export default function PropertiesPage() {
   };
 
   const handleSave = (formData) => saveMutation.mutate(formData);
-  
+
   const handleDelete = (prop) => {
     if (prop._count?.rooms > 0 || prop._count?.reservations > 0) {
       alert(`Cannot delete "${prop.propertyName}" because it has active rooms or reservations.`);
@@ -63,7 +66,7 @@ export default function PropertiesPage() {
   };
 
   // Client-side search
-  const filteredProperties = properties.filter(prop => 
+  const filteredProperties = properties.filter(prop =>
     prop.propertyName?.toLowerCase().includes(search.toLowerCase()) ||
     prop.propertyCode?.toLowerCase().includes(search.toLowerCase()) ||
     prop.city?.toLowerCase().includes(search.toLowerCase())
@@ -86,8 +89,13 @@ export default function PropertiesPage() {
       <div className="bg-surface border border-border rounded-xl p-2">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
-          <input type="text" placeholder="Search by name, code, or city..." value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-lg text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
+          <input 
+            type="text" 
+            placeholder="Search by name, code, or city..." 
+            value={search} 
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-lg text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" 
+          />
         </div>
       </div>
 

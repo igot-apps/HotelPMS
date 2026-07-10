@@ -16,8 +16,9 @@ const getParamId = (req: Request): number => {
 
 export const createGuest = async (req: AuthRequest, res: Response) => {
   try {
-    if (req.user && !req.body.tenantId) {
-      req.body.tenantId = req.user.tenantId;
+    // ✅ Inject propertyId from token if not provided
+    if (req.user && !req.body.propertyId) {
+      req.body.propertyId = req.user.propertyId;
     }
 
     const guest = await guestService.createGuest(req.body);
@@ -38,9 +39,18 @@ export const getGuests = async (req: AuthRequest, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const searchTerm = req.query.search as string | undefined;
-    const tenantId = req.user?.tenantId!;
+    
+    // ✅ Use propertyId from user token (or query if manager overriding)
+    const propertyId = req.query.propertyId 
+      ? parseInt(req.query.propertyId as string) 
+      : req.user?.propertyId;
 
-    const result = await guestService.getGuests(tenantId, searchTerm, page, limit);
+    if (!propertyId) {
+      return res.status(400).json({ success: false, message: 'Property ID is required' });
+    }
+
+    const result = await guestService.getGuests(propertyId, searchTerm, page, limit);
+    
     return res.status(200).json({
       success: true,
       data: result.guests,
@@ -63,8 +73,9 @@ export const getGuestById = async (req: AuthRequest, res: Response) => {
   try {
     const guestId = getParamId(req);
     const guest = await guestService.getGuestById(guestId);
-    
-    if (req.user && guest.tenantId !== req.user.tenantId) {
+
+    // ✅ Security check updated to use propertyId
+    if (req.user && guest.propertyId !== req.user.propertyId) {
       return res.status(403).json({
         success: false,
         message: 'You do not have access to this guest',
@@ -118,9 +129,10 @@ export const getGuestReservations = async (req: AuthRequest, res: Response) => {
 export const updateGuest = async (req: AuthRequest, res: Response) => {
   try {
     const guestId = getParamId(req);
-    
     const guest = await guestService.getGuestById(guestId);
-    if (req.user && guest.tenantId !== req.user.tenantId) {
+
+    // ✅ Security check updated to use propertyId
+    if (req.user && guest.propertyId !== req.user.propertyId) {
       return res.status(403).json({
         success: false,
         message: 'You do not have access to this guest',
@@ -143,9 +155,10 @@ export const updateGuest = async (req: AuthRequest, res: Response) => {
 export const deleteGuest = async (req: AuthRequest, res: Response) => {
   try {
     const guestId = getParamId(req);
-    
     const guest = await guestService.getGuestById(guestId);
-    if (req.user && guest.tenantId !== req.user.tenantId) {
+
+    // ✅ Security check updated to use propertyId
+    if (req.user && guest.propertyId !== req.user.propertyId) {
       return res.status(403).json({
         success: false,
         message: 'You do not have access to this guest',
@@ -170,7 +183,15 @@ export const searchGuests = async (req: AuthRequest, res: Response) => {
     const { q } = req.query;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
-    const tenantId = req.user?.tenantId!;
+    
+    // ✅ Use propertyId from user token
+    const propertyId = req.query.propertyId 
+      ? parseInt(req.query.propertyId as string) 
+      : req.user?.propertyId;
+
+    if (!propertyId) {
+      return res.status(400).json({ success: false, message: 'Property ID is required' });
+    }
 
     if (!q || typeof q !== 'string' || q.length < 2) {
       return res.status(400).json({
@@ -179,7 +200,8 @@ export const searchGuests = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const result = await guestService.searchGuests(tenantId, q, page, limit);
+    const result = await guestService.searchGuests(propertyId, q, page, limit);
+    
     return res.status(200).json({
       success: true,
       data: result.guests,

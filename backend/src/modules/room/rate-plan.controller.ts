@@ -16,8 +16,9 @@ const getParamId = (req: Request): number => {
 
 export const createRatePlan = async (req: AuthRequest, res: Response) => {
   try {
-    if (req.user && !req.body.tenantId) {
-      req.body.tenantId = req.user.tenantId;
+    // ✅ Inject propertyId from token if not provided (Removed tenantId)
+    if (req.user && !req.body.propertyId) {
+      req.body.propertyId = req.user.propertyId;
     }
 
     const ratePlan = await ratePlanService.createRatePlan(req.body);
@@ -37,16 +38,18 @@ export const getRatePlans = async (req: AuthRequest, res: Response) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
-    const propertyId = req.query.propertyId 
-      ? parseInt(req.query.propertyId as string) 
+    
+    // ✅ Fallback to user's propertyId if not provided in query
+    const propertyId = req.query.propertyId
+      ? parseInt(req.query.propertyId as string)
+      : req.user?.propertyId; 
+      
+    const roomTypeId = req.query.roomTypeId
+      ? parseInt(req.query.roomTypeId as string)
       : undefined;
-    const roomTypeId = req.query.roomTypeId 
-      ? parseInt(req.query.roomTypeId as string) 
-      : undefined;
-    const tenantId = req.user?.tenantId;
 
+    // ✅ Removed tenantId
     const result = await ratePlanService.getRatePlans(
-      tenantId,
       propertyId,
       roomTypeId,
       page,
@@ -75,8 +78,9 @@ export const getRatePlanById = async (req: AuthRequest, res: Response) => {
   try {
     const ratePlanId = getParamId(req);
     const ratePlan = await ratePlanService.getRatePlanById(ratePlanId);
-    
-    if (req.user && ratePlan.property.tenantId !== req.user.tenantId) {
+
+    // ✅ Security check updated to use propertyId
+    if (req.user && ratePlan.propertyId !== req.user.propertyId) {
       return res.status(403).json({
         success: false,
         message: 'You do not have access to this rate plan',
@@ -98,9 +102,10 @@ export const getRatePlanById = async (req: AuthRequest, res: Response) => {
 export const updateRatePlan = async (req: AuthRequest, res: Response) => {
   try {
     const ratePlanId = getParamId(req);
-    
     const ratePlan = await ratePlanService.getRatePlanById(ratePlanId);
-    if (req.user && ratePlan.property.tenantId !== req.user.tenantId) {
+
+    // ✅ Security check updated to use propertyId
+    if (req.user && ratePlan.propertyId !== req.user.propertyId) {
       return res.status(403).json({
         success: false,
         message: 'You do not have access to this rate plan',
@@ -123,9 +128,10 @@ export const updateRatePlan = async (req: AuthRequest, res: Response) => {
 export const deleteRatePlan = async (req: AuthRequest, res: Response) => {
   try {
     const ratePlanId = getParamId(req);
-    
     const ratePlan = await ratePlanService.getRatePlanById(ratePlanId);
-    if (req.user && ratePlan.property.tenantId !== req.user.tenantId) {
+
+    // ✅ Security check updated to use propertyId
+    if (req.user && ratePlan.propertyId !== req.user.propertyId) {
       return res.status(403).json({
         success: false,
         message: 'You do not have access to this rate plan',

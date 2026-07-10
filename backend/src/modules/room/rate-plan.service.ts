@@ -1,7 +1,7 @@
 import * as ratePlanRepository from './rate-plan.repository';
 
 export const createRatePlan = async (data: any) => {
-  if (!data.tenantId) throw new Error('Tenant ID is required');
+  // ✅ Removed tenantId check
   if (!data.propertyId) throw new Error('Property ID is required');
   if (!data.roomTypeId) throw new Error('Room type ID is required');
   if (!data.planName) throw new Error('Plan name is required');
@@ -10,13 +10,12 @@ export const createRatePlan = async (data: any) => {
 };
 
 export const getRatePlans = async (
-  tenantId?: number,
-  propertyId?: number,
+  propertyId?: number, // ✅ Removed tenantId
   roomTypeId?: number,
   page: number = 1,
   limit: number = 10
 ) => {
-  return ratePlanRepository.findRatePlans(tenantId, propertyId, roomTypeId, page, limit);
+  return ratePlanRepository.findRatePlans(propertyId, roomTypeId, page, limit);
 };
 
 export const getRatePlanById = async (ratePlanId: number) => {

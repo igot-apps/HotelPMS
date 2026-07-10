@@ -3,7 +3,7 @@ import {
   createProperty,
   getProperties,
   getPropertyById,
-  getPropertiesByTenant,
+  getAllActiveProperties, // ✅ CHANGED: Replaced getPropertiesByTenant
   getPropertyStats,
   updateProperty,
   deleteProperty,
@@ -18,7 +18,10 @@ router.use(authenticate);
 // Property routes
 router.post('/', createProperty);
 router.get('/', getProperties);
-router.get('/tenant/:id', getPropertiesByTenant);
+
+// ✅ CHANGED: Replaced /tenant/:id with /active
+router.get('/active', getAllActiveProperties); 
+
 router.get('/:id', getPropertyById);
 router.get('/:id/stats', getPropertyStats);
 router.put('/:id', updateProperty);

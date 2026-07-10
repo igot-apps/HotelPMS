@@ -2,17 +2,18 @@ import * as guestRepository from './guest.repository';
 import { hashPassword } from '../../shared/utils/password';
 
 export const createGuest = async (data: any) => {
-  if (!data.tenantId) throw new Error('Tenant ID is required');
+  // ✅ Replaced tenantId check with propertyId
+  if (!data.propertyId) throw new Error('Property ID is required');
   if (!data.fullName) throw new Error('Full name is required');
-  
-  // Check if guest with same email exists
+
+  // Check if guest with same email exists for this property
   if (data.email) {
     const existing = await guestRepository.findGuestByEmail(
-      data.tenantId,
+      data.propertyId, // ✅ Replaced tenantId
       data.email
     );
     if (existing) {
-      throw new Error('Guest with this email already exists');
+      throw new Error('Guest with this email already exists for this property');
     }
   }
 
@@ -31,12 +32,12 @@ export const createGuest = async (data: any) => {
 };
 
 export const getGuests = async (
-  tenantId: number,
+  propertyId: number, // ✅ Replaced tenantId
   searchTerm?: string,
   page: number = 1,
   limit: number = 10
 ) => {
-  return guestRepository.findGuests(tenantId, searchTerm, page, limit);
+  return guestRepository.findGuests(propertyId, searchTerm, page, limit);
 };
 
 export const getGuestById = async (guestId: number) => {
@@ -77,7 +78,7 @@ export const deleteGuest = async (guestId: number) => {
 };
 
 export const searchGuests = async (
-  tenantId: number,
+  propertyId: number, // ✅ Replaced tenantId
   searchTerm: string,
   page: number = 1,
   limit: number = 10
@@ -85,5 +86,5 @@ export const searchGuests = async (
   if (!searchTerm || searchTerm.length < 2) {
     throw new Error('Search term must be at least 2 characters');
   }
-  return guestRepository.findGuests(tenantId, searchTerm, page, limit);
+  return guestRepository.findGuests(propertyId, searchTerm, page, limit);
 };

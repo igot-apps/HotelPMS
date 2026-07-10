@@ -16,9 +16,9 @@ const getParamId = (req: Request): number => {
 
 export const createRoomType = async (req: AuthRequest, res: Response) => {
   try {
-    // Auto-assign tenant from authenticated user
-    if (req.user && !req.body.tenantId) {
-      req.body.tenantId = req.user.tenantId;
+    // ✅ Inject propertyId from token if not provided
+    if (req.user && !req.body.propertyId) {
+      req.body.propertyId = req.user.propertyId;
     }
 
     const roomType = await roomTypeService.createRoomType(req.body);
@@ -38,12 +38,14 @@ export const getRoomTypes = async (req: AuthRequest, res: Response) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
+    
+    // ✅ Use propertyId from user token
     const propertyId = req.query.propertyId 
       ? parseInt(req.query.propertyId as string) 
-      : undefined;
-    const tenantId = req.user?.tenantId;
+      : req.user?.propertyId;
 
-    const result = await roomTypeService.getRoomTypes(tenantId, propertyId, page, limit);
+    const result = await roomTypeService.getRoomTypes(propertyId, page, limit);
+    
     return res.status(200).json({
       success: true,
       data: result.roomTypes,
@@ -66,9 +68,9 @@ export const getRoomTypeById = async (req: AuthRequest, res: Response) => {
   try {
     const roomTypeId = getParamId(req);
     const roomType = await roomTypeService.getRoomTypeById(roomTypeId);
-    
-    // Check tenant access
-    if (req.user && roomType.property.tenantId !== req.user.tenantId) {
+
+    // ✅ Security check updated to use propertyId
+    if (req.user && roomType.propertyId !== req.user.propertyId) {
       return res.status(403).json({
         success: false,
         message: 'You do not have access to this room type',
@@ -106,10 +108,10 @@ export const getRoomTypeStats = async (req: AuthRequest, res: Response) => {
 export const updateRoomType = async (req: AuthRequest, res: Response) => {
   try {
     const roomTypeId = getParamId(req);
-    
-    // Check access
     const roomType = await roomTypeService.getRoomTypeById(roomTypeId);
-    if (req.user && roomType.property.tenantId !== req.user.tenantId) {
+
+    // ✅ Security check updated to use propertyId
+    if (req.user && roomType.propertyId !== req.user.propertyId) {
       return res.status(403).json({
         success: false,
         message: 'You do not have access to this room type',
@@ -132,10 +134,10 @@ export const updateRoomType = async (req: AuthRequest, res: Response) => {
 export const deleteRoomType = async (req: AuthRequest, res: Response) => {
   try {
     const roomTypeId = getParamId(req);
-    
-    // Check access
     const roomType = await roomTypeService.getRoomTypeById(roomTypeId);
-    if (req.user && roomType.property.tenantId !== req.user.tenantId) {
+
+    // ✅ Security check updated to use propertyId
+    if (req.user && roomType.propertyId !== req.user.propertyId) {
       return res.status(403).json({
         success: false,
         message: 'You do not have access to this room type',

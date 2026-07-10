@@ -6,7 +6,6 @@ export default function Topbar({ onMenuClick }) {
 
   return (
     <header className="h-16 bg-surface border-b border-border flex items-center justify-between px-4 md:px-8 sticky top-0 z-40">
-      
       {/* Left Side: Mobile Menu Button & Current Property */}
       <div className="flex items-center gap-4">
         {/* Hamburger Button (Only visible on mobile) */}
@@ -17,20 +16,20 @@ export default function Topbar({ onMenuClick }) {
         >
           <Menu size={24} />
         </button>
-        
-        {/* 🚨 UPDATED: Current Property Indicator Badge */}
+
+        {/* ✅ UPDATED: Current Property Indicator Badge (Tenant concept completely removed) */}
         <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary-50 border border-border rounded-lg">
           <Building2 size={16} className="text-primary-600" />
           <span 
             className="text-sm font-semibold text-text truncate max-w-[150px] md:max-w-none" 
-            title={user?.propertyName || user?.tenantName}
+            title={user?.propertyName || 'No Property'}
           >
-            {/* 🚨 CHANGED: Show propertyName, fallback to tenantName if null */}
-            {user?.propertyName || user?.tenantName || 'No Property'}
+            {/* ✅ CHANGED: Removed tenantName fallback. Property is the root entity now. */}
+            {user?.propertyName || 'No Property'}
           </span>
         </div>
       </div>
-      
+
       {/* Right Side: User Profile */}
       <div className="flex items-center gap-4 ml-auto">
         <div className="text-right hidden sm:block">

@@ -1,9 +1,7 @@
 import { PrismaClient } from '../../../src/generated/prisma';
-
 const prisma = new PrismaClient();
 
 export const createPayment = async (data: {
-  tenantId: number;
   reservationId: number;
   amount: number;
   paymentMethod: string;
@@ -15,7 +13,6 @@ export const createPayment = async (data: {
 }) => {
   return prisma.payment.create({
     data: {
-      tenantId: data.tenantId,
       reservationId: data.reservationId,
       amount: data.amount,
       paymentMethod: data.paymentMethod,
@@ -29,32 +26,21 @@ export const createPayment = async (data: {
       reservation: {
         select: {
           reservationId: true,
+          propertyId: true, // ✅ Added for auth checks
           guestId: true,
           totalAmount: true,
           amountPaid: true,
           balanceDue: true,
-          guest: {
-            select: {
-              fullName: true,
-              email: true,
-              phone: true,
-            },
-          },
+          guest: { select: { fullName: true, email: true, phone: true } },
         },
       },
-      receiver: {
-        select: {
-          userId: true,
-          fullName: true,
-          username: true,
-        },
-      },
+      receiver: { select: { userId: true, fullName: true, username: true } },
     },
   });
 };
 
 export const findPayments = async (
-  tenantId: number,
+  propertyId: number, // ✅ Replaced tenantId
   filters: {
     reservationId?: number;
     paymentMethod?: string;
@@ -66,40 +52,35 @@ export const findPayments = async (
   page: number = 1,
   limit: number = 10
 ) => {
-  
   const skip = (page - 1) * limit;
-  const where: any = { tenantId };
+  
+  // ✅ Filter by property via the reservation relation
+  const where: any = {
+    reservation: { propertyId } 
+  };
 
-  // 🚨 1. SEARCH LOGIC (The missing piece!)
   if (filters.search) {
     const searchStr = String(filters.search);
     const searchNum = parseInt(searchStr);
-
-    // Build the OR array to search across multiple fields
     where.OR = [
       { gatewayReference: { contains: searchStr, mode: 'insensitive' } },
       { reservation: { guest: { fullName: { contains: searchStr, mode: 'insensitive' } } } },
       { reservation: { guest: { phone: { contains: searchStr } } } },
     ];
-
-    // If the search term is a valid number, also search by Reservation ID
     if (!isNaN(searchNum)) {
       where.OR.push({ reservationId: searchNum });
     }
   }
 
-  // 2. Standard Filters
   if (filters.reservationId) where.reservationId = filters.reservationId;
   if (filters.paymentMethod) where.paymentMethod = filters.paymentMethod;
   if (filters.status) where.status = filters.status;
   
-  // 3. Date Filters
   if (filters.fromDate || filters.toDate) {
     where.paymentDate = {};
     if (filters.fromDate) where.paymentDate.gte = filters.fromDate;
     if (filters.toDate) where.paymentDate.lte = filters.toDate;
   }
-
 
   const [payments, total] = await Promise.all([
     prisma.payment.findMany({
@@ -111,26 +92,15 @@ export const findPayments = async (
         reservation: {
           select: {
             reservationId: true,
+            propertyId: true, // ✅ Added for auth checks
             guestId: true,
             totalAmount: true,
             amountPaid: true,
             balanceDue: true,
-            guest: {
-              select: {
-                fullName: true,
-                email: true,
-                phone: true,
-              },
-            },
+            guest: { select: { fullName: true, email: true, phone: true } },
           },
         },
-        receiver: {
-          select: {
-            userId: true,
-            fullName: true,
-            username: true,
-          },
-        },
+        receiver: { select: { userId: true, fullName: true, username: true } },
       },
     }),
     prisma.payment.count({ where }),
@@ -146,27 +116,15 @@ export const findPaymentById = async (paymentId: number) => {
       reservation: {
         select: {
           reservationId: true,
+          propertyId: true, // ✅ Added for auth checks
           guestId: true,
           totalAmount: true,
           amountPaid: true,
           balanceDue: true,
-          guest: {
-            select: {
-              guestId: true,
-              fullName: true,
-              email: true,
-              phone: true,
-            },
-          },
+          guest: { select: { guestId: true, fullName: true, email: true, phone: true } },
         },
       },
-      receiver: {
-        select: {
-          userId: true,
-          fullName: true,
-          username: true,
-        },
-      },
+      receiver: { select: { userId: true, fullName: true, username: true } },
     },
   });
 };
@@ -176,13 +134,8 @@ export const findPaymentsByReservation = async (reservationId: number) => {
     where: { reservationId },
     orderBy: { paymentDate: 'desc' },
     include: {
-      receiver: {
-        select: {
-          userId: true,
-          fullName: true,
-          username: true,
-        },
-      },
+      reservation: { select: { propertyId: true } }, // ✅ Added for auth checks
+      receiver: { select: { userId: true, fullName: true, username: true } },
     },
   });
 };
@@ -203,12 +156,7 @@ export const updatePayment = async (
     data,
     include: {
       reservation: {
-        select: {
-          reservationId: true,
-          totalAmount: true,
-          amountPaid: true,
-          balanceDue: true,
-        },
+        select: { reservationId: true, propertyId: true, totalAmount: true, amountPaid: true, balanceDue: true },
       },
     },
   });
@@ -221,34 +169,27 @@ export const deletePayment = async (paymentId: number) => {
   });
 };
 
-export const getPaymentStats = async (tenantId: number) => {
+export const getPaymentStats = async (propertyId: number) => { // ✅ Replaced tenantId
+  // ✅ Filter stats by property via the reservation relation
+  const whereClause = { reservation: { propertyId } };
+
   const stats = await prisma.payment.aggregate({
-    where: { tenantId },
-    _sum: {
-      amount: true,
-    },
-    _count: {
-      paymentId: true,
-    },
+    where: whereClause,
+    _sum: { amount: true },
+    _count: { paymentId: true },
   });
 
   const methodStats = await prisma.payment.groupBy({
     by: ['paymentMethod'],
-    where: { tenantId },
-    _sum: {
-      amount: true,
-    },
-    _count: {
-      paymentId: true,
-    },
+    where: whereClause,
+    _sum: { amount: true },
+    _count: { paymentId: true },
   });
 
   const statusStats = await prisma.payment.groupBy({
     by: ['status'],
-    where: { tenantId },
-    _count: {
-      paymentId: true,
-    },
+    where: whereClause,
+    _count: { paymentId: true },
   });
 
   return {
@@ -270,13 +211,9 @@ export const calculateAccumulatedPayment = async (reservationId: number): Promis
   const result = await prisma.payment.aggregate({
     where: {
       reservationId: reservationId,
-      status: 'Completed', // Only count successful payments
+      status: 'Completed',
     },
-    _sum: {
-      amount: true,
-    },
+    _sum: { amount: true },
   });
-
-  // Prisma returns a Decimal object, convert to standard JS Number
   return result._sum.amount ? Number(result._sum.amount) : 0;
 };

@@ -4,11 +4,11 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 
-console.log(`Using TypeScript version: ${require('typescript').version}`);
+console.log(`Using TypeScript version: ${require('typescript').version}\n`);
 
 // Import modules
 import authRoutes from './modules/auth/auth.routes';
-import tenantRoutes from './modules/tenant/tenant.routes';
+// ❌ REMOVED: import tenantRoutes from './modules/tenant/tenant.routes';
 import propertyRoutes from './modules/property/property.routes';
 import roomRoutes from './modules/room/room.routes';
 import guestRoutes from './modules/guest/guest.routes';
@@ -35,10 +35,9 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-
-//request log
+// request log
 app.use((req, _res, next) => {
-  console.log(`➡️ ${req.method} ${req.originalUrl}`);
+  console.log(`➡️ ${req.method} ${req.originalUrl}\n`);
   next();
 });
 
@@ -60,21 +59,18 @@ app.get('/', (_req: Request, res: Response) => {
   });
 });
 
-
-
-
 // API Routes
- app.use('/api/auth', authRoutes);
- app.use('/api/tenants', tenantRoutes);
- app.use('/api/properties', propertyRoutes);
- app.use('/api/rooms', roomRoutes);
- app.use('/api/guests', guestRoutes);
- app.use('/api/reservations', reservationRoutes);
- app.use('/api/payments', paymentRoutes);
- app.use('/api/reports', reportRoutes);
- app.use('/api/users', userRoutes);
+app.use('/api/auth', authRoutes);
+// ❌ REMOVED: app.use('/api/tenants', tenantRoutes);
+app.use('/api/properties', propertyRoutes);
+app.use('/api/rooms', roomRoutes);
+app.use('/api/guests', guestRoutes);
+app.use('/api/reservations', reservationRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/dashboard', dashboardRoutes);
- 
+
 // 404 handler
 app.use((_req: Request, res: Response) => {
   res.status(404).json({
@@ -94,11 +90,10 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 
 // Start server
 const PORT = process.env.PORT || 3000;
-
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log(`📊 Environment: ${process.env.NODE_ENV}`);
+    console.log(`🚀 Server running on http://localhost:${PORT}\n`);
+    console.log(`📊 Environment: ${process.env.NODE_ENV}\n`);
   });
 }
 

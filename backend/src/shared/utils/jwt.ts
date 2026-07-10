@@ -9,9 +9,11 @@ const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET || 'your-refresh-s
 
 export interface JwtPayload {
   userId: number;
-  tenantId: number;
+  propertyId: number; // ✅ CHANGED from tenantId
   roleId: number;
   username: string;
+  iat?: number;
+  exp?: number;
 }
 
 export const generateAccessToken = (payload: JwtPayload): string => {

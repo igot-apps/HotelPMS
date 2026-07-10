@@ -1,10 +1,8 @@
 import { PrismaClient } from '../../../src/generated/prisma';
-
 const prisma = new PrismaClient();
 
 export const createRoomType = async (data: {
-  tenantId: number;
-  propertyId: number;
+  propertyId: number; // ✅ Replaced tenantId
   typeName: string;
   description?: string;
   basePrice: number;
@@ -13,8 +11,7 @@ export const createRoomType = async (data: {
 }) => {
   return prisma.roomType.create({
     data: {
-      tenantId: data.tenantId,
-      propertyId: data.propertyId,
+      propertyId: data.propertyId, // ✅ Replaced tenantId
       typeName: data.typeName,
       description: data.description,
       basePrice: data.basePrice,
@@ -25,16 +22,14 @@ export const createRoomType = async (data: {
 };
 
 export const findRoomTypes = async (
-  tenantId?: number,
-  propertyId?: number,
+  propertyId?: number, // ✅ Replaced tenantId
   page: number = 1,
   limit: number = 10
 ) => {
   const skip = (page - 1) * limit;
   const where: any = {};
   
-  if (tenantId) where.tenantId = tenantId;
-  if (propertyId) where.propertyId = propertyId;
+  if (propertyId) where.propertyId = propertyId; // ✅ Replaced tenantId
   where.isActive = true;
 
   const [roomTypes, total] = await Promise.all([
@@ -74,7 +69,7 @@ export const findRoomTypeById = async (roomTypeId: number) => {
           propertyId: true,
           propertyName: true,
           propertyCode: true,
-          tenantId: true,
+          // ✅ Removed tenantId: true
         },
       },
       rooms: {
