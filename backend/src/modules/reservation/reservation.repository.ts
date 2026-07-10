@@ -63,6 +63,7 @@ export const findReservations = async (
   filters: {
     propertyId?: number;
     guestId?: number;
+    staffId?: number;
     status?: string;
     fromDate?: Date;
     toDate?: Date;
@@ -75,6 +76,7 @@ export const findReservations = async (
 
   if (filters.propertyId) where.propertyId = filters.propertyId;
   if (filters.guestId) where.guestId = filters.guestId;
+  if (filters.staffId) where.staffId = filters.staffId;
   if (filters.status) where.status = filters.status;
   if (filters.fromDate) where.checkInDate = { gte: filters.fromDate };
   if (filters.toDate) where.checkOutDate = { lte: filters.toDate };

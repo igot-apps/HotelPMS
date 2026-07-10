@@ -41,41 +41,37 @@ export const getReservations = async (req: AuthRequest, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const tenantId = req.user?.tenantId!;
+    const userId = req.user?.userId!;
+
+    // 🚨 ROLE-BASED SCOPING
+    const userRoleId = (req.user as any)?.roleId;
+    const isManager = userRoleId === 1; // Manager roleId is 1
+
+    const effectiveStaffId = isManager 
+      ? (req.query.staffId ? parseInt(req.query.staffId as string) : undefined)
+      : userId; // Force Receptionists to only see their own
 
     const filters = {
-      propertyId: req.query.propertyId
-        ? parseInt(req.query.propertyId as string)
-        : undefined,
-      guestId: req.query.guestId
-        ? parseInt(req.query.guestId as string)
-        : undefined,
+      propertyId: req.query.propertyId ? parseInt(req.query.propertyId as string) : undefined,
+      guestId: req.query.guestId ? parseInt(req.query.guestId as string) : undefined,
+      staffId: effectiveStaffId, // 🚨 Pass the enforced staffId
       status: req.query.status as string | undefined,
       fromDate: req.query.fromDate as string | undefined,
       toDate: req.query.toDate as string | undefined,
     };
 
-    const result = await reservationService.getReservations(
-      tenantId,
-      filters,
-      page,
-      limit
-    );
+    const result = await reservationService.getReservations(tenantId, filters, page, limit);
 
     return res.status(200).json({
       success: true,
       data: result.reservations,
       pagination: {
-        page: result.page,
-        limit: result.limit,
-        total: result.total,
+        page: result.page, limit: result.limit, total: result.total,
         totalPages: Math.ceil(result.total / result.limit),
       },
     });
   } catch (error: any) {
-    return res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+    return res.status(400).json({ success: false, message: error.message });
   }
 };
 
