@@ -42,6 +42,7 @@ export const getReservations = async (req: AuthRequest, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 10;
     const tenantId = req.user?.tenantId!;
     const userId = req.user?.userId!;
+    
 
     // 🚨 ROLE-BASED SCOPING
     const userRoleId = (req.user as any)?.roleId;
