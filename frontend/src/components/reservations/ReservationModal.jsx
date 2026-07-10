@@ -1,21 +1,24 @@
-import { useState, useEffect, useRef } from 'react'; 
-import { X, Loader2, AlertCircle, Check, ChevronLeft, ChevronRight, CreditCard, UserPlus } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Loader2, AlertCircle, Check, ChevronLeft, ChevronRight, CreditCard, UserPlus, Printer } from 'lucide-react';
 import { getAvailableRooms } from '../../api/rooms';
-import { getGuests, createGuest } from '../../api/guests'; // Added createGuest
+import { getGuests, createGuest } from '../../api/guests';
 import { useAuthStore } from '../../store/authStore';
-import toast from 'react-hot-toast'; // For success feedback
+import toast from 'react-hot-toast';
+import ThermalReceiptModal from './ThermalReceiptModal';
 
-
-export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading }) {
+export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading, createdReservation }) {
   const user = useAuthStore((state) => state.user);
   const propertyId = user?.propertyId;
-
+  
   const [currentStep, setCurrentStep] = useState(1);
   const [guests, setGuests] = useState([]);
   const [availableRooms, setAvailableRooms] = useState([]);
   const [isFetchingRooms, setIsFetchingRooms] = useState(false);
   
-  // NEW: Quick Add Guest States
+  // Receipt States
+  const [showReceipt, setShowReceipt] = useState(false);
+
+  // Quick Add Guest States
   const [isAddGuestOpen, setIsAddGuestOpen] = useState(false);
   const [isSavingGuest, setIsSavingGuest] = useState(false);
   const [newGuestData, setNewGuestData] = useState({
@@ -27,18 +30,24 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
     selectedRooms: [], recordPayment: true, amountPaid: '', paymentMethod: 'Cash', gatewayReference: '',
   });
 
+  // 🚨 DATE HELPERS: Prevent past dates
+  const today = new Date().toISOString().split('T')[0];
+  const getMinCheckOut = (checkIn) => {
+    if (!checkIn) return today;
+    const nextDay = new Date(checkIn);
+    nextDay.setDate(nextDay.getDate() + 1);
+    return nextDay.toISOString().split('T')[0];
+  };
+
   useEffect(() => {
     if (isOpen) {
-      const today = new Date().toISOString().split('T')[0];
       const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
-      
       setCurrentStep(1);
       setFormData({
         guestId: '', checkInDate: today, checkOutDate: tomorrow, source: 'Walk-in', notes: '',
         selectedRooms: [], recordPayment: true, amountPaid: '', paymentMethod: 'Cash', gatewayReference: '',
       });
       setAvailableRooms([]);
-      
       getGuests({ limit: 100 }).then(res => setGuests(res.data.data || [])).catch(err => console.error(err));
     }
   }, [isOpen]);
@@ -71,39 +80,27 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
     }
     return 0;
   };
-  
+
   const nights = calculateNights();
   const totalDue = formData.selectedRooms.reduce((acc, room) => acc + (parseFloat(room.roomType.basePrice) * nights), 0);
 
-  // ==========================================
-  // NEW: Quick Add Guest Handler
-  // ==========================================
+  // Quick Add Guest Handler
   const handleQuickAddGuest = async (e) => {
     e.preventDefault();
     if (!newGuestData.fullName || !newGuestData.phone) {
       toast.error('Full Name and Phone are required.');
       return;
     }
-
     setIsSavingGuest(true);
     try {
-      // 1. Create the guest via API
       const res = await createGuest(newGuestData);
       const createdGuest = res.data.data;
-      
-      // 2. Add to the top of the local dropdown list
       setGuests(prev => [createdGuest, ...prev]);
-      
-      // 3. AUTO-SELECT the newly created guest in the main form
       setFormData(prev => ({ ...prev, guestId: String(createdGuest.guestId) }));
-      
-      // 4. Close modal and reset
       setIsAddGuestOpen(false);
       setNewGuestData({ fullName: '', phone: '', email: '', idNumber: '' });
-      
       toast.success(`${createdGuest.fullName} added and selected!`);
     } catch (err) {
-      // The global Axios interceptor will show the error toast (e.g., "Phone already exists")
       console.error('Failed to create guest:', err);
     } finally {
       setIsSavingGuest(false);
@@ -115,6 +112,14 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
       if (!formData.guestId || !formData.checkInDate || !formData.checkOutDate) {
         toast.error('Please fill in Guest, Check-in, and Check-out dates.'); return;
       }
+      
+      // 🚨 FRONTEND VALIDATION: Block past dates
+      const todayDate = new Date(); todayDate.setHours(0,0,0,0);
+      const checkInDate = new Date(formData.checkInDate); checkInDate.setHours(0,0,0,0);
+      if (checkInDate < todayDate) {
+        toast.error('Check-in date cannot be in the past.'); return;
+      }
+
       if (nights <= 0) { toast.error('Check-out date must be after check-in date.'); return; }
     }
     if (currentStep === 2 && formData.selectedRooms.length === 0) {
@@ -129,7 +134,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
     e.preventDefault();
     const exactTotal = parseFloat(totalDue.toFixed(2));
     const exactPaid = formData.recordPayment ? parseFloat(parseFloat(formData.amountPaid || 0).toFixed(2)) : 0;
-
+    
     const payload = {
       propertyId, guestId: parseInt(formData.guestId), staffId: user?.userId, source: formData.source,
       checkInDate: formData.checkInDate, checkOutDate: formData.checkOutDate, notes: formData.notes,
@@ -143,6 +148,55 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
 
   if (!isOpen) return null;
 
+  // ==========================================
+  // 🌟 SUCCESS STATE & RECEIPT FLOW
+  // ==========================================
+  if (createdReservation) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className="bg-surface w-full max-w-md rounded-2xl shadow-xl border border-border overflow-hidden">
+          <div className="p-8 text-center">
+            <div className="w-16 h-16 bg-success-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Check size={32} className="text-success-600" />
+            </div>
+            <h2 className="text-xl font-bold text-text">Reservation Created!</h2>
+            <p className="text-text-muted mt-2">
+              Reservation <span className="font-bold text-text">#{createdReservation.reservationId}</span> has been successfully saved.
+            </p>
+            <div className="flex gap-3 justify-center mt-6">
+              <button 
+                onClick={() => { setShowReceipt(false); onClose(); }} 
+                className="px-5 py-2.5 text-sm font-semibold text-text bg-surface border border-border rounded-lg hover:bg-secondary-50 transition"
+              >
+                Close
+              </button>
+              <button 
+                onClick={() => setShowReceipt(true)} 
+                className="px-5 py-2.5 text-sm font-semibold text-text-inverted bg-primary-600 rounded-lg hover:bg-primary-700 transition flex items-center gap-2"
+              >
+                <Printer size={16} /> Print Receipt
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        {/* 🚨 FIX: Pass the full reservation object and stats instead of just the ID */}
+        {showReceipt && (
+          <ThermalReceiptModal 
+            isOpen={showReceipt} 
+            onClose={() => setShowReceipt(false)} 
+            reservation={createdReservation} 
+            stats={{
+              totalAmount: createdReservation.totalAmount,
+              totalPaid: createdReservation.amountPaid,
+              balanceDue: createdReservation.balanceDue,
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+
   const formatCurrency = (val) => parseFloat(val || 0).toFixed(2);
   const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
@@ -152,7 +206,9 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
         <div className="p-6 border-b border-border">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-text">New Reservation</h2>
-            <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition"><X size={20} /></button>
+            <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition">
+              <X size={20} />
+            </button>
           </div>
           <div className="flex items-center justify-center gap-2">
             <StepIndicator num={1} label="Guest & Dates" active={currentStep >= 1} completed={currentStep > 1} />
@@ -166,17 +222,14 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6">
           {currentStep === 1 && (
             <div className="space-y-5 max-w-2xl mx-auto">
-                            <div>
+              <div>
                 <label className="block text-sm font-semibold text-text mb-1.5">Guest *</label>
                 <div className="flex gap-2">
-                  {/* NEW: Searchable Guest Combobox */}
                   <SearchableGuestSelect 
                     guests={guests} 
                     value={formData.guestId} 
                     onChange={(id) => setFormData(prev => ({ ...prev, guestId: id }))} 
                   />
-                  
-                  {/* Quick Add Guest Button */}
                   <button 
                     type="button" 
                     onClick={() => setIsAddGuestOpen(true)} 
@@ -186,19 +239,37 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
                     <UserPlus size={18} /> Add Guest
                   </button>
                 </div>
-                <p className="text-xs text-text-muted mt-1">Search by name or phone. Click "Add Guest" to quickly create a new profile.</p>
               </div>
-
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-text mb-1.5">Check-in Date *</label>
-                  <input type="date" name="checkInDate" value={formData.checkInDate} onChange={handleChange} required className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition" />
+                  {/* 🚨 PREVENT PAST DATES: min={today} */}
+                  <input 
+                    type="date" 
+                    name="checkInDate" 
+                    min={today} 
+                    value={formData.checkInDate} 
+                    onChange={handleChange} 
+                    required 
+                    className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition" 
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-text mb-1.5">Check-out Date *</label>
-                  <input type="date" name="checkOutDate" value={formData.checkOutDate} onChange={handleChange} required className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition" />
+                  {/* 🚨 MUST BE AFTER CHECK-IN: min={getMinCheckOut(...)} */}
+                  <input 
+                    type="date" 
+                    name="checkOutDate" 
+                    min={getMinCheckOut(formData.checkInDate)} 
+                    value={formData.checkOutDate} 
+                    onChange={handleChange} 
+                    required 
+                    className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition" 
+                  />
                 </div>
               </div>
+
               <div>
                 <label className="block text-sm font-semibold text-text mb-1.5">Booking Source</label>
                 <select name="source" value={formData.source} onChange={handleChange} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition">
@@ -294,13 +365,32 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
                   <input type="checkbox" id="recordPayment" checked={formData.recordPayment} onChange={(e) => setFormData({ ...formData, recordPayment: e.target.checked, amountPaid: e.target.checked ? totalDue.toFixed(2) : '0' })} className="w-4 h-4 rounded border-border text-primary-600 focus:ring-primary-500" />
                   <label htmlFor="recordPayment" className="text-sm font-bold text-text cursor-pointer flex items-center gap-2"><CreditCard size={16} /> Record Initial Payment now</label>
                 </div>
-
+                
                 {formData.recordPayment && (
                   <div className="space-y-3 pt-2 border-t border-border">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-xs font-semibold text-text-muted mb-1">Initial Payment Amount (GH₵)</label>
-                        <input type="number" step="0.01" name="amountPaid" value={formData.amountPaid} onChange={handleChange} required className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
+                        {/* 🚨 FULL PAY BUTTON ADDED HERE */}
+                        <div className="flex gap-2">
+                          <input 
+                            type="number" 
+                            step="0.01" 
+                            name="amountPaid" 
+                            value={formData.amountPaid} 
+                            onChange={handleChange} 
+                            required 
+                            className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" 
+                          />
+                          <button 
+                            type="button"
+                            onClick={() => setFormData({...formData, amountPaid: totalDue.toFixed(2)})}
+                            className="px-3 py-2 bg-success-50 text-success-700 border border-success-200 rounded-lg text-xs font-bold hover:bg-success-100 transition whitespace-nowrap flex items-center gap-1"
+                            title="Set to full amount"
+                          >
+                            <Check size={12} /> Full Pay
+                          </button>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-text-muted mb-1">Payment Method</label>
@@ -313,7 +403,6 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
                         <input type="text" name="gatewayReference" value={formData.gatewayReference} onChange={handleChange} placeholder="e.g. transaction ID" className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
                       </div>
                     </div>
-
                     <div className="flex justify-between items-center p-3 bg-secondary-50 rounded-lg border border-border">
                       <span className="text-sm font-semibold text-text">Remaining Balance to Collect:</span>
                       {(() => {
@@ -350,9 +439,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
         </div>
       </div>
 
-      {/* ========================================== */}
-      {/* NEW: Nested Quick Add Guest Modal          */}
-      {/* ========================================== */}
+      {/* Nested Quick Add Guest Modal */}
       {isAddGuestOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-surface w-full max-w-md rounded-2xl shadow-2xl border border-border overflow-hidden">
@@ -360,7 +447,6 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
               <h3 className="text-lg font-bold text-text flex items-center gap-2"><UserPlus size={20} className="text-primary-600" /> Quick Add Guest</h3>
               <button type="button" onClick={() => setIsAddGuestOpen(false)} className="p-1.5 rounded-lg hover:bg-secondary-100 text-text-muted transition"><X size={20} /></button>
             </div>
-            
             <form onSubmit={handleQuickAddGuest} className="p-5 space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-text-muted mb-1">Full Name *</label>
@@ -384,7 +470,6 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading 
                 <input type="email" value={newGuestData.email} onChange={(e) => setNewGuestData({...newGuestData, email: e.target.value})} placeholder="guest@email.com"
                   className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
               </div>
-
               <div className="flex justify-end gap-3 pt-3 border-t border-border">
                 <button type="button" onClick={() => setIsAddGuestOpen(false)} className="px-4 py-2 text-sm font-semibold text-text bg-surface border border-border rounded-lg hover:bg-secondary-50">Cancel</button>
                 <button type="submit" disabled={isSavingGuest} className="px-4 py-2 text-sm font-semibold text-text-inverted bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2">
@@ -410,31 +495,23 @@ function StepIndicator({ num, label, active, completed }) {
   );
 }
 
-
-// ==========================================
-// Custom Searchable Guest Dropdown
-// ==========================================
 function SearchableGuestSelect({ guests, value, onChange }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const wrapperRef = useRef(null);
 
-  // Filter guests based on search term (Name or Phone)
-  const filteredGuests = guests.filter(g => 
+  const filteredGuests = guests.filter(g =>
     g.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (g.phone && g.phone.includes(searchTerm))
   );
 
-  // Find the currently selected guest to display their name
   const selectedGuest = guests.find(g => String(g.guestId) === String(value));
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event) {
       if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
         setIsOpen(false);
-        // Reset search term when closing so the input shows the selected name cleanly
-        setSearchTerm(''); 
+        setSearchTerm('');
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -451,20 +528,16 @@ function SearchableGuestSelect({ guests, value, onChange }) {
     <div ref={wrapperRef} className="relative flex-1">
       <input
         type="text"
-        // Show search term while typing, otherwise show selected guest's name
         value={isOpen ? searchTerm : (selectedGuest ? `${selectedGuest.fullName} (${selectedGuest.phone})` : '')}
-        onChange={(e) => { 
-          setSearchTerm(e.target.value); 
+        onChange={(e) => {
+          setSearchTerm(e.target.value);
           if (!isOpen) setIsOpen(true);
-          // If they delete the text, clear the selection
-          if (!e.target.value) onChange(''); 
+          if (!e.target.value) onChange('');
         }}
         onFocus={() => setIsOpen(true)}
         placeholder="Search by name or phone..."
         className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text placeholder:text-text-muted focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition"
       />
-      
-      {/* Dropdown List */}
       {isOpen && (
         <div className="absolute z-20 w-full mt-1 bg-surface border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
           {filteredGuests.length > 0 ? (

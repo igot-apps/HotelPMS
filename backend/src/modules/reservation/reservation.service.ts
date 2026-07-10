@@ -14,11 +14,25 @@ export const createReservation = async (data: any) => {
     throw new Error('At least one room is required');
   }
 
-  const checkIn = new Date(data.checkInDate);
-  const checkOut = new Date(data.checkOutDate);
+  // 🚨 1. NORMALIZE DATES TO MIDNIGHT
+  // This prevents timezone bugs where UTC midnight is seen as "yesterday" locally.
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
+  const checkIn = new Date(data.checkInDate);
+  checkIn.setHours(0, 0, 0, 0);
+
+  const checkOut = new Date(data.checkOutDate);
+  checkOut.setHours(0, 0, 0, 0);
+
+  // 🚨 2. PREVENT PAST DATES
+  if (checkIn < today) {
+    throw new Error('Check-in date cannot be in the past. For walk-ins, please select today\'s date.');
+  }
+
+  // 🚨 3. VALIDATE STAY LENGTH
   if (checkIn >= checkOut) {
-    throw new Error('Check-in date must be before check-out date');
+    throw new Error('Check-out date must be at least one day after the check-in date.');
   }
 
   // Check availability for all rooms

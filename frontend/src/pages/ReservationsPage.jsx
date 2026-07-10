@@ -15,6 +15,7 @@ export default function ReservationsPage() {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [localSearch, setLocalSearch] = useState(searchParams.get('search') || '');
+  const [createdReservation, setCreatedReservation] = useState(null);
 
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '10');
@@ -92,14 +93,16 @@ export default function ReservationsPage() {
       
       return resResponse;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['reservations'] });
-      queryClient.invalidateQueries({ queryKey: ['rooms'] }); 
-      queryClient.invalidateQueries({ queryKey: ['payments'] }); 
-      queryClient.invalidateQueries({ queryKey: ['dashboardActive'] }); // Refresh dashboard alerts
-      queryClient.invalidateQueries({ queryKey: ['dashboardUpcoming'] });
-      setIsModalOpen(false);
-    },
+  onSuccess: (response) => {
+    queryClient.invalidateQueries({ queryKey: ['reservations'] });
+    queryClient.invalidateQueries({ queryKey: ['rooms'] }); 
+    queryClient.invalidateQueries({ queryKey: ['payments'] }); 
+    queryClient.invalidateQueries({ queryKey: ['dashboardActive'] }); 
+    queryClient.invalidateQueries({ queryKey: ['dashboardUpcoming'] });
+    
+    // 🚨 INSTEAD OF CLOSING THE MODAL, WE PASS THE DATA TO IT FOR THE RECEIPT FLOW
+    setCreatedReservation(response.data.data);
+  },
   });
 
   const actionMutation = useMutation({
@@ -242,9 +245,19 @@ export default function ReservationsPage() {
             <button onClick={() => updateParams({ page: totalPages })} disabled={page === totalPages || !pagination.total || isPlaceholderData} className="px-2 py-1 text-sm font-medium rounded-lg border border-border bg-surface hover:bg-secondary-50 disabled:opacity-40 disabled:cursor-not-allowed transition">Last</button>
           </div>
         </div>
-      </div>
+      </div> 
 
-      <ReservationModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSubmit={(data) => createMutation.mutate(data)} isLoading={createMutation.isPending} />
-    </div>
+     <ReservationModal 
+        isOpen={isModalOpen} 
+        onClose={() => {
+          setIsModalOpen(false);
+          setCreatedReservation(null); // 🚨 RESET THE STATE WHEN CLOSING
+          createMutation.reset();
+        }} 
+        onSubmit={(data) => createMutation.mutate(data)} 
+        isLoading={createMutation.isPending} 
+        createdReservation={createdReservation} // 🚨 PASS THE NEW PROP
+      />
+    </div> 
   );
 }
