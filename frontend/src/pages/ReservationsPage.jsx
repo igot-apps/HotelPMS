@@ -5,7 +5,8 @@ import { getReservations, createReservation, checkInReservation, checkOutReserva
 import { recordPayment } from '../api/payments';
 import { useAuthStore } from '../store/authStore';
 import ReservationModal from '../components/reservations/ReservationModal';
-import { Search, Plus, CalendarDays, AlertCircle, LogIn, LogOut, XCircle, ChevronLeft, ChevronRight, Eye, X } from 'lucide-react';
+// 🚨 ADDED: Check icon for the "Paid" badge
+import { Search, Plus, CalendarDays, AlertCircle, LogIn, LogOut, XCircle, ChevronLeft, ChevronRight, Eye, X, Check } from 'lucide-react';
 
 export default function ReservationsPage() {
   const user = useAuthStore((state) => state.user);
@@ -15,6 +16,8 @@ export default function ReservationsPage() {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [localSearch, setLocalSearch] = useState(searchParams.get('search') || '');
+  
+  // 🚨 ADDED: State to hold the newly created reservation for the Receipt Flow
   const [createdReservation, setCreatedReservation] = useState(null);
 
   const page = parseInt(searchParams.get('page') || '1');
@@ -60,7 +63,7 @@ export default function ReservationsPage() {
   const startItem = pagination.total > 0 ? (page - 1) * limit + 1 : 0;
   const endItem = Math.min(page * limit, pagination.total);
 
-  const filteredReservations = reservations.filter(res => 
+  const filteredReservations = reservations.filter(res =>
     res.guest?.fullName?.toLowerCase().includes(search.toLowerCase()) ||
     res.reservationRooms?.some(r => r.room?.roomNumber?.toLowerCase().includes(search.toLowerCase()))
   );
@@ -68,11 +71,11 @@ export default function ReservationsPage() {
   // 🛡️ BULLETPROOF TWO-STEP MUTATION
   const createMutation = useMutation({
     mutationFn: async (payload) => {
-      // 1. Create the reservation (We send amountPaid: 0 to prevent double counting)
+      // 1. Create the reservation
       const resResponse = await createReservation(payload);
       const newReservation = resResponse.data.data;
 
-      // 2. If there was an initial payment, record it separately via POST /payments
+      // 2. If there was an initial payment, record it separately
       if (payload.initialPayment > 0.01) {
         const paymentPayload = {
           reservationId: newReservation.reservationId,
@@ -82,27 +85,25 @@ export default function ReservationsPage() {
           gatewayReference: payload.gatewayReference || null,
           notes: 'Initial payment for reservation'
         };
-        
         try {
           await recordPayment(paymentPayload);
         } catch (err) {
           console.error("❌ Initial payment recording failed:", err);
-          // We catch the error so the reservation still saves, but the global toast will show the error
         }
       }
-      
       return resResponse;
     },
-  onSuccess: (response) => {
-    queryClient.invalidateQueries({ queryKey: ['reservations'] });
-    queryClient.invalidateQueries({ queryKey: ['rooms'] }); 
-    queryClient.invalidateQueries({ queryKey: ['payments'] }); 
-    queryClient.invalidateQueries({ queryKey: ['dashboardActive'] }); 
-    queryClient.invalidateQueries({ queryKey: ['dashboardUpcoming'] });
-    
-    // 🚨 INSTEAD OF CLOSING THE MODAL, WE PASS THE DATA TO IT FOR THE RECEIPT FLOW
-    setCreatedReservation(response.data.data);
-  },
+    // 🚨 UPDATED: Instead of closing the modal, we pass the data to it for the receipt flow
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['reservations'] });
+      queryClient.invalidateQueries({ queryKey: ['rooms'] }); 
+      queryClient.invalidateQueries({ queryKey: ['payments'] }); 
+      queryClient.invalidateQueries({ queryKey: ['dashboardActive'] }); 
+      queryClient.invalidateQueries({ queryKey: ['dashboardUpcoming'] });
+      
+      // Save the created reservation to trigger the Success/Receipt screen in the Modal
+      setCreatedReservation(response.data.data);
+    },
   });
 
   const actionMutation = useMutation({
@@ -175,7 +176,8 @@ export default function ReservationsPage() {
                 <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Room(s)</th>
                 <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Dates</th>
                 <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider text-right">Amount</th>
+                {/* 🚨 UPGRADED: Changed "Amount" to "Payment" */}
+                <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider text-right">Payment</th>
                 <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider text-right">Actions</th>
               </tr>
             </thead>
@@ -195,11 +197,11 @@ export default function ReservationsPage() {
                   if (res.status === 'CheckedIn') statusClass = 'bg-success-50 text-success-700 ring-1 ring-success-600/20';
                   if (res.status === 'CheckedOut') statusClass = 'bg-secondary-100 text-secondary-600';
                   if (res.status === 'Cancelled') statusClass = 'bg-danger-50 text-danger-700 ring-1 ring-danger-600/20';
-
+                  
                   let actions = null;
                   if (res.status === 'Confirmed') actions = (<button onClick={() => handleAction(res.reservationId, 'checkin', 'Check in this guest?')} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition"><LogIn size={14} /> Check In</button>);
                   else if (res.status === 'CheckedIn') actions = (<button onClick={() => handleAction(res.reservationId, 'checkout', 'Check out this guest?')} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition"><LogOut size={14} /> Check Out</button>);
-
+                  
                   if (res.status !== 'CheckedOut' && res.status !== 'Cancelled') {
                     actions = (
                       <div className="flex items-center justify-end gap-2">
@@ -209,13 +211,31 @@ export default function ReservationsPage() {
                     );
                   }
 
+                  // 🚨 NEW: Calculate balance due for the badge
+                  const balanceDue = parseFloat(res.balanceDue || 0);
+                  const hasBalance = balanceDue > 0.01; // > 0.01 prevents floating point errors
+
                   return (
                     <tr key={res.reservationId} className="border-b border-border last:border-0 hover:bg-secondary-50/50 transition-colors">
                       <td className="px-6 py-4"><p className="text-xs font-bold text-text-muted">#{res.reservationId}</p><p className="text-sm font-semibold text-text">{res.guest?.fullName}</p></td>
                       <td className="px-6 py-4 text-sm text-text font-medium">{rooms}</td>
                       <td className="px-6 py-4 text-sm text-text-muted">{checkIn} <span className="mx-1">→</span> {checkOut}</td>
                       <td className="px-6 py-4"><span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold ${statusClass}`}>{res.status}</span></td>
-                      <td className="px-6 py-4 text-sm font-bold text-text text-right">{parseFloat(res.totalAmount || 0).toFixed(2)} GHS</td>
+                      
+                      {/* 🚨 UPGRADED: Payment Column with Status Badge */}
+                      <td className="px-6 py-4 text-right">
+                        <p className="text-sm font-bold text-text">{parseFloat(res.totalAmount || 0).toFixed(2)} GHS</p>
+                        {hasBalance ? (
+                          <span className="inline-block text-xs font-bold text-danger-600 bg-danger-50 px-2 py-0.5 rounded mt-1">
+                            Due: {balanceDue.toFixed(2)} GHS
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-success-600 bg-success-50 px-2 py-0.5 rounded mt-1">
+                            <Check size={10} /> Paid
+                          </span>
+                        )}
+                      </td>
+
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <Link to={`/reservations/${res.reservationId}`} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" title="View Details"><Eye size={16} /></Link>
@@ -229,7 +249,6 @@ export default function ReservationsPage() {
             </tbody>
           </table>
         </div>
-
         <div className="px-6 py-4 border-t border-border bg-secondary-50/30 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <p className="text-sm text-text-muted">Showing <span className="font-semibold text-text">{startItem}</span> to <span className="font-semibold text-text">{endItem}</span> of <span className="font-semibold text-text">{pagination.total}</span></p>
@@ -247,16 +266,17 @@ export default function ReservationsPage() {
         </div>
       </div> 
 
-     <ReservationModal 
+      {/* 🚨 UPDATED: Pass createdReservation prop and reset it on close */}
+      <ReservationModal 
         isOpen={isModalOpen} 
         onClose={() => {
           setIsModalOpen(false);
-          setCreatedReservation(null); // 🚨 RESET THE STATE WHEN CLOSING
+          setCreatedReservation(null); // Reset state when closing
           createMutation.reset();
         }} 
         onSubmit={(data) => createMutation.mutate(data)} 
         isLoading={createMutation.isPending} 
-        createdReservation={createdReservation} // 🚨 PASS THE NEW PROP
+        createdReservation={createdReservation} // Pass the data for the receipt flow
       />
     </div> 
   );
