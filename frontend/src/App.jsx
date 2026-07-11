@@ -2,8 +2,12 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import AppLayout from './components/layout/AppLayout';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+
+// Public Pages
 import LoginPage from './pages/LoginPage';
-import HotelRegistrationWizard from './pages/HotelRegistrationWizard'; // ✅ NEW IMPORT
+import HotelRegistrationWizard from './pages/HotelRegistrationWizard'; // ✅ RE-ADDED
+
+// Protected Pages
 import DashboardPage from './pages/DashboardPage';
 import RoomsPage from './pages/RoomsPage';
 import GuestsPage from './pages/GuestsPage';
@@ -27,42 +31,33 @@ function App() {
         position="top-right"
         toastOptions={{
           duration: 8000,
-          // 🌟 BASE STYLE: The Frosted Glass Effect
           style: {
-            background: 'rgba(255, 255, 255, 0.7)', // 70% opaque white
-            backdropFilter: 'blur(12px)',           // The magic "frosted glass" blur
-            WebkitBackdropFilter: 'blur(12px)',     // Required for Safari support
-            border: '1px solid rgba(255, 255, 255, 0.4)', // Subtle glass edge
+            background: 'rgba(255, 255, 255, 0.7)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255, 255, 255, 0.4)',
             borderRadius: '16px',
             boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
-            color: '#1f2937', // Dark slate text
+            color: '#1f2937',
             fontWeight: '500',
             padding: '14px 20px',
             fontSize: '14px',
           },
-          // 🟢 SUCCESS STYLE: Semi-transparent Emerald Green
           success: {
             style: {
-              background: 'rgba(16, 185, 129, 0.15)', // 15% opaque green
+              background: 'rgba(16, 185, 129, 0.15)',
               border: '1px solid rgba(16, 185, 129, 0.3)',
-              color: '#065f46', // Dark green text for readability
+              color: '#065f46',
             },
-            iconTheme: {
-              primary: '#10b981', // Solid green icon
-              secondary: '#ffffff',
-            },
+            iconTheme: { primary: '#10b981', secondary: '#ffffff' },
           },
-          // 🔴 ERROR STYLE: Semi-transparent Red
           error: {
             style: {
-              background: 'rgba(239, 68, 68, 0.15)', // 15% opaque red
+              background: 'rgba(239, 68, 68, 0.15)',
               border: '1px solid rgba(239, 68, 68, 0.3)',
-              color: '#991b1b', // Dark red text for readability
+              color: '#991b1b',
             },
-            iconTheme: {
-              primary: '#ef4444', // Solid red icon
-              secondary: '#ffffff',
-            },
+            iconTheme: { primary: '#ef4444', secondary: '#ffffff' },
           },
         }}
       />
@@ -72,7 +67,7 @@ function App() {
         {/* 🌟 PUBLIC ROUTES (No login required)       */}
         {/* ========================================== */}
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/register-your-hotel" element={<HotelRegistrationWizard />} /> {/* ✅ NEW ROUTE */}
+        <Route path="/register-your-hotel" element={<HotelRegistrationWizard />} /> {/* ✅ RE-ADDED */}
 
         {/* ========================================== */}
         {/* 🔒 PROTECTED ROUTES (Wrapped in Layout)    */}
@@ -85,7 +80,7 @@ function App() {
             </ProtectedRoute>
           }
         >
-          {/* Default Route */}
+          {/* ✅ FIXED: Default Route is now uncommented */}
           <Route index element={<Navigate to="/dashboard" replace />} />
           
           {/* Core Operations */}
@@ -93,7 +88,6 @@ function App() {
           <Route path="rooms" element={<RoomsPage />} />
           <Route path="guests" element={<GuestsPage />} />
           <Route path="reservations" element={<ReservationsPage />} />
-          {/* FIX: Reservation Details is now correctly nested as a child route */}
           <Route path="reservations/:id" element={<ReservationDetailsPage />} />
           <Route path="payments" element={<PaymentsPage />} />
           <Route path="reports" element={<ReportsPage />} />

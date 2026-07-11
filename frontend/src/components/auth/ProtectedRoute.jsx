@@ -1,11 +1,16 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 
 export default function ProtectedRoute({ children }) {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const location = useLocation();
+  const { user, isAuthenticated } = useAuthStore();
+  
+  // 🛡️ Check BOTH the flag and the user object to prevent edge-case crashes
+  const isLoggedIn = isAuthenticated && !!user;
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+  if (!isLoggedIn) {
+    // 🚨 Redirect to login, but save the page they were trying to visit
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   return children;
