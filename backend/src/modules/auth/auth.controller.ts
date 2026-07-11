@@ -119,3 +119,38 @@ export const logout = async (_req: AuthRequest, res: Response) => {
     message: 'Logged out successfully',
   });
 };
+
+export const registerHotel = async (req: Request, res: Response) => {
+  try {
+    const { hotelName, slug, email, phone, ownerName, ownerEmail, password } = req.body;
+
+    // Basic validation
+    if (!hotelName || !slug || !ownerEmail || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Hotel name, slug, owner email, and password are required.' 
+      });
+    }
+
+    const result = await authService.registerNewHotel({
+      hotelName,
+      slug,
+      email,
+      phone,
+      ownerName,
+      ownerEmail,
+      password,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Hotel registered successfully! Welcome aboard.',
+      data: result, // Contains user, accessToken, refreshToken
+    });
+  } catch (error: any) {
+    return res.status(400).json({
+      success: false,
+      message: error.message || 'Failed to register hotel',
+    });
+  }
+}

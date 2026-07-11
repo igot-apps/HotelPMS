@@ -23,3 +23,6 @@ export const getMe = async () => {
   const response = await api.get('/auth/me');
   return response.data;
 };
+
+// 🌟 NEW: B2B SaaS Hotel Registration
+export const registerHotel = (data) => api.post('/auth/register-hotel', data);

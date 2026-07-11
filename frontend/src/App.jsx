@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast';
 import AppLayout from './components/layout/AppLayout';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
+import HotelRegistrationWizard from './pages/HotelRegistrationWizard'; // ✅ NEW IMPORT
 import DashboardPage from './pages/DashboardPage';
 import RoomsPage from './pages/RoomsPage';
 import GuestsPage from './pages/GuestsPage';
@@ -18,65 +19,64 @@ import AvailabilityPage from './pages/AvailabilityPage';
 import RoomManagementPage from './pages/RoomManagementPage';
 import UsersPage from './pages/UsersPage';
 
-
-   
-
 function App() {
   return (
     <BrowserRouter>
       {/* Global Toast Container */}
-      <Toaster 
-  position="top-right"
-  toastOptions={{
-    duration: 8000,
-    
-    // 🌟 BASE STYLE: The Frosted Glass Effect
-    style: {
-      background: 'rgba(255, 255, 255, 0.7)', // 70% opaque white (Change to rgba(15, 23, 42, 0.7) if your app is Dark Mode)
-      backdropFilter: 'blur(12px)',           // The magic "frosted glass" blur
-      WebkitBackdropFilter: 'blur(12px)',     // Required for Safari support
-      border: '1px solid rgba(255, 255, 255, 0.4)', // Subtle glass edge
-      borderRadius: '16px',
-      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
-      color: '#1f2937', // Dark slate text
-      fontWeight: '500',
-      padding: '14px 20px',
-      fontSize: '14px',
-    },
-
-    // 🟢 SUCCESS STYLE: Semi-transparent Emerald Green
-    success: {
-      style: {
-        background: 'rgba(16, 185, 129, 0.15)', // 15% opaque green
-        border: '1px solid rgba(16, 185, 129, 0.3)',
-        color: '#065f46', // Dark green text for readability
-      },
-      iconTheme: {
-        primary: '#10b981', // Solid green icon
-        secondary: '#ffffff',
-      },
-    },
-
-    // 🔴 ERROR STYLE: Semi-transparent Red
-    error: {
-      style: {
-        background: 'rgba(239, 68, 68, 0.15)', // 15% opaque red
-        border: '1px solid rgba(239, 68, 68, 0.3)',
-        color: '#991b1b', // Dark red text for readability
-      },
-      iconTheme: {
-        primary: '#ef4444', // Solid red icon
-        secondary: '#ffffff',
-      },
-    },
-  }}
-/>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 8000,
+          // 🌟 BASE STYLE: The Frosted Glass Effect
+          style: {
+            background: 'rgba(255, 255, 255, 0.7)', // 70% opaque white
+            backdropFilter: 'blur(12px)',           // The magic "frosted glass" blur
+            WebkitBackdropFilter: 'blur(12px)',     // Required for Safari support
+            border: '1px solid rgba(255, 255, 255, 0.4)', // Subtle glass edge
+            borderRadius: '16px',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
+            color: '#1f2937', // Dark slate text
+            fontWeight: '500',
+            padding: '14px 20px',
+            fontSize: '14px',
+          },
+          // 🟢 SUCCESS STYLE: Semi-transparent Emerald Green
+          success: {
+            style: {
+              background: 'rgba(16, 185, 129, 0.15)', // 15% opaque green
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+              color: '#065f46', // Dark green text for readability
+            },
+            iconTheme: {
+              primary: '#10b981', // Solid green icon
+              secondary: '#ffffff',
+            },
+          },
+          // 🔴 ERROR STYLE: Semi-transparent Red
+          error: {
+            style: {
+              background: 'rgba(239, 68, 68, 0.15)', // 15% opaque red
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              color: '#991b1b', // Dark red text for readability
+            },
+            iconTheme: {
+              primary: '#ef4444', // Solid red icon
+              secondary: '#ffffff',
+            },
+          },
+        }}
+      />
 
       <Routes>
-        {/* Public Route */}
+        {/* ========================================== */}
+        {/* 🌟 PUBLIC ROUTES (No login required)       */}
+        {/* ========================================== */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/register-your-hotel" element={<HotelRegistrationWizard />} /> {/* ✅ NEW ROUTE */}
 
-        {/* Protected Routes (Wrapped in Layout) */}
+        {/* ========================================== */}
+        {/* 🔒 PROTECTED ROUTES (Wrapped in Layout)    */}
+        {/* ========================================== */}
         <Route
           path="/"
           element={
@@ -86,30 +86,31 @@ function App() {
           }
         >
           {/* Default Route */}
-          {/* <Route index element={<Navigate to="/dashboard" replace />} /> */}
+          <Route index element={<Navigate to="/dashboard" replace />} />
           
           {/* Core Operations */}
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="rooms" element={<RoomsPage />} />
           <Route path="guests" element={<GuestsPage />} />
           <Route path="reservations" element={<ReservationsPage />} />
-          
           {/* FIX: Reservation Details is now correctly nested as a child route */}
           <Route path="reservations/:id" element={<ReservationDetailsPage />} />
-          
           <Route path="payments" element={<PaymentsPage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="availability" element={<AvailabilityPage />} />
           <Route path="room-management" element={<RoomManagementPage />} />
+          
           {/* Configuration Pages */}
           <Route path="room-types" element={<RoomTypesPage />} />
           <Route path="rate-plans" element={<RatePlansPage />} />
           <Route path="properties" element={<PropertiesPage />} />
           <Route path="users" element={<UsersPage />} />
         </Route>
-        
-        {/* Fallback Route */}
+
+        {/* ========================================== */}
+        {/* Fallback Route                             */}
+        {/* ========================================== */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>
