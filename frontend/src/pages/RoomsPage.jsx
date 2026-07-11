@@ -37,7 +37,23 @@ export default function RoomsPage() {
 
   const handleToggleOperational = (room) => {
     const newStatus = room.operationalStatus?.toUpperCase() === 'MAINTENANCE' ? 'Available' : 'Maintenance';
-    statusMutation.mutate({ roomId: room.roomId, payload: { operationalStatus: newStatus, housekeepingStatus: room.housekeepingStatus } });
+    
+    // 🚨 WARNING CONFIRMATION FOR MAINTENANCE
+    if (newStatus === 'Maintenance') {
+      const isConfirmed = window.confirm(
+        `⚠️ Set Room ${room.roomNumber} to Maintenance?\n\nThis room will be hidden from availability and cannot be booked for new reservations until it is marked as Available again.\n\nDo you want to proceed?`
+      );
+      if (!isConfirmed) return; // User clicked "Cancel", so we stop the mutation
+    }
+
+    // If setting to Available, or if user confirmed Maintenance, proceed with the update
+    statusMutation.mutate({ 
+      roomId: room.roomId, 
+      payload: { 
+        operationalStatus: newStatus, 
+        housekeepingStatus: room.housekeepingStatus 
+      } 
+    });
   };
 
   // 4. Data Processing
