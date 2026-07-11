@@ -169,36 +169,46 @@ export const deletePayment = async (paymentId: number) => {
   });
 };
 
-export const getPaymentStats = async (propertyId: number) => { // ✅ Replaced tenantId
-  // ✅ Filter stats by property via the reservation relation
-  const whereClause = { reservation: { propertyId } };
+export const getPaymentStats = async (propertyId: number) => { 
+  // ✅ Base filter for the property
+  const baseWhere = { reservation: { propertyId } };
 
+  // ✅ NEW: Filter for actual revenue (ONLY 'Completed' payments)
+  const revenueWhere = {
+    ...baseWhere,
+    status: 'Completed', 
+  };
+
+  // 1. Total Revenue & Transactions (Completed only)
   const stats = await prisma.payment.aggregate({
-    where: whereClause,
+    where: revenueWhere,
     _sum: { amount: true },
     _count: { paymentId: true },
   });
 
+  // 2. Revenue by Payment Method (Completed only)
   const methodStats = await prisma.payment.groupBy({
     by: ['paymentMethod'],
-    where: whereClause,
+    where: revenueWhere,
     _sum: { amount: true },
     _count: { paymentId: true },
   });
 
+  // 3. Status breakdown (All payments, to see how many were refunded)
   const statusStats = await prisma.payment.groupBy({
     by: ['status'],
-    where: whereClause,
+    where: baseWhere,
     _count: { paymentId: true },
   });
 
   return {
     totalPayments: stats._count.paymentId,
-    totalAmount: stats._sum.amount || 0,
+    // ✅ FIXED: Safely convert Prisma Decimal to Number
+    totalAmount: stats._sum.amount ? Number(stats._sum.amount) : 0, 
     byMethod: methodStats.map((m) => ({
       method: m.paymentMethod,
       count: m._count.paymentId,
-      total: m._sum.amount || 0,
+      total: m._sum.amount ? Number(m._sum.amount) : 0,
     })),
     byStatus: statusStats.map((s) => ({
       status: s.status,
