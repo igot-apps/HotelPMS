@@ -136,15 +136,35 @@ export const updateReservation = async (reservationId: number, data: any) => {
 export const cancelReservation = async (reservationId: number) => {
   const reservation = await reservationRepository.findReservationById(reservationId);
   if (!reservation) throw new Error('Reservation not found');
+  
   if (reservation.status === 'CheckedIn') {
     throw new Error('Cannot cancel a checked-in reservation');
   }
+  if (reservation.status === 'Cancelled') {
+    throw new Error('This reservation is already cancelled');
+  }
 
+  // 1. Release the rooms back to inventory
   for (const rr of reservation.reservationRooms) {
     await updateRoomStatus(rr.roomId, 'Available');
   }
 
-  return reservationRepository.cancelReservation(reservationId);
+  // 2. Calculate Refund Due 
+  // 🌟 MVP LOGIC: We assume 100% of the amountPaid is refundable. 
+  // (Later, you can add complex cancellation policies here, like deducting a 1-night fee).
+  const amountPaid = Number(reservation.amountPaid || 0);
+  const refundDue = amountPaid; 
+
+  // 3. Determine Refund Status
+  // If the guest paid something, flag it as 'Pending'. Otherwise, 'None'.
+  const refundStatus = refundDue > 0 ? 'Pending' : 'None';
+
+  // 4. Update the reservation with the new financial flags
+  return reservationRepository.cancelReservation(reservationId, {
+    refundDue,
+    refundStatus,
+    cancellationDate: new Date(),
+  });
 };
 
 export const checkInGuest = async (reservationId: number) => {

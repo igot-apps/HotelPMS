@@ -220,7 +220,28 @@ export default function ReservationsPage() {
                       <td className="px-6 py-4"><p className="text-xs font-bold text-text-muted">#{res.reservationId}</p><p className="text-sm font-semibold text-text">{res.guest?.fullName}</p></td>
                       <td className="px-6 py-4 text-sm text-text font-medium">{rooms}</td>
                       <td className="px-6 py-4 text-sm text-text-muted">{checkIn} <span className="mx-1">→</span> {checkOut}</td>
-                      <td className="px-6 py-4"><span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold ${statusClass}`}>{res.status}</span></td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-1.5">
+                          {/* Main Status Badge */}
+                          <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold ${statusClass}`}>
+                            {res.status}
+                          </span>
+
+                          {/* 🌟 NEW: Pending Refund Warning Badge */}
+                          {res.status === 'Cancelled' && res.refundStatus === 'Pending' && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-warning-50 text-warning-700 border border-warning-200">
+                              <AlertCircle size={12} /> Refund Due: {parseFloat(res.refundDue || 0).toFixed(2)} GHS
+                            </span>
+                          )}
+
+                          {/* 🌟 NEW: Processed Refund Success Badge */}
+                          {res.status === 'Cancelled' && res.refundStatus === 'Processed' && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-success-50 text-success-700 border border-success-200">
+                              <Check size={12} /> Refunded
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       
                       {/* 🚨 UPGRADED: Payment Column with Status Badge */}
                       <td className="px-6 py-4 text-right">

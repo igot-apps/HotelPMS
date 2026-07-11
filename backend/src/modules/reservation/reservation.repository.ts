@@ -142,6 +142,9 @@ export const updateReservation = async (
     totalAmount: number;
     amountPaid: number;
     balanceDue: number;
+    refundStatus: string;
+    refundDue: number;
+    cancellationDate: Date;     
   }>
 ) => {
   return prisma.reservation.update({
@@ -160,10 +163,23 @@ export const updateReservationStatus = async (
   });
 };
 
-export const cancelReservation = async (reservationId: number) => {
+// ✅ UPDATED: Now accepts financial flags to track the refund workflow
+export const cancelReservation = async (
+  reservationId: number,
+  refundData: {
+    refundDue: number;
+    refundStatus: string;
+    cancellationDate: Date;
+  }
+) => {
   return prisma.reservation.update({
     where: { reservationId },
-    data: { status: 'Cancelled' },
+    data: {
+      status: 'Cancelled',
+      refundDue: refundData.refundDue,
+      refundStatus: refundData.refundStatus,
+      cancellationDate: refundData.cancellationDate,
+    },
   });
 };
 

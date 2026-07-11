@@ -1,9 +1,7 @@
 import * as paymentRepository from './payment.repository';
-import { findReservationById } from '../reservation/reservation.repository';
-import { updateReservationFinancials } from '../reservation/reservation.repository';
+import { findReservationById, updateReservationFinancials, updateReservation } from '../reservation/reservation.repository';
 
 export const recordPayment = async (data: any) => {
-  // ✅ Removed tenantId check
   if (!data.reservationId) throw new Error('Reservation ID is required');
   if (!data.amount) throw new Error('Amount is required');
   if (data.amount <= 0) throw new Error('Amount must be greater than 0');
@@ -17,7 +15,6 @@ export const recordPayment = async (data: any) => {
 
   const amount = Number(data.amount);
   const accummulatedPayments = await paymentRepository.calculateAccumulatedPayment(data.reservationId);
-  
   if (amount + accummulatedPayments > Number(reservation.totalAmount)) {
     throw new Error('Payment amount exceeds total reservation amount');
   }
@@ -44,7 +41,7 @@ export const recordPayment = async (data: any) => {
 };
 
 export const getPayments = async (
-  propertyId: number, // ✅ Replaced tenantId
+  propertyId: number, 
   filters: {
     reservationId?: number;
     paymentMethod?: string;
@@ -62,7 +59,7 @@ export const getPayments = async (
   return paymentRepository.findPayments(
     propertyId,
     {
-      search: filters.search, 
+      search: filters.search,
       reservationId: filters.reservationId,
       paymentMethod: filters.paymentMethod,
       status: filters.status,
@@ -111,27 +108,43 @@ export const updatePayment = async (paymentId: number, data: any) => {
   return paymentRepository.updatePayment(paymentId, data);
 };
 
-export const deletePayment = async (paymentId: number) => {
+// ✅ UPGRADED: Now respects the "Flag & Review" workflow
+export const processRefund = async (paymentId: number) => { // ✅ Removed unused staffId
   const payment = await paymentRepository.findPaymentById(paymentId);
   if (!payment) throw new Error('Payment not found');
+  if (payment.status === 'Refunded') throw new Error('This payment has already been refunded');
 
   const reservation = await findReservationById(payment.reservationId);
   if (!reservation) throw new Error('Reservation not found');
 
-  const newAmountPaid = Number(reservation.amountPaid || 0) - Number(payment.amount);
-  if (newAmountPaid < 0) {
-    throw new Error('Cannot refund more than paid amount');
+  // 🚨 SECURITY CHECK: Ensure the reservation was actually flagged for a refund
+  if (reservation.refundStatus !== 'Pending') {
+    throw new Error('This reservation is not flagged for a refund. It must be cancelled first.');
   }
+
+  // 1. Update the Payment status to 'Refunded'
+  const updatedPayment = await paymentRepository.updatePayment(paymentId, { status: 'Refunded' });
+
+  // 2. Deduct the amount from the Reservation's financials
+  const currentAmountPaid = Number(reservation.amountPaid || 0);
+  const refundAmount = Number(payment.amount);
+  const newAmountPaid = currentAmountPaid - refundAmount;
 
   await updateReservationFinancials(
     payment.reservationId,
     Number(reservation.totalAmount || 0),
-    newAmountPaid
+    newAmountPaid < 0 ? 0 : newAmountPaid // Prevent negative paid amounts
   );
 
-  return paymentRepository.deletePayment(paymentId);
+  // 3. Update the Reservation's refund status to 'Processed'
+  // ✅ FIXED: Calling updateReservation directly since it's imported at the top
+  await updateReservation(reservation.reservationId, {
+    refundStatus: 'Processed',
+  });
+
+  return updatedPayment;
 };
 
-export const getPaymentStatistics = async (propertyId: number) => { // ✅ Replaced tenantId
+export const getPaymentStatistics = async (propertyId: number) => { 
   return paymentRepository.getPaymentStats(propertyId);
 };

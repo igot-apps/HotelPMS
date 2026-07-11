@@ -7,6 +7,7 @@ import {
   Search, Plus, CreditCard, TrendingUp, Banknote, Smartphone, Undo2, 
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight, X 
 } from 'lucide-react';
+import RequirePermission from '../components/RequirePermission';
 
 export default function PaymentsPage() {
   const queryClient = useQueryClient();
@@ -315,12 +316,15 @@ export default function PaymentsPage() {
                       </td>
                       <td className="px-6 py-4 text-right">
                         {p.status === 'Completed' ? (
-                          <button 
-                            onClick={() => handleRefund(p.paymentId)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-danger-200 text-danger-600 hover:bg-danger-50 transition"
-                          >
-                            <Undo2 size={14} /> Refund
-                          </button>
+                          // 🚨 CRITICAL: ONLY Managers with 'CanIssueRefunds' can see this button!
+                          <RequirePermission permission="CanIssueRefunds">
+                            <button 
+                              onClick={() => handleRefund(p.paymentId)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-danger-200 text-danger-600 hover:bg-danger-50 transition"
+                            >
+                              <Undo2 size={14} /> Process Refund
+                            </button>
+                          </RequirePermission>
                         ) : (
                           <span className="text-xs text-text-muted italic">Refunded</span>
                         )}

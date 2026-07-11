@@ -128,7 +128,7 @@ export const deletePayment = async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ success: false, message: 'You do not have access to this payment' });
     }
 
-    await paymentService.deletePayment(paymentId);
+    await paymentService.processRefund(paymentId);
     return res.status(200).json({ success: true, message: 'Payment refunded successfully' });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });
