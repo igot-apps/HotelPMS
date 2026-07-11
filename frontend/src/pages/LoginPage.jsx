@@ -1,115 +1,217 @@
-// src/pages/LoginPage.jsx
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useMutation } from '@tanstack/react-query';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { login } from '../api/auth';
+import { loginUser } from '../api/auth'; // Ensure this matches your API file
 import toast from 'react-hot-toast';
-import { Loader2, Lock, User, Building2 } from 'lucide-react';
+import { 
+  Building2, Sparkles, Shield, ArrowRight, Eye, EyeOff, Loader2, 
+  CheckCircle2, BedDouble, CreditCard, BarChart3 
+} from 'lucide-react';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  
-  // Rename to storeLogin to avoid conflict with the imported API function
-  const { login: storeLogin } = useAuthStore(); 
+  const login = useAuthStore((state) => state.login);
   
   const [formData, setFormData] = useState({ username: '', password: '' });
-  const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const mutation = useMutation({
+    mutationFn: loginUser,
+        onSuccess: (response) => {
+      const { user, accessToken, refreshToken } = response.data.data;
+      
+      // ✅ FIXED: Pull permissions directly from the user object and pass it as the 3rd argument!
+      login(user, { accessToken, refreshToken }, user.permissions); 
+      
+      toast.success(`Welcome back, ${user.fullName}!`);
+      navigate('/dashboard');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Invalid username or password.');
+    },
+  });
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    setIsLoading(true);
-
-    try {
-      // 1. Call the backend API
-      const response = await login(formData);
-      
-      // 2. Extract data from the response
-      // Notice how permissions is extracted from response.data.user
-      const { user, accessToken, refreshToken } = response.data;
-      const permissions = user.permissions; // 🚨 Extract from the user object!
-
-      // 3. Save to Zustand Store
-      storeLogin(user, { accessToken, refreshToken }, permissions);
-
-      // 4. Success feedback & redirect
-      toast.success(`Welcome back, ${user.fullName}!`);
-      navigate('/dashboard');
-      
-    } catch (error) {
-      console.error('Login failed:', error);
-    } finally {
-      setIsLoading(false);
+    if (!formData.username || !formData.password) {
+      toast.error('Please enter both username and password.');
+      return;
     }
+    mutation.mutate(formData);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md bg-surface border border-border rounded-2xl shadow-xl p-8 space-y-6">
-        
-        {/* Header */}
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary-50 text-primary-600 mb-3">
-            <Building2 size={24} />
+    <div className="min-h-screen flex bg-background">
+      
+      {/* ========================================== */}
+      {/* LEFT SIDE: BRANDING & REGISTRATION CTA     */}
+      {/* ========================================== */}
+      <div className="hidden lg:flex lg:w-1/2 bg-secondary-900 text-text-inverted flex-col justify-between p-12 relative overflow-hidden">
+        {/* Background Glow Effect */}
+        <div className="absolute top-0 left-0 w-96 h-96 bg-primary-600/20 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
+
+        <div className="relative z-10">
+          <div className="flex items-center gap-3 mb-12">
+            <div className="w-10 h-10 bg-primary-600 rounded-lg flex items-center justify-center">
+              <Building2 size={24} className="text-text-inverted" />
+            </div>
+            <span className="text-2xl font-bold tracking-tight">HotelPMS</span>
           </div>
-          <h1 className="text-2xl font-bold text-text">Hotel PMS</h1>
-          <p className="text-sm text-text-muted mt-1">Sign in to your account</p>
+
+          <h1 className="text-4xl xl:text-5xl font-bold leading-tight mb-6">
+            The operating system for <span className="text-primary-400">modern hotels.</span>
+          </h1>
+          <p className="text-lg text-secondary-300 max-w-md mb-10">
+            Manage reservations, rooms, staff, and financial reports for your property—all from one beautiful, unified dashboard.
+          </p>
+
+          {/* Feature List */}
+          <div className="space-y-4 mb-12">
+            <FeatureItem icon={BedDouble} text="Real-time room availability & housekeeping" />
+            <FeatureItem icon={CreditCard} text="Secure payment processing & invoicing" />
+            <FeatureItem icon={BarChart3} text="Automated financial reports & analytics" />
+          </div>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-semibold text-text mb-1.5">Username</label>
-            <div className="relative">
-              <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-              <input
-                type="text"
-                name="username"
-                value={formData.username}
-                onChange={handleChange}
-                required
-                placeholder="e.g. gtetteh"
-                className="w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition"
-              />
+        {/* Registration CTA */}
+        <div className="relative z-10 p-6 bg-secondary-800/50 border border-secondary-700 rounded-2xl backdrop-blur-sm">
+          <div className="flex items-start gap-4">
+            <div className="p-2 bg-primary-600/20 rounded-lg">
+              <Sparkles size={20} className="text-primary-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-lg text-text-inverted mb-1">Own a hotel?</h3>
+              <p className="text-sm text-secondary-300 mb-4">
+                Get your own isolated management system and public booking page in under 5 minutes.
+              </p>
+              <Link 
+                to="/register-your-hotel" 
+                className="inline-flex items-center gap-2 text-sm font-semibold text-primary-400 hover:text-primary-300 transition group"
+              >
+                Register your hotel for free 
+                <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+              </Link>
             </div>
           </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-text mb-1.5">Password</label>
-            <div className="relative">
-              <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-              <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                required
-                placeholder="••••••••"
-                className="w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition"
-              />
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full py-3 bg-primary-600 text-text-inverted font-semibold rounded-lg hover:bg-primary-700 transition flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {isLoading ? <Loader2 className="animate-spin" size={18} /> : 'Sign In'}
-          </button>
-        </form>
-
-        {/* Demo Credentials Helper (Based on your seed.js) */}
-        <div className="text-center text-xs text-text-muted pt-4 border-t border-border space-y-1">
-          <p className="font-semibold text-text">Demo Credentials (from seed.js):</p>
-          <p>Manager: <span className="font-mono font-bold text-text">gtetteh / manager123</span></p>
-          <p>Receptionist: <span className="font-mono font-bold text-text">jmensah / reception123</span></p>
-          <p>Housekeeping: <span className="font-mono font-bold text-text">sakoto / housekeeping123</span></p>
         </div>
       </div>
+
+      {/* ========================================== */}
+      {/* RIGHT SIDE: LOGIN FORM                     */}
+      {/* ========================================== */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12">
+        <div className="w-full max-w-md space-y-8">
+          {/* Mobile Logo (Only shows on small screens) */}
+          <div className="lg:hidden text-center mb-8">
+            <div className="inline-flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
+                <Building2 size={20} className="text-text-inverted" />
+              </div>
+              <span className="text-xl font-bold text-text">HotelPMS</span>
+            </div>
+          </div>
+
+          <div>
+            <h2 className="text-3xl font-bold text-text tracking-tight">Welcome back</h2>
+            <p className="text-text-muted mt-2">Sign in to your hotel's management dashboard.</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Username Field */}
+            <div>
+              <label htmlFor="username" className="block text-sm font-semibold text-text mb-1.5">
+                Username or Email
+              </label>
+              <input
+                id="username"
+                name="username"
+                type="text"
+                autoComplete="username"
+                value={formData.username}
+                onChange={handleChange}
+                placeholder="e.g. manager@hotel.com"
+                className="w-full px-4 py-3 bg-surface border border-border rounded-xl text-text placeholder:text-text-muted outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
+              />
+            </div>
+
+            {/* Password Field */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="password" className="block text-sm font-semibold text-text">
+                  Password
+                </label>
+                <a href="#" className="text-xs font-semibold text-primary-600 hover:text-primary-700 transition">
+                  Forgot password?
+                </a>
+              </div>
+              <div className="relative">
+                <input
+                  id="password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  placeholder="••••••••"
+                  className="w-full px-4 py-3 pr-11 bg-surface border border-border rounded-xl text-text placeholder:text-text-muted outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-text-muted hover:text-text transition"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={mutation.isPending}
+              className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-primary-600 text-text-inverted font-semibold rounded-xl hover:bg-primary-700 transition shadow-lg shadow-primary-600/20 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {mutation.isPending ? (
+                <>
+                  <Loader2 className="animate-spin" size={18} /> Signing in...
+                </>
+              ) : (
+                <>
+                  <Shield size={18} /> Sign in to Dashboard
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Mobile Registration Link */}
+          <div className="lg:hidden text-center pt-6 border-t border-border">
+            <p className="text-sm text-text-muted">
+              Own a hotel?{' '}
+              <Link to="/register-your-hotel" className="font-semibold text-primary-600 hover:text-primary-700">
+                Create your free account
+              </Link>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Helper Component for the Left Side Features
+function FeatureItem({ icon: Icon, text }) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-secondary-800 flex items-center justify-center">
+        <CheckCircle2 size={16} className="text-primary-400" />
+      </div>
+      <span className="text-secondary-200">{text}</span>
     </div>
   );
 }

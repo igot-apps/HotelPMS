@@ -1,11 +1,17 @@
 import { PrismaClient } from '../../../src/generated/prisma';
 const prisma = new PrismaClient();
 
-export const findUserByUsername = async (username: string) => {
-  return prisma.user.findUnique({
-    where: { username },
+export const findUserByUsernameOrEmail = async (identifier: string) => {
+  return prisma.user.findFirst({
+    where: {
+      OR: [
+        { username: identifier }, // ✅ Checks if it matches the username
+        { email: identifier },    // ✅ Checks if it matches the email
+      ],
+    },
+    // ⚠️ IMPORTANT: Keep your existing `include` block exactly as it was!
+    // It should look something like this to fetch roles and permissions:
     include: {
-      property: true, // ✅ Property is now the root entity
       role: {
         include: {
           rolePermissions: {
@@ -13,6 +19,12 @@ export const findUserByUsername = async (username: string) => {
               permission: true,
             },
           },
+        },
+      },
+      property: {
+        select: {
+          propertyId: true,
+          propertyName: true,
         },
       },
     },

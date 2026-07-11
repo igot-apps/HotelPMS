@@ -26,7 +26,7 @@ export const loginUser = async (
   username: string,
   password: string
 ): Promise<LoginResponse> => {
-  const user = await authRepository.findUserByUsername(username);
+  const user = await authRepository.findUserByUsernameOrEmail(username); 
   
   if (!user) {
     return { success: false, message: 'Invalid username or password' };
