@@ -8,7 +8,6 @@ console.log(`Using TypeScript version: ${require('typescript').version}\n`);
 
 // Import modules
 import authRoutes from './modules/auth/auth.routes';
-// ❌ REMOVED: import tenantRoutes from './modules/tenant/tenant.routes';
 import propertyRoutes from './modules/property/property.routes';
 import roomRoutes from './modules/room/room.routes';
 import guestRoutes from './modules/guest/guest.routes';
@@ -17,6 +16,7 @@ import paymentRoutes from './modules/payment/payment.routes';
 import reportRoutes from './modules/reports/report.routes';
 import userRoutes from './modules/user/user.routes';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
+import paystackRoutes from './modules/paystack/paystack.routes'; // 🌟 NEW: Paystack Integration
 
 // Load environment variables
 dotenv.config();
@@ -27,6 +27,12 @@ const app: Express = express();
 // Middleware
 app.use(helmet());
 app.use(cors());
+
+// ⚠️ CRITICAL: Parse raw body specifically for the Paystack Webhook.
+// This MUST come BEFORE express.json() to ensure signature verification works!
+app.use('/api/paystack/webhook', express.raw({ type: 'application/json' }));
+
+// Standard JSON parsing for everything else
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -61,7 +67,6 @@ app.get('/', (_req: Request, res: Response) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
-// ❌ REMOVED: app.use('/api/tenants', tenantRoutes);
 app.use('/api/properties', propertyRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/guests', guestRoutes);
@@ -70,6 +75,9 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+
+// 🌟 Mount Paystack Routes
+app.use('/api/paystack', paystackRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {

@@ -19,7 +19,9 @@ model Property {
   businessName      String    @db.VarChar(200) // Merged from Tenant
   legalName         String?   @db.VarChar(200) // Merged from Tenant
   subscriptionPlan  String    @default("Starter") @db.VarChar(50) // Merged from Tenant
-  subscriptionStatus String   @default("Active") @db.VarChar(20) // Merged from Tenant
+  subscriptionStatus String    @default("Trial") @db.VarChar(20)
+  trialEndsAt        DateTime? // When the 14-day free trial expires
+  subscriptionEndsAt DateTime? // When the paid monthly/yearly subscription expires
   currency          String    @default("GHS") @db.VarChar(10) // Merged from Tenant
   timezone          String    @default("Africa/Accra") @db.VarChar(50) // Merged from Tenant
   logo              String?   @db.Text // Merged from Tenant

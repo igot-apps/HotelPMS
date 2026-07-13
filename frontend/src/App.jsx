@@ -22,6 +22,7 @@ import CalendarPage from './pages/CalendarPage';
 import AvailabilityPage from './pages/AvailabilityPage';
 import RoomManagementPage from './pages/RoomManagementPage';
 import UsersPage from './pages/UsersPage';
+import BillingPage from './pages/BillingPage';
 
 function App() {
   return (
@@ -100,6 +101,7 @@ function App() {
           <Route path="rate-plans" element={<RatePlansPage />} />
           <Route path="properties" element={<PropertiesPage />} />
           <Route path="users" element={<UsersPage />} />
+          <Route path="billing" element={<BillingPage />} />
         </Route>
 
         {/* ========================================== */}

@@ -15,9 +15,13 @@ export interface LoginResponse {
     username: string;
     email: string | null;
     role: string;
-    propertyId: number | null; // ✅ Allow null to satisfy TS
-    propertyName: string | null; // ✅ Allow null to satisfy TS
+    propertyId: number | null; 
+    propertyName: string | null; 
     permissions: string[];
+    // 🌟 NEW: Subscription & Trial fields added to the interface
+    subscriptionPlan: string;
+    subscriptionStatus: string;
+    trialEndsAt: Date | null; 
   };
   message?: string;
 }
@@ -69,6 +73,9 @@ export const loginUser = async (
       role: user.role.roleName,
       propertyId: user.propertyId || null,
       propertyName: (user as any).property?.propertyName || null, // ✅ Safe navigation
+      subscriptionPlan: user.property.subscriptionPlan,
+      subscriptionStatus: user.property.subscriptionStatus,
+      trialEndsAt: user.property.trialEndsAt,
       permissions,
     },
   };
@@ -141,7 +148,11 @@ export const registerNewHotel = async (data: {
   // 3. Start a Prisma Transaction (All or Nothing)
   const result = await prisma.$transaction(async (tx: any) => {
     
-    // A. Create the Property (The Hotel)
+    // A. Create the Property (The Hotel) with a 14-Day Free Trial
+    // 🌟 Calculate the trial expiration date (14 days from right now)
+    const trialEndsAt = new Date();
+    trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+
     const property = await tx.property.create({
       data: {
         propertyName: data.hotelName,
@@ -150,10 +161,15 @@ export const registerNewHotel = async (data: {
         propertyType: 'Hotel',
         primaryEmail: data.email,
         primaryPhone: data.phone,
-        country: 'Ghana', // Default, can be updated later
+        country: 'Ghana', 
         currency: 'GHS',
         timezone: 'Africa/Accra',
-        status: 'Active',
+        status: 'Active', // Operational status
+        
+        // 🌟 NEW: Subscription & Trial Setup
+        subscriptionPlan: 'Starter',
+        subscriptionStatus: 'Trial', 
+        trialEndsAt: trialEndsAt, // Automatically sets the 14-day expiration!
       },
     });
 
@@ -215,17 +231,22 @@ export const registerNewHotel = async (data: {
   const permissions = roleWithPerms?.rolePermissions.map((rp: any) => rp.permission.code) || [];
 
   return {
-    user: {
+  user: {
       userId: result.ownerUser.userId,
       fullName: result.ownerUser.fullName,
       username: result.ownerUser.username,
       email: result.ownerUser.email,
-      role: result.managerRole.roleName, // ✅ Will now return "Manager"
+      role: result.managerRole.roleName, 
       propertyId: result.property.propertyId,
       propertyName: result.property.propertyName,
+      // 🌟 NEW: Pass subscription data to frontend immediately upon registration
+      subscriptionPlan: result.property.subscriptionPlan,
+      subscriptionStatus: result.property.subscriptionStatus,
+      trialEndsAt: result.property.trialEndsAt,
       permissions,
     },
     accessToken,
     refreshToken,
   };
+
 };

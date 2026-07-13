@@ -22,11 +22,14 @@ export const findUserByUsernameOrEmail = async (identifier: string) => {
         },
       },
       property: {
-        select: {
-          propertyId: true,
-          propertyName: true,
-        },
+      select: {
+        propertyId: true,
+        propertyName: true,
+        subscriptionPlan: true,
+        subscriptionStatus: true,
+        trialEndsAt: true,
       },
+    },
     },
   });
 };
