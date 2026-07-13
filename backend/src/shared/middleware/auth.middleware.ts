@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken, JwtPayload } from '../utils/jwt';
-import { PrismaClient } from '../../generated/prisma'; // Adjust path if your generated folder is elsewhere
+import { PrismaClient } from '../../generated/prisma';
 
 const prisma = new PrismaClient();
 
@@ -11,13 +11,13 @@ export interface AuthRequest extends Request {
 }
 
 // ==========================================
-// 1. AUTHENTICATION (Unchanged)
+// 1. AUTHENTICATION + SUBSCRIPTION CHECK (Upgraded)
 // ==========================================
-export const authenticate = (
+export const authenticate = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
-): void => {
+): Promise<void> => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -40,6 +40,48 @@ export const authenticate = (
   }
 
   req.user = decoded;
+
+  // 🌟 SUBSCRIPTION ENFORCEMENT (The "Soft Lock")
+  const propertyId = req.user.propertyId;
+  
+  // ✅ ALLOW READ-ONLY ACCESS: Let them view the dashboard, rooms, and billing page even if expired
+  if (req.method !== 'GET' && propertyId && propertyId !== 0) {
+    try {
+      const property = await prisma.property.findUnique({
+        where: { propertyId },
+        select: { 
+          subscriptionStatus: true, 
+          trialEndsAt: true, 
+          subscriptionEndsAt: true 
+        }
+      });
+
+      if (property) {
+        const now = new Date();
+        
+        // Check if Trial is expired
+        const isTrialExpired = property.subscriptionStatus === 'Trial' && property.trialEndsAt && property.trialEndsAt < now;
+        
+        // Check if Paid Subscription is expired
+        const isSubExpired = property.subscriptionStatus === 'Active' && property.subscriptionEndsAt && property.subscriptionEndsAt < now;
+
+        if (isTrialExpired || isSubExpired) {
+          // 🚨 SOFT LOCK: Block the write request
+          res.status(403).json({ 
+            success: false, 
+            message: 'Your subscription has expired. Please upgrade to continue.',
+            code: 'SUBSCRIPTION_EXPIRED'
+          });
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('Subscription check error:', error);
+      res.status(500).json({ success: false, message: 'Internal server error during subscription check' });
+      return;
+    }
+  }
+
   next();
 };
 
@@ -84,7 +126,7 @@ export const requirePermission = (...requiredPermissions: string[]) => {
     try {
       // 🚀 OPTIMIZATION: Check if permissions are already loaded in this request lifecycle
       let userPermissions = req.userPermissions;
-
+      
       if (!userPermissions) {
         // Fetch the role and its permissions from the database
         const roleWithPermissions = await prisma.role.findUnique({
@@ -110,7 +152,7 @@ export const requirePermission = (...requiredPermissions: string[]) => {
         userPermissions = roleWithPermissions.rolePermissions.map(
           (rp) => rp.permission.code
         );
-        
+
         // 🚀 Cache on the request object so subsequent middlewares don't hit the DB again
         req.userPermissions = userPermissions;
       }
