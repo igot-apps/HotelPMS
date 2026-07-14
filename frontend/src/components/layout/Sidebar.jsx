@@ -1,40 +1,54 @@
 import { NavLink } from 'react-router-dom';
-import { 
-  LayoutDashboard, Search, BedDouble, Users, CalendarDays, CreditCard, BarChart3, 
-  LogOut, Settings, Layers, Tags, Building2, X , Shield 
+import {
+  LayoutDashboard, Search, BedDouble, Users, CalendarDays, CreditCard, BarChart3,
+  LogOut, Settings, Layers, Tags, Building2, X, Shield, Crown // 🌟 Added Crown icon
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
-import RequirePermission from '../RequirePermission'; // Ensure this path is correct
+import RequirePermission from '../RequirePermission'; 
 
 const operationItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/availability', icon: Search, label: 'Check Availability' },
   { to: '/reservations', icon: CalendarDays, label: 'Reservations', permission: 'CanCreateReservation' },
-  { to: '/rooms', icon: BedDouble, label: 'Rooms & Inventory' }, 
+  { to: '/rooms', icon: BedDouble, label: 'Rooms & Inventory' },
   { to: '/guests', icon: Users, label: 'Guests' },
   { to: '/payments', icon: CreditCard, label: 'Payments', permission: 'CanProcessPayments' },
   { to: '/reports', icon: BarChart3, label: 'Reports', permission: 'CanViewFinancialReports' },
 ];
 
 const configItems = [
-  // 🚨 NEW: Room Management link (Visible only to Managers who have 'CanCreateRoom')
   { to: '/room-management', icon: Settings, label: 'Room Management', permission: 'CanCreateRoom' },
-    { to: '/users', icon: Shield, label: 'Staff Management', permission: 'CanManageStaffAndRoles' },
-  
+  { to: '/users', icon: Shield, label: 'Staff Management', permission: 'CanManageStaffAndRoles' },
   { to: '/room-types', icon: Layers, label: 'Room Types', permission: 'CanCreateRoomType' },
   { to: '/rate-plans', icon: Tags, label: 'Rate Plans', permission: 'CanManageRates' },
   { to: '/properties', icon: Building2, label: 'Properties' },
 ];
 
+// 🌟 NEW: Account / SaaS Items
+const accountItems = [
+  // We use 'CanManageStaffAndRoles' so it works immediately with your current DB!
+  // Only Managers have this permission, so Receptionists won't see the Billing link.
+  { to: '/billing', icon: Crown, label: 'Billing & Plan', permission: 'CanManageStaffAndRoles' }, 
+];
+
 export default function Sidebar({ isOpen, onClose }) {
   const logout = useAuthStore((state) => state.logout);
+  const user = useAuthStore((state) => state.user); // 🌟 Get user for trial check
   const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
+
+  // Helper to check if trial is expiring soon (for the pulsing dot)
+  const getDaysLeft = () => {
+    if (!user?.trialEndsAt || user?.subscriptionStatus === 'Active') return 99;
+    const diff = new Date(user.trialEndsAt) - new Date();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  };
+  const daysLeft = getDaysLeft();
 
   const renderLinks = (items) => (
     items.map((item) => {
@@ -45,19 +59,23 @@ export default function Sidebar({ isOpen, onClose }) {
             onClick={onClose}
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive
-                  ? 'bg-primary-600/20 text-primary-400 border-l-4 border-primary-500'
+                isActive 
+                  ? 'bg-primary-600/20 text-primary-400 border-l-4 border-primary-500' 
                   : 'text-secondary-300 hover:bg-secondary-800 hover:text-text-inverted'
               }`
             }
           >
             <item.icon size={20} />
-            {item.label}
+            <span className="flex-1">{item.label}</span>
+            
+            {/* 🌟 Premium UX: Pulsing red dot if trial is expiring in 3 days or less */}
+            {item.to === '/billing' && user?.subscriptionStatus === 'Trial' && daysLeft <= 3 && (
+              <span className="ml-auto w-2.5 h-2.5 bg-danger-500 rounded-full animate-pulse"></span>
+            )}
           </NavLink>
         </li>
       );
 
-      // If the item has a permission property, wrap it in RequirePermission
       if (item.permission) {
         return (
           <RequirePermission key={item.to} permission={item.permission}>
@@ -65,15 +83,12 @@ export default function Sidebar({ isOpen, onClose }) {
           </RequirePermission>
         );
       }
-
       return linkElement;
     })
   );
 
   return (
-    <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-secondary-900 text-secondary-300 flex flex-col transition-transform duration-300 ease-in-out 
-      ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
-      
+    <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-secondary-900 text-secondary-300 flex flex-col transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
       <div className="p-6 border-b border-secondary-700 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-text-inverted">🏨 Hotel PMS</h1>
@@ -83,20 +98,29 @@ export default function Sidebar({ isOpen, onClose }) {
           <X size={20} />
         </button>
       </div>
-
+      
       <nav className="flex-1 overflow-y-auto py-4 px-3">
         <p className="px-4 mb-2 text-xs font-bold text-secondary-500 uppercase tracking-wider">Operations</p>
         <ul className="space-y-1 mb-6">
           {renderLinks(operationItems)}
         </ul>
-
+        
         <div className="border-t border-secondary-700 my-4"></div>
         
         <p className="px-4 mb-2 text-xs font-bold text-secondary-500 uppercase tracking-wider flex items-center gap-2">
           <Settings size={12} /> Configuration
         </p>
-        <ul className="space-y-1">
+        <ul className="space-y-1 mb-6">
           {renderLinks(configItems)}
+        </ul>
+
+        {/* 🌟 NEW: Account Section */}
+        <div className="border-t border-secondary-700 my-4"></div>
+        <p className="px-4 mb-2 text-xs font-bold text-secondary-500 uppercase tracking-wider flex items-center gap-2">
+          <Crown size={12} /> Account
+        </p>
+        <ul className="space-y-1">
+          {renderLinks(accountItems)}
         </ul>
       </nav>
 
