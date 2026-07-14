@@ -1,11 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { initializeSubscriptionPayment } from '../api/billing';
-import { CreditCard, Smartphone, Calendar, CheckCircle2, AlertTriangle, Loader2, Tag, ShieldCheck } from 'lucide-react';
+import { initializeSubscriptionPayment, verifyPayment } from '../api/billing';
+import { CreditCard, Smartphone, Calendar, CheckCircle2, AlertTriangle, Loader2, Tag, ShieldCheck, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function BillingPage() {
   const { user } = useAuthStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const hasVerifiedRef = useRef(false); // 🔒 Lock to prevent React Strict Mode double-firing
+  
   const [isPaying, setIsPaying] = useState(false);
   const [selectedDuration, setSelectedDuration] = useState(1);
 
@@ -17,7 +21,7 @@ export default function BillingPage() {
 
   const currentTier = pricingTiers.find(t => t.months === selectedDuration);
 
-  // 🌟 UPGRADED: Checks BOTH Trial and Paid Subscription dates
+  // 🌟 BULLETPROOF STATUS CHECKER
   const getSubscriptionStatus = () => {
     const today = new Date();
 
@@ -27,12 +31,8 @@ export default function BillingPage() {
       if (!isNaN(subEnd.getTime())) {
         const diffTime = subEnd - today;
         const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
-        if (daysLeft > 0) {
-          return { status: 'Active', daysLeft, isExpired: false, endDate: subEnd.toLocaleDateString() };
-        } else {
-          return { status: 'Expired', daysLeft: 0, isExpired: true, endDate: subEnd.toLocaleDateString() };
-        }
+        if (daysLeft > 0) return { status: 'Active', daysLeft, isExpired: false, endDate: subEnd.toLocaleDateString() };
+        else return { status: 'Expired', daysLeft: 0, isExpired: true, endDate: subEnd.toLocaleDateString() };
       }
     }
 
@@ -46,11 +46,37 @@ export default function BillingPage() {
       }
     }
 
-    // 3. Fallback
+    // 3. Fallback (Prevents "null" crashes)
     return { status: 'Unknown', daysLeft: 0, isExpired: false, endDate: null };
   };
 
   const subInfo = getSubscriptionStatus();
+
+  // 🌟 AUTO-VERIFY FALLBACK: Catches the redirect from Paystack
+  useEffect(() => {
+    const reference = searchParams.get('reference') || searchParams.get('trxref');
+    
+    if (reference && !hasVerifiedRef.current) {
+      hasVerifiedRef.current = true; // 🔒 Lock
+      setSearchParams({}); // Clean URL
+
+      const activateSubscription = async () => {
+        const toastId = toast.loading('Verifying your payment...');
+        try {
+          const res = await verifyPayment(reference);
+          if (res.data.data.status === 'success') {
+            toast.success('🎉 Payment successful! Reloading your dashboard...', { id: toastId });
+            setTimeout(() => window.location.reload(), 1500); 
+          } else {
+            toast.error('Payment was not completed successfully.', { id: toastId });
+          }
+        } catch (error) {
+          toast.error('Payment verification failed.', { id: toastId });
+        }
+      };
+      activateSubscription();
+    }
+  }, [searchParams, setSearchParams]);
 
   const handleUpgrade = async (e) => {
     e.preventDefault();
@@ -66,7 +92,7 @@ export default function BillingPage() {
       });
 
       if (response.data.success) {
-        toast.success(`Redirecting to Paystack to pay ${currentTier.price} GHS...`);
+        toast.success(`Redirecting to Paystack...`);
         window.location.href = response.data.data.authorization_url;
       } else {
         toast.error(response.data.message || 'Failed to initialize payment');
@@ -110,7 +136,7 @@ export default function BillingPage() {
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-warning-50 text-warning-700 ring-1 ring-warning-600/20">
-                    <Calendar size={14} /> {subInfo.daysLeft} Days Left in Trial
+                    <Calendar size={14} /> {subInfo.daysLeft || 0} Days Left in Trial
                   </span>
                 )}
               </div>
@@ -121,7 +147,7 @@ export default function BillingPage() {
                   ? `🎉 Your subscription is active! It expires on ${subInfo.endDate}.` 
                   : subInfo.isExpired 
                     ? 'Your subscription or trial has ended. Please upgrade to continue using the PMS.' 
-                    : `Enjoy full access to the PMS. Your free trial will end on ${subInfo.endDate}.`}
+                    : `Enjoy full access to the PMS. Your free trial will end on ${subInfo.endDate || 'soon'}.`}
               </p>
             </div>
           </div>
@@ -166,7 +192,7 @@ export default function BillingPage() {
               <div>
                 <p className="text-sm font-semibold text-text">Secure Mobile Money Checkout</p>
                 <p className="text-xs text-text-muted mt-1">
-                  Click the button below to be redirected to Paystack's secure checkout page, where you will be prompted to enter your Mobile Money number and authorize the payment.
+                  Click the button below to be redirected to Paystack's secure checkout page.
                 </p>
               </div>
             </div>
