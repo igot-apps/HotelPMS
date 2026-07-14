@@ -21,7 +21,8 @@ export interface LoginResponse {
     // 🌟 NEW: Subscription & Trial fields added to the interface
     subscriptionPlan: string;
     subscriptionStatus: string;
-    trialEndsAt: Date | null; 
+    trialEndsAt: Date | null;
+    subscriptionEndsAt: Date | null; 
   };
   message?: string;
 }
@@ -76,6 +77,7 @@ export const loginUser = async (
       subscriptionPlan: user.property.subscriptionPlan,
       subscriptionStatus: user.property.subscriptionStatus,
       trialEndsAt: user.property.trialEndsAt,
+      subscriptionEndsAt: user.property.subscriptionEndsAt, // 
       permissions,
     },
   };

@@ -29,9 +29,12 @@ const app: Express = express();
 app.use(helmet());
 app.use(cors());
 
-// ⚠️ CRITICAL: Parse raw body specifically for the Paystack Webhook.
-// This MUST come BEFORE express.json() to ensure signature verification works!
-app.use('/api/paystack/webhook', express.raw({ type: 'application/json' }));
+// ⚠️ CRITICAL: Parse raw body specifically for Paystack Webhooks.
+// 1. Platform SaaS Billing Webhook
+app.use('/api/paystack/webhooks/platform', express.raw({ type: 'application/json' }));
+
+// 2. Future: Hotel Guest Booking Webhooks (We will uncomment this in Phase 3)
+// app.use('/api/paystack/webhooks/hotels/:propertyId', express.raw({ type: 'application/json' }));
 
 // Standard JSON parsing for everything else
 app.use(express.json());

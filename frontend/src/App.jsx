@@ -31,7 +31,7 @@ function App() {
       <Toaster
         position="top-right"
         toastOptions={{
-          duration: 8000,
+          duration: 4000,
           style: {
             background: 'rgba(255, 255, 255, 0.7)',
             backdropFilter: 'blur(12px)',

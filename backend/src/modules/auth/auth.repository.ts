@@ -28,6 +28,7 @@ export const findUserByUsernameOrEmail = async (identifier: string) => {
         subscriptionPlan: true,
         subscriptionStatus: true,
         trialEndsAt: true,
+        subscriptionEndsAt: true, // 🌟 NEW: Tell Prisma to fetch the paid expiration date
       },
     },
     },

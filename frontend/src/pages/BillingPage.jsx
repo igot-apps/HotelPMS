@@ -6,13 +6,9 @@ import toast from 'react-hot-toast';
 
 export default function BillingPage() {
   const { user } = useAuthStore();
-  
   const [isPaying, setIsPaying] = useState(false);
-  
-  // 🌟 State for selected billing duration
   const [selectedDuration, setSelectedDuration] = useState(1);
 
-  // 🌟 PRICING CONFIG (Must match backend)
   const pricingTiers = [
     { months: 1, label: 'Monthly', price: 200, discount: '' },
     { months: 3, label: 'Quarterly', price: 550, discount: 'Save 50 GHS' },
@@ -21,46 +17,48 @@ export default function BillingPage() {
 
   const currentTier = pricingTiers.find(t => t.months === selectedDuration);
 
-  // Calculate Trial Days Remaining (Bulletproof)
-    const getTrialStatus = () => {
-    // 1. If Active, ignore trial dates completely!
-    if (user?.subscriptionStatus === 'Active') {
-      return { status: 'Active', daysLeft: 0, isExpired: false };
-    }
-    
-    // 2. Prevent "Invalid Date" or 1970 glitches
-    if (!user?.trialEndsAt) {
-      return { status: 'Unknown', daysLeft: 0, isExpired: false };
-    }
-    
-    const trialEnd = new Date(user.trialEndsAt);
+  // 🌟 UPGRADED: Checks BOTH Trial and Paid Subscription dates
+  const getSubscriptionStatus = () => {
     const today = new Date();
-    
-    // 3. If the date is invalid (like 1970), default to Unknown
-    if (isNaN(trialEnd.getTime())) {
-      return { status: 'Unknown', daysLeft: 0, isExpired: false };
+
+    // 1. Check Paid Subscription First
+    if (user?.subscriptionStatus === 'Active' && user?.subscriptionEndsAt) {
+      const subEnd = new Date(user.subscriptionEndsAt);
+      if (!isNaN(subEnd.getTime())) {
+        const diffTime = subEnd - today;
+        const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (daysLeft > 0) {
+          return { status: 'Active', daysLeft, isExpired: false, endDate: subEnd.toLocaleDateString() };
+        } else {
+          return { status: 'Expired', daysLeft: 0, isExpired: true, endDate: subEnd.toLocaleDateString() };
+        }
+      }
     }
 
-    const diffTime = trialEnd - today;
-    const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    return { 
-      status: daysLeft > 0 ? 'Trial' : 'Expired', 
-      daysLeft: Math.max(0, daysLeft), 
-      isExpired: daysLeft <= 0 
-    };
+    // 2. Check Trial
+    if (user?.subscriptionStatus === 'Trial' && user?.trialEndsAt) {
+      const trialEnd = new Date(user.trialEndsAt);
+      if (!isNaN(trialEnd.getTime())) {
+        const diffTime = trialEnd - today;
+        const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return { status: daysLeft > 0 ? 'Trial' : 'Expired', daysLeft: Math.max(0, daysLeft), isExpired: daysLeft <= 0, endDate: trialEnd.toLocaleDateString() };
+      }
+    }
+
+    // 3. Fallback
+    return { status: 'Unknown', daysLeft: 0, isExpired: false, endDate: null };
   };
 
-  const trialInfo = getTrialStatus();
+  const subInfo = getSubscriptionStatus();
 
   const handleUpgrade = async (e) => {
     e.preventDefault();
-
     setIsPaying(true);
     try {
       const response = await initializeSubscriptionPayment({
         email: user.email || 'manager@hotel.com',
-        phone: '0240000000', // 🌟 Placeholder: Paystack will ask the user for their actual number on the checkout page
+        phone: '0240000000', 
         callbackUrl: window.location.origin + '/billing',
         propertyId: user.propertyId,
         planName: 'Pro',
@@ -82,7 +80,6 @@ export default function BillingPage() {
 
   return (
     <div className="space-y-8 max-w-4xl mx-auto">
-      {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-text tracking-tight">Billing & Subscription</h1>
         <p className="text-text-muted mt-1">Manage your hotel's subscription plan and payment methods.</p>
@@ -103,34 +100,34 @@ export default function BillingPage() {
             <div>
               <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">Status</p>
               <div className="flex items-center gap-2">
-                {trialInfo.status === 'Active' ? (
+                {subInfo.status === 'Active' ? (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-success-50 text-success-700 ring-1 ring-success-600/20">
-                    <CheckCircle2 size={14} /> Active
+                    <CheckCircle2 size={14} /> Active ({subInfo.daysLeft} Days Left)
                   </span>
-                ) : trialInfo.isExpired ? (
+                ) : subInfo.isExpired ? (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-danger-50 text-danger-700 ring-1 ring-danger-600/20">
                     <AlertTriangle size={14} /> Expired
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-warning-50 text-warning-700 ring-1 ring-warning-600/20">
-                    <Calendar size={14} /> {trialInfo.daysLeft} Days Left in Trial
+                    <Calendar size={14} /> {subInfo.daysLeft} Days Left in Trial
                   </span>
                 )}
               </div>
             </div>
             <div className="pt-4 border-t border-border">
               <p className="text-sm text-text-muted">
-                {trialInfo.status === 'Active' 
-                  ? 'Your subscription is active. You have full access to all features.' 
-                  : trialInfo.isExpired 
-                    ? 'Your free trial has ended. Please upgrade to continue using the PMS.' 
-                    : `Enjoy full access to the PMS. Your free trial will end on ${new Date(user.trialEndsAt).toLocaleDateString()}.`}
+                {subInfo.status === 'Active' 
+                  ? `🎉 Your subscription is active! It expires on ${subInfo.endDate}.` 
+                  : subInfo.isExpired 
+                    ? 'Your subscription or trial has ended. Please upgrade to continue using the PMS.' 
+                    : `Enjoy full access to the PMS. Your free trial will end on ${subInfo.endDate}.`}
               </p>
             </div>
           </div>
         </div>
 
-        {/* 🌟 Card 2: Upgrade / Select Duration */}
+        {/* Card 2: Upgrade / Select Duration */}
         <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 bg-success-50 rounded-lg"><Smartphone size={20} className="text-success-600" /></div>
@@ -138,7 +135,6 @@ export default function BillingPage() {
           </div>
 
           <form onSubmit={handleUpgrade} className="space-y-6">
-            {/* Duration Selector */}
             <div>
               <label className="block text-sm font-semibold text-text mb-2">Select Billing Duration</label>
               <div className="grid grid-cols-3 gap-2">
@@ -165,7 +161,6 @@ export default function BillingPage() {
               </div>
             </div>
 
-            {/* 🌟 NEW: Simplified Info Box (Replaces the input field) */}
             <div className="bg-secondary-50 border border-secondary-200 rounded-xl p-4 flex items-start gap-3">
               <ShieldCheck size={20} className="text-secondary-600 mt-0.5 flex-shrink-0" />
               <div>
