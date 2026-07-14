@@ -1,29 +1,48 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { initializeSubscriptionPayment } from '../api/billing';
-import { CreditCard, Smartphone, Calendar, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
+import { CreditCard, Smartphone, Calendar, CheckCircle2, AlertTriangle, Loader2, Tag, ShieldCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function BillingPage() {
-  const navigate = useNavigate();
   const { user } = useAuthStore();
   
-  const [phoneNumber, setPhoneNumber] = useState('');
   const [isPaying, setIsPaying] = useState(false);
+  
+  // 🌟 State for selected billing duration
+  const [selectedDuration, setSelectedDuration] = useState(1);
 
-  // 🌟 Calculate Trial Days Remaining
-  const getTrialStatus = () => {
-    if (!user?.trialEndsAt) return { status: 'Unknown', daysLeft: 0, isExpired: false };
+  // 🌟 PRICING CONFIG (Must match backend)
+  const pricingTiers = [
+    { months: 1, label: 'Monthly', price: 200, discount: '' },
+    { months: 3, label: 'Quarterly', price: 550, discount: 'Save 50 GHS' },
+    { months: 12, label: 'Yearly', price: 2000, discount: '2 Months Free!' },
+  ];
+
+  const currentTier = pricingTiers.find(t => t.months === selectedDuration);
+
+  // Calculate Trial Days Remaining (Bulletproof)
+    const getTrialStatus = () => {
+    // 1. If Active, ignore trial dates completely!
+    if (user?.subscriptionStatus === 'Active') {
+      return { status: 'Active', daysLeft: 0, isExpired: false };
+    }
+    
+    // 2. Prevent "Invalid Date" or 1970 glitches
+    if (!user?.trialEndsAt) {
+      return { status: 'Unknown', daysLeft: 0, isExpired: false };
+    }
     
     const trialEnd = new Date(user.trialEndsAt);
     const today = new Date();
+    
+    // 3. If the date is invalid (like 1970), default to Unknown
+    if (isNaN(trialEnd.getTime())) {
+      return { status: 'Unknown', daysLeft: 0, isExpired: false };
+    }
+
     const diffTime = trialEnd - today;
     const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    if (user.subscriptionStatus === 'Active') {
-      return { status: 'Active', daysLeft: 0, isExpired: false };
-    }
     
     return { 
       status: daysLeft > 0 ? 'Trial' : 'Expired', 
@@ -33,37 +52,29 @@ export default function BillingPage() {
   };
 
   const trialInfo = getTrialStatus();
-  const subscriptionPrice = 200; // Example: 200 GHS per month
 
   const handleUpgrade = async (e) => {
     e.preventDefault();
-    
-    if (!phoneNumber || phoneNumber.length < 10) {
-      toast.error('Please enter a valid Mobile Money number (e.g., 0551234567)');
-      return;
-    }
 
     setIsPaying(true);
     try {
       const response = await initializeSubscriptionPayment({
-        email: user.email || 'manager@hotel.com', // Fallback if email is missing
-        amount: subscriptionPrice,
-        phone: phoneNumber,
+        email: user.email || 'manager@hotel.com',
+        phone: '0240000000', // 🌟 Placeholder: Paystack will ask the user for their actual number on the checkout page
         callbackUrl: window.location.origin + '/billing',
         propertyId: user.propertyId,
-        planName: 'Pro', // Upgrading from Starter to Pro
+        planName: 'Pro',
+        durationMonths: selectedDuration,
       });
 
       if (response.data.success) {
-        toast.success('Redirecting to Paystack Mobile Money...');
-        // 🌟 Redirect the user to the Paystack checkout page
+        toast.success(`Redirecting to Paystack to pay ${currentTier.price} GHS...`);
         window.location.href = response.data.data.authorization_url;
       } else {
         toast.error(response.data.message || 'Failed to initialize payment');
       }
     } catch (error) {
-      console.error('Payment initialization error:', error);
-      toast.error(error.response?.data?.message || 'An error occurred. Please try again.');
+      toast.error(error.response?.data?.message || 'An error occurred.');
     } finally {
       setIsPaying(false);
     }
@@ -78,21 +89,17 @@ export default function BillingPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* 🌟 Card 1: Current Plan Status */}
+        {/* Card 1: Current Plan Status */}
         <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-primary-50 rounded-lg">
-              <CreditCard size={20} className="text-primary-600" />
-            </div>
+            <div className="p-2 bg-primary-50 rounded-lg"><CreditCard size={20} className="text-primary-600" /></div>
             <h2 className="text-lg font-bold text-text">Current Plan</h2>
           </div>
-
           <div className="space-y-4">
             <div>
               <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">Plan Name</p>
               <p className="text-2xl font-bold text-text">{user?.subscriptionPlan || 'Starter'}</p>
             </div>
-
             <div>
               <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">Status</p>
               <div className="flex items-center gap-2">
@@ -111,7 +118,6 @@ export default function BillingPage() {
                 )}
               </div>
             </div>
-
             <div className="pt-4 border-t border-border">
               <p className="text-sm text-text-muted">
                 {trialInfo.status === 'Active' 
@@ -124,41 +130,50 @@ export default function BillingPage() {
           </div>
         </div>
 
-        {/* 🌟 Card 2: Upgrade / Pay via Mobile Money */}
+        {/* 🌟 Card 2: Upgrade / Select Duration */}
         <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-success-50 rounded-lg">
-              <Smartphone size={20} className="text-success-600" />
-            </div>
+            <div className="p-2 bg-success-50 rounded-lg"><Smartphone size={20} className="text-success-600" /></div>
             <h2 className="text-lg font-bold text-text">Upgrade Subscription</h2>
           </div>
 
-          <form onSubmit={handleUpgrade} className="space-y-5">
+          <form onSubmit={handleUpgrade} className="space-y-6">
+            {/* Duration Selector */}
             <div>
-              <p className="text-sm text-text-muted mb-3">
-                Upgrade to the <span className="font-bold text-text">Pro Plan</span> for uninterrupted access.
-              </p>
-              <div className="text-3xl font-bold text-text mb-4">
-                {subscriptionPrice} GHS <span className="text-sm font-normal text-text-muted">/ month</span>
+              <label className="block text-sm font-semibold text-text mb-2">Select Billing Duration</label>
+              <div className="grid grid-cols-3 gap-2">
+                {pricingTiers.map((tier) => (
+                  <button
+                    key={tier.months}
+                    type="button"
+                    onClick={() => setSelectedDuration(tier.months)}
+                    className={`relative p-3 rounded-xl border-2 text-center transition-all ${
+                      selectedDuration === tier.months
+                        ? 'border-success-500 bg-success-50/50 shadow-md'
+                        : 'border-border hover:border-success-200 bg-background'
+                    }`}
+                  >
+                    {tier.discount && (
+                      <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-warning-100 text-warning-700 text-[10px] font-bold rounded-full flex items-center gap-0.5 whitespace-nowrap">
+                        <Tag size={8} /> {tier.discount}
+                      </span>
+                    )}
+                    <p className="text-xs font-semibold text-text-muted uppercase">{tier.label}</p>
+                    <p className="text-lg font-bold text-text mt-1">{tier.price} GHS</p>
+                  </button>
+                ))}
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-text mb-1.5">
-                Mobile Money Number
-              </label>
-              <input
-                type="tel"
-                placeholder="e.g., 0551234567"
-                value={phoneNumber}
-                // 🚨 CRITICAL: Automatically remove any spaces the user types
-                onChange={(e) => setPhoneNumber(e.target.value.replace(/\s+/g, ''))} 
-                className="w-full px-4 py-3 bg-background border border-border rounded-xl text-text placeholder:text-text-muted outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
-                required
-                />
-              <p className="text-xs text-text-muted mt-1.5">
-                A prompt will be sent to this number to authorize the payment.
-              </p>
+            {/* 🌟 NEW: Simplified Info Box (Replaces the input field) */}
+            <div className="bg-secondary-50 border border-secondary-200 rounded-xl p-4 flex items-start gap-3">
+              <ShieldCheck size={20} className="text-secondary-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-text">Secure Mobile Money Checkout</p>
+                <p className="text-xs text-text-muted mt-1">
+                  Click the button below to be redirected to Paystack's secure checkout page, where you will be prompted to enter your Mobile Money number and authorize the payment.
+                </p>
+              </div>
             </div>
 
             <button
@@ -167,13 +182,9 @@ export default function BillingPage() {
               className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-success-600 text-text-inverted font-semibold rounded-xl hover:bg-success-700 transition shadow-lg shadow-success-600/20 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {isPaying ? (
-                <>
-                  <Loader2 className="animate-spin" size={18} /> Initializing Payment...
-                </>
+                <><Loader2 className="animate-spin" size={18} /> Initializing Payment...</>
               ) : (
-                <>
-                  <Smartphone size={18} /> Pay {subscriptionPrice} GHS with MoMo
-                </>
+                <><Smartphone size={18} /> Pay {currentTier.price} GHS for {currentTier.months} Month{currentTier.months > 1 ? 's' : ''}</>
               )}
             </button>
           </form>
@@ -181,4 +192,4 @@ export default function BillingPage() {
       </div>
     </div>
   );
-}  
+}
