@@ -270,7 +270,7 @@ export default function BillingPage() {
               className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-success-600 text-text-inverted font-semibold rounded-xl hover:bg-success-700 transition shadow-lg shadow-success-600/20 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {isPaying ? (
-                <><Loader2 className="animate-spin" size={18} /> Initializing...</>
+                <><Loader2 className="animate-spin" size={18} /> Initializing... </>
               ) : (
                 <><Smartphone size={18} /> Pay {currentTier.price} GHS for {currentTier.months} Month{currentTier.months > 1 ? 's' : ''}</>
               )}
@@ -280,4 +280,4 @@ export default function BillingPage() {
       </div>
     </div>
   );
-}
+} 
