@@ -4,14 +4,13 @@ import { PrismaClient } from '../../generated/prisma';
 
 const prisma = new PrismaClient();
 
-// Extend the AuthRequest interface to include permissions for this request lifecycle
 export interface AuthRequest extends Request {
   user?: JwtPayload;
-  userPermissions?: string[]; // 🚨 NEW: Stores permissions so we don't query the DB multiple times per request
+  userPermissions?: string[];
 }
 
 // ==========================================
-// 1. AUTHENTICATION + SUBSCRIPTION CHECK (Upgraded)
+// 1. AUTHENTICATION + THE "SOFT LOCK"
 // ==========================================
 export const authenticate = async (
   req: AuthRequest,
@@ -21,10 +20,7 @@ export const authenticate = async (
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({
-      success: false,
-      message: 'No token provided',
-    });
+    res.status(401).json({ success: false, message: 'No token provided' });
     return;
   }
 
@@ -32,56 +28,47 @@ export const authenticate = async (
   const decoded = verifyAccessToken(token);
 
   if (!decoded) {
-    res.status(401).json({
-      success: false,
-      message: 'Invalid or expired token',
-    });
+    res.status(401).json({ success: false, message: 'Invalid or expired token' });
     return;
   }
 
+  // 1. User is verified, attach to request
   req.user = decoded;
 
-  // 🌟 SUBSCRIPTION ENFORCEMENT (The "Soft Lock")
+  // 🚨 2. THE SOFT LOCK: Check subscription immediately!
   const propertyId = req.user.propertyId;
   
-  // ✅ ALLOW READ-ONLY ACCESS: Let them view the dashboard, rooms, and billing page even if expired
+  // Only block WRITE requests (POST, PUT, DELETE, PATCH). Allow GET (reading) so they can see the billing page.
   if (req.method !== 'GET' && propertyId && propertyId !== 0) {
     try {
       const property = await prisma.property.findUnique({
         where: { propertyId },
-        select: { 
-          subscriptionStatus: true, 
-          trialEndsAt: true, 
-          subscriptionEndsAt: true 
-        }
+        select: { subscriptionStatus: true, trialEndsAt: true, subscriptionEndsAt: true }
       });
 
       if (property) {
         const now = new Date();
         
-        // Check if Trial is expired
         const isTrialExpired = property.subscriptionStatus === 'Trial' && property.trialEndsAt && property.trialEndsAt < now;
-        
-        // Check if Paid Subscription is expired
         const isSubExpired = property.subscriptionStatus === 'Active' && property.subscriptionEndsAt && property.subscriptionEndsAt < now;
+        const isStatusExpired = property.subscriptionStatus === 'Expired';
 
-        if (isTrialExpired || isSubExpired) {
-          // 🚨 SOFT LOCK: Block the write request
+        // 🚫 BLOCK THE REQUEST IF EXPIRED
+        if (isTrialExpired || isSubExpired || isStatusExpired) {
           res.status(403).json({ 
             success: false, 
             message: 'Your subscription has expired. Please upgrade to continue.',
             code: 'SUBSCRIPTION_EXPIRED'
           });
-          return;
+          return; // STOPS THE REQUEST HERE
         }
       }
     } catch (error) {
       console.error('Subscription check error:', error);
-      res.status(500).json({ success: false, message: 'Internal server error during subscription check' });
-      return;
     }
   }
 
+  // 3. If all good, proceed to the route
   next();
 };
 
@@ -91,77 +78,41 @@ export const authenticate = async (
 export const requireRole = (allowedRoleIds: number[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
-      res.status(401).json({
-        success: false,
-        message: 'Authentication required',
-      });
+      res.status(401).json({ success: false, message: 'Authentication required' });
       return;
     }
-
     if (!allowedRoleIds.includes(req.user.roleId)) {
-      res.status(403).json({
-        success: false,
-        message: 'Insufficient permissions',
-      });
+      res.status(403).json({ success: false, message: 'Insufficient permissions' });
       return;
     }
-
     next();
   };
 };
 
 // ==========================================
-// 3. PERMISSION CHECK (Fully Implemented)
+// 3. PERMISSION CHECK (Unchanged)
 // ==========================================
 export const requirePermission = (...requiredPermissions: string[]) => {
   return async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     if (!req.user) {
-      res.status(401).json({
-        success: false,
-        message: 'Authentication required',
-      });
+      res.status(401).json({ success: false, message: 'Authentication required' });
       return;
     }
-
     try {
-      // 🚀 OPTIMIZATION: Check if permissions are already loaded in this request lifecycle
       let userPermissions = req.userPermissions;
-      
       if (!userPermissions) {
-        // Fetch the role and its permissions from the database
         const roleWithPermissions = await prisma.role.findUnique({
           where: { roleId: req.user.roleId },
-          include: {
-            rolePermissions: {
-              include: {
-                permission: true,
-              },
-            },
-          },
+          include: { rolePermissions: { include: { permission: true } } },
         });
-
         if (!roleWithPermissions) {
-          res.status(403).json({
-            success: false,
-            message: 'Access denied. Role not found.',
-          });
+          res.status(403).json({ success: false, message: 'Access denied. Role not found.' });
           return;
         }
-
-        // Extract just the permission codes (e.g., ['CanCreateRoom', 'CanViewRooms'])
-        userPermissions = roleWithPermissions.rolePermissions.map(
-          (rp) => rp.permission.code
-        );
-
-        // 🚀 Cache on the request object so subsequent middlewares don't hit the DB again
+        userPermissions = roleWithPermissions.rolePermissions.map((rp) => rp.permission.code);
         req.userPermissions = userPermissions;
       }
-
-      // Check if the user has ALL the required permissions for this route
-      const hasPermission = requiredPermissions.every((perm) =>
-        userPermissions!.includes(perm)
-      );
-
+      const hasPermission = requiredPermissions.every((perm) => userPermissions!.includes(perm));
       if (!hasPermission) {
         res.status(403).json({
           success: false,
@@ -169,17 +120,12 @@ export const requirePermission = (...requiredPermissions: string[]) => {
         });
         return;
       }
-
       next();
     } catch (error) {
       console.error('Authorization error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Internal server error during authorization.',
-      });
+      res.status(500).json({ success: false, message: 'Internal server error during authorization.' });
     }
   };
 };
 
-// Optional: Alias for convenience if you prefer the name 'authorize' in your routes
 export const authorize = requirePermission;

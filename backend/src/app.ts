@@ -17,7 +17,7 @@ import reportRoutes from './modules/reports/report.routes';
 import userRoutes from './modules/user/user.routes';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import paystackRoutes from './modules/paystack/paystack.routes'; // 🌟 NEW: Paystack Integration
-import { checkSubscription } from './shared/middleware/subscription.middleware';
+
 
 // Load environment variables
 dotenv.config();
@@ -70,9 +70,7 @@ app.get('/', (_req: Request, res: Response) => {
 });
 
 
-// 🌟 Apply Subscription Check to all /api routes
-// (It will skip GET requests, but block POST/PUT/DELETE if expired)
-app.use('/api', checkSubscription);
+
 
 // API Routes
 app.use('/api/auth', authRoutes);

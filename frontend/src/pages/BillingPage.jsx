@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { initializeSubscriptionPayment, verifyPayment } from '../api/billing';
-import { CreditCard, Smartphone, Calendar, CheckCircle2, AlertTriangle, Loader2, Tag, ShieldCheck, RefreshCw } from 'lucide-react';
+import { CreditCard, Smartphone, Calendar, CheckCircle2, AlertTriangle, Loader2, Tag, ShieldCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function BillingPage() {
@@ -24,8 +24,6 @@ export default function BillingPage() {
   // 🌟 BULLETPROOF STATUS CHECKER
   const getSubscriptionStatus = () => {
     const today = new Date();
-
-    // 1. Check Paid Subscription First
     if (user?.subscriptionStatus === 'Active' && user?.subscriptionEndsAt) {
       const subEnd = new Date(user.subscriptionEndsAt);
       if (!isNaN(subEnd.getTime())) {
@@ -35,8 +33,6 @@ export default function BillingPage() {
         else return { status: 'Expired', daysLeft: 0, isExpired: true, endDate: subEnd.toLocaleDateString() };
       }
     }
-
-    // 2. Check Trial
     if (user?.subscriptionStatus === 'Trial' && user?.trialEndsAt) {
       const trialEnd = new Date(user.trialEndsAt);
       if (!isNaN(trialEnd.getTime())) {
@@ -45,30 +41,40 @@ export default function BillingPage() {
         return { status: daysLeft > 0 ? 'Trial' : 'Expired', daysLeft: Math.max(0, daysLeft), isExpired: daysLeft <= 0, endDate: trialEnd.toLocaleDateString() };
       }
     }
-
-    // 3. Fallback (Prevents "null" crashes)
     return { status: 'Unknown', daysLeft: 0, isExpired: false, endDate: null };
   };
 
   const subInfo = getSubscriptionStatus();
 
-  // 🌟 AUTO-VERIFY FALLBACK: Catches the redirect from Paystack
+  // 🌟 THE MAGIC: Auto-detect Paystack redirect and update Zustand store instantly
   useEffect(() => {
     const reference = searchParams.get('reference') || searchParams.get('trxref');
     
     if (reference && !hasVerifiedRef.current) {
       hasVerifiedRef.current = true; // 🔒 Lock
-      setSearchParams({}); // Clean URL
+      setSearchParams({}); // Clean the URL
 
       const activateSubscription = async () => {
         const toastId = toast.loading('Verifying your payment...');
         try {
           const res = await verifyPayment(reference);
-          if (res.data.data.status === 'success') {
-            toast.success('🎉 Payment successful! Reloading your dashboard...', { id: toastId });
-            setTimeout(() => window.location.reload(), 1500); 
+          
+          if (res.data.data.status === 'success' && res.data.updatedProperty) {
+            // 🚀 CRITICAL: Push the fresh data directly into the Zustand store!
+            // This updates the UI instantly without needing a logout/login.
+            useAuthStore.setState({
+              user: {
+                ...user,
+                subscriptionPlan: res.data.updatedProperty.subscriptionPlan,
+                subscriptionStatus: res.data.updatedProperty.subscriptionStatus,
+                trialEndsAt: res.data.updatedProperty.trialEndsAt,
+                subscriptionEndsAt: res.data.updatedProperty.subscriptionEndsAt,
+              }
+            });
+            
+            toast.success('🎉 Payment successful! Your subscription is now active.', { id: toastId });
           } else {
-            toast.error('Payment was not completed successfully.', { id: toastId });
+            toast.success('Payment verified!', { id: toastId });
           }
         } catch (error) {
           toast.error('Payment verification failed.', { id: toastId });
@@ -76,7 +82,7 @@ export default function BillingPage() {
       };
       activateSubscription();
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, user]);
 
   const handleUpgrade = async (e) => {
     e.preventDefault();
@@ -94,8 +100,6 @@ export default function BillingPage() {
       if (response.data.success) {
         toast.success(`Redirecting to Paystack...`);
         window.location.href = response.data.data.authorization_url;
-      } else {
-        toast.error(response.data.message || 'Failed to initialize payment');
       }
     } catch (error) {
       toast.error(error.response?.data?.message || 'An error occurred.');
@@ -153,7 +157,7 @@ export default function BillingPage() {
           </div>
         </div>
 
-        {/* Card 2: Upgrade / Select Duration */}
+        {/* Card 2: Upgrade */}
         <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 bg-success-50 rounded-lg"><Smartphone size={20} className="text-success-600" /></div>
@@ -187,12 +191,12 @@ export default function BillingPage() {
               </div>
             </div>
 
-            <div className="bg-secondary-50 border border-secondary-200 rounded-xl p-4 flex items-start gap-3">
+            <div className="bg-secondary-50 border border-secondary-200 rounded-xl p-4 flex items-center-start gap-3">
               <ShieldCheck size={20} className="text-secondary-600 mt-0.5 flex-shrink-0" />
               <div>
                 <p className="text-sm font-semibold text-text">Secure Mobile Money Checkout</p>
                 <p className="text-xs text-text-muted mt-1">
-                  Click the button below to be redirected to Paystack's secure checkout page.
+                  You will be redirected to Paystack to complete your payment securely.
                 </p>
               </div>
             </div>
@@ -203,7 +207,7 @@ export default function BillingPage() {
               className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-success-600 text-text-inverted font-semibold rounded-xl hover:bg-success-700 transition shadow-lg shadow-success-600/20 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {isPaying ? (
-                <><Loader2 className="animate-spin" size={18} /> Initializing Payment...</>
+                <><Loader2 className="animate-spin" size={18} /> Initializing...</>
               ) : (
                 <><Smartphone size={18} /> Pay {currentTier.price} GHS for {currentTier.months} Month{currentTier.months > 1 ? 's' : ''}</>
               )}
