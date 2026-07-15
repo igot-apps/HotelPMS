@@ -13,7 +13,7 @@ export default function BillingPage() {
   const [isPaying, setIsPaying] = useState(false);
   const [selectedDuration, setSelectedDuration] = useState(1);
   
-  // 🌟 FRESH DATA STATE: Holds the live truth from the database
+  // 🌟 FRESH DATA STATE
   const [freshData, setFreshData] = useState(null);
   const [isLoadingStatus, setIsLoadingStatus] = useState(true);
 
@@ -32,17 +32,8 @@ export default function BillingPage() {
         const res = await fetchSubscriptionStatus();
         if (res.data.success) {
           setFreshData(res.data.data);
-          
-          // 🌟 SYNC BACK TO ZUSTAND: Update localStorage so the Sidebar/Navbar knows too!
-          useAuthStore.setState({
-            user: {
-              ...user,
-              subscriptionPlan: res.data.data.subscriptionPlan,
-              subscriptionStatus: res.data.data.subscriptionStatus,
-              trialEndsAt: res.data.data.trialEndsAt,
-              subscriptionEndsAt: res.data.data.subscriptionEndsAt,
-            }
-          });
+          // Sync back to Zustand so the rest of the app knows
+          useAuthStore.setState({ user: { ...user, ...res.data.data } });
         }
       } catch (error) {
         console.error('Failed to fetch fresh subscription status', error);
@@ -53,86 +44,65 @@ export default function BillingPage() {
     getLiveStatus();
   }, []);
 
-  // 🌟 2. HANDLE PAYSTACK REDIRECT & INSTANT UPDATE
+  // 🌟 2. HANDLE PAYSTACK REDIRECT SAFELY
   useEffect(() => {
     const reference = searchParams.get('reference') || searchParams.get('trxref');
     
+    // Only run if we have a reference AND we haven't verified it yet
     if (reference && !hasVerifiedRef.current) {
       hasVerifiedRef.current = true;
-      setSearchParams({});
+      setSearchParams({}); // 🧹 Clean the URL immediately to prevent 404s on refresh
 
       const activateSubscription = async () => {
         const toastId = toast.loading('Verifying your payment...');
         try {
           const res = await verifyPayment(reference);
           if (res.data.data.status === 'success') {
-            toast.success('🎉 Payment successful! Your subscription is now active.', { id: toastId });
+            toast.success('🎉 Payment successful! Updating dashboard...', { id: toastId });
             
-            // Fetch the fresh data immediately after payment to update the UI
+            // Fetch the fresh data immediately after payment
             const freshRes = await fetchSubscriptionStatus();
             if (freshRes.data.success) {
               setFreshData(freshRes.data.data);
-              useAuthStore.setState({
-                user: { ...user, ...freshRes.data.data }
-              });
+              useAuthStore.setState({ user: { ...user, ...freshRes.data.data } });
             }
           } else {
-            toast.error('Payment was not completed successfully.', { id: toastId });
+            toast.error('Payment was not completed.', { id: toastId });
           }
         } catch (error) {
-          toast.error('Payment verification failed.', { id: toastId });
+          // If Paystack says "resource not found", we just ignore it and load the page normally
+          toast.error('Payment verification skipped.', { id: toastId });
         }
       };
       activateSubscription();
     }
   }, [searchParams, setSearchParams, user]);
 
-  // 🌟 3. BULLETPROOF STATUS CALCULATOR (Uses freshData, handles 'Expired' explicitly)
+  // 🌟 3. BULLETPROOF STATUS CALCULATOR
   const getSubscriptionStatus = () => {
-    if (!freshData) return { status: 'Loading', daysLeft: 0, isExpired: false, endDate: null };
-
+    const data = freshData || user;
+    if (!data) return { status: 'Loading', daysLeft: 0, isExpired: false, endDate: null };
     const today = new Date();
 
-    // 🚨 EXPLICITLY CHECK FOR EXPIRED STATUS (Fixes the confusion!)
-    if (freshData.subscriptionStatus === 'Expired') {
-      return { 
-        status: 'Expired', 
-        daysLeft: 0, 
-        isExpired: true, 
-        endDate: freshData.subscriptionEndsAt ? new Date(freshData.subscriptionEndsAt).toLocaleDateString() : 'N/A'
-      };
+    if (data.subscriptionStatus === 'Expired') {
+      return { status: 'Expired', daysLeft: 0, isExpired: true, endDate: data.subscriptionEndsAt ? new Date(data.subscriptionEndsAt).toLocaleDateString() : 'N/A' };
     }
-
-    // Check Paid Subscription (Active)
-    if (freshData.subscriptionStatus === 'Active' && freshData.subscriptionEndsAt) {
-      const subEnd = new Date(freshData.subscriptionEndsAt);
+    if (data.subscriptionStatus === 'Active' && data.subscriptionEndsAt) {
+      const subEnd = new Date(data.subscriptionEndsAt);
       if (!isNaN(subEnd.getTime())) {
-        const diffTime = subEnd - today;
-        const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        if (daysLeft > 0) {
-          return { status: 'Active', daysLeft, isExpired: false, endDate: subEnd.toLocaleDateString() };
-        } else {
-          // DB says Active, but date passed -> Treat as Expired
-          return { status: 'Expired', daysLeft: 0, isExpired: true, endDate: subEnd.toLocaleDateString() };
-        }
+        const daysLeft = Math.ceil((subEnd - today) / (1000 * 60 * 60 * 24));
+        if (daysLeft > 0) return { status: 'Active', daysLeft, isExpired: false, endDate: subEnd.toLocaleDateString() };
+        else return { status: 'Expired', daysLeft: 0, isExpired: true, endDate: subEnd.toLocaleDateString() };
       }
     }
-
-    // Check Trial
-    if (freshData.subscriptionStatus === 'Trial' && freshData.trialEndsAt) {
-      const trialEnd = new Date(freshData.trialEndsAt);
+    if (data.subscriptionStatus === 'Trial' && data.trialEndsAt) {
+      const trialEnd = new Date(data.trialEndsAt);
       if (!isNaN(trialEnd.getTime())) {
-        const diffTime = trialEnd - today;
-        const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        if (daysLeft > 0) {
-          return { status: 'Trial', daysLeft, isExpired: false, endDate: trialEnd.toLocaleDateString() };
-        } else {
-          // Trial ended -> Treat as Expired
-          return { status: 'Expired', daysLeft: 0, isExpired: true, endDate: trialEnd.toLocaleDateString() };
-        }
+        const daysLeft = Math.ceil((trialEnd - today) / (1000 * 60 * 60 * 24));
+        if (daysLeft > 0) return { status: 'Trial', daysLeft, isExpired: false, endDate: trialEnd.toLocaleDateString() };
+        else return { status: 'Expired', daysLeft: 0, isExpired: true, endDate: trialEnd.toLocaleDateString() };
       }
     }
-
     return { status: 'Unknown', daysLeft: 0, isExpired: false, endDate: null };
   };
 
@@ -197,7 +167,6 @@ export default function BillingPage() {
                     <CheckCircle2 size={14} /> Active ({subInfo.daysLeft} Days Left)
                   </span>
                 ) : subInfo.isExpired ? (
-                  // 🚨 CLEAR EXPIRED UI
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-danger-50 text-danger-700 ring-1 ring-danger-600/20">
                     <AlertTriangle size={14} /> Expired
                   </span>
@@ -213,8 +182,8 @@ export default function BillingPage() {
                 {subInfo.status === 'Active' 
                   ? `🎉 Your subscription is active! It expires on ${subInfo.endDate}.` 
                   : subInfo.isExpired 
-                    ? '⚠️ Your subscription has expired. Please upgrade below to restore full access to the PMS.' 
-                    : `Enjoy full access to the PMS. Your free trial will end on ${subInfo.endDate}.`}
+                    ? '⚠️ Your subscription has expired. Please upgrade below to restore full access.' 
+                    : `Enjoy full access to the PMS. Your free trial will end on ${subInfo.endDate || 'soon'}.`}
               </p>
             </div>
           </div>
@@ -270,7 +239,7 @@ export default function BillingPage() {
               className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-success-600 text-text-inverted font-semibold rounded-xl hover:bg-success-700 transition shadow-lg shadow-success-600/20 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {isPaying ? (
-                <><Loader2 className="animate-spin" size={18} /> Initializing... </>
+                <><Loader2 className="animate-spin" size={18} /> Initializing...</>
               ) : (
                 <><Smartphone size={18} /> Pay {currentTier.price} GHS for {currentTier.months} Month{currentTier.months > 1 ? 's' : ''}</>
               )}
@@ -280,4 +249,4 @@ export default function BillingPage() {
       </div>
     </div>
   );
-} 
+}
