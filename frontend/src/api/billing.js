@@ -9,3 +9,7 @@ export const initializeSubscriptionPayment = (data) => {
 export const verifyPayment = (reference) => {
   return api.get(`/paystack/verify/${reference}`);
 };
+
+export const fetchSubscriptionStatus = () => {
+  return api.get('/paystack/subscription-status');
+};

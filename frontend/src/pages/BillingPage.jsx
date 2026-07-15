@@ -1,17 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { initializeSubscriptionPayment, verifyPayment } from '../api/billing';
+import { initializeSubscriptionPayment, verifyPayment, fetchSubscriptionStatus } from '../api/billing';
 import { CreditCard, Smartphone, Calendar, CheckCircle2, AlertTriangle, Loader2, Tag, ShieldCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function BillingPage() {
   const { user } = useAuthStore();
   const [searchParams, setSearchParams] = useSearchParams();
-  const hasVerifiedRef = useRef(false); // 🔒 Lock to prevent React Strict Mode double-firing
+  const hasVerifiedRef = useRef(false);
   
   const [isPaying, setIsPaying] = useState(false);
   const [selectedDuration, setSelectedDuration] = useState(1);
+  
+  // 🌟 FRESH DATA STATE: Holds the live truth from the database
+  const [freshData, setFreshData] = useState(null);
+  const [isLoadingStatus, setIsLoadingStatus] = useState(true);
 
   const pricingTiers = [
     { months: 1, label: 'Monthly', price: 200, discount: '' },
@@ -21,60 +25,59 @@ export default function BillingPage() {
 
   const currentTier = pricingTiers.find(t => t.months === selectedDuration);
 
-  // 🌟 BULLETPROOF STATUS CHECKER
-  const getSubscriptionStatus = () => {
-    const today = new Date();
-    if (user?.subscriptionStatus === 'Active' && user?.subscriptionEndsAt) {
-      const subEnd = new Date(user.subscriptionEndsAt);
-      if (!isNaN(subEnd.getTime())) {
-        const diffTime = subEnd - today;
-        const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        if (daysLeft > 0) return { status: 'Active', daysLeft, isExpired: false, endDate: subEnd.toLocaleDateString() };
-        else return { status: 'Expired', daysLeft: 0, isExpired: true, endDate: subEnd.toLocaleDateString() };
+  // 🌟 1. FETCH FRESH DATA FROM DATABASE ON PAGE LOAD
+  useEffect(() => {
+    const getLiveStatus = async () => {
+      try {
+        const res = await fetchSubscriptionStatus();
+        if (res.data.success) {
+          setFreshData(res.data.data);
+          
+          // 🌟 SYNC BACK TO ZUSTAND: Update localStorage so the Sidebar/Navbar knows too!
+          useAuthStore.setState({
+            user: {
+              ...user,
+              subscriptionPlan: res.data.data.subscriptionPlan,
+              subscriptionStatus: res.data.data.subscriptionStatus,
+              trialEndsAt: res.data.data.trialEndsAt,
+              subscriptionEndsAt: res.data.data.subscriptionEndsAt,
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch fresh subscription status', error);
+      } finally {
+        setIsLoadingStatus(false);
       }
-    }
-    if (user?.subscriptionStatus === 'Trial' && user?.trialEndsAt) {
-      const trialEnd = new Date(user.trialEndsAt);
-      if (!isNaN(trialEnd.getTime())) {
-        const diffTime = trialEnd - today;
-        const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return { status: daysLeft > 0 ? 'Trial' : 'Expired', daysLeft: Math.max(0, daysLeft), isExpired: daysLeft <= 0, endDate: trialEnd.toLocaleDateString() };
-      }
-    }
-    return { status: 'Unknown', daysLeft: 0, isExpired: false, endDate: null };
-  };
+    };
+    getLiveStatus();
+  }, []);
 
-  const subInfo = getSubscriptionStatus();
-
-  // 🌟 THE MAGIC: Auto-detect Paystack redirect and update Zustand store instantly
+  // 🌟 2. HANDLE PAYSTACK REDIRECT & INSTANT UPDATE
   useEffect(() => {
     const reference = searchParams.get('reference') || searchParams.get('trxref');
     
     if (reference && !hasVerifiedRef.current) {
-      hasVerifiedRef.current = true; // 🔒 Lock
-      setSearchParams({}); // Clean the URL
+      hasVerifiedRef.current = true;
+      setSearchParams({});
 
       const activateSubscription = async () => {
         const toastId = toast.loading('Verifying your payment...');
         try {
           const res = await verifyPayment(reference);
-          
-          if (res.data.data.status === 'success' && res.data.updatedProperty) {
-            // 🚀 CRITICAL: Push the fresh data directly into the Zustand store!
-            // This updates the UI instantly without needing a logout/login.
-            useAuthStore.setState({
-              user: {
-                ...user,
-                subscriptionPlan: res.data.updatedProperty.subscriptionPlan,
-                subscriptionStatus: res.data.updatedProperty.subscriptionStatus,
-                trialEndsAt: res.data.updatedProperty.trialEndsAt,
-                subscriptionEndsAt: res.data.updatedProperty.subscriptionEndsAt,
-              }
-            });
-            
+          if (res.data.data.status === 'success') {
             toast.success('🎉 Payment successful! Your subscription is now active.', { id: toastId });
+            
+            // Fetch the fresh data immediately after payment to update the UI
+            const freshRes = await fetchSubscriptionStatus();
+            if (freshRes.data.success) {
+              setFreshData(freshRes.data.data);
+              useAuthStore.setState({
+                user: { ...user, ...freshRes.data.data }
+              });
+            }
           } else {
-            toast.success('Payment verified!', { id: toastId });
+            toast.error('Payment was not completed successfully.', { id: toastId });
           }
         } catch (error) {
           toast.error('Payment verification failed.', { id: toastId });
@@ -83,6 +86,57 @@ export default function BillingPage() {
       activateSubscription();
     }
   }, [searchParams, setSearchParams, user]);
+
+  // 🌟 3. BULLETPROOF STATUS CALCULATOR (Uses freshData, handles 'Expired' explicitly)
+  const getSubscriptionStatus = () => {
+    if (!freshData) return { status: 'Loading', daysLeft: 0, isExpired: false, endDate: null };
+
+    const today = new Date();
+
+    // 🚨 EXPLICITLY CHECK FOR EXPIRED STATUS (Fixes the confusion!)
+    if (freshData.subscriptionStatus === 'Expired') {
+      return { 
+        status: 'Expired', 
+        daysLeft: 0, 
+        isExpired: true, 
+        endDate: freshData.subscriptionEndsAt ? new Date(freshData.subscriptionEndsAt).toLocaleDateString() : 'N/A'
+      };
+    }
+
+    // Check Paid Subscription (Active)
+    if (freshData.subscriptionStatus === 'Active' && freshData.subscriptionEndsAt) {
+      const subEnd = new Date(freshData.subscriptionEndsAt);
+      if (!isNaN(subEnd.getTime())) {
+        const diffTime = subEnd - today;
+        const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        if (daysLeft > 0) {
+          return { status: 'Active', daysLeft, isExpired: false, endDate: subEnd.toLocaleDateString() };
+        } else {
+          // DB says Active, but date passed -> Treat as Expired
+          return { status: 'Expired', daysLeft: 0, isExpired: true, endDate: subEnd.toLocaleDateString() };
+        }
+      }
+    }
+
+    // Check Trial
+    if (freshData.subscriptionStatus === 'Trial' && freshData.trialEndsAt) {
+      const trialEnd = new Date(freshData.trialEndsAt);
+      if (!isNaN(trialEnd.getTime())) {
+        const diffTime = trialEnd - today;
+        const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        if (daysLeft > 0) {
+          return { status: 'Trial', daysLeft, isExpired: false, endDate: trialEnd.toLocaleDateString() };
+        } else {
+          // Trial ended -> Treat as Expired
+          return { status: 'Expired', daysLeft: 0, isExpired: true, endDate: trialEnd.toLocaleDateString() };
+        }
+      }
+    }
+
+    return { status: 'Unknown', daysLeft: 0, isExpired: false, endDate: null };
+  };
+
+  const subInfo = getSubscriptionStatus();
 
   const handleUpgrade = async (e) => {
     e.preventDefault();
@@ -108,6 +162,14 @@ export default function BillingPage() {
     }
   };
 
+  if (isLoadingStatus) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="animate-spin text-primary-500" size={32} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 max-w-4xl mx-auto">
       <div>
@@ -125,7 +187,7 @@ export default function BillingPage() {
           <div className="space-y-4">
             <div>
               <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">Plan Name</p>
-              <p className="text-2xl font-bold text-text">{user?.subscriptionPlan || 'Starter'}</p>
+              <p className="text-2xl font-bold text-text">{freshData?.subscriptionPlan || 'Starter'}</p>
             </div>
             <div>
               <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">Status</p>
@@ -135,12 +197,13 @@ export default function BillingPage() {
                     <CheckCircle2 size={14} /> Active ({subInfo.daysLeft} Days Left)
                   </span>
                 ) : subInfo.isExpired ? (
+                  // 🚨 CLEAR EXPIRED UI
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-danger-50 text-danger-700 ring-1 ring-danger-600/20">
                     <AlertTriangle size={14} /> Expired
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-warning-50 text-warning-700 ring-1 ring-warning-600/20">
-                    <Calendar size={14} /> {subInfo.daysLeft || 0} Days Left in Trial
+                    <Calendar size={14} /> {subInfo.daysLeft} Days Left in Trial
                   </span>
                 )}
               </div>
@@ -150,8 +213,8 @@ export default function BillingPage() {
                 {subInfo.status === 'Active' 
                   ? `🎉 Your subscription is active! It expires on ${subInfo.endDate}.` 
                   : subInfo.isExpired 
-                    ? 'Your subscription or trial has ended. Please upgrade to continue using the PMS.' 
-                    : `Enjoy full access to the PMS. Your free trial will end on ${subInfo.endDate || 'soon'}.`}
+                    ? '⚠️ Your subscription has expired. Please upgrade below to restore full access to the PMS.' 
+                    : `Enjoy full access to the PMS. Your free trial will end on ${subInfo.endDate}.`}
               </p>
             </div>
           </div>
@@ -191,7 +254,7 @@ export default function BillingPage() {
               </div>
             </div>
 
-            <div className="bg-secondary-50 border border-secondary-200 rounded-xl p-4 flex items-center-start gap-3">
+            <div className="bg-secondary-50 border border-secondary-200 rounded-xl p-4 flex items-start gap-3">
               <ShieldCheck size={20} className="text-secondary-600 mt-0.5 flex-shrink-0" />
               <div>
                 <p className="text-sm font-semibold text-text">Secure Mobile Money Checkout</p>
