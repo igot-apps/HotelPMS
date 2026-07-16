@@ -1,5 +1,6 @@
+// AvailabilityPage.jsx
 import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAvailableRooms } from '../api/rooms';
 import { createReservation } from '../api/reservations';
 import { recordPayment } from '../api/payments';
@@ -7,7 +8,7 @@ import { useAuthStore } from '../store/authStore';
 import ReservationModal from '../components/reservations/ReservationModal';
 import toast from 'react-hot-toast';
 import { 
-  Search, Calendar, BedDouble, AlertCircle, Users, ChevronRight, Loader2, ShoppingCart
+  Search, Calendar, BedDouble, AlertCircle, Users, ChevronRight, Loader2, ShoppingCart, CheckCircle2
 } from 'lucide-react';
 
 export default function AvailabilityPage() {
@@ -19,6 +20,9 @@ export default function AvailabilityPage() {
   const [checkOutDate, setCheckOutDate] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
   
+  // 🌟 State to track selected rooms
+  const [selectedRooms, setSelectedRooms] = useState([]);
+  
   // State for the single global booking modal
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
 
@@ -29,6 +33,11 @@ export default function AvailabilityPage() {
     setCheckInDate(today);
     setCheckOutDate(tomorrow);
   }, []);
+
+  // 🌟 Reset selected rooms when search parameters change to prevent stale data
+  useEffect(() => {
+    setSelectedRooms([]);
+  }, [checkInDate, checkOutDate]);
 
   // Fetch available rooms
   const { data, isLoading, error } = useQuery({
@@ -49,9 +58,21 @@ export default function AvailabilityPage() {
     }
   };
 
-  // Handle clicking the single global "Proceed to Book" button
+  // 🌟 Toggle room selection by clicking the card
+  const toggleRoomSelection = (roomId) => {
+    setSelectedRooms(prev => 
+      prev.includes(roomId) 
+        ? prev.filter(id => id !== roomId)
+        : [...prev, roomId]
+    );
+  };
+
+  // Handle clicking the global "Proceed to Book" button
   const handleProceedToBook = () => {
-    if (availableRooms.length === 0) return;
+    if (selectedRooms.length === 0) {
+      toast.error('Please select at least one room to proceed.');
+      return;
+    }
     setIsBookingModalOpen(true);
   };
 
@@ -77,8 +98,9 @@ export default function AvailabilityPage() {
 
       toast.success('Reservation created successfully!');
       
-      // 3. Close modal and refresh availability
+      // 3. Close modal, clear selections, and refresh availability
       setIsBookingModalOpen(false);
+      setSelectedRooms([]); 
       queryClient.invalidateQueries({ queryKey: ['availability'] });
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       
@@ -89,15 +111,22 @@ export default function AvailabilityPage() {
 
   const formatCurrency = (val) => parseFloat(val || 0).toFixed(2);
 
+  // 🌟 Calculate total estimated price for selected rooms
+  const selectedTotal = selectedRooms.reduce((sum, id) => {
+    const room = availableRooms.find(r => r.roomId === id);
+    const basePrice = parseFloat(room?.roomType?.basePrice || 0);
+    return sum + (basePrice * nights);
+  }, 0);
+
   return (
-    <div className="space-y-6 pb-28"> {/* Added pb-28 to prevent content hiding behind sticky button */}
+    <div className="space-y-6 pb-28"> {/* pb-28 prevents content hiding behind sticky button */}
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-text tracking-tight flex items-center gap-2">
           <Search size={24} className="text-primary-500" /> Check Availability
         </h1>
         <p className="text-text-muted text-sm mt-1">
-          Search for free rooms by date range. Review the list below, then proceed to book.
+          Search for free rooms by date range. Click on the rooms you want to select them, then proceed to book.
         </p>
       </div>
 
@@ -171,22 +200,34 @@ export default function AvailabilityPage() {
                 Found <span className="text-primary-600 font-bold">{availableRooms.length}</span> available room{availableRooms.length !== 1 ? 's' : ''} for {nights} night{nights !== 1 ? 's' : ''}.
               </p>
               
-              {/* View-Only Room Cards Grid */}
+              {/* Room Cards Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {availableRooms.map((room) => {
                   const basePrice = parseFloat(room.roomType?.basePrice || 0);
                   const roomTotal = basePrice * nights;
+                  const isSelected = selectedRooms.includes(room.roomId);
 
                   return (
-                    // 🚨 NO onClick handler here. Purely view-only.
                     <div 
                       key={room.roomId} 
-                      className="bg-surface border border-border rounded-xl p-5 hover:shadow-md transition-shadow flex flex-col"
+                      onClick={() => toggleRoomSelection(room.roomId)}
+                      className={`bg-surface border rounded-xl p-5 transition-all flex flex-col relative cursor-pointer hover:shadow-md ${
+                        isSelected 
+                          ? 'border-primary-500 ring-2 ring-primary-500/20 bg-primary-50/30' 
+                          : 'border-border hover:border-primary-300'
+                      }`}
                     >
+                      {/* 🌟 Selection Indicator (Checkmark Badge) */}
+                      {isSelected && (
+                        <div className="absolute top-3 right-3 bg-primary-500 text-white rounded-full p-1 shadow-sm">
+                          <CheckCircle2 size={18} />
+                        </div>
+                      )}
+
                       {/* Room Header */}
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex items-center gap-3">
-                          <div className="p-2.5 rounded-lg bg-primary-50 text-primary-600">
+                          <div className={`p-2.5 rounded-lg ${isSelected ? 'bg-primary-100 text-primary-600' : 'bg-primary-50 text-primary-600'}`}>
                             <BedDouble size={20} />
                           </div>
                           <div>
@@ -211,11 +252,11 @@ export default function AvailabilityPage() {
                         </div>
                       </div>
 
-                      {/* Pricing Display (No button here) */}
+                      {/* Pricing Display */}
                       <div className="border-t border-border pt-4 mt-auto">
                         <div className="flex items-baseline justify-between">
                           <span className="text-xs text-text-muted">GH₵ {formatCurrency(basePrice)} × {nights} nights</span>
-                          <span className="text-xl font-bold text-primary-600">
+                          <span className={`text-xl font-bold ${isSelected ? 'text-primary-600' : 'text-text'}`}>
                             GH₵ {formatCurrency(roomTotal)}
                           </span>
                         </div>
@@ -257,17 +298,22 @@ export default function AvailabilityPage() {
             </div>
             <div>
               <p className="text-sm font-bold text-text">
-                {availableRooms.length} Room{availableRooms.length !== 1 ? 's' : ''} Available
+                {selectedRooms.length} of {availableRooms.length} Rooms Selected
               </p>
               <p className="text-xs text-text-muted">
-                Click below to select rooms and proceed to booking.
+                Total Estimated: GH₵ {formatCurrency(selectedTotal)}
               </p>
             </div>
           </div>
           
           <button 
             onClick={handleProceedToBook}
-            className="px-6 py-3 bg-success-600 text-text-inverted font-bold rounded-lg hover:bg-success-700 transition flex items-center gap-2 shadow-lg"
+            disabled={selectedRooms.length === 0}
+            className={`px-6 py-3 font-bold rounded-lg transition flex items-center gap-2 shadow-lg ${
+              selectedRooms.length === 0 
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                : 'bg-success-600 text-text-inverted hover:bg-success-700'
+            }`}
           >
             Proceed to Book <ChevronRight size={18} />
           </button>
@@ -285,9 +331,8 @@ export default function AvailabilityPage() {
         initialData={{
           checkInDate,
           checkOutDate,
-          // 🚨 Pass ALL available room IDs. The modal will pre-select them, 
-          // allowing the user to deselect the ones they don't want in Step 2.
-          roomIds: availableRooms.map(r => r.roomId), 
+          // 🌟 Pass ONLY the selected room IDs. The modal will pre-select them in Step 2.
+          roomIds: selectedRooms, 
         }}
       />
     </div>
