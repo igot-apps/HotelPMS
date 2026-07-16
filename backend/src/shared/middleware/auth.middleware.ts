@@ -1,3 +1,4 @@
+//auth.middleware.ts
 import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken, JwtPayload } from '../utils/jwt';
 import { PrismaClient } from '../../generated/prisma';

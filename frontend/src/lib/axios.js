@@ -15,7 +15,7 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     // Get token from Zustand store (or localStorage)
-    const token = useAuthStore.getState().accessToken; 
+    const token = useAuthStore.getState().accessToken;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -40,26 +40,37 @@ api.interceptors.response.use(
 
       // 🍞 HUMAN-FRIENDLY TOAST MAPPING
       let toastMessage = backendMessage;
-      
+
       if (status === 401) {
         toastMessage = 'Your session has expired. Please log in again.';
         // Optional: trigger logout here
         // useAuthStore.getState().logout();
         // window.location.href = '/login';
+        
       } else if (status === 403) {
-        toastMessage = 'You do not have permission to perform this action.';
+        // 🌟 FIX: Read the specific message from the backend!
+        // If the backend sent a specific message (like "Subscription expired" or "Access denied..."), show it.
+        // Otherwise, fallback to the generic permission error.
+        if (data?.code === 'SUBSCRIPTION_EXPIRED' || (data?.message && data.message !== 'Insufficient permissions')) {
+          toastMessage = data.message;
+        } else {
+          toastMessage = 'You do not have permission to perform this action.';
+        }
+        
       } else if (status === 404) {
         toastMessage = 'The requested resource was not found.';
+        
       } else if (status === 400) {
         // Backend validation errors (e.g., "Room 1 is not available") are usually already human-friendly
         toastMessage = backendMessage; 
+        
       } else if (status >= 500) {
         toastMessage = 'A server error occurred. Please try again later.';
       }
 
       // Show the error toast
       toast.error(toastMessage);
-
+      
     } else if (error.request) {
       // The request was made but no response was received (Network Error / Offline)
       console.error('[Network Error]:', error.request);

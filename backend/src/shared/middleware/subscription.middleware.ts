@@ -1,3 +1,4 @@
+// subscription.middleware.ts
 import { Response, NextFunction } from 'express';
 import { PrismaClient } from '../../generated/prisma';
 import { AuthRequest } from './auth.middleware';
