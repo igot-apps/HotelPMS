@@ -78,31 +78,59 @@ export default function BillingPage() {
     }
   }, [searchParams, setSearchParams, user]);
 
-  // 🌟 3. BULLETPROOF STATUS CALCULATOR
+  // 🌟 UPGRADED: Resets clock to midnight so the countdown drops at the start of the day
   const getSubscriptionStatus = () => {
-    const data = freshData || user;
-    if (!data) return { status: 'Loading', daysLeft: 0, isExpired: false, endDate: null };
+    // 🚨 CRITICAL: Reset today to midnight (00:00:00)
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    if (data.subscriptionStatus === 'Expired') {
-      return { status: 'Expired', daysLeft: 0, isExpired: true, endDate: data.subscriptionEndsAt ? new Date(data.subscriptionEndsAt).toLocaleDateString() : 'N/A' };
-    }
-    if (data.subscriptionStatus === 'Active' && data.subscriptionEndsAt) {
-      const subEnd = new Date(data.subscriptionEndsAt);
+    // 1. Check Paid Subscription First
+    if (user?.subscriptionStatus === 'Active' && user?.subscriptionEndsAt) {
+      const subEnd = new Date(user.subscriptionEndsAt);
+      // 🚨 CRITICAL: Reset expiration date to midnight as well
+      subEnd.setHours(0, 0, 0, 0);
+
       if (!isNaN(subEnd.getTime())) {
-        const daysLeft = Math.ceil((subEnd - today) / (1000 * 60 * 60 * 24));
-        if (daysLeft > 0) return { status: 'Active', daysLeft, isExpired: false, endDate: subEnd.toLocaleDateString() };
-        else return { status: 'Expired', daysLeft: 0, isExpired: true, endDate: subEnd.toLocaleDateString() };
+        const diffTime = subEnd - today;
+        const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (daysLeft > 0) {
+          return { 
+            status: 'Active', 
+            daysLeft: daysLeft, 
+            isExpired: false,
+            endDate: new Date(user.subscriptionEndsAt).toLocaleDateString() // Keep original date for display
+          };
+        } else {
+          return { 
+            status: 'Expired', 
+            daysLeft: 0, 
+            isExpired: true,
+            endDate: new Date(user.subscriptionEndsAt).toLocaleDateString()
+          };
+        }
       }
     }
-    if (data.subscriptionStatus === 'Trial' && data.trialEndsAt) {
-      const trialEnd = new Date(data.trialEndsAt);
+
+    // 2. Check Trial
+    if (user?.subscriptionStatus === 'Trial' && user?.trialEndsAt) {
+      const trialEnd = new Date(user.trialEndsAt);
+      trialEnd.setHours(0, 0, 0, 0); // Reset to midnight
+
       if (!isNaN(trialEnd.getTime())) {
-        const daysLeft = Math.ceil((trialEnd - today) / (1000 * 60 * 60 * 24));
-        if (daysLeft > 0) return { status: 'Trial', daysLeft, isExpired: false, endDate: trialEnd.toLocaleDateString() };
-        else return { status: 'Expired', daysLeft: 0, isExpired: true, endDate: trialEnd.toLocaleDateString() };
+        const diffTime = trialEnd - today;
+        const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        return { 
+          status: daysLeft > 0 ? 'Trial' : 'Expired', 
+          daysLeft: Math.max(0, daysLeft), 
+          isExpired: daysLeft <= 0,
+          endDate: new Date(user.trialEndsAt).toLocaleDateString()
+        };
       }
     }
+
+    // 3. Fallback
     return { status: 'Unknown', daysLeft: 0, isExpired: false, endDate: null };
   };
 
