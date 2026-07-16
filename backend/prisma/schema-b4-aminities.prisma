@@ -19,7 +19,9 @@ model Property {
   businessName      String    @db.VarChar(200) // Merged from Tenant
   legalName         String?   @db.VarChar(200) // Merged from Tenant
   subscriptionPlan  String    @default("Starter") @db.VarChar(50) // Merged from Tenant
-  subscriptionStatus String   @default("Active") @db.VarChar(20) // Merged from Tenant
+  subscriptionStatus String    @default("Trial") @db.VarChar(20)
+  trialEndsAt        DateTime? // When the 14-day free trial expires
+  subscriptionEndsAt DateTime? // When the paid monthly/yearly subscription expires
   currency          String    @default("GHS") @db.VarChar(10) // Merged from Tenant
   timezone          String    @default("Africa/Accra") @db.VarChar(50) // Merged from Tenant
   logo              String?   @db.Text // Merged from Tenant
@@ -228,6 +230,9 @@ model Reservation {
   totalAmount       Decimal?  @db.Decimal(10, 2)
   amountPaid        Decimal?  @db.Decimal(10, 2)
   balanceDue        Decimal?  @db.Decimal(10, 2)
+  refundDue         Decimal   @default(0) @db.Decimal(10, 2)
+  refundStatus      String    @default("None") @db.VarChar(20) // Options: 'None', 'Pending', 'Processed', 'Waived'
+  cancellationDate  DateTime? // Tracks exactly when the reservation was cancelled
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 

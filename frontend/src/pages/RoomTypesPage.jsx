@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRoomTypes, createRoomType, updateRoomType, deleteRoomType } from '../api/roomTypes';
 import { useAuthStore } from '../store/authStore';
 import RoomTypeModal from '../components/catalog/RoomTypeModal';
-import { Search, Plus, Edit2, Trash2, Layers, AlertCircle, ChevronLeft, ChevronRight, BedDouble } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Layers, AlertCircle, ChevronLeft, ChevronRight, BedDouble, Tag } from 'lucide-react';
 
 export default function RoomTypesPage() {
   const user = useAuthStore((state) => state.user);
@@ -42,18 +42,18 @@ export default function RoomTypesPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['roomTypes'] }),
   });
 
-  // Extract error for modal
   const saveError = saveMutation.error?.response?.data?.message || (saveMutation.isError ? 'Failed to save room type.' : null);
 
   // 3. Handlers
   const openAddModal = () => { setEditingType(null); setIsModalOpen(true); };
   const openEditModal = (type) => { setEditingType(type); setIsModalOpen(true); };
+  
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingType(null);
     saveMutation.reset();
   };
-
+  
   const handleSave = (formData) => saveMutation.mutate(formData);
   
   const handleDelete = (type) => {
@@ -67,7 +67,7 @@ export default function RoomTypesPage() {
   };
 
   // Client-side search filter
-  const filteredTypes = roomTypes.filter(type => 
+  const filteredTypes = roomTypes.filter(type =>
     type.typeName?.toLowerCase().includes(search.toLowerCase()) ||
     type.description?.toLowerCase().includes(search.toLowerCase())
   );
@@ -78,7 +78,7 @@ export default function RoomTypesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-text tracking-tight">Room Types</h1>
-          <p className="text-text-muted text-sm mt-1">Manage room categories, base pricing, and occupancy limits.</p>
+          <p className="text-text-muted text-sm mt-1">Manage room categories, base pricing, occupancy limits, and amenities.</p>
         </div>
         <button onClick={openAddModal} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm">
           <Plus size={16} /> Add Room Type
@@ -89,8 +89,13 @@ export default function RoomTypesPage() {
       <div className="bg-surface border border-border rounded-xl p-2 flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
-          <input type="text" placeholder="Search room types..." value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-lg text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
+          <input 
+            type="text" 
+            placeholder="Search room types..." 
+            value={search} 
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-lg text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" 
+          />
         </div>
       </div>
 
@@ -122,13 +127,28 @@ export default function RoomTypesPage() {
                 {filteredTypes.map((type) => (
                   <tr key={type.roomTypeId} className="border-b border-border last:border-0 hover:bg-secondary-50/50 transition-colors">
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center flex-shrink-0">
                           <BedDouble size={18} />
                         </div>
-                        <div>
+                        <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-text">{type.typeName}</p>
-                          <p className="text-xs text-text-muted truncate max-w-xs">{type.description || 'No description'}</p>
+                          <p className="text-xs text-text-muted truncate max-w-xs mb-2">{type.description || 'No description'}</p>
+                          
+                          {/* 🌟 NEW: Display Amenities Badges */}
+                          {type.amenities && type.amenities.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {type.amenities.map((link) => (
+                                <span 
+                                  key={link.amenity.amenityId} 
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-secondary-100 text-secondary-700 border border-secondary-200"
+                                >
+                                  <Tag size={10} />
+                                  {link.amenity.name}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -159,7 +179,7 @@ export default function RoomTypesPage() {
             </table>
           </div>
         )}
-
+        
         {/* Pagination Footer */}
         {pagination.totalPages > 1 && (
           <div className="px-6 py-3 border-t border-border bg-secondary-50/30 flex items-center justify-between">
@@ -185,7 +205,7 @@ export default function RoomTypesPage() {
       <RoomTypeModal
         isOpen={isModalOpen}
         onClose={closeModal}
-        onSubmit={handleSave}
+        onSuccess={() => {}} // Handled by useMutation onSuccess
         isLoading={saveMutation.isPending}
         initialData={editingType}
         error={saveError}

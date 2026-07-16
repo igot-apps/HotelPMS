@@ -17,7 +17,7 @@ import reportRoutes from './modules/reports/report.routes';
 import userRoutes from './modules/user/user.routes';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import paystackRoutes from './modules/paystack/paystack.routes'; // 🌟 NEW: Paystack Integration
-
+import amenityRoutes from './modules/amenity/amenity.routes';
 
 // Load environment variables
 dotenv.config();
@@ -82,7 +82,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-
+app.use('/api/amenities', amenityRoutes);
 // 🌟 Mount Paystack Routes
 app.use('/api/paystack', paystackRoutes);
 

@@ -1,21 +1,22 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
-import { 
-  getRooms, getRoomTypes, createRoom, updateRoom, deleteRoom, updateRoomStatus,
-  createRoomType, updateRoomType, deleteRoomType
+import {
+  getRooms, createRoom, updateRoom, deleteRoom, updateRoomStatus,
+  getRoomTypes // We only need to fetch types here; creation/updating is handled by the modal
 } from '../api/rooms';
 import RequirePermission from '../components/RequirePermission';
+import RoomTypeModal from '../components/catalog/RoomTypeModal'; // 🌟 Import the advanced modal with amenities
 import toast from 'react-hot-toast';
-import { 
-  BedDouble, Layers, Plus, Edit2, Trash2, Loader2, Sparkles, AlertCircle, X, Users
+import {
+  BedDouble, Layers, Plus, Edit2, Trash2, Loader2, Sparkles, AlertCircle, X, Users, Tag // 🌟 Added Tag icon
 } from 'lucide-react';
 
 export default function RoomManagementPage() {
   const user = useAuthStore((state) => state.user);
   const propertyId = user?.propertyId;
   const queryClient = useQueryClient();
-
+  
   const [activeTab, setActiveTab] = useState('rooms');
   
   // Modal States
@@ -40,7 +41,7 @@ export default function RoomManagementPage() {
   const rooms = roomsData || [];
   const roomTypes = typesData || [];
 
-  // Mutations
+  // Room Mutations
   const roomMutation = useMutation({
     mutationFn: ({ id, data }) => id ? updateRoom(id, data) : createRoom(data),
     onSuccess: () => {
@@ -68,25 +69,6 @@ export default function RoomManagementPage() {
     },
   });
 
-  const typeMutation = useMutation({
-    mutationFn: ({ id, data }) => id ? updateRoomType(id, data) : createRoomType(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['roomTypes'] });
-      toast.success(editingType ? 'Room type updated!' : 'Room type created!');
-      setIsTypeModalOpen(false);
-      setEditingType(null);
-    },
-    onError: (err) => toast.error(err.response?.data?.message || 'Failed to save room type'),
-  });
-
-  const deleteTypeMutation = useMutation({
-    mutationFn: (id) => deleteRoomType(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['roomTypes'] });
-      toast.success('Room type deleted.');
-    },
-  });
-
   // Handlers
   const handleSaveRoom = (data) => {
     if (editingRoom) {
@@ -96,28 +78,26 @@ export default function RoomManagementPage() {
     }
   };
 
-  const handleSaveType = (data) => {
-    if (editingType) {
-      typeMutation.mutate({ id: editingType.roomTypeId, data });
-    } else {
-      typeMutation.mutate({ data: { ...data, propertyId } });
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-text tracking-tight">Room Management</h1>
-        <p className="text-text-muted text-sm mt-1">Configure physical rooms, categories, and base pricing.</p>
+        <p className="text-text-muted text-sm mt-1">Configure physical rooms, categories, base pricing, and amenities.</p>
       </div>
 
       {/* Tabs */}
       <div className="border-b border-border">
         <nav className="flex gap-6">
-          <button onClick={() => setActiveTab('rooms')} className={`pb-3 text-sm font-semibold border-b-2 transition ${activeTab === 'rooms' ? 'border-primary-600 text-primary-600' : 'border-transparent text-text-muted hover:text-text'}`}>
+          <button 
+            onClick={() => setActiveTab('rooms')} 
+            className={`pb-3 text-sm font-semibold border-b-2 transition ${activeTab === 'rooms' ? 'border-primary-600 text-primary-600' : 'border-transparent text-text-muted hover:text-text'}`}
+          >
             <BedDouble size={16} className="inline mr-2" /> Physical Rooms ({rooms.length})
           </button>
-          <button onClick={() => setActiveTab('types')} className={`pb-3 text-sm font-semibold border-b-2 transition ${activeTab === 'types' ? 'border-primary-600 text-primary-600' : 'border-transparent text-text-muted hover:text-text'}`}>
+          <button 
+            onClick={() => setActiveTab('types')} 
+            className={`pb-3 text-sm font-semibold border-b-2 transition ${activeTab === 'types' ? 'border-primary-600 text-primary-600' : 'border-transparent text-text-muted hover:text-text'}`}
+          >
             <Layers size={16} className="inline mr-2" /> Room Types & Rates ({roomTypes.length})
           </button>
         </nav>
@@ -126,37 +106,47 @@ export default function RoomManagementPage() {
       {/* Tab Content */}
       {activeTab === 'rooms' && (
         <RoomsTab 
-          rooms={rooms} isLoading={isLoadingRooms}
+          rooms={rooms} 
+          isLoading={isLoadingRooms}
           onAdd={() => { setEditingRoom(null); setIsRoomModalOpen(true); }}
           onEdit={(room) => { setEditingRoom(room); setIsRoomModalOpen(true); }}
           onDelete={(id, num) => window.confirm(`Deactivate Room ${num}?`) && deleteRoomMutation.mutate(id)}
           onStatusChange={(id, op, hk) => statusMutation.mutate({ id, data: { operationalStatus: op, housekeepingStatus: hk } })}
         />
       )}
-
+      
       {activeTab === 'types' && (
         <TypesTab 
-          types={roomTypes} isLoading={isLoadingTypes}
+          types={roomTypes} 
+          isLoading={isLoadingTypes}
           onAdd={() => { setEditingType(null); setIsTypeModalOpen(true); }}
           onEdit={(type) => { setEditingType(type); setIsTypeModalOpen(true); }}
-          onDelete={(id, name) => window.confirm(`Delete "${name}"? Ensure no rooms are using it.`) && deleteTypeMutation.mutate(id)}
+          onDelete={(id, name) => window.confirm(`Delete "${name}"? Ensure no rooms are using it.`) && deleteRoomType(id)}
         />
       )}
 
       {/* Modals */}
       {isRoomModalOpen && (
         <RoomModal 
-          room={editingRoom} roomTypes={roomTypes} propertyId={propertyId}
+          room={editingRoom} 
+          roomTypes={roomTypes} 
+          propertyId={propertyId}
           onClose={() => { setIsRoomModalOpen(false); setEditingRoom(null); }}
-          onSave={handleSaveRoom} isLoading={roomMutation.isPending}
+          onSave={handleSaveRoom} 
+          isLoading={roomMutation.isPending}
         />
       )}
 
+      {/* 🌟 ADVANCED ROOM TYPE MODAL (Replaces the basic inline one) */}
       {isTypeModalOpen && (
-        <TypeModal 
-          type={editingType} 
+        <RoomTypeModal 
+          isOpen={isTypeModalOpen}
+          initialData={editingType}
           onClose={() => { setIsTypeModalOpen(false); setEditingType(null); }}
-          onSave={handleSaveType} isLoading={typeMutation.isPending}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['roomTypes'] });
+            toast.success(editingType ? 'Room type updated!' : 'Room type created!');
+          }}
         />
       )}
     </div>
@@ -191,13 +181,13 @@ function RoomsTab({ rooms, isLoading, onAdd, onEdit, onDelete, onStatusChange })
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan="5" className="p-12 text-center text-text-muted animate-pulse">Loading rooms...</td></tr>
+              <tr> <td colSpan="5" className="p-12 text-center text-text-muted animate-pulse">Loading rooms...</td> </tr>
             ) : rooms.length === 0 ? (
-              <tr><td colSpan="5" className="p-12 text-center text-text-muted">No rooms found. Click "Add New Room" to create one.</td></tr>
+              <tr> <td colSpan="5" className="p-12 text-center text-text-muted">No rooms found. Click "Add New Room" to create one.</td> </tr>
             ) : (
               rooms.map((room) => (
                 <tr key={room.roomId} className="border-b border-border last:border-0 hover:bg-secondary-50/50 transition">
-                  <td className="px-6 py-4"><p className="text-lg font-bold text-text">{room.roomNumber}</p></td>
+                  <td className="px-6 py-4"> <p className="text-lg font-bold text-text">{room.roomNumber}</p> </td>
                   <td className="px-6 py-4">
                     <p className="text-sm font-semibold text-text">{room.roomType?.typeName}</p>
                     <p className="text-xs text-text-muted">Floor {room.floor}</p>
@@ -220,10 +210,10 @@ function RoomsTab({ rooms, isLoading, onAdd, onEdit, onDelete, onStatusChange })
                         </button>
                       </RequirePermission>
                       <RequirePermission permission="CanUpdateRoom">
-                        <button onClick={() => onEdit(room)} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" title="Edit Room"><Edit2 size={16} /></button>
+                        <button onClick={() => onEdit(room)} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" title="Edit Room"> <Edit2 size={16} /> </button>
                       </RequirePermission>
                       <RequirePermission permission="CanDeleteRoom">
-                        <button onClick={() => onDelete(room.roomId, room.roomNumber)} className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition" title="Delete Room"><Trash2 size={16} /></button>
+                        <button onClick={() => onDelete(room.roomId, room.roomNumber)} className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition" title="Delete Room"> <Trash2 size={16} /> </button>
                       </RequirePermission>
                     </div>
                   </td>
@@ -237,6 +227,7 @@ function RoomsTab({ rooms, isLoading, onAdd, onEdit, onDelete, onStatusChange })
   );
 }
 
+// 🌟 UPGRADED TypesTab to show Amenities Badges
 function TypesTab({ types, isLoading, onAdd, onEdit, onDelete }) {
   return (
     <div className="bg-surface border border-border rounded-xl shadow-sm overflow-hidden">
@@ -253,7 +244,7 @@ function TypesTab({ types, isLoading, onAdd, onEdit, onDelete }) {
           <thead className="bg-secondary-50/50 border-b border-border">
             <tr>
               <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase">Type Name</th>
-              <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase">Description</th>
+              <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase">Description & Amenities</th>
               <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase">Max Guests</th>
               <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase text-right">Base Price</th>
               <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase text-right">Actions</th>
@@ -261,9 +252,9 @@ function TypesTab({ types, isLoading, onAdd, onEdit, onDelete }) {
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan="5" className="p-12 text-center text-text-muted animate-pulse">Loading room types...</td></tr>
+              <tr> <td colSpan="5" className="p-12 text-center text-text-muted animate-pulse">Loading room types...</td> </tr>
             ) : types.length === 0 ? (
-              <tr><td colSpan="5" className="p-12 text-center text-text-muted">No room types found. Click "Add Room Type" to create one.</td></tr>
+              <tr> <td colSpan="5" className="p-12 text-center text-text-muted">No room types found. Click "Add Room Type" to create one.</td> </tr>
             ) : (
               types.map((type) => (
                 <tr key={type.roomTypeId} className="border-b border-border last:border-0 hover:bg-secondary-50/50 transition">
@@ -271,16 +262,32 @@ function TypesTab({ types, isLoading, onAdd, onEdit, onDelete }) {
                     <p className="text-sm font-bold text-text">{type.typeName}</p>
                     <p className="text-xs text-text-muted">{type._count?.rooms || 0} Rooms assigned</p>
                   </td>
-                  <td className="px-6 py-4 text-sm text-text-muted max-w-xs truncate">{type.description || '-'}</td>
+                  <td className="px-6 py-4">
+                    <p className="text-sm text-text-muted max-w-xs truncate mb-2">{type.description || '-'}</p>
+                    {/* 🌟 NEW: Display Amenities Badges */}
+                    {type.amenities && type.amenities.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {type.amenities.map((link) => (
+                          <span 
+                            key={link.amenity.amenityId} 
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-secondary-100 text-secondary-700 border border-secondary-200"
+                          >
+                            <Tag size={10} />
+                            {link.amenity.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-6 py-4 text-sm text-text">{type.maxOccupancy} Guests</td>
                   <td className="px-6 py-4 text-sm font-bold text-primary-600 text-right">GH₵ {parseFloat(type.basePrice || 0).toFixed(2)}</td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <RequirePermission permission="CanUpdateRoomType">
-                        <button onClick={() => onEdit(type)} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" title="Edit Type"><Edit2 size={16} /></button>
+                        <button onClick={() => onEdit(type)} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" title="Edit Type"> <Edit2 size={16} /> </button>
                       </RequirePermission>
                       <RequirePermission permission="CanDeleteRoomType">
-                        <button onClick={() => onDelete(type.roomTypeId, type.typeName)} className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition" title="Delete Type"><Trash2 size={16} /></button>
+                        <button onClick={() => onDelete(type.roomTypeId, type.typeName)} className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition" title="Delete Type"> <Trash2 size={16} /> </button>
                       </RequirePermission>
                     </div>
                   </td>
@@ -309,7 +316,7 @@ function RoomModal({ room, roomTypes, propertyId, onClose, onSave, isLoading }) 
   const handleSubmit = (e) => {
     e.preventDefault();
     onSave({
-      propertyId, // Automatically attach the logged-in manager's property
+      propertyId,
       ...formData,
       roomTypeId: parseInt(formData.roomTypeId),
       floor: parseInt(formData.floor),
@@ -321,7 +328,7 @@ function RoomModal({ room, roomTypes, propertyId, onClose, onSave, isLoading }) 
       <div className="bg-surface w-full max-w-lg rounded-2xl shadow-xl border border-border overflow-hidden">
         <div className="p-6 border-b border-border flex justify-between items-center">
           <h2 className="text-xl font-bold text-text">{room ? 'Edit Room' : 'Add New Room'}</h2>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted"><X size={20} /></button>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted"> <X size={20} /> </button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -374,59 +381,6 @@ function RoomModal({ room, roomTypes, propertyId, onClose, onSave, isLoading }) 
   );
 }
 
-function TypeModal({ type, onClose, onSave, isLoading }) {
-  const [formData, setFormData] = useState({
-    typeName: type?.typeName || '',
-    description: type?.description || '',
-    basePrice: type?.basePrice || 0,
-    maxOccupancy: type?.maxOccupancy || 1,
-  });
-
-  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    onSave({
-      ...formData,
-      basePrice: parseFloat(formData.basePrice),
-      maxOccupancy: parseInt(formData.maxOccupancy),
-    });
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-surface w-full max-w-lg rounded-2xl shadow-xl border border-border overflow-hidden">
-        <div className="p-6 border-b border-border flex justify-between items-center">
-          <h2 className="text-xl font-bold text-text">{type ? 'Edit Room Type' : 'Add Room Type'}</h2>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted"><X size={20} /></button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-semibold text-text mb-1.5">Type Name *</label>
-            <input type="text" name="typeName" value={formData.typeName} onChange={handleChange} required className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-text mb-1.5">Description</label>
-            <textarea name="description" value={formData.description} onChange={handleChange} rows="2" className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 resize-none" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-text mb-1.5">Base Price (GH₵) *</label>
-              <input type="number" step="0.01" name="basePrice" value={formData.basePrice} onChange={handleChange} required className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-text mb-1.5">Max Occupancy *</label>
-              <input type="number" name="maxOccupancy" value={formData.maxOccupancy} onChange={handleChange} required className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
-            </div>
-          </div>
-          <div className="flex justify-end gap-3 pt-4 border-t border-border">
-            <button type="button" onClick={onClose} className="px-5 py-2.5 text-sm font-semibold text-text bg-surface border border-border rounded-lg hover:bg-secondary-50">Cancel</button>
-            <button type="submit" disabled={isLoading} className="px-5 py-2.5 text-sm font-semibold text-text-inverted bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2">
-              {isLoading && <Loader2 className="animate-spin" size={16} />} {type ? 'Update Type' : 'Create Type'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
+// 🌟 NOTE: The inline TypeModal has been completely removed! 
+// We now use the advanced <RoomTypeModal /> imported from '../components/catalog/RoomTypeModal' 
+// which includes the Inline Tagging for Amenities.

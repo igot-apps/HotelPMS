@@ -48,6 +48,7 @@ model Property {
   rooms             Room[]
   ratePlans         RatePlan[]
   reservations      Reservation[]
+  amenities         Amenity[]
 
   @@map("properties")
 }
@@ -166,6 +167,7 @@ model RoomType {
   rooms             Room[]
   ratePlans         RatePlan[]
   reservationRooms  ReservationRoom[]
+  amenities         RoomTypeAmenity[]
 
   @@unique([propertyId, typeName])
   @@map("room_types")
@@ -319,4 +321,34 @@ model AuditLog {
   @@index([userId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ============================================================
+// AMENITIES (Inline Tagging System)
+// ============================================================
+
+model Amenity {
+  amenityId         Int       @id @default(autoincrement())
+  propertyId        Int
+  name              String    @db.VarChar(100)
+  icon              String?   @db.VarChar(50) // e.g., "wifi", "ac", "tv", "pool"
+  createdAt         DateTime  @default(now())
+
+  property          Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
+  roomTypes         RoomTypeAmenity[]
+
+  // 🚨 Prevents the same hotel from creating duplicate amenity names
+  @@unique([propertyId, name]) 
+  @@map("amenities")
+}
+
+model RoomTypeAmenity {
+  roomTypeId        Int
+  amenityId         Int
+
+  roomType          RoomType  @relation(fields: [roomTypeId], references: [roomTypeId], onDelete: Cascade)
+  amenity           Amenity   @relation(fields: [amenityId], references: [amenityId], onDelete: Cascade)
+
+  @@id([roomTypeId, amenityId])
+  @@map("room_type_amenities")
 }

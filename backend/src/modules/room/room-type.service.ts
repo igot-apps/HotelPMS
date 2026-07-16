@@ -1,16 +1,23 @@
 import * as roomTypeRepository from './room-type.repository';
 
-export const createRoomType = async (data: any) => {
-  // ✅ Removed tenantId check
+export const createRoomType = async (data: {
+  propertyId: number;
+  typeName: string;
+  description?: string;
+  basePrice: number;
+  maxOccupancy: number;
+  isActive?: boolean;
+  amenityIds?: number[]; // 🌟 NEW
+}) => {
   if (!data.propertyId) throw new Error('Property ID is required');
   if (!data.typeName) throw new Error('Room type name is required');
   if (!data.basePrice) throw new Error('Base price is required');
-
+  
   return roomTypeRepository.createRoomType(data);
 };
 
 export const getRoomTypes = async (
-  propertyId?: number, // ✅ Replaced tenantId
+  propertyId?: number,
   page: number = 1,
   limit: number = 10
 ) => {
@@ -29,14 +36,26 @@ export const getRoomTypeStats = async (roomTypeId: number) => {
   return stats;
 };
 
-export const updateRoomType = async (roomTypeId: number, data: any) => {
+export const updateRoomType = async (
+  roomTypeId: number, 
+  data: Partial<{
+    typeName: string;
+    description: string;
+    basePrice: number;
+    maxOccupancy: number;
+    isActive: boolean;
+    amenityIds: number[]; // 🌟 NEW
+  }>
+) => {
   const roomType = await roomTypeRepository.findRoomTypeById(roomTypeId);
   if (!roomType) throw new Error('Room type not found');
+  
   return roomTypeRepository.updateRoomType(roomTypeId, data);
 };
 
 export const deleteRoomType = async (roomTypeId: number) => {
   const roomType = await roomTypeRepository.findRoomTypeById(roomTypeId);
   if (!roomType) throw new Error('Room type not found');
+  
   return roomTypeRepository.deleteRoomType(roomTypeId);
 };
