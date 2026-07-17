@@ -8,7 +8,7 @@ export const createRoomType = async (data: {
   basePrice: number;
   maxOccupancy: number;
   isActive?: boolean;
-  amenityIds?: number[]; // 🌟 NEW: Accept array of amenity IDs
+  amenityIds?: number[]; // 🌟 ADDED: Accept array of amenity IDs
 }) => {
   return prisma.roomType.create({
     data: {
@@ -18,7 +18,7 @@ export const createRoomType = async (data: {
       basePrice: data.basePrice,
       maxOccupancy: data.maxOccupancy || 1,
       isActive: data.isActive !== undefined ? data.isActive : true,
-      // 🌟 Link the selected amenities during creation
+      // 🌟 ADDED: Link the selected amenities during creation
       ...(data.amenityIds && data.amenityIds.length > 0 && {
         amenities: {
           create: data.amenityIds.map((id) => ({
@@ -30,7 +30,7 @@ export const createRoomType = async (data: {
     include: {
       property: { select: { propertyId: true, propertyName: true, propertyCode: true } },
       _count: { select: { rooms: true, ratePlans: true } },
-      // 🌟 Return the linked amenities in the response
+      // 🌟 ADDED: Return the linked amenities in the response
       amenities: { include: { amenity: true } }, 
     },
   });
@@ -55,7 +55,7 @@ export const findRoomTypes = async (
       include: {
         property: { select: { propertyId: true, propertyName: true, propertyCode: true } },
         _count: { select: { rooms: true, ratePlans: true } },
-        // 🌟 Include amenities in the list view
+        // 🌟 ADDED: Include amenities in the list view
         amenities: { include: { amenity: true } }, 
       },
     }),
@@ -79,7 +79,7 @@ export const findRoomTypeById = async (roomTypeId: number) => {
       },
       ratePlans: true,
       _count: { select: { rooms: true, ratePlans: true } },
-      // 🌟 Include amenities when fetching a single room type (for editing)
+      // 🌟 ADDED: Include amenities when fetching a single room type (for editing)
       amenities: { include: { amenity: true } }, 
     },
   });
@@ -93,7 +93,7 @@ export const updateRoomType = async (
     basePrice: number;
     maxOccupancy: number;
     isActive: boolean;
-    amenityIds: number[]; // 🌟 NEW
+    amenityIds: number[]; // 🌟 ADDED
   }>
 ) => {
   const { amenityIds, ...rest } = data;
@@ -102,7 +102,7 @@ export const updateRoomType = async (
     where: { roomTypeId },
     data: {
       ...rest,
-      // 🌟 Use the compound unique key to update the amenities junction table
+      // 🌟 ADDED: Use the compound unique key to update the amenities junction table
       ...(amenityIds !== undefined && {
         amenities: {
           set: amenityIds.map((id) => ({
@@ -115,7 +115,7 @@ export const updateRoomType = async (
       }),
     },
     include: {
-      // 🌟 Return the updated amenities
+      // 🌟 ADDED: Return the updated amenities
       amenities: { include: { amenity: true } }, 
     },
   });

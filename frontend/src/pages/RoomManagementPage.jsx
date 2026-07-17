@@ -3,10 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
 import {
   getRooms, createRoom, updateRoom, deleteRoom, updateRoomStatus,
-  getRoomTypes // We only need to fetch types here; creation/updating is handled by the modal
+  getRoomTypes 
 } from '../api/rooms';
 import RequirePermission from '../components/RequirePermission';
-import RoomTypeModal from '../components/catalog/RoomTypeModal'; // 🌟 Import the advanced modal with amenities
+import RoomTypeModal from '../components/catalog/RoomTypeModal'; 
+import AmenityManagementModal from '../components/catalog/AmenityManagementModal'; // 🌟 NEW IMPORT
 import toast from 'react-hot-toast';
 import {
   BedDouble, Layers, Plus, Edit2, Trash2, Loader2, Sparkles, AlertCircle, X, Users, Tag // 🌟 Added Tag icon
@@ -22,6 +23,7 @@ export default function RoomManagementPage() {
   // Modal States
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
+  const [isAmenityModalOpen, setIsAmenityModalOpen] = useState(false); // 🌟 NEW STATE
   const [editingRoom, setEditingRoom] = useState(null);
   const [editingType, setEditingType] = useState(null);
 
@@ -121,7 +123,8 @@ export default function RoomManagementPage() {
           isLoading={isLoadingTypes}
           onAdd={() => { setEditingType(null); setIsTypeModalOpen(true); }}
           onEdit={(type) => { setEditingType(type); setIsTypeModalOpen(true); }}
-          onDelete={(id, name) => window.confirm(`Delete "${name}"? Ensure no rooms are using it.`) && deleteRoomType(id)}
+          onDelete={(id, name) => window.confirm(`Delete "${name}"? Ensure no rooms are using it.`) && deleteRoomType(id)} // Note: You'll need to ensure deleteRoomType is imported or handled if used here, or remove this prop if not needed.
+          onManageAmenities={() => setIsAmenityModalOpen(true)} // 🌟 NEW PROP
         />
       )}
 
@@ -137,7 +140,7 @@ export default function RoomManagementPage() {
         />
       )}
 
-      {/* 🌟 ADVANCED ROOM TYPE MODAL (Replaces the basic inline one) */}
+      {/* 🌟 ADVANCED ROOM TYPE MODAL */}
       {isTypeModalOpen && (
         <RoomTypeModal 
           isOpen={isTypeModalOpen}
@@ -147,6 +150,18 @@ export default function RoomManagementPage() {
             queryClient.invalidateQueries({ queryKey: ['roomTypes'] });
             toast.success(editingType ? 'Room type updated!' : 'Room type created!');
           }}
+        />
+      )}
+
+      {/* 🌟 AMENITY MANAGEMENT MODAL */}
+      {isAmenityModalOpen && (
+        <AmenityManagementModal 
+          isOpen={isAmenityModalOpen} 
+          onClose={() => {
+            setIsAmenityModalOpen(false);
+            // 🌟 THE MAGIC FIX: Force the parent page to refetch Room Types
+            queryClient.invalidateQueries({ queryKey: ['roomTypes'] }); 
+          }} 
         />
       )}
     </div>
@@ -227,17 +242,27 @@ function RoomsTab({ rooms, isLoading, onAdd, onEdit, onDelete, onStatusChange })
   );
 }
 
-// 🌟 UPGRADED TypesTab to show Amenities Badges
-function TypesTab({ types, isLoading, onAdd, onEdit, onDelete }) {
+// 🌟 UPGRADED TypesTab to show Amenities Badges and Manage Button
+function TypesTab({ types, isLoading, onAdd, onEdit, onDelete, onManageAmenities }) {
   return (
     <div className="bg-surface border border-border rounded-xl shadow-sm overflow-hidden">
       <div className="p-4 border-b border-border flex justify-between items-center bg-secondary-50/30">
         <h3 className="text-sm font-bold text-text">Room Types & Rates</h3>
-        <RequirePermission permission="CanCreateRoomType">
-          <button onClick={onAdd} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm">
-            <Plus size={16} /> Add Room Type
+        <div className="flex gap-2">
+          {/* 🌟 NEW BUTTON: Manage Master Amenities */}
+          <button 
+            onClick={onManageAmenities} 
+            className="inline-flex items-center gap-2 px-4 py-2 bg-secondary-100 text-text text-sm font-semibold rounded-lg hover:bg-secondary-200 transition shadow-sm border border-border"
+          >
+            <Tag size={16} /> Manage Amenities
           </button>
-        </RequirePermission>
+          
+          <RequirePermission permission="CanCreateRoomType">
+            <button onClick={onAdd} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm">
+              <Plus size={16} /> Add Room Type
+            </button>
+          </RequirePermission>
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left">
@@ -264,7 +289,7 @@ function TypesTab({ types, isLoading, onAdd, onEdit, onDelete }) {
                   </td>
                   <td className="px-6 py-4">
                     <p className="text-sm text-text-muted max-w-xs truncate mb-2">{type.description || '-'}</p>
-                    {/* 🌟 NEW: Display Amenities Badges */}
+                    {/* 🌟 Display Amenities Badges */}
                     {type.amenities && type.amenities.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
                         {type.amenities.map((link) => (
@@ -380,7 +405,3 @@ function RoomModal({ room, roomTypes, propertyId, onClose, onSave, isLoading }) 
     </div>
   );
 }
-
-// 🌟 NOTE: The inline TypeModal has been completely removed! 
-// We now use the advanced <RoomTypeModal /> imported from '../components/catalog/RoomTypeModal' 
-// which includes the Inline Tagging for Amenities.
