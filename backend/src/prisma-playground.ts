@@ -36,7 +36,7 @@ async function runCustomProof() {
     console.log('\n✅ CUSTOM SCRIPT EXECUTED SUCCESSFULLY!');
     console.log('✅ THIS FILE IS NOW YOUR PRIVATE SANDBOX.');
     console.log('✅ YOU CAN WRITE ANY TEST CODE (EVEN DESTRUCTIVE) BELOW THIS LINE.\n');
-    
+     
   } catch (error: any) {
     console.error('❌ CUSTOM SCRIPT ERROR:', error.message);
   } finally {
