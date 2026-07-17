@@ -20,7 +20,6 @@ const operationItems = [
 const configItems = [
   { to: '/room-management', icon: Settings, label: 'Room Management', permission: 'CanCreateRoom' },
   { to: '/users', icon: Shield, label: 'Staff Management', permission: 'CanManageStaffAndRoles' },
-  { to: '/room-types', icon: Layers, label: 'Room Types', permission: 'CanCreateRoomType' },
   { to: '/rate-plans', icon: Tags, label: 'Rate Plans', permission: 'CanManageRates' },
   { to: '/properties', icon: Building2, label: 'Properties' },
 ];

@@ -14,7 +14,6 @@ import GuestsPage from './pages/GuestsPage';
 import ReservationsPage from './pages/ReservationsPage';
 import PaymentsPage from './pages/PaymentsPage';
 import ReportsPage from './pages/ReportsPage';
-import RoomTypesPage from './pages/RoomTypesPage';
 import RatePlansPage from './pages/RatePlansPage';
 import PropertiesPage from './pages/PropertiesPage';
 import ReservationDetailsPage from './pages/ReservationDetailsPage';
@@ -97,7 +96,6 @@ function App() {
           <Route path="room-management" element={<RoomManagementPage />} />
           
           {/* Configuration Pages */}
-          <Route path="room-types" element={<RoomTypesPage />} />
           <Route path="rate-plans" element={<RatePlansPage />} />
           <Route path="properties" element={<PropertiesPage />} />
           <Route path="users" element={<UsersPage />} />
