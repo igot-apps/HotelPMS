@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Loader2, Globe, Save } from 'lucide-react';
+import { X, Loader2, Globe, Save, Smartphone } from 'lucide-react';
 
 export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, initialData }) {
   const [formData, setFormData] = useState({
@@ -13,7 +13,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
     primaryEmail: '',
     primaryPhone: '',
     
-    // 🌟 NEW: Public Website & Billing Fields
+    // 🌟 Public Website & Billing Fields
     coverImage: '',
     galleryImages: '', // Handled as a comma-separated string in the UI
     publicDescription: '',
@@ -21,6 +21,9 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
     houseRules: '',
     taxPercentage: 0.00,
     isOnlineBookingEnabled: false,
+    
+    // 🌟 Paystack Integration
+    paystackSecretKey: '',
   });
 
   // Populate form when editing
@@ -36,7 +39,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
         primaryEmail: initialData.primaryEmail || '',
         primaryPhone: initialData.primaryPhone || '',
         
-        // 🌟 Parse new fields
+        // Public Website Fields
         coverImage: initialData.coverImage || '',
         galleryImages: Array.isArray(initialData.galleryImages) ? initialData.galleryImages.join(', ') : '',
         publicDescription: initialData.publicDescription || '',
@@ -44,6 +47,9 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
         houseRules: initialData.houseRules || '',
         taxPercentage: initialData.taxPercentage ? parseFloat(initialData.taxPercentage) : 0.00,
         isOnlineBookingEnabled: initialData.isOnlineBookingEnabled || false,
+        
+        // 🌟 Paystack Key (will be masked like "sk_test_1614...1e0a")
+        paystackSecretKey: initialData.paystackSecretKey || '',
       });
     } else {
       // Reset for new property
@@ -51,6 +57,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
         propertyName: '', propertyCode: '', propertyType: '', address: '', city: '', country: 'Ghana',
         primaryEmail: '', primaryPhone: '', coverImage: '', galleryImages: '', publicDescription: '',
         cancellationPolicy: '', houseRules: '', taxPercentage: 0.00, isOnlineBookingEnabled: false,
+        paystackSecretKey: '',
       });
     }
   }, [initialData, isOpen]);
@@ -68,10 +75,16 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
       ? formData.galleryImages.split(',').map(url => url.trim()).filter(url => url) 
       : [];
 
+    // 🌟 Only send the Paystack key if it's a new value (not the masked version with "...")
+    const shouldUpdatePaystackKey = formData.paystackSecretKey && !formData.paystackSecretKey.includes('...');
+
     const payload = {
       ...formData,
       galleryImages: galleryArray,
       taxPercentage: parseFloat(formData.taxPercentage) || 0.00,
+      isOnlineBookingEnabled: formData.isOnlineBookingEnabled,
+      // 🌟 Only include paystackSecretKey if it's a new value
+      ...(shouldUpdatePaystackKey && { paystackSecretKey: formData.paystackSecretKey }),
     };
 
     onSubmit(payload);
@@ -249,6 +262,34 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
                 className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20" 
               />
               <p className="text-xs text-text-muted mt-1">This tax will be automatically added to all online bookings at checkout.</p>
+            </div>
+
+            {/* 🌟 Paystack Mobile Money Integration */}
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-text mb-1.5 flex items-center gap-2">
+                <Smartphone size={16} className="text-primary-600" />
+                Paystack Secret Key (Mobile Money)
+              </label>
+              <input 
+                type="password" 
+                name="paystackSecretKey" 
+                value={formData.paystackSecretKey} 
+                onChange={handleChange} 
+                placeholder="sk_live_... or sk_test_..." 
+                className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 font-mono text-sm" 
+              />
+              <p className="text-xs text-text-muted mt-1">
+                Your hotel's Paystack secret key for Mobile Money payments (MTN MoMo, Vodafone Cash, AirtelTigo). 
+                Payments will be processed directly to your account. 
+                <a href="https://dashboard.paystack.com/#/settings/developer" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline ml-1">
+                  Get your key here →
+                </a>
+              </p>
+              {initialData?.paystackSecretKey && (
+                <p className="text-xs text-warning-600 mt-1">
+                  ⚠️ Leave blank to keep your current key. Enter a new key to replace it.
+                </p>
+              )}
             </div>
           </div>
 

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Calendar, Tag, Loader2, CheckCircle2, ArrowLeft, CreditCard, ShieldCheck, LogIn, X } from 'lucide-react';
+// 🌟 UPDATED: Replaced CreditCard with Smartphone for Mobile Money
+import { Calendar, Tag, Loader2, CheckCircle2, ArrowLeft, Smartphone, ShieldCheck, LogIn, X } from 'lucide-react';
 import api from '../lib/axios';
 import toast from 'react-hot-toast';
 
@@ -13,27 +14,30 @@ export default function PublicCheckoutPage() {
   const checkIn = searchParams.get('checkIn');
   const checkOut = searchParams.get('checkOut');
 
-  // 🌟 SAFELY parse guest info
+  // 🌟 SAFELY parse guest info to prevent "undefined" JSON errors
   const guestInfoString = localStorage.getItem('guestInfo');
   const guestInfo = guestInfoString && guestInfoString !== 'undefined' 
     ? JSON.parse(guestInfoString) 
     : null;
   const guestToken = localStorage.getItem('guestToken');
 
-  // 🌟 NEW: State for the Login Prompt Modal
+  // 🌟 State for the Login Prompt Modal (Soft Gate)
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
 
+  // 🌟 ONLY redirect if dates are missing. Allow logged-out users to view the page.
   useEffect(() => {
     if (!checkIn || !checkOut) {
       navigate(`/public/${propertyCode}`);
     }
   }, [checkIn, checkOut, navigate, propertyCode]);
 
+  // Fetch Property (for tax rate)
   const { data: property, isLoading: isLoadingProp } = useQuery({
     queryKey: ['publicProperty', propertyCode],
     queryFn: async () => (await api.get(`/public/${propertyCode}`)).data.data,
   });
 
+  // Fetch Room Types (to find the selected room's price and details)
   const { data: roomTypes, isLoading: isLoadingRooms } = useQuery({
     queryKey: ['publicRooms', propertyCode],
     queryFn: async () => (await api.get(`/public/${propertyCode}/room-types`)).data.data,
@@ -41,6 +45,7 @@ export default function PublicCheckoutPage() {
 
   const selectedRoom = roomTypes?.find(r => r.roomTypeId === parseInt(roomTypeId));
 
+  // 🌟 Calculate Pricing Safely
   const nights = Math.max(1, Math.ceil((new Date(checkOut) - new Date(checkIn)) / (1000 * 60 * 60 * 24)));
   const basePrice = selectedRoom ? parseFloat(selectedRoom.basePrice) : 0;
   const subtotal = basePrice * nights;
@@ -48,6 +53,7 @@ export default function PublicCheckoutPage() {
   const taxAmount = subtotal * (taxRate / 100);
   const totalAmount = subtotal + taxAmount;
 
+  // Mutation to create the reservation
   const bookingMutation = useMutation({
     mutationFn: async () => {
       const res = await api.post(`/public/${propertyCode}/reservations`, {
@@ -67,7 +73,7 @@ export default function PublicCheckoutPage() {
       setConfirmationData(data);
     },
     onError: (err) => {
-      toast.error(err.response?.data?.message || 'Failed to process booking.');
+      toast.error(err.response?.data?.message || 'Failed to process booking. Please try again.');
     }
   });
 
@@ -97,7 +103,7 @@ export default function PublicCheckoutPage() {
     );
   }
 
-  // SUCCESS STATE
+  // 🌟 SUCCESS STATE: Show Receipt
   if (confirmationData) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -107,6 +113,7 @@ export default function PublicCheckoutPage() {
           </div>
           <h1 className="text-2xl font-bold text-text mb-2">Booking Confirmed!</h1>
           <p className="text-text-muted mb-6">Your reservation at {property?.propertyName} has been successfully processed.</p>
+          
           <div className="bg-background p-4 rounded-lg border border-border text-left space-y-3 mb-6">
             <div className="flex justify-between text-sm">
               <span className="text-text-muted">Confirmation Code:</span>
@@ -121,8 +128,13 @@ export default function PublicCheckoutPage() {
               <span className="font-bold text-text">GH₵ {confirmationData.totalAmount.toFixed(2)}</span>
             </div>
           </div>
+
           <p className="text-xs text-text-muted mb-6">Please save your confirmation code. You will need it for check-in.</p>
-          <button onClick={() => navigate(`/public/${propertyCode}`)} className="w-full py-3 bg-primary-600 text-text-inverted font-bold rounded-lg hover:bg-primary-700 transition">
+          
+          <button 
+            onClick={() => navigate(`/public/${propertyCode}`)}
+            className="w-full py-3 bg-primary-600 text-text-inverted font-bold rounded-lg hover:bg-primary-700 transition"
+          >
             Return to Hotel Page
           </button>
         </div>
@@ -130,7 +142,7 @@ export default function PublicCheckoutPage() {
     );
   }
 
-  // CHECKOUT STATE
+  // 🌟 CHECKOUT STATE: Show Summary & Pay Button
   return (
     <div className="min-h-screen bg-background py-12 px-4">
       <div className="max-w-4xl mx-auto">
@@ -139,10 +151,11 @@ export default function PublicCheckoutPage() {
         </button>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column */}
+          {/* Left Column: Booking Summary */}
           <div className="lg:col-span-2 space-y-6">
             <h1 className="text-2xl font-bold text-text">Review & Pay</h1>
             
+            {/* Trip Details */}
             <div className="bg-surface p-6 rounded-xl border border-border">
               <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
                 <Calendar size={20} className="text-primary-600"/> Your Trip
@@ -157,6 +170,7 @@ export default function PublicCheckoutPage() {
                   <p className="text-xs text-text-muted">{nights} Night{nights > 1 ? 's' : ''}</p>
                 </div>
               </div>
+              
               {selectedRoom?.amenities?.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-4">
                   {selectedRoom.amenities.map((link) => (
@@ -185,16 +199,17 @@ export default function PublicCheckoutPage() {
                     <LogIn size={16} className="text-primary-600" />
                     <p className="text-sm font-semibold text-primary-700">Guest information required</p>
                   </div>
-                  <p className="text-xs text-primary-600">You will be prompted to log in or register when you click "Confirm & Pay".</p>
+                  <p className="text-xs text-primary-600">You will be prompted to log in or register when you click "Pay with Mobile Money".</p>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Right Column */}
+          {/* Right Column: Price Breakdown & Pay */}
           <div className="lg:col-span-1">
             <div className="bg-surface p-6 rounded-xl border border-border sticky top-6">
               <h2 className="text-lg font-bold text-text mb-4">Price Details</h2>
+              
               <div className="space-y-3 text-sm mb-6">
                 <div className="flex justify-between text-text">
                   <span>GH₵ {basePrice.toFixed(2)} x {nights} night{nights > 1 ? 's' : ''}</span>
@@ -212,19 +227,21 @@ export default function PublicCheckoutPage() {
                 </div>
               </div>
 
+              {/* 🌟 UPDATED: Uses Smartphone icon and Mobile Money text */}
               <button 
-                onClick={handlePay} // 🌟 Uses the Soft Gate function
+                onClick={handlePay}
                 disabled={bookingMutation.isPending}
                 className="w-full py-3 bg-primary-600 text-text-inverted font-bold rounded-lg hover:bg-primary-700 transition flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {bookingMutation.isPending ? (
                   <><Loader2 className="animate-spin" size={18} /> Processing...</>
                 ) : (
-                  <><CreditCard size={18} /> Confirm & Pay</>
+                  <><Smartphone size={18} /> Pay with Mobile Money</>
                 )}
               </button>
+              
               <p className="text-[10px] text-text-muted text-center mt-3">
-                By clicking pay, you agree to the hotel's cancellation policy and house rules.
+                Secure payment via MTN MoMo, Vodafone Cash, or AirtelTigo Money
               </p>
             </div>
           </div>

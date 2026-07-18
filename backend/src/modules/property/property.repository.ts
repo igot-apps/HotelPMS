@@ -56,7 +56,7 @@ export const findProperties = async (
 };
 
 export const findPropertyById = async (propertyId: number) => {
-  return prisma.property.findUnique({
+  const property = await prisma.property.findUnique({
     where: { propertyId },
     include: {
       rooms: {
@@ -81,6 +81,19 @@ export const findPropertyById = async (propertyId: number) => {
       },
     },
   });
+
+  if (!property) return null;
+
+  // 🌟 MASK the Paystack key before sending to frontend
+  // Show only first 12 and last 4 characters: sk_test_1614...1e0a
+  const maskedKey = property.paystackSecretKey 
+    ? `${property.paystackSecretKey.substring(0, 12)}...${property.paystackSecretKey.slice(-4)}`
+    : null;
+
+  return {
+    ...property,
+    paystackSecretKey: maskedKey, // 🌟 Send masked version to frontend
+  };
 };
 
 export const findAllActiveProperties = async () => {

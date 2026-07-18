@@ -48,6 +48,8 @@ model Property {
   houseRules             String?   @db.Text
   taxPercentage          Decimal   @default(0.00) @db.Decimal(5, 2) // e.g., 15.00 for 15%
   isOnlineBookingEnabled Boolean   @default(false) // Master switch for public bookings
+  // 🌟 NEW: Property-specific Paystack integration
+  paystackSecretKey   String?   @db.Text // Encrypted Paystack secret key for this property
 
   // Reverse relations
   users                  User[]
