@@ -10,8 +10,8 @@ export default function GuestAuthPage() {
   const navigate = useNavigate();
   const location = useLocation();
   
-  // Get the redirect path from location state, or default to a generic checkout
-  const redirectPath = location.state?.from || `/public/${propertyCode}/checkout`;
+  // 🌟 Get the exact URL the guest was trying to visit before being redirected here
+  const redirectPath = location.state?.from || `/public/${propertyCode}`;
 
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({ fullName: '', phone: '', email: '', password: '' });
@@ -25,15 +25,17 @@ export default function GuestAuthPage() {
       return res.data;
     },
     onSuccess: (response) => {
-      // Save token and guest info to localStorage
+      // 🌟 CORRECTLY save the guest data (response.data contains the guest info and token)
       localStorage.setItem('guestToken', response.data.token);
-      localStorage.setItem('guestInfo', JSON.stringify(response.data.data));
+      localStorage.setItem('guestInfo', JSON.stringify(response.data));
       
       toast.success(isLogin ? 'Welcome back!' : 'Account created successfully!');
-      navigate(redirectPath);
+      
+      // 🌟 REDIRECT: Bounce them back to the Review & Pay page they originally wanted
+      navigate(redirectPath, { replace: true });
     },
     onError: (error) => {
-      toast.error(error.response?.data?.message || 'Authentication failed');
+      toast.error(error.response?.data?.message || 'Authentication failed. Please try again.');
     }
   });
 
@@ -49,7 +51,7 @@ export default function GuestAuthPage() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-surface rounded-2xl shadow-xl border border-border p-8">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-text-muted hover:text-text mb-6 transition">
+        <button onClick={() => navigate(`/public/${propertyCode}`)} className="flex items-center gap-2 text-sm text-text-muted hover:text-text mb-6 transition">
           <ArrowLeft size={16} /> Back to Hotel
         </button>
 
@@ -99,7 +101,7 @@ export default function GuestAuthPage() {
 
           <button type="submit" disabled={authMutation.isPending} className="w-full py-3 bg-primary-600 text-text-inverted font-bold rounded-lg hover:bg-primary-700 transition flex items-center justify-center gap-2 disabled:opacity-50">
             {authMutation.isPending && <Loader2 className="animate-spin" size={18} />}
-            {isLogin ? 'Login & Continue' : 'Create Account & Continue'}
+            {isLogin ? 'Login & Continue to Checkout' : 'Create Account & Continue to Checkout'}
           </button>
         </form>
 

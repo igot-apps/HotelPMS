@@ -11,13 +11,17 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key';
 router.post('/register', async (req: any, res: Response) => {
   try {
     const { fullName, phone, email, password } = req.body;
+    
+    // 🌟 Clean inputs to prevent space mismatches
+    const cleanPhone = phone?.trim();
+    const cleanEmail = email?.trim() || null;
 
-    if (!fullName || !phone || !password) {
+    if (!fullName || !cleanPhone || !password) {
       return res.status(400).json({ success: false, message: 'Full name, phone, and password are required' });
     }
 
     // Check if guest already exists by phone
-    const existingGuest = await prisma.platformGuest.findUnique({ where: { phone } });
+    const existingGuest = await prisma.platformGuest.findUnique({ where: { phone: cleanPhone } });
     if (existingGuest) {
       return res.status(400).json({ success: false, message: 'An account with this phone number already exists. Please login instead.' });
     }
@@ -26,15 +30,17 @@ router.post('/register', async (req: any, res: Response) => {
 
     const newGuest = await prisma.platformGuest.create({
       data: {
-        fullName,
-        phone,
-        email: email || null,
+        fullName: fullName.trim(),
+        phone: cleanPhone,
+        email: cleanEmail,
         passwordHash,
-        isPhoneVerified: false, // Will be updated when OTP is implemented
+        isPhoneVerified: false,
         isEmailVerified: false,
       },
       select: { guestId: true, fullName: true, phone: true, email: true }
     });
+
+    console.log('✅ REGISTER SUCCESS: Created guest with phone:', cleanPhone);
 
     // Generate JWT for the guest
     const token = jwt.sign({ platformGuestId: newGuest.guestId, type: 'guest' }, JWT_SECRET, { expiresIn: '7d' });
@@ -45,6 +51,7 @@ router.post('/register', async (req: any, res: Response) => {
       data: { ...newGuest, token }
     });
   } catch (error: any) {
+    console.error('❌ REGISTER ERROR:', error);
     return res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -53,14 +60,23 @@ router.post('/register', async (req: any, res: Response) => {
 router.post('/login', async (req: any, res: Response) => {
   try {
     const { phone, password } = req.body;
+    const cleanPhone = phone?.trim();
 
-    if (!phone || !password) {
+    if (!cleanPhone || !password) {
       return res.status(400).json({ success: false, message: 'Phone and password are required' });
     }
 
-    const guest = await prisma.platformGuest.findUnique({ where: { phone } });
+    console.log('🔍 LOGIN DEBUG: Attempting login with phone:', cleanPhone);
+
+    const guest = await prisma.platformGuest.findUnique({ where: { phone: cleanPhone } });
+    
     if (!guest) {
-      return res.status(404).json({ success: false, message: 'Guest not found. Please register first.' });
+      console.log('❌ LOGIN DEBUG: Guest not found in database.');
+      // 🌟 Print all guests to help us see what's actually in the DB
+      const allGuests = await prisma.platformGuest.findMany({ select: { phone: true, fullName: true } });
+      console.log('📋 ALL PLATFORM GUESTS IN DB:', allGuests);
+      
+      return res.status(404).json({ success: false, message: 'Guest not found. Please check your phone number and try again.' });
     }
 
     const isPasswordValid = await bcrypt.compare(password, guest.passwordHash);
@@ -75,6 +91,8 @@ router.post('/login', async (req: any, res: Response) => {
     // Generate JWT
     const token = jwt.sign({ platformGuestId: guest.guestId, type: 'guest' }, JWT_SECRET, { expiresIn: '7d' });
 
+    console.log('✅ LOGIN SUCCESS: Guest logged in:', cleanPhone);
+
     return res.json({ 
       success: true, 
       message: 'Login successful!',
@@ -87,6 +105,7 @@ router.post('/login', async (req: any, res: Response) => {
       }
     });
   } catch (error: any) {
+    console.error('❌ LOGIN ERROR:', error);
     return res.status(500).json({ success: false, message: error.message });
   }
 });

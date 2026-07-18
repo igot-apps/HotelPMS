@@ -77,18 +77,9 @@ export default function PublicHotelPage() {
     // React Query handles the refetch automatically when state changes
   };
 
-    // 🌟 CHECKOUT GATE: Check if guest is logged in before booking
+  // 🌟 DIRECT NAVIGATION: Let them see the checkout page first
   const handleBookNow = (roomTypeId) => {
-    const hasToken = localStorage.getItem('guestToken');
-    if (!hasToken) {
-      // Redirect to auth, remembering exactly where they wanted to go
-      navigate(`/public/${propertyCode}/auth`, { 
-        state: { from: `/public/${propertyCode}/book/${roomTypeId}?checkIn=${checkIn}&checkOut=${checkOut}` } 
-      });
-    } else {
-      // They are logged in, take them straight to checkout
-      navigate(`/public/${propertyCode}/book/${roomTypeId}?checkIn=${checkIn}&checkOut=${checkOut}`);
-    }
+    navigate(`/public/${propertyCode}/book/${roomTypeId}?checkIn=${checkIn}&checkOut=${checkOut}`);
   };
 
   return (

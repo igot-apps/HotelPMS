@@ -7,10 +7,12 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import HotelRegistrationWizard from './pages/HotelRegistrationWizard';
 
-// 🌟 Public hotel page
+// 🌟 Public Website Pages (Guest Booking Flow)
 import PublicHotelPage from './pages/PublicHotelPage';
+import GuestAuthPage from './pages/GuestAuthPage';
+import PublicCheckoutPage from './pages/PublicCheckoutPage';
 
-// Protected Pages
+// Protected Pages (Staff PMS)
 import DashboardPage from './pages/DashboardPage';
 import RoomsPage from './pages/RoomsPage';
 import GuestsPage from './pages/GuestsPage';
@@ -25,8 +27,6 @@ import AvailabilityPage from './pages/AvailabilityPage';
 import RoomManagementPage from './pages/RoomManagementPage';
 import UsersPage from './pages/UsersPage';
 import BillingPage from './pages/BillingPage';
-import GuestAuthPage from './pages/GuestAuthPage'; // 🌟 Add this import
-
 
 function App() {
   return (
@@ -74,9 +74,10 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register-your-hotel" element={<HotelRegistrationWizard />} />
         
-        {/* 🌟 NEW: Public Hotel Booking Page (Bypasses AppLayout/Sidebar) */}
+        {/* 🌟 THESE 3 ROUTES BYPASS THE APP LAYOUT/SIDEBAR */}
         <Route path="/public/:propertyCode" element={<PublicHotelPage />} />
         <Route path="/public/:propertyCode/auth" element={<GuestAuthPage />} />
+        <Route path="/public/:propertyCode/book/:roomTypeId" element={<PublicCheckoutPage />} />
 
         {/* ========================================== */}
         {/* 🔒 PROTECTED ROUTES (Wrapped in Layout)    */}
