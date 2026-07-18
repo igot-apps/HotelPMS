@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { PrismaClient } from '../../generated/prisma';
+import axios from 'axios';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -68,35 +69,21 @@ router.get('/:propertyCode', async (req: any, res: Response) => {
 router.get('/:propertyCode/room-types', async (req: any, res: Response) => {
   try {
     const { propertyCode } = req.params;
-    // 🌟 1. Extract pagination params (default to page 1, limit 6)
     const { checkIn, checkOut, page = '1', limit = '6' } = req.query;
     
     const property = await checkOnlineBookingEnabled(propertyCode);
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
 
-    // Fetch all active room types with images and amenities
     const roomTypes = await prisma.roomType.findMany({
-      where: { 
-        propertyId: property.propertyId, 
-        isActive: true 
-      },
+      where: { propertyId: property.propertyId, isActive: true },
       orderBy: { basePrice: 'asc' },
       include: {
-        amenities: {
-          include: { amenity: { select: { name: true, icon: true } } }
-        },
-        _count: {
-          select: {
-            rooms: {
-              where: { operationalStatus: 'Available', housekeepingStatus: 'Clean' }
-            }
-          }
-        }
+        amenities: { include: { amenity: { select: { name: true, icon: true } } } },
+        _count: { select: { rooms: { where: { operationalStatus: 'Available', housekeepingStatus: 'Clean' } } } }
       }
     });
 
-    // 🌟 2. If dates are provided, filter out room types that are fully booked
     let availableRoomTypes = roomTypes;
     if (checkIn && checkOut) {
       const checkInDate = new Date(checkIn as string);
@@ -107,50 +94,32 @@ router.get('/:propertyCode/room-types', async (req: any, res: Response) => {
           const totalRoomsOfType = await prisma.room.count({
             where: { propertyId: property.propertyId, roomTypeId: rt.roomTypeId, operationalStatus: 'Available' }
           });
-
           const bookedRooms = await prisma.reservationRoom.count({
             where: {
               roomTypeId: rt.roomTypeId,
               reservation: {
                 propertyId: property.propertyId,
                 status: { in: ['Confirmed', 'CheckedIn'] },
-                OR: [
-                  { checkInDate: { lte: checkOutDate }, checkOutDate: { gte: checkInDate } }
-                ]
+                OR: [{ checkInDate: { lte: checkOutDate }, checkOutDate: { gte: checkInDate } }]
               }
             }
           });
-
           const availableCount = totalRoomsOfType - bookedRooms;
-          
-          return {
-            ...rt,
-            availableRooms: availableCount,
-            isAvailable: availableCount > 0
-          };
+          return { ...rt, availableRooms: availableCount, isAvailable: availableCount > 0 };
         })
       );
-      // Only keep room types that have > 0 availability
       availableRoomTypes = availabilityChecks.filter(rt => rt.isAvailable);
     }
 
-    // 🌟 3. PAGINATION LOGIC (Applied AFTER availability filtering)
     const total = availableRoomTypes.length;
     const totalPages = Math.ceil(total / limitNum);
     const paginatedData = availableRoomTypes.slice((pageNum - 1) * limitNum, pageNum * limitNum);
 
-    // 🌟 4. Return the data AND the pagination metadata
     return res.json({ 
       success: true, 
       data: paginatedData,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
-        totalPages
-      }
+      pagination: { page: pageNum, limit: limitNum, total, totalPages }
     });
-
   } catch (error: any) {
     if (error.message.includes('disabled') || error.message.includes('not found')) {
       return res.status(404).json({ success: false, message: error.message });
@@ -165,56 +134,50 @@ router.get('/:propertyCode/room-types', async (req: any, res: Response) => {
 router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
   try {
     const { propertyCode } = req.params;
-    const { 
-      checkInDate, checkOutDate, roomTypeId, 
-      guestFullName, guestPhone, guestEmail, // For creating a new PlatformGuest
-      platformGuestId, // Or link an existing verified guest
-      agreedPricePerNight, notes 
-    } = req.body;
+    const { checkInDate, checkOutDate, roomTypeId, guestFullName, guestPhone, guestEmail, platformGuestId, agreedPricePerNight, notes } = req.body;
 
     const property = await checkOnlineBookingEnabled(propertyCode);
 
-    // 1. Validate Dates
     const cIn = new Date(checkInDate);
     const cOut = new Date(checkOutDate);
     if (cIn >= cOut) throw new Error('Check-out date must be after check-in date.');
     
     const nights = Math.ceil((cOut.getTime() - cIn.getTime()) / (1000 * 60 * 60 * 24));
-    const baseTotal = Number(agreedPricePerNight) * nights;
-    const taxAmount = baseTotal * (Number(property.taxPercentage) / 100);
+    const baseTotal = parseFloat(agreedPricePerNight) * nights;
+    const taxAmount = baseTotal * (parseFloat(property.taxPercentage as any) / 100);
     const finalTotal = baseTotal + taxAmount;
 
-    // 2. Check Room Availability
-    const totalRoomsOfType = await prisma.room.count({
-      where: { propertyId: property.propertyId, roomTypeId, operationalStatus: 'Available' }
-    });
-    const bookedRooms = await prisma.reservationRoom.count({
+    // 🌟 Find a SPECIFIC available room of this type for these dates
+    const availableRoom = await prisma.room.findFirst({
       where: {
-        roomTypeId,
-        reservation: {
-          propertyId: property.propertyId,
-          status: { in: ['Confirmed', 'CheckedIn'] },
-          OR: [{ checkInDate: { lte: cOut }, checkOutDate: { gte: cIn } }]
+        propertyId: property.propertyId,
+        roomTypeId: roomTypeId,
+        operationalStatus: 'Available',
+        reservationRooms: {
+          none: {
+            reservation: {
+              status: { in: ['Confirmed', 'CheckedIn'] },
+              OR: [{ checkInDate: { lte: cOut }, checkOutDate: { gte: cIn } }]
+            }
+          }
         }
       }
     });
 
-    if (totalRoomsOfType - bookedRooms <= 0) {
+    if (!availableRoom) {
       return res.status(400).json({ success: false, message: 'Sorry, this room type is no longer available for the selected dates.' });
     }
 
-    // 3. Create or Link Platform Guest
     let finalPlatformGuestId = platformGuestId;
     if (!finalPlatformGuestId && guestFullName && guestPhone) {
-      // Upsert guest by phone (simple V1 verification)
       const guest = await prisma.platformGuest.upsert({
-        where: { phone: guestPhone },
-        update: { fullName: guestFullName, email: guestEmail || undefined },
+        where: { phone: guestPhone.trim() },
+        update: { fullName: guestFullName.trim(), email: guestEmail?.trim() || undefined },
         create: { 
-          fullName: guestFullName, 
-          phone: guestPhone, 
-          email: guestEmail || '', 
-          passwordHash: 'PENDING_VERIFICATION', // Placeholder until OTP is built
+          fullName: guestFullName.trim(), 
+          phone: guestPhone.trim(), 
+          email: guestEmail?.trim() || '', 
+          passwordHash: 'PENDING_VERIFICATION',
           isPhoneVerified: false 
         }
       });
@@ -225,7 +188,6 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
       throw new Error('Guest information is required for online bookings.');
     }
 
-    // 4. Create Reservation (Prisma will auto-generate confirmationCode via @default(uuid()))
     const reservation = await prisma.reservation.create({
       data: {
         propertyId: property.propertyId,
@@ -236,23 +198,21 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
         status: 'Confirmed',
         notes: notes || '',
         totalAmount: finalTotal,
-        amountPaid: 0, // Will be updated by Paystack webhook later
+        amountPaid: 0, 
         balanceDue: finalTotal,
       },
-      include: {
-        platformGuest: { select: { fullName: true, phone: true, email: true } }
-      }
+      include: { platformGuest: { select: { fullName: true, phone: true, email: true } } }
     });
 
-    // 5. Create Reservation Room
+    // 🌟 Create Reservation Room using the VALID roomId we found
     await prisma.reservationRoom.create({
       data: {
         reservationId: reservation.reservationId,
-        roomId: 0, // 🌟 V1: We assign a specific room at check-in. For now, we link the RoomType.
+        roomId: availableRoom.roomId, // ✅ FIXED: Uses actual valid room ID
         roomTypeId: roomTypeId,
         checkInDate: cIn,
         checkOutDate: cOut,
-        agreedPricePerNight: Number(agreedPricePerNight),
+        agreedPricePerNight: parseFloat(agreedPricePerNight),
       }
     });
 
@@ -260,6 +220,7 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
       success: true, 
       message: 'Reservation created successfully!',
       data: {
+        reservationId: reservation.reservationId,
         confirmationCode: reservation.confirmationCode,
         totalAmount: finalTotal,
         guestName: reservation.platformGuest?.fullName
@@ -267,7 +228,140 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
     });
 
   } catch (error: any) {
+    console.error('Reservation Creation Error:', error);
     return res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+// ============================================================
+// 4. INITIALIZE GUEST PAYMENT (Mobile Money ONLY with Callback)
+// ============================================================
+router.post('/:propertyCode/payments/initialize', async (req: any, res: Response) => {
+  try {
+    const { propertyCode } = req.params;
+    const { reservationId, email, amount } = req.body; // amount in GHS
+
+    const property = await prisma.property.findUnique({ 
+      where: { propertyCode },
+      select: { propertyId: true, paystackSecretKey: true, currency: true }
+    });
+
+    if (!property?.paystackSecretKey) {
+      return res.status(400).json({ success: false, message: 'This hotel has not configured Mobile Money payments yet.' });
+    }
+
+    // 🌟 Build callback URL (frontend success page)
+    const callbackUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/public/${propertyCode}/booking-success`;
+
+    // 🌟 Call Paystack API with callback URL and Mobile Money ONLY
+    const response = await axios.post(
+      'https://api.paystack.co/transaction/initialize',
+      {
+        email,
+        amount: Math.round(amount * 100), // Convert GHS to Pesewas
+        reference: `RES-${reservationId}-${Date.now()}`,
+        currency: property.currency || 'GHS',
+        channels: ['mobile_money'], // 🚫 BLOCKS CREDIT CARDS, SHOWS MOBILE MONEY ONLY
+        callback_url: callbackUrl, // 🌟 Redirect here after payment
+        metadata: {
+          propertyCode,
+          reservationId: String(reservationId)
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${property.paystackSecretKey}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    return res.json({ success: true, data: response.data.data });
+  } catch (error: any) {
+    console.error('Paystack Initialization Error:', error.response?.data || error.message);
+    return res.status(500).json({ success: false, message: 'Failed to initialize payment' });
+  }
+});
+
+// ============================================================
+// 🌟 5. VERIFY GUEST PAYMENT (For Local Development Fallback)
+// ============================================================
+router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Response) => {
+  try {
+    const { propertyCode, reference } = req.params;
+
+    const property = await prisma.property.findUnique({ 
+      where: { propertyCode },
+      select: { propertyId: true, paystackSecretKey: true }
+    });
+
+    if (!property?.paystackSecretKey) {
+      return res.status(400).json({ success: false, message: 'Property Paystack configuration not found' });
+    }
+
+    // Verify transaction with Paystack using property's key
+    const response = await axios.get(
+      `https://api.paystack.co/transaction/verify/${reference}`,
+      {
+        headers: {
+          Authorization: `Bearer ${property.paystackSecretKey}`,
+        },
+      }
+    );
+
+    const transactionData = response.data.data;
+
+    // If payment is successful, update the reservation
+    if (transactionData.status === 'success') {
+      const reservationId = parseInt(transactionData.metadata?.reservationId);
+      const amountPaid = transactionData.amount / 100; // Convert pesewas back to GHS
+
+      if (reservationId) {
+        // 🛡️ ANTI-DUPLICATE LOCK: Check if already processed by webhook
+        const reservation = await prisma.reservation.findUnique({
+          where: { reservationId },
+          select: { amountPaid: true, status: true }
+        });
+
+        // 🌟 FIX: Convert Prisma Decimal to Number for comparison
+        if (reservation && Number(reservation.amountPaid) === 0) {
+          // Update the reservation financials
+          await prisma.reservation.update({
+            where: { reservationId },
+            data: {
+              amountPaid: { increment: amountPaid },
+              balanceDue: { decrement: amountPaid },
+              status: 'Confirmed',
+            }
+          });
+
+          // Record the payment
+          await prisma.payment.create({
+            data: {
+              reservationId,
+              amount: amountPaid,
+              paymentMethod: 'Mobile Money',
+              status: 'Completed',
+              reference: transactionData.reference,
+              receivedBy: null,
+            }
+          });
+
+          console.log(`🔧 [VERIFY FALLBACK] Reservation #${reservationId} payment verified: GH₵ ${amountPaid}`);
+        } else {
+          console.log(`ℹ️ [VERIFY SKIPPED] Reservation #${reservationId} already processed by webhook`);
+        }
+      }
+    }
+
+    return res.json({ 
+      success: true, 
+      data: transactionData,
+      status: transactionData.status
+    });
+  } catch (error: any) {
+    console.error('Paystack Verify Error:', error.response?.data?.message || error.message);
+    return res.status(500).json({ success: false, message: error.response?.data?.message || error.message });
   }
 });
 

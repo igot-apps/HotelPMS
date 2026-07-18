@@ -53,27 +53,38 @@ export default function PublicCheckoutPage() {
   const taxAmount = subtotal * (taxRate / 100);
   const totalAmount = subtotal + taxAmount;
 
-  // Mutation to create the reservation
-  const bookingMutation = useMutation({
+  // 🌟 NEW: Payment Initialization Mutation (Creates reservation + Gets Paystack URL)
+  const initializePaymentMutation = useMutation({
     mutationFn: async () => {
-      const res = await api.post(`/public/${propertyCode}/reservations`, {
+      // 1. First, create the reservation (status: Pending/Confirmed, amountPaid: 0)
+      const resData = await api.post(`/public/${propertyCode}/reservations`, {
         checkInDate: checkIn,
         checkOutDate: checkOut,
         roomTypeId: parseInt(roomTypeId),
         guestFullName: guestInfo.fullName,
         guestPhone: guestInfo.phone,
-        guestEmail: guestInfo.email || '',
+        guestEmail: guestInfo.email || 'guest@example.com',
         platformGuestId: guestInfo.guestId,
         agreedPricePerNight: basePrice,
       });
-      return res.data.data;
+      
+      const reservationId = resData.data.data.reservationId;
+
+      // 2. Initialize Paystack with the property's specific key
+      const paystackRes = await api.post(`/public/${propertyCode}/payments/initialize`, {
+        reservationId,
+        email: guestInfo.email || 'guest@example.com',
+        amount: totalAmount,
+      });
+
+      return paystackRes.data.data; // Contains authorization_url and reference
     },
-    onSuccess: (data) => {
-      toast.success('Booking confirmed successfully!');
-      setConfirmationData(data);
+    onSuccess: (paystackData) => {
+      // 3. Redirect the user's browser to Paystack to complete the MoMo prompt
+      window.location.href = paystackData.authorization_url;
     },
     onError: (err) => {
-      toast.error(err.response?.data?.message || 'Failed to process booking. Please try again.');
+      toast.error(err.response?.data?.message || 'Failed to initialize payment.');
     }
   });
 
@@ -85,7 +96,8 @@ export default function PublicCheckoutPage() {
       setShowLoginPrompt(true); // Pop up the modal!
       return;
     }
-    bookingMutation.mutate();
+    // Trigger the payment flow
+    initializePaymentMutation.mutate();
   };
 
   const handleProceedToLogin = () => {
@@ -103,7 +115,7 @@ export default function PublicCheckoutPage() {
     );
   }
 
-  // 🌟 SUCCESS STATE: Show Receipt
+  // 🌟 SUCCESS STATE: Show Receipt (If redirected back from Paystack later, we can enhance this)
   if (confirmationData) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -227,14 +239,14 @@ export default function PublicCheckoutPage() {
                 </div>
               </div>
 
-              {/* 🌟 UPDATED: Uses Smartphone icon and Mobile Money text */}
+              {/* 🌟 UPDATED: Uses Smartphone icon and triggers Paystack redirect */}
               <button 
                 onClick={handlePay}
-                disabled={bookingMutation.isPending}
+                disabled={initializePaymentMutation.isPending}
                 className="w-full py-3 bg-primary-600 text-text-inverted font-bold rounded-lg hover:bg-primary-700 transition flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                {bookingMutation.isPending ? (
-                  <><Loader2 className="animate-spin" size={18} /> Processing...</>
+                {initializePaymentMutation.isPending ? (
+                  <><Loader2 className="animate-spin" size={18} /> Initializing...</>
                 ) : (
                   <><Smartphone size={18} /> Pay with Mobile Money</>
                 )}

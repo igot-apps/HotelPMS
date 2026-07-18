@@ -27,6 +27,9 @@ import AvailabilityPage from './pages/AvailabilityPage';
 import RoomManagementPage from './pages/RoomManagementPage';
 import UsersPage from './pages/UsersPage';
 import BillingPage from './pages/BillingPage';
+import PublicBookingSuccessPage from './pages/PublicBookingSuccessPage';
+
+
 
 function App() {
   return (
@@ -78,6 +81,8 @@ function App() {
         <Route path="/public/:propertyCode" element={<PublicHotelPage />} />
         <Route path="/public/:propertyCode/auth" element={<GuestAuthPage />} />
         <Route path="/public/:propertyCode/book/:roomTypeId" element={<PublicCheckoutPage />} />
+        <Route path="/public/:propertyCode/booking-success" element={<PublicBookingSuccessPage />} />
+        
 
         {/* ========================================== */}
         {/* 🔒 PROTECTED ROUTES (Wrapped in Layout)    */}
