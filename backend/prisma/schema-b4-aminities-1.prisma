@@ -11,52 +11,44 @@ datasource db {
 // ============================================================
 // CORE - PROPERTY (Now the Root Entity / The Hotel)
 // ============================================================
+
 model Property {
-  propertyId             Int       @id @default(autoincrement())
-  propertyCode           String    @unique @db.VarChar(50)
-  propertyName           String    @db.VarChar(200)
-  businessName           String    @db.VarChar(200)
-  legalName              String?   @db.VarChar(200)
-  subscriptionPlan       String    @default("Starter") @db.VarChar(50)
-  subscriptionStatus     String    @default("Trial") @db.VarChar(20)
-  trialEndsAt            DateTime?
-  subscriptionEndsAt     DateTime?
-  currency               String    @default("GHS") @db.VarChar(10)
-  timezone               String    @default("Africa/Accra") @db.VarChar(50)
-  logo                   String?   @db.Text
-  primaryEmail           String?   @db.VarChar(200)
-  primaryPhone           String?   @db.VarChar(50)
-  isActive               Boolean   @default(true)
+  propertyId        Int       @id @default(autoincrement())
+  propertyCode      String    @unique @db.VarChar(50) // Now globally unique
+  propertyName      String    @db.VarChar(200)
+  businessName      String    @db.VarChar(200) // Merged from Tenant
+  legalName         String?   @db.VarChar(200) // Merged from Tenant
+  subscriptionPlan  String    @default("Starter") @db.VarChar(50) // Merged from Tenant
+  subscriptionStatus String    @default("Trial") @db.VarChar(20)
+  trialEndsAt        DateTime? // When the 14-day free trial expires
+  subscriptionEndsAt DateTime? // When the paid monthly/yearly subscription expires
+  currency          String    @default("GHS") @db.VarChar(10) // Merged from Tenant
+  timezone          String    @default("Africa/Accra") @db.VarChar(50) // Merged from Tenant
+  logo              String?   @db.Text // Merged from Tenant
+  primaryEmail      String?   @db.VarChar(200) // Merged from Tenant
+  primaryPhone      String?   @db.VarChar(50) // Merged from Tenant
+  isActive          Boolean   @default(true) // Merged from Tenant
 
-  propertyType           String    @db.VarChar(50)
-  address                String?   @db.Text
-  city                   String?   @db.VarChar(100)
-  country                String    @db.VarChar(100) 
-  gpsCoordinates         String?   @db.VarChar(100)
-  totalRooms             Int       @default(0)
-  checkInTime            String    @default("14:00") @db.VarChar(10)
-  checkOutTime           String    @default("11:00") @db.VarChar(10)
-  status                 String    @default("Active") @db.VarChar(20)
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
-
-  // 🌟 NEW: Public Website Content & Settings
-  coverImage             String?   @db.Text
-  galleryImages          Json?     // Stores array of image URLs: ["url1", "url2"]
-  publicDescription      String?   @db.Text
-  cancellationPolicy     String?   @db.Text
-  houseRules             String?   @db.Text
-  taxPercentage          Decimal   @default(0.00) @db.Decimal(5, 2) // e.g., 15.00 for 15%
-  isOnlineBookingEnabled Boolean   @default(false) // Master switch for public bookings
+  propertyType      String    @db.VarChar(50)
+  address           String?   @db.Text
+  city              String?   @db.VarChar(100)
+  country           String    @db.VarChar(100) 
+  gpsCoordinates    String?   @db.VarChar(100)
+  totalRooms        Int       @default(0)
+  checkInTime       String    @default("14:00") @db.VarChar(10)
+  checkOutTime      String    @default("11:00") @db.VarChar(10)
+  status            String    @default("Active") @db.VarChar(20)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   // Reverse relations
-  users                  User[]
-  propertyGuests         PropertyGuest[]
-  roomTypes              RoomType[]
-  rooms                  Room[]
-  ratePlans              RatePlan[]
-  reservations           Reservation[]
-  amenities              Amenity[]
+  users             User[]
+  guests            Guest[] // Guests now belong directly to the Property
+  roomTypes         RoomType[]
+  rooms             Room[]
+  ratePlans         RatePlan[]
+  reservations      Reservation[]
+  amenities         Amenity[]
 
   @@map("properties")
 }
@@ -64,9 +56,10 @@ model Property {
 // ============================================================
 // RBAC - USERS, ROLES, PERMISSIONS
 // ============================================================
+
 model User {
   userId            Int       @id @default(autoincrement())
-  propertyId        Int
+  propertyId        Int // Replaces tenantId
   fullName          String    @db.VarChar(200)
   username          String    @unique
   email             String?   @unique @db.VarChar(200)
@@ -118,7 +111,7 @@ model RolePermission {
   roleId            Int
   permissionId      Int
 
-  role              Role       @relation(fields: [roleId], references: [roleId], onDelete: Cascade)
+  role              Role      @relation(fields: [roleId], references: [roleId], onDelete: Cascade)
   permission        Permission @relation(fields: [permissionId], references: [permissionId], onDelete: Cascade)
 
   @@unique([roleId, permissionId])
@@ -126,58 +119,42 @@ model RolePermission {
 }
 
 // ============================================================
-// GUESTS - PROPERTY LEVEL (Internal Operational Records)
+// GUESTS
 // ============================================================
-model PropertyGuest {
-  guestId        Int       @id @default(autoincrement())
-  propertyId     Int       
-  fullName       String    @db.VarChar(200)
-  phone          String?   @db.VarChar(50) // No unique constraint; receptionists often enter shared/fake numbers
-  idNumber       String?   @db.VarChar(50)
-  address        String?   @db.Text
-  city           String?   @db.VarChar(100)
-  country        String?   @db.VarChar(100)
-  notes          String?   @db.Text
-  isActive       Boolean   @default(true)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
 
-  property       Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
-  reservations   Reservation[]
-
-  @@index([propertyId])
-  @@index([phone]) // Indexed for fast searching by reception, but NOT unique
-  @@map("property_guests")
-}
-
-// ============================================================
-// GUESTS - PLATFORM LEVEL (Verified Online Identities)
-// ============================================================
-model PlatformGuest {
+model Guest {
   guestId           Int       @id @default(autoincrement())
+  propertyId        Int // Replaces tenantId
   fullName          String    @db.VarChar(200)
-  phone             String    @unique @db.VarChar(50) // Verified and unique globally
-  email             String    @unique @db.VarChar(200) // Verified and unique globally
-  passwordHash      String    @db.Text
-  isPhoneVerified   Boolean   @default(false)
-  isEmailVerified   Boolean   @default(false)
+  phone             String?   @db.VarChar(50)
+  email             String?   @db.VarChar(200)
+  idNumber          String?   @db.VarChar(50)
+  address           String?   @db.Text
+  city              String?   @db.VarChar(100)
+  country           String?   @db.VarChar(100)
+  username          String?   @unique
+  passwordHash      String?   @db.Text
+  dateRegistered    DateTime  @default(now())
+  lastStayDate      DateTime?
+  totalStays        Int       @default(0)
+  notes             String?   @db.Text
   isActive          Boolean   @default(true)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
+  property          Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
   reservations      Reservation[]
 
-  @@index([phone])
-  @@index([email])
-  @@map("platform_guests")
+  @@map("guests")
 }
 
 // ============================================================
 // ROOM INVENTORY
 // ============================================================
+
 model RoomType {
   roomTypeId        Int       @id @default(autoincrement())
-  propertyId        Int
+  propertyId        Int // Replaces tenantId
   typeName          String    @db.VarChar(100)
   description       String?   @db.Text
   basePrice         Decimal   @db.Decimal(10, 2)
@@ -185,10 +162,6 @@ model RoomType {
   isActive          Boolean   @default(true)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
-
-  // 🌟 NEW: Public Website Visuals
-  coverImage        String?   @db.Text
-  galleryImages     Json?     // Stores array of image URLs
 
   property          Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
   rooms             Room[]
@@ -202,12 +175,12 @@ model RoomType {
 
 model Room {
   roomId            Int       @id @default(autoincrement())
-  propertyId        Int
+  propertyId        Int // Replaces tenantId
   roomNumber        String    @db.VarChar(20)
   roomTypeId        Int
   floor             Int?
   operationalStatus String    @default("Available") @db.VarChar(20)
-  housekeepingStatus String   @default("Clean") @db.VarChar(20)
+  housekeepingStatus String  @default("Clean") @db.VarChar(20)
   notes             String?   @db.Text
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -222,7 +195,7 @@ model Room {
 
 model RatePlan {
   ratePlanId        Int       @id @default(autoincrement())
-  propertyId        Int
+  propertyId        Int // Replaces tenantId
   roomTypeId        Int
   planName          String    @db.VarChar(100)
   description       String?   @db.Text
@@ -245,62 +218,55 @@ model RatePlan {
 // ============================================================
 // RESERVATIONS
 // ============================================================
+
 model Reservation {
   reservationId     Int       @id @default(autoincrement())
-  propertyId        Int
-  
-  // 🌟 NEW: Public Booking Confirmation & Dual Guest Support
-  confirmationCode  String    @unique @default(uuid()) // Generates a unique string like "a1b2c3d4..."
-  propertyGuestId   Int?      // Used for walk-ins / reception bookings
-  platformGuestId   Int?      // Used for online verified bookings
-  
+  propertyId        Int // Replaces tenantId
+  guestId           Int
   staffId           Int?
   source            String    @default("Website") @db.VarChar(50)
   checkInDate       DateTime
   checkOutDate      DateTime
-  // 🌟 UPDATED: Added 'NoShow' to the supported statuses for future receptionist workflows
-  status            String    @default("Pending") @db.VarChar(20) // Options: 'Pending', 'Confirmed', 'CheckedIn', 'CheckedOut', 'Cancelled', 'NoShow'
+  status            String    @default("Pending") @db.VarChar(20)
   notes             String?   @db.Text
   totalAmount       Decimal?  @db.Decimal(10, 2)
   amountPaid        Decimal?  @db.Decimal(10, 2)
   balanceDue        Decimal?  @db.Decimal(10, 2)
   refundDue         Decimal   @default(0) @db.Decimal(10, 2)
   refundStatus      String    @default("None") @db.VarChar(20) // Options: 'None', 'Pending', 'Processed', 'Waived'
-  cancellationDate  DateTime?
+  cancellationDate  DateTime? // Tracks exactly when the reservation was cancelled
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  property          Property       @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
-  propertyGuest     PropertyGuest? @relation(fields: [propertyGuestId], references: [guestId], onDelete: SetNull)
-  platformGuest     PlatformGuest? @relation(fields: [platformGuestId], references: [guestId], onDelete: SetNull)
-  staff             User?          @relation("staffReservations", fields: [staffId], references: [userId])
+  property          Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
+  guest             Guest     @relation(fields: [guestId], references: [guestId], onDelete: Cascade)
+  staff             User?     @relation("staffReservations", fields: [staffId], references: [userId])
   reservationRooms  ReservationRoom[]
   payments          Payment[]
 
   @@index([propertyId])
-  @@index([propertyGuestId])
-  @@index([platformGuestId])
+  @@index([guestId])
   @@index([status])
   @@index([checkInDate, checkOutDate])
   @@map("reservations")
 }
 
 model ReservationRoom {
-  reservationRoomId   Int       @id @default(autoincrement())
-  reservationId       Int
-  roomId              Int
-  roomTypeId          Int
-  ratePlanId          Int?
-  checkInDate         DateTime
-  checkOutDate        DateTime
-  agreedPricePerNight Decimal   @db.Decimal(10, 2)
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  reservationRoomId Int       @id @default(autoincrement())
+  reservationId     Int
+  roomId            Int
+  roomTypeId        Int
+  ratePlanId        Int?
+  checkInDate       DateTime
+  checkOutDate      DateTime
+  agreedPricePerNight Decimal @db.Decimal(10, 2)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  reservation         Reservation @relation(fields: [reservationId], references: [reservationId], onDelete: Cascade)
-  room                Room      @relation(fields: [roomId], references: [roomId])
-  roomType            RoomType  @relation(fields: [roomTypeId], references: [roomTypeId])
-  ratePlan            RatePlan? @relation(fields: [ratePlanId], references: [ratePlanId])
+  reservation       Reservation @relation(fields: [reservationId], references: [reservationId], onDelete: Cascade)
+  room              Room      @relation(fields: [roomId], references: [roomId])
+  roomType          RoomType  @relation(fields: [roomTypeId], references: [roomTypeId])
+  ratePlan          RatePlan? @relation(fields: [ratePlanId], references: [ratePlanId])
 
   @@unique([reservationId, roomId])
   @@index([reservationId])
@@ -312,6 +278,7 @@ model ReservationRoom {
 // ============================================================
 // PAYMENTS
 // ============================================================
+
 model Payment {
   paymentId         Int       @id @default(autoincrement())
   reservationId     Int
@@ -336,6 +303,7 @@ model Payment {
 // ============================================================
 // AUDIT LOG
 // ============================================================
+
 model AuditLog {
   auditLogId        Int       @id @default(autoincrement())
   userId            Int?
@@ -358,6 +326,7 @@ model AuditLog {
 // ============================================================
 // AMENITIES (Inline Tagging System)
 // ============================================================
+
 model Amenity {
   amenityId         Int       @id @default(autoincrement())
   propertyId        Int
@@ -368,6 +337,7 @@ model Amenity {
   property          Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
   roomTypes         RoomTypeAmenity[]
 
+  // 🚨 Prevents the same hotel from creating duplicate amenity names
   @@unique([propertyId, name]) 
   @@map("amenities")
 }

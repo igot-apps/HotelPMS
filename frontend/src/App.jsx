@@ -3,9 +3,12 @@ import { Toaster } from 'react-hot-toast';
 import AppLayout from './components/layout/AppLayout';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 
-// Public Pages
+// Property Registration and PMS Public Pages
 import LoginPage from './pages/LoginPage';
-import HotelRegistrationWizard from './pages/HotelRegistrationWizard'; // ✅ RE-ADDED
+import HotelRegistrationWizard from './pages/HotelRegistrationWizard';
+
+// 🌟 Public hotel page
+import PublicHotelPage from './pages/PublicHotelPage';
 
 // Protected Pages
 import DashboardPage from './pages/DashboardPage';
@@ -22,6 +25,8 @@ import AvailabilityPage from './pages/AvailabilityPage';
 import RoomManagementPage from './pages/RoomManagementPage';
 import UsersPage from './pages/UsersPage';
 import BillingPage from './pages/BillingPage';
+import GuestAuthPage from './pages/GuestAuthPage'; // 🌟 Add this import
+
 
 function App() {
   return (
@@ -67,7 +72,11 @@ function App() {
         {/* 🌟 PUBLIC ROUTES (No login required)       */}
         {/* ========================================== */}
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/register-your-hotel" element={<HotelRegistrationWizard />} /> {/* ✅ RE-ADDED */}
+        <Route path="/register-your-hotel" element={<HotelRegistrationWizard />} />
+        
+        {/* 🌟 NEW: Public Hotel Booking Page (Bypasses AppLayout/Sidebar) */}
+        <Route path="/public/:propertyCode" element={<PublicHotelPage />} />
+        <Route path="/public/:propertyCode/auth" element={<GuestAuthPage />} />
 
         {/* ========================================== */}
         {/* 🔒 PROTECTED ROUTES (Wrapped in Layout)    */}
@@ -80,7 +89,6 @@ function App() {
             </ProtectedRoute>
           }
         >
-          {/* ✅ FIXED: Default Route is now uncommented */}
           <Route index element={<Navigate to="/dashboard" replace />} />
           
           {/* Core Operations */}

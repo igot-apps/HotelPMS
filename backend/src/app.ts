@@ -18,6 +18,8 @@ import userRoutes from './modules/user/user.routes';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import paystackRoutes from './modules/paystack/paystack.routes'; // 🌟 NEW: Paystack Integration
 import amenityRoutes from './modules/amenity/amenity.routes';
+import publicRoutes from './modules/public/public.routes';
+import publicAuthRoutes from './modules/public/public-auth.routes';
 
 // Load environment variables
 dotenv.config();
@@ -83,8 +85,9 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/amenities', amenityRoutes);
-// 🌟 Mount Paystack Routes
-app.use('/api/paystack', paystackRoutes);
+app.use('/api/paystack', paystackRoutes); // 🌟 Mount Paystack Routes
+app.use('/api/public', publicRoutes); // 🌟 Mount Public Routes
+app.use('/api/public/auth', publicAuthRoutes); // 🌟 Mount Public Auth Routes
 
 // 404 handler
 app.use((_req: Request, res: Response) => {
