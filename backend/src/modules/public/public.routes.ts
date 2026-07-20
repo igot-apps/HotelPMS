@@ -311,21 +311,22 @@ router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Re
 
     const transactionData = response.data.data;
 
-    // If payment is successful, update the reservation
+    // If payment is successful, update the reservation AND create payment record
     if (transactionData.status === 'success') {
       const reservationId = parseInt(transactionData.metadata?.reservationId);
-      const amountPaid = transactionData.amount / 100; // Convert pesewas back to GHS
+      const amountPaid = transactionData.amount / 100;
 
       if (reservationId) {
-        // 🛡️ ANTI-DUPLICATE LOCK: Check if already processed by webhook
+        // Check if already processed by webhook to prevent duplicates
         const reservation = await prisma.reservation.findUnique({
           where: { reservationId },
           select: { amountPaid: true, status: true }
         });
 
-        // 🌟 FIX: Convert Prisma Decimal to Number for comparison
+        // 🛡️ ANTI-DUPLICATE LOCK: Only process if amountPaid is still 0
         if (reservation && Number(reservation.amountPaid) === 0) {
-          // Update the reservation financials
+          
+          // 🌟 1. Update reservation
           await prisma.reservation.update({
             where: { reservationId },
             data: {
@@ -335,19 +336,21 @@ router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Re
             }
           });
 
-          // Record the payment
+          // 🌟 2. CREATE PAYMENT RECORD
           await prisma.payment.create({
             data: {
               reservationId,
               amount: amountPaid,
               paymentMethod: 'Mobile Money',
+              paymentDate: new Date(),
+              gatewayReference: transactionData.reference,
               status: 'Completed',
-              reference: transactionData.reference,
+              notes: `Online payment verified via frontend fallback`,
               receivedBy: null,
             }
           });
 
-          console.log(`🔧 [VERIFY FALLBACK] Reservation #${reservationId} payment verified: GH₵ ${amountPaid}`);
+          console.log(`🔧 [VERIFY FALLBACK] Reservation #${reservationId} payment verified and recorded: GH₵ ${amountPaid}`);
         } else {
           console.log(`ℹ️ [VERIFY SKIPPED] Reservation #${reservationId} already processed by webhook`);
         }

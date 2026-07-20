@@ -32,10 +32,10 @@ app.use(helmet());
 app.use(cors());
 
 // ⚠️ CRITICAL: Parse raw body specifically for Paystack Webhooks.
-// 1. Platform SaaS Billing Webhook (UNTouched)
+// 1. Platform SaaS Billing Webhook
 app.use('/api/paystack/webhooks/platform', express.raw({ type: 'application/json' }));
 
-// 2. 🌟 NEW: Hotel Guest Booking Webhook
+// 2. 🌟 Hotel Guest Booking Webhook (UNCOMMENTED & ACTIVE)
 app.use('/api/paystack/webhooks/guest-bookings', express.raw({ type: 'application/json' }));
 
 // Standard JSON parsing for everything else

@@ -1,3 +1,4 @@
+// Payment API module
 import api from '../lib/axios';
 import { getReservations } from './reservations'; // Reusing reservations API for the dropdown
 

@@ -1,6 +1,10 @@
-import { PrismaClient } from '../../../src/generated/prisma';
+import { PrismaClient } from '../../generated/prisma';
+
 const prisma = new PrismaClient();
 
+// ============================================================
+// CREATE PAYMENT
+// ============================================================
 export const createPayment = async (data: {
   reservationId: number;
   amount: number;
@@ -26,12 +30,15 @@ export const createPayment = async (data: {
       reservation: {
         select: {
           reservationId: true,
-          propertyId: true, // ✅ Added for auth checks
-          guestId: true,
+          propertyId: true,
+          platformGuestId: true,
+          propertyGuestId: true,
           totalAmount: true,
           amountPaid: true,
           balanceDue: true,
-          guest: { select: { fullName: true, email: true, phone: true } },
+          platformGuest: { select: { fullName: true, email: true, phone: true } },
+          // 🌟 FIXED: Removed email (PropertyGuest doesn't have email field)
+          propertyGuest: { select: { fullName: true, phone: true } },
         },
       },
       receiver: { select: { userId: true, fullName: true, username: true } },
@@ -39,8 +46,11 @@ export const createPayment = async (data: {
   });
 };
 
+// ============================================================
+// FIND PAYMENTS (with filters and pagination)
+// ============================================================
 export const findPayments = async (
-  propertyId: number, // ✅ Replaced tenantId
+  propertyId: number,
   filters: {
     reservationId?: number;
     paymentMethod?: string;
@@ -53,10 +63,8 @@ export const findPayments = async (
   limit: number = 10
 ) => {
   const skip = (page - 1) * limit;
-  
-  // ✅ Filter by property via the reservation relation
   const where: any = {
-    reservation: { propertyId } 
+    reservation: { propertyId }
   };
 
   if (filters.search) {
@@ -64,8 +72,10 @@ export const findPayments = async (
     const searchNum = parseInt(searchStr);
     where.OR = [
       { gatewayReference: { contains: searchStr, mode: 'insensitive' } },
-      { reservation: { guest: { fullName: { contains: searchStr, mode: 'insensitive' } } } },
-      { reservation: { guest: { phone: { contains: searchStr } } } },
+      { reservation: { platformGuest: { fullName: { contains: searchStr, mode: 'insensitive' } } } },
+      { reservation: { propertyGuest: { fullName: { contains: searchStr, mode: 'insensitive' } } } },
+      { reservation: { platformGuest: { phone: { contains: searchStr } } } },
+      { reservation: { propertyGuest: { phone: { contains: searchStr } } } },
     ];
     if (!isNaN(searchNum)) {
       where.OR.push({ reservationId: searchNum });
@@ -92,12 +102,15 @@ export const findPayments = async (
         reservation: {
           select: {
             reservationId: true,
-            propertyId: true, // ✅ Added for auth checks
-            guestId: true,
+            propertyId: true,
+            platformGuestId: true,
+            propertyGuestId: true,
             totalAmount: true,
             amountPaid: true,
             balanceDue: true,
-            guest: { select: { fullName: true, email: true, phone: true } },
+            platformGuest: { select: { fullName: true, email: true, phone: true } },
+            // 🌟 FIXED: Removed email (PropertyGuest doesn't have email field)
+            propertyGuest: { select: { fullName: true, phone: true } },
           },
         },
         receiver: { select: { userId: true, fullName: true, username: true } },
@@ -109,6 +122,9 @@ export const findPayments = async (
   return { payments, total, page, limit };
 };
 
+// ============================================================
+// FIND PAYMENT BY ID
+// ============================================================
 export const findPaymentById = async (paymentId: number) => {
   return prisma.payment.findUnique({
     where: { paymentId },
@@ -116,12 +132,15 @@ export const findPaymentById = async (paymentId: number) => {
       reservation: {
         select: {
           reservationId: true,
-          propertyId: true, // ✅ Added for auth checks
-          guestId: true,
+          propertyId: true,
+          platformGuestId: true,
+          propertyGuestId: true,
           totalAmount: true,
           amountPaid: true,
           balanceDue: true,
-          guest: { select: { guestId: true, fullName: true, email: true, phone: true } },
+          platformGuest: { select: { guestId: true, fullName: true, email: true, phone: true } },
+          // 🌟 FIXED: Removed email (PropertyGuest doesn't have email field)
+          propertyGuest: { select: { guestId: true, fullName: true, phone: true } },
         },
       },
       receiver: { select: { userId: true, fullName: true, username: true } },
@@ -129,17 +148,23 @@ export const findPaymentById = async (paymentId: number) => {
   });
 };
 
+// ============================================================
+// FIND PAYMENTS BY RESERVATION
+// ============================================================
 export const findPaymentsByReservation = async (reservationId: number) => {
   return prisma.payment.findMany({
     where: { reservationId },
     orderBy: { paymentDate: 'desc' },
     include: {
-      reservation: { select: { propertyId: true } }, // ✅ Added for auth checks
+      reservation: { select: { propertyId: true } },
       receiver: { select: { userId: true, fullName: true, username: true } },
     },
   });
 };
 
+// ============================================================
+// UPDATE PAYMENT
+// ============================================================
 export const updatePayment = async (
   paymentId: number,
   data: Partial<{
@@ -162,6 +187,9 @@ export const updatePayment = async (
   });
 };
 
+// ============================================================
+// DELETE PAYMENT (Soft delete - mark as Refunded)
+// ============================================================
 export const deletePayment = async (paymentId: number) => {
   return prisma.payment.update({
     where: { paymentId },
@@ -169,54 +197,9 @@ export const deletePayment = async (paymentId: number) => {
   });
 };
 
-export const getPaymentStats = async (propertyId: number) => { 
-  // ✅ Base filter for the property
-  const baseWhere = { reservation: { propertyId } };
-
-  // ✅ NEW: Filter for actual revenue (ONLY 'Completed' payments)
-  const revenueWhere = {
-    ...baseWhere,
-    status: 'Completed', 
-  };
-
-  // 1. Total Revenue & Transactions (Completed only)
-  const stats = await prisma.payment.aggregate({
-    where: revenueWhere,
-    _sum: { amount: true },
-    _count: { paymentId: true },
-  });
-
-  // 2. Revenue by Payment Method (Completed only)
-  const methodStats = await prisma.payment.groupBy({
-    by: ['paymentMethod'],
-    where: revenueWhere,
-    _sum: { amount: true },
-    _count: { paymentId: true },
-  });
-
-  // 3. Status breakdown (All payments, to see how many were refunded)
-  const statusStats = await prisma.payment.groupBy({
-    by: ['status'],
-    where: baseWhere,
-    _count: { paymentId: true },
-  });
-
-  return {
-    totalPayments: stats._count.paymentId,
-    // ✅ FIXED: Safely convert Prisma Decimal to Number
-    totalAmount: stats._sum.amount ? Number(stats._sum.amount) : 0, 
-    byMethod: methodStats.map((m) => ({
-      method: m.paymentMethod,
-      count: m._count.paymentId,
-      total: m._sum.amount ? Number(m._sum.amount) : 0,
-    })),
-    byStatus: statusStats.map((s) => ({
-      status: s.status,
-      count: s._count.paymentId,
-    })),
-  };
-};
-
+// ============================================================
+// CALCULATE ACCUMULATED PAYMENT
+// ============================================================
 export const calculateAccumulatedPayment = async (reservationId: number): Promise<number> => {
   const result = await prisma.payment.aggregate({
     where: {
@@ -226,4 +209,124 @@ export const calculateAccumulatedPayment = async (reservationId: number): Promis
     _sum: { amount: true },
   });
   return result._sum.amount ? Number(result._sum.amount) : 0;
+};
+
+// ============================================================
+// GET PAYMENTS (Simple pagination for PaymentsPage)
+// ============================================================
+export const getPayments = async (propertyId: number, page: number = 1, limit: number = 10) => {
+  const skip = (page - 1) * limit;
+  const take = limit;
+
+  const [payments, total] = await Promise.all([
+    prisma.payment.findMany({
+      where: {
+        reservation: {
+          propertyId: Number(propertyId)
+        }
+      },
+      skip,
+      take,
+      orderBy: {
+        paymentDate: 'desc'
+      },
+      include: {
+        reservation: {
+          select: {
+            reservationId: true,
+            propertyId: true,
+            platformGuestId: true,
+            propertyGuestId: true,
+            totalAmount: true,
+            amountPaid: true,
+            balanceDue: true,
+            platformGuest: {
+              select: {
+                guestId: true,
+                fullName: true,
+                phone: true,
+                email: true
+              }
+            },
+            // 🌟 FIXED: Removed email (PropertyGuest doesn't have email field)
+            propertyGuest: {
+              select: {
+                guestId: true,
+                fullName: true,
+                phone: true
+              }
+            }
+          }
+        },
+        receiver: {
+          select: {
+            userId: true,
+            fullName: true,
+            username: true
+          }
+        }
+      }
+    }),
+    prisma.payment.count({
+      where: {
+        reservation: {
+          propertyId: Number(propertyId)
+        }
+      }
+    })
+  ]);
+
+  return { payments, total };
+};
+
+// ============================================================
+// GET PAYMENT STATISTICS (For Dashboard/Reports)
+// ============================================================
+export const getPaymentStats = async (propertyId: number) => {
+  const stats = await prisma.payment.aggregate({
+    where: {
+      reservation: {
+        propertyId: Number(propertyId)
+      }
+    },
+    _sum: {
+      amount: true
+    },
+    _count: {
+      amount: true
+    }
+  });
+
+  const recentPayments = await prisma.payment.findMany({
+    where: {
+      reservation: {
+        propertyId: Number(propertyId)
+      }
+    },
+    orderBy: {
+      paymentDate: 'desc'
+    },
+    take: 5,
+    include: {
+      reservation: {
+        select: {
+          reservationId: true,
+          confirmationCode: true,
+          platformGuest: {
+            select: { fullName: true, phone: true }
+          },
+          // 🌟 FIXED: Removed email (PropertyGuest doesn't have email field)
+          propertyGuest: {
+            select: { fullName: true, phone: true }
+          }
+        }
+      }
+    }
+  });
+
+  return {
+    totalRevenue: Number(stats._sum.amount) || 0,
+    totalTransactions: stats._count.amount || 0,
+    recentPayments
+  };
 };

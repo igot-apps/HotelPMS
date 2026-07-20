@@ -6,11 +6,9 @@ import { useAuthStore } from '../../store/authStore';
 import toast from 'react-hot-toast';
 import ThermalReceiptModal from './ThermalReceiptModal';
 
-// 🌟 ADDED initialData TO PROPS
 export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading, createdReservation, initialData }) {
   const user = useAuthStore((state) => state.user);
   const propertyId = user?.propertyId;
-  
   const [currentStep, setCurrentStep] = useState(1);
   const [guests, setGuests] = useState([]);
   const [availableRooms, setAvailableRooms] = useState([]);
@@ -25,9 +23,10 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
   const [newGuestData, setNewGuestData] = useState({
     fullName: '', phone: '', email: '', idNumber: ''
   });
-  
+
+  // 🌟 CHANGED: guestId → propertyGuestId
   const [formData, setFormData] = useState({
-    guestId: '', checkInDate: '', checkOutDate: '', source: 'Walk-in', notes: '',
+    propertyGuestId: '', checkInDate: '', checkOutDate: '', source: 'Walk-in', notes: '',
     selectedRooms: [], recordPayment: true, amountPaid: '', paymentMethod: 'Cash', gatewayReference: '',
   });
 
@@ -45,12 +44,11 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
     if (isOpen) {
       const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
       
-      // 1. Auto-populate dates from Availability Page (or default to today/tomorrow)
       const initialCheckIn = initialData?.checkInDate || today;
       const initialCheckOut = initialData?.checkOutDate || tomorrow;
       
       setFormData({
-        guestId: '', 
+        propertyGuestId: '', // 🌟 CHANGED
         checkInDate: initialCheckIn, 
         checkOutDate: initialCheckOut, 
         source: 'Walk-in', 
@@ -62,11 +60,8 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
         gatewayReference: '',
       });
       
-      // 🚨 FIX: Always start at Step 1 so the user can select the Guest.
-      // (The dates and rooms will still be auto-filled in the background!)
       setCurrentStep(1);
-      
-
+      // 🌟 Fetch Property Guests (walk-in guests)
       getGuests({ limit: 100 }).then(res => setGuests(res.data.data || [])).catch(err => console.error(err));
     }
   }, [isOpen, initialData]);
@@ -80,7 +75,6 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
           const rooms = res.data.data || [];
           setAvailableRooms(rooms);
           
-          // 🌟 AUTO-SELECT ROOMS FROM initialData
           if (initialData?.roomIds && initialData.roomIds.length > 0) {
             const preSelectedRooms = rooms.filter(room => initialData.roomIds.includes(room.roomId));
             setFormData(prev => ({ ...prev, selectedRooms: preSelectedRooms }));
@@ -92,7 +86,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
   }, [currentStep, formData.checkInDate, formData.checkOutDate, propertyId, initialData]);
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
-  
+
   const toggleRoomSelection = (room) => {
     const isSelected = formData.selectedRooms.some(r => r.roomId === room.roomId);
     if (isSelected) {
@@ -125,7 +119,8 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
       const res = await createGuest(newGuestData);
       const createdGuest = res.data.data;
       setGuests(prev => [createdGuest, ...prev]);
-      setFormData(prev => ({ ...prev, guestId: String(createdGuest.guestId) }));
+      // 🌟 CHANGED: Set propertyGuestId
+      setFormData(prev => ({ ...prev, propertyGuestId: String(createdGuest.guestId) }));
       setIsAddGuestOpen(false);
       setNewGuestData({ fullName: '', phone: '', email: '', idNumber: '' });
       toast.success(`${createdGuest.fullName} added and selected!`);
@@ -138,18 +133,28 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
 
   const nextStep = () => {
     if (currentStep === 1) {
-      if (!formData.guestId || !formData.checkInDate || !formData.checkOutDate) {
-        toast.error('Please fill in Guest, Check-in, and Check-out dates.'); return;
+      // 🌟 CHANGED: Check propertyGuestId
+      if (!formData.propertyGuestId || !formData.checkInDate || !formData.checkOutDate) {
+        toast.error('Please fill in Guest, Check-in, and Check-out dates.'); 
+        return;
       }
-      const todayDate = new Date(); todayDate.setHours(0,0,0,0);
-      const checkInDate = new Date(formData.checkInDate); checkInDate.setHours(0,0,0,0);
+      const todayDate = new Date(); 
+      todayDate.setHours(0,0,0,0);
+      const checkInDate = new Date(formData.checkInDate); 
+      checkInDate.setHours(0,0,0,0);
+      
       if (checkInDate < todayDate) {
-        toast.error('Check-in date cannot be in the past.'); return;
+        toast.error('Check-in date cannot be in the past.'); 
+        return;
       }
-      if (nights <= 0) { toast.error('Check-out date must be after check-in date.'); return; }
+      if (nights <= 0) { 
+        toast.error('Check-out date must be after check-in date.'); 
+        return; 
+      }
     }
     if (currentStep === 2 && formData.selectedRooms.length === 0) {
-      toast.error('Please select at least one room.'); return;
+      toast.error('Please select at least one room.'); 
+      return;
     }
     setCurrentStep(prev => prev + 1);
   };
@@ -162,12 +167,23 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
     const exactPaid = formData.recordPayment ? parseFloat(parseFloat(formData.amountPaid || 0).toFixed(2)) : 0;
     
     const payload = {
-      propertyId, guestId: parseInt(formData.guestId), staffId: user?.userId, source: formData.source,
-      checkInDate: formData.checkInDate, checkOutDate: formData.checkOutDate, notes: formData.notes,
+      propertyId, 
+      // 🌟 CHANGED: Send propertyGuestId instead of guestId
+      propertyGuestId: parseInt(formData.propertyGuestId), 
+      staffId: user?.userId, 
+      source: formData.source,
+      checkInDate: formData.checkInDate, 
+      checkOutDate: formData.checkOutDate, 
+      notes: formData.notes,
       rooms: formData.selectedRooms.map(room => ({
-        roomId: room.roomId, roomTypeId: room.roomTypeId, agreedPricePerNight: parseFloat(room.roomType.basePrice),
+        roomId: room.roomId, 
+        roomTypeId: room.roomTypeId, 
+        agreedPricePerNight: parseFloat(room.roomType.basePrice),
       })),
-      amountPaid: 0, initialPayment: exactPaid, paymentMethod: formData.paymentMethod, gatewayReference: formData.gatewayReference || null,
+      amountPaid: 0, 
+      initialPayment: exactPaid, 
+      paymentMethod: formData.paymentMethod, 
+      gatewayReference: formData.gatewayReference || null,
     };
     onSubmit(payload);
   };
@@ -205,10 +221,10 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
             </div>
           </div>
           {showReceipt && (
-            <ThermalReceiptModal 
-              isOpen={showReceipt} 
-              onClose={() => setShowReceipt(false)} 
-              reservation={createdReservation} 
+            <ThermalReceiptModal
+              isOpen={showReceipt}
+              onClose={() => setShowReceipt(false)}
+              reservation={createdReservation}
               stats={{
                 totalAmount: createdReservation.totalAmount,
                 totalPaid: createdReservation.amountPaid,
@@ -251,8 +267,9 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                 <div className="flex gap-2">
                   <SearchableGuestSelect 
                     guests={guests} 
-                    value={formData.guestId} 
-                    onChange={(id) => setFormData(prev => ({ ...prev, guestId: id }))} 
+                    // 🌟 CHANGED: propertyGuestId
+                    value={formData.propertyGuestId} 
+                    onChange={(id) => setFormData(prev => ({ ...prev, propertyGuestId: id }))} 
                   />
                   <button 
                     type="button" 
@@ -293,7 +310,10 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
               <div>
                 <label className="block text-sm font-semibold text-text mb-1.5">Booking Source</label>
                 <select name="source" value={formData.source} onChange={handleChange} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition">
-                  <option value="Walk-in">Walk-in</option><option value="Phone">Phone</option><option value="Website">Website</option><option value="Direct">Direct</option>
+                  <option value="Walk-in">Walk-in</option>
+                  <option value="Phone">Phone</option>
+                  <option value="Website">Website</option>
+                  <option value="Direct">Direct</option>
                 </select>
               </div>
               <div>
@@ -346,18 +366,38 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
               <div className="bg-secondary-50 p-5 rounded-xl border border-border">
                 <h3 className="text-sm font-bold text-text mb-3">Booking Info</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div><p className="text-xs text-text-muted">Guest</p><p className="font-semibold text-text">{guests.find(g => g.guestId == formData.guestId)?.fullName}</p></div>
-                  <div><p className="text-xs text-text-muted">Handled By</p><p className="font-semibold text-text">{user?.fullName}</p></div>
-                  <div><p className="text-xs text-text-muted">Check-in</p><p className="font-semibold text-text">{formatDate(formData.checkInDate)}</p></div>
-                  <div><p className="text-xs text-text-muted">Check-out</p><p className="font-semibold text-text">{formatDate(formData.checkOutDate)}</p></div>
+                  <div>
+                    <p className="text-xs text-text-muted">Guest</p>
+                    {/* 🌟 CHANGED: Find by propertyGuestId */}
+                    <p className="font-semibold text-text">{guests.find(g => g.guestId == formData.propertyGuestId)?.fullName}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-text-muted">Handled By</p>
+                    <p className="font-semibold text-text">{user?.fullName}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-text-muted">Check-in</p>
+                    <p className="font-semibold text-text">{formatDate(formData.checkInDate)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-text-muted">Check-out</p>
+                    <p className="font-semibold text-text">{formatDate(formData.checkOutDate)}</p>
+                  </div>
                 </div>
               </div>
               <div className="bg-surface border border-border rounded-xl overflow-hidden">
-                <div className="p-4 border-b border-border bg-secondary-50/50"><h3 className="text-sm font-bold text-text">Rooms ({formData.selectedRooms.length})</h3></div>
+                <div className="p-4 border-b border-border bg-secondary-50/50">
+                  <h3 className="text-sm font-bold text-text">Rooms ({formData.selectedRooms.length})</h3>
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-secondary-50/30 text-xs text-text-muted uppercase">
-                      <tr><th className="px-4 py-2">Room</th><th className="px-4 py-2">Type</th><th className="px-4 py-2 text-right">Rate</th><th className="px-4 py-2 text-right">Subtotal</th></tr>
+                      <tr>
+                        <th className="px-4 py-2">Room</th>
+                        <th className="px-4 py-2">Type</th>
+                        <th className="px-4 py-2 text-right">Rate</th>
+                        <th className="px-4 py-2 text-right">Subtotal</th>
+                      </tr>
                     </thead>
                     <tbody>
                       {formData.selectedRooms.map(room => (
@@ -381,7 +421,9 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
               <div className="bg-surface border border-border rounded-xl p-5 space-y-4">
                 <div className="flex items-center gap-3">
                   <input type="checkbox" id="recordPayment" checked={formData.recordPayment} onChange={(e) => setFormData({ ...formData, recordPayment: e.target.checked, amountPaid: e.target.checked ? totalDue.toFixed(2) : '0' })} className="w-4 h-4 rounded border-border text-primary-600 focus:ring-primary-500" />
-                  <label htmlFor="recordPayment" className="text-sm font-bold text-text cursor-pointer flex items-center gap-2"><CreditCard size={16} /> Record Initial Payment now</label>
+                  <label htmlFor="recordPayment" className="text-sm font-bold text-text cursor-pointer flex items-center gap-2">
+                    <CreditCard size={16} /> Record Initial Payment now
+                  </label>
                 </div>
                 {formData.recordPayment && (
                   <div className="space-y-3 pt-2 border-t border-border">
@@ -411,7 +453,10 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                       <div>
                         <label className="block text-xs font-semibold text-text-muted mb-1">Payment Method</label>
                         <select name="paymentMethod" value={formData.paymentMethod} onChange={handleChange} className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20">
-                          <option value="Cash">Cash</option><option value="Card">Card</option><option value="MobileMoney">Mobile Money</option><option value="Online">Online</option>
+                          <option value="Cash">Cash</option>
+                          <option value="Card">Card</option>
+                          <option value="MobileMoney">Mobile Money</option>
+                          <option value="Online">Online</option>
                         </select>
                       </div>
                       <div>
@@ -460,8 +505,12 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-surface w-full max-w-md rounded-2xl shadow-2xl border border-border overflow-hidden">
             <div className="p-5 border-b border-border flex justify-between items-center bg-primary-50/30">
-              <h3 className="text-lg font-bold text-text flex items-center gap-2"><UserPlus size={20} className="text-primary-600" /> Quick Add Guest</h3>
-              <button type="button" onClick={() => setIsAddGuestOpen(false)} className="p-1.5 rounded-lg hover:bg-secondary-100 text-text-muted transition"><X size={20} /></button>
+              <h3 className="text-lg font-bold text-text flex items-center gap-2">
+                <UserPlus size={20} className="text-primary-600" /> Quick Add Guest
+              </h3>
+              <button type="button" onClick={() => setIsAddGuestOpen(false)} className="p-1.5 rounded-lg hover:bg-secondary-100 text-text-muted transition">
+                <X size={20} />
+              </button>
             </div>
             <form onSubmit={handleQuickAddGuest} className="p-5 space-y-4">
               <div>
