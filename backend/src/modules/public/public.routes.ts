@@ -1,9 +1,114 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { PrismaClient } from '../../generated/prisma';
 import axios from 'axios';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// ============================================================
+// 🌟 DISCOVER: Fetch all public properties with search & filters
+// ============================================================
+router.get('/discover', async (req: any, res: Response) => {
+  try {
+    const { search, checkIn, checkOut } = req.query;
+
+    // Base filter: only show hotels with online booking enabled
+    const where: any = { isOnlineBookingEnabled: true };
+
+    // 🌟 Search filter: match property name OR city (case-insensitive)
+    if (search && String(search).trim() !== '') {
+      const searchTerm = String(search).trim();
+      where.OR = [
+        { propertyName: { contains: searchTerm, mode: 'insensitive' } },
+        { city: { contains: searchTerm, mode: 'insensitive' } },
+        { country: { contains: searchTerm, mode: 'insensitive' } },
+      ];
+    }
+
+    const properties = await prisma.property.findMany({
+      where,
+      select: {
+        propertyId: true,
+        propertyCode: true,
+        propertyName: true,
+        city: true,
+        country: true,
+        publicDescription: true,
+        coverImage: true,
+        roomTypes: {
+          where: { isActive: true },
+          select: { 
+            basePrice: true, 
+            roomTypeId: true,
+            _count: { select: { rooms: { where: { operationalStatus: 'Available' } } } }
+          }
+        }
+      }
+    });
+
+    // 🌟 If dates provided, filter by availability
+    let filteredProperties = properties;
+    if (checkIn && checkOut) {
+      const checkInDate = new Date(checkIn as string);
+      const checkOutDate = new Date(checkOut as string);
+
+      filteredProperties = await Promise.all(
+        properties.map(async (p) => {
+          // Check if ANY room type has availability for these dates
+          const availableRoomTypes = await Promise.all(
+            p.roomTypes.map(async (rt) => {
+              const totalRooms = await prisma.room.count({
+                where: { 
+                  propertyId: p.propertyId, 
+                  roomTypeId: rt.roomTypeId, 
+                  operationalStatus: 'Available' 
+                }
+              });
+              const bookedRooms = await prisma.reservationRoom.count({
+                where: {
+                  roomTypeId: rt.roomTypeId,
+                  reservation: {
+                    propertyId: p.propertyId,
+                    status: { in: ['Confirmed', 'CheckedIn'] },
+                    OR: [{ checkInDate: { lte: checkOutDate }, checkOutDate: { gte: checkInDate } }]
+                  }
+                }
+              });
+              return totalRooms - bookedRooms;
+            })
+          );
+          const hasAvailability = availableRoomTypes.some(count => count > 0);
+          return hasAvailability ? p : null;
+        })
+      ).then(results => results.filter(Boolean) as typeof properties);
+    }
+
+    // Format the data for the frontend
+    const formatted = filteredProperties.map(p => ({
+      propertyCode: p.propertyCode,
+      propertyName: p.propertyName,
+      city: p.city,
+      country: p.country,
+      description: p.publicDescription,
+      coverImage: p.coverImage,
+      minPrice: p.roomTypes.length > 0 
+        ? Math.min(...p.roomTypes.map(rt => Number(rt.basePrice))) 
+        : 0,
+      rating: 4.5,
+      distance: 'Nearby',
+      amenities: ['Free WiFi', 'Parking']
+    }));
+
+    return res.json({ 
+      success: true, 
+      data: formatted,
+      total: formatted.length 
+    });
+  } catch (error: any) {
+    console.error('❌ Discover Error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 // Helper to check if property is online-booking enabled
 const checkOnlineBookingEnabled = async (propertyCode: string) => {
@@ -11,15 +116,12 @@ const checkOnlineBookingEnabled = async (propertyCode: string) => {
     where: { propertyCode },
     select: { propertyId: true, isOnlineBookingEnabled: true, taxPercentage: true }
   });
-
   if (!property) {
     throw new Error('Property not found');
   }
-
   if (!property.isOnlineBookingEnabled) {
     throw new Error('Online booking is currently disabled for this property.');
   }
-
   return property;
 };
 
@@ -30,7 +132,6 @@ router.get('/:propertyCode', async (req: any, res: Response) => {
   try {
     const { propertyCode } = req.params;
     await checkOnlineBookingEnabled(propertyCode);
-
     const property = await prisma.property.findUnique({
       where: { propertyCode },
       select: {
@@ -53,7 +154,6 @@ router.get('/:propertyCode', async (req: any, res: Response) => {
         primaryEmail: true,
       }
     });
-
     return res.json({ success: true, data: property });
   } catch (error: any) {
     if (error.message.includes('disabled') || error.message.includes('not found')) {
@@ -70,11 +170,9 @@ router.get('/:propertyCode/room-types', async (req: any, res: Response) => {
   try {
     const { propertyCode } = req.params;
     const { checkIn, checkOut, page = '1', limit = '6' } = req.query;
-    
     const property = await checkOnlineBookingEnabled(propertyCode);
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
-
     const roomTypes = await prisma.roomType.findMany({
       where: { propertyId: property.propertyId, isActive: true },
       orderBy: { basePrice: 'asc' },
@@ -83,12 +181,10 @@ router.get('/:propertyCode/room-types', async (req: any, res: Response) => {
         _count: { select: { rooms: { where: { operationalStatus: 'Available', housekeepingStatus: 'Clean' } } } }
       }
     });
-
     let availableRoomTypes = roomTypes;
     if (checkIn && checkOut) {
       const checkInDate = new Date(checkIn as string);
       const checkOutDate = new Date(checkOut as string);
-
       const availabilityChecks = await Promise.all(
         roomTypes.map(async (rt) => {
           const totalRoomsOfType = await prisma.room.count({
@@ -110,13 +206,11 @@ router.get('/:propertyCode/room-types', async (req: any, res: Response) => {
       );
       availableRoomTypes = availabilityChecks.filter(rt => rt.isAvailable);
     }
-
     const total = availableRoomTypes.length;
     const totalPages = Math.ceil(total / limitNum);
     const paginatedData = availableRoomTypes.slice((pageNum - 1) * limitNum, pageNum * limitNum);
-
-    return res.json({ 
-      success: true, 
+    return res.json({
+      success: true,
       data: paginatedData,
       pagination: { page: pageNum, limit: limitNum, total, totalPages }
     });
@@ -135,19 +229,14 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
   try {
     const { propertyCode } = req.params;
     const { checkInDate, checkOutDate, roomTypeId, guestFullName, guestPhone, guestEmail, platformGuestId, agreedPricePerNight, notes } = req.body;
-
     const property = await checkOnlineBookingEnabled(propertyCode);
-
     const cIn = new Date(checkInDate);
     const cOut = new Date(checkOutDate);
     if (cIn >= cOut) throw new Error('Check-out date must be after check-in date.');
-    
     const nights = Math.ceil((cOut.getTime() - cIn.getTime()) / (1000 * 60 * 60 * 24));
     const baseTotal = parseFloat(agreedPricePerNight) * nights;
     const taxAmount = baseTotal * (parseFloat(property.taxPercentage as any) / 100);
     const finalTotal = baseTotal + taxAmount;
-
-    // 🌟 Find a SPECIFIC available room of this type for these dates
     const availableRoom = await prisma.room.findFirst({
       where: {
         propertyId: property.propertyId,
@@ -163,31 +252,27 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
         }
       }
     });
-
     if (!availableRoom) {
       return res.status(400).json({ success: false, message: 'Sorry, this room type is no longer available for the selected dates.' });
     }
-
     let finalPlatformGuestId = platformGuestId;
     if (!finalPlatformGuestId && guestFullName && guestPhone) {
       const guest = await prisma.platformGuest.upsert({
         where: { phone: guestPhone.trim() },
         update: { fullName: guestFullName.trim(), email: guestEmail?.trim() || undefined },
-        create: { 
-          fullName: guestFullName.trim(), 
-          phone: guestPhone.trim(), 
-          email: guestEmail?.trim() || '', 
+        create: {
+          fullName: guestFullName.trim(),
+          phone: guestPhone.trim(),
+          email: guestEmail?.trim() || '',
           passwordHash: 'PENDING_VERIFICATION',
-          isPhoneVerified: false 
+          isPhoneVerified: false
         }
       });
       finalPlatformGuestId = guest.guestId;
     }
-
     if (!finalPlatformGuestId) {
       throw new Error('Guest information is required for online bookings.');
     }
-
     const reservation = await prisma.reservation.create({
       data: {
         propertyId: property.propertyId,
@@ -198,26 +283,23 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
         status: 'Confirmed',
         notes: notes || '',
         totalAmount: finalTotal,
-        amountPaid: 0, 
+        amountPaid: 0,
         balanceDue: finalTotal,
       },
       include: { platformGuest: { select: { fullName: true, phone: true, email: true } } }
     });
-
-    // 🌟 Create Reservation Room using the VALID roomId we found
     await prisma.reservationRoom.create({
       data: {
         reservationId: reservation.reservationId,
-        roomId: availableRoom.roomId, // ✅ FIXED: Uses actual valid room ID
+        roomId: availableRoom.roomId,
         roomTypeId: roomTypeId,
         checkInDate: cIn,
         checkOutDate: cOut,
         agreedPricePerNight: parseFloat(agreedPricePerNight),
       }
     });
-
-    return res.status(201).json({ 
-      success: true, 
+    return res.status(201).json({
+      success: true,
       message: 'Reservation created successfully!',
       data: {
         reservationId: reservation.reservationId,
@@ -226,7 +308,6 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
         guestName: reservation.platformGuest?.fullName
       }
     });
-
   } catch (error: any) {
     console.error('Reservation Creation Error:', error);
     return res.status(400).json({ success: false, message: error.message });
@@ -239,30 +320,24 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
 router.post('/:propertyCode/payments/initialize', async (req: any, res: Response) => {
   try {
     const { propertyCode } = req.params;
-    const { reservationId, email, amount } = req.body; // amount in GHS
-
-    const property = await prisma.property.findUnique({ 
+    const { reservationId, email, amount } = req.body;
+    const property = await prisma.property.findUnique({
       where: { propertyCode },
       select: { propertyId: true, paystackSecretKey: true, currency: true }
     });
-
     if (!property?.paystackSecretKey) {
       return res.status(400).json({ success: false, message: 'This hotel has not configured Mobile Money payments yet.' });
     }
-
-    // 🌟 Build callback URL (frontend success page)
     const callbackUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/public/${propertyCode}/booking-success`;
-
-    // 🌟 Call Paystack API with callback URL and Mobile Money ONLY
     const response = await axios.post(
       'https://api.paystack.co/transaction/initialize',
       {
         email,
-        amount: Math.round(amount * 100), // Convert GHS to Pesewas
+        amount: Math.round(amount * 100),
         reference: `RES-${reservationId}-${Date.now()}`,
         currency: property.currency || 'GHS',
-        channels: ['mobile_money'], // 🚫 BLOCKS CREDIT CARDS, SHOWS MOBILE MONEY ONLY
-        callback_url: callbackUrl, // 🌟 Redirect here after payment
+        channels: ['mobile_money'],
+        callback_url: callbackUrl,
         metadata: {
           propertyCode,
           reservationId: String(reservationId)
@@ -275,7 +350,6 @@ router.post('/:propertyCode/payments/initialize', async (req: any, res: Response
         },
       }
     );
-
     return res.json({ success: true, data: response.data.data });
   } catch (error: any) {
     console.error('Paystack Initialization Error:', error.response?.data || error.message);
@@ -289,17 +363,13 @@ router.post('/:propertyCode/payments/initialize', async (req: any, res: Response
 router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Response) => {
   try {
     const { propertyCode, reference } = req.params;
-
-    const property = await prisma.property.findUnique({ 
+    const property = await prisma.property.findUnique({
       where: { propertyCode },
       select: { propertyId: true, paystackSecretKey: true }
     });
-
     if (!property?.paystackSecretKey) {
       return res.status(400).json({ success: false, message: 'Property Paystack configuration not found' });
     }
-
-    // Verify transaction with Paystack using property's key
     const response = await axios.get(
       `https://api.paystack.co/transaction/verify/${reference}`,
       {
@@ -308,25 +378,16 @@ router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Re
         },
       }
     );
-
     const transactionData = response.data.data;
-
-    // If payment is successful, update the reservation AND create payment record
     if (transactionData.status === 'success') {
       const reservationId = parseInt(transactionData.metadata?.reservationId);
       const amountPaid = transactionData.amount / 100;
-
       if (reservationId) {
-        // Check if already processed by webhook to prevent duplicates
         const reservation = await prisma.reservation.findUnique({
           where: { reservationId },
           select: { amountPaid: true, status: true }
         });
-
-        // 🛡️ ANTI-DUPLICATE LOCK: Only process if amountPaid is still 0
         if (reservation && Number(reservation.amountPaid) === 0) {
-          
-          // 🌟 1. Update reservation
           await prisma.reservation.update({
             where: { reservationId },
             data: {
@@ -335,8 +396,6 @@ router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Re
               status: 'Confirmed',
             }
           });
-
-          // 🌟 2. CREATE PAYMENT RECORD
           await prisma.payment.create({
             data: {
               reservationId,
@@ -349,16 +408,14 @@ router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Re
               receivedBy: null,
             }
           });
-
           console.log(`🔧 [VERIFY FALLBACK] Reservation #${reservationId} payment verified and recorded: GH₵ ${amountPaid}`);
         } else {
           console.log(`ℹ️ [VERIFY SKIPPED] Reservation #${reservationId} already processed by webhook`);
         }
       }
     }
-
-    return res.json({ 
-      success: true, 
+    return res.json({
+      success: true,
       data: transactionData,
       status: transactionData.status
     });
@@ -367,46 +424,5 @@ router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Re
     return res.status(500).json({ success: false, message: error.response?.data?.message || error.message });
   }
 });
-
-// ============================================================
-// 🌟 DISCOVER: Fetch all public properties for the main directory
-// ============================================================
-router.get('/discover', async (_req: Request, res: Response) => {
-  try {
-    const properties = await prisma.property.findMany({
-      where: { isOnlineBookingEnabled: true },
-      select: {
-        propertyCode: true,
-        propertyName: true,
-        city: true,
-        publicDescription: true,
-        coverImage: true,
-        roomTypes: {
-          select: { basePrice: true },
-          orderBy: { basePrice: 'asc' },
-          take: 1 // Get the lowest price
-        }
-      }
-    });
-
-    // Format the data for the frontend
-    const formatted = properties.map(p => ({
-      propertyCode: p.propertyCode,
-      propertyName: p.propertyName,
-      city: p.city,
-      description: p.publicDescription,
-      coverImage: p.coverImage,
-      minPrice: p.roomTypes.length > 0 ? Number(p.roomTypes[0].basePrice) : 0,
-      rating: 4.5, 
-      distance: 'Nearby',
-      amenities: ['Free WiFi', 'Parking'] 
-    }));
-
-    return res.json({ success: true, data: formatted });
-  } catch (error: any) {
-    console.error('Discover Error:', error);
-    return res.status(500).json({ success: false, message: error.message });
-  }
-}); 
 
 export default router;

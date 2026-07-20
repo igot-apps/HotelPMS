@@ -6,11 +6,13 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 // Property Registration and PMS Public Pages
 import LoginPage from './pages/LoginPage';
 import HotelRegistrationWizard from './pages/HotelRegistrationWizard';
+import DiscoverPage from './pages/DiscoverPage'; // 🌟 NEW: Main Public Homepage
 
 // 🌟 Public Website Pages (Guest Booking Flow)
 import PublicHotelPage from './pages/PublicHotelPage';
 import GuestAuthPage from './pages/GuestAuthPage';
 import PublicCheckoutPage from './pages/PublicCheckoutPage';
+import PublicBookingSuccessPage from './pages/PublicBookingSuccessPage';
 
 // Protected Pages (Staff PMS)
 import DashboardPage from './pages/DashboardPage';
@@ -27,9 +29,6 @@ import AvailabilityPage from './pages/AvailabilityPage';
 import RoomManagementPage from './pages/RoomManagementPage';
 import UsersPage from './pages/UsersPage';
 import BillingPage from './pages/BillingPage';
-import PublicBookingSuccessPage from './pages/PublicBookingSuccessPage';
-
-
 
 function App() {
   return (
@@ -74,52 +73,40 @@ function App() {
         {/* ========================================== */}
         {/* 🌟 PUBLIC ROUTES (No login required)       */}
         {/* ========================================== */}
+        <Route path="/" element={<DiscoverPage />} /> {/* 🌟 NEW: Main Public Homepage */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register-your-hotel" element={<HotelRegistrationWizard />} />
         
-        {/* 🌟 THESE 3 ROUTES BYPASS THE APP LAYOUT/SIDEBAR */}
+        {/* 🌟 Guest Booking Flow */}
         <Route path="/public/:propertyCode" element={<PublicHotelPage />} />
         <Route path="/public/:propertyCode/auth" element={<GuestAuthPage />} />
         <Route path="/public/:propertyCode/book/:roomTypeId" element={<PublicCheckoutPage />} />
         <Route path="/public/:propertyCode/booking-success" element={<PublicBookingSuccessPage />} />
-        
 
         {/* ========================================== */}
         {/* 🔒 PROTECTED ROUTES (Wrapped in Layout)    */}
         {/* ========================================== */}
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <AppLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          
-          {/* Core Operations */}
-          <Route path="dashboard" element={<DashboardPage />} />
-          <Route path="rooms" element={<RoomsPage />} />
-          <Route path="guests" element={<GuestsPage />} />
-          <Route path="reservations" element={<ReservationsPage />} />
-          <Route path="reservations/:id" element={<ReservationDetailsPage />} />
-          <Route path="payments" element={<PaymentsPage />} />
-          <Route path="reports" element={<ReportsPage />} />
-          <Route path="calendar" element={<CalendarPage />} />
-          <Route path="availability" element={<AvailabilityPage />} />
-          <Route path="room-management" element={<RoomManagementPage />} />
-          
-          {/* Configuration Pages */}
-          <Route path="rate-plans" element={<RatePlansPage />} />
-          <Route path="properties" element={<PropertiesPage />} />
-          <Route path="users" element={<UsersPage />} />
-          <Route path="billing" element={<BillingPage />} />
+        <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/rooms" element={<RoomsPage />} />
+          <Route path="/guests" element={<GuestsPage />} />
+          <Route path="/reservations" element={<ReservationsPage />} />
+          <Route path="/reservations/:id" element={<ReservationDetailsPage />} />
+          <Route path="/payments" element={<PaymentsPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/calendar" element={<CalendarPage />} />
+          <Route path="/availability" element={<AvailabilityPage />} />
+          <Route path="/room-management" element={<RoomManagementPage />} />
+          <Route path="/rate-plans" element={<RatePlansPage />} />
+          <Route path="/properties" element={<PropertiesPage />} />
+          <Route path="/users" element={<UsersPage />} />
+          <Route path="/billing" element={<BillingPage />} />
         </Route>
 
         {/* ========================================== */}
         {/* Fallback Route                             */}
         {/* ========================================== */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
