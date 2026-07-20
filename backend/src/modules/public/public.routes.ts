@@ -1,4 +1,4 @@
-import { Router, Response } from 'express';
+import { Router, Request, Response } from 'express';
 import { PrismaClient } from '../../generated/prisma';
 import axios from 'axios';
 
@@ -367,5 +367,46 @@ router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Re
     return res.status(500).json({ success: false, message: error.response?.data?.message || error.message });
   }
 });
+
+// ============================================================
+// 🌟 DISCOVER: Fetch all public properties for the main directory
+// ============================================================
+router.get('/discover', async (_req: Request, res: Response) => {
+  try {
+    const properties = await prisma.property.findMany({
+      where: { isOnlineBookingEnabled: true },
+      select: {
+        propertyCode: true,
+        propertyName: true,
+        city: true,
+        publicDescription: true,
+        coverImage: true,
+        roomTypes: {
+          select: { basePrice: true },
+          orderBy: { basePrice: 'asc' },
+          take: 1 // Get the lowest price
+        }
+      }
+    });
+
+    // Format the data for the frontend
+    const formatted = properties.map(p => ({
+      propertyCode: p.propertyCode,
+      propertyName: p.propertyName,
+      city: p.city,
+      description: p.publicDescription,
+      coverImage: p.coverImage,
+      minPrice: p.roomTypes.length > 0 ? Number(p.roomTypes[0].basePrice) : 0,
+      rating: 4.5, 
+      distance: 'Nearby',
+      amenities: ['Free WiFi', 'Parking'] 
+    }));
+
+    return res.json({ success: true, data: formatted });
+  } catch (error: any) {
+    console.error('Discover Error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+}); 
 
 export default router;
