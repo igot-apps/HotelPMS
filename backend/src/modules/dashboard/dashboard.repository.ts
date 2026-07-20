@@ -1,80 +1,106 @@
-import { PrismaClient } from '../../../src/generated/prisma';
+import { PrismaClient } from '../../generated/prisma';
+
 const prisma = new PrismaClient();
 
-export const getOperationalOverview = async (propertyId: number) => { // ✅ REMOVED tenantId
-  // 1. Define "Today" boundaries
-  const now = new Date();
-  const startOfDay = new Date(now.setHours(0, 0, 0, 0));
-  const endOfDay = new Date(now.setHours(23, 59, 59, 999));
+export const getOperationalOverview = async (propertyId: number) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   
-  // ✅ Property is now the root scope
-  const baseWhere = { propertyId };
+  const endOfToday = new Date(today);
+  endOfToday.setHours(23, 59, 59, 999);
 
-  // 2. Fetch Today's Arrivals (Check-ins)
+  // 1. Fetch Today's Arrivals (Check-ins)
   const arrivals = await prisma.reservation.findMany({
     where: {
-      ...baseWhere,
-      checkInDate: { gte: startOfDay, lte: endOfDay },
-      status: 'Confirmed',
+      propertyId,
+      checkInDate: {
+        gte: today,
+        lte: endOfToday
+      },
+      status: { in: ['Confirmed', 'CheckedIn'] }
     },
     include: {
-      guest: { select: { fullName: true, phone: true } },
-      reservationRooms: { include: { room: { select: { roomNumber: true } } } },
+      // 🌟 UPDATED: Use new guest relations
+      platformGuest: { select: { fullName: true, phone: true } },
+      propertyGuest: { select: { fullName: true, phone: true } },
+      reservationRooms: {
+        include: {
+          room: { select: { roomNumber: true } }
+        }
+      }
     },
-    orderBy: { checkInDate: 'asc' },
+    orderBy: { checkInDate: 'asc' }
   });
 
-  // 3. Fetch Today's Departures (Check-outs)
+  // 2. Fetch Today's Departures (Check-outs)
   const departures = await prisma.reservation.findMany({
     where: {
-      ...baseWhere,
-      checkOutDate: { gte: startOfDay, lte: endOfDay },
-      status: 'CheckedIn',
+      propertyId,
+      checkOutDate: {
+        gte: today,
+        lte: endOfToday
+      },
+      status: { in: ['Confirmed', 'CheckedIn'] }
     },
     include: {
-      guest: { select: { fullName: true, phone: true } },
-      reservationRooms: { include: { room: { select: { roomNumber: true } } } },
+      // 🌟 UPDATED: Use new guest relations
+      platformGuest: { select: { fullName: true, phone: true } },
+      propertyGuest: { select: { fullName: true, phone: true } },
+      reservationRooms: {
+        include: {
+          room: { select: { roomNumber: true } }
+        }
+      }
     },
-    orderBy: { checkOutDate: 'asc' },
+    orderBy: { checkOutDate: 'asc' }
   });
 
-  // 4. Room Status Counts
-  const roomStatsRaw = await prisma.room.groupBy({
-    by: ['operationalStatus'],
-    where: baseWhere,
-    _count: true,
+  // 3. Room Statistics
+  const totalRooms = await prisma.room.count({ where: { propertyId } });
+  const availableRooms = await prisma.room.count({ 
+    where: { propertyId, operationalStatus: 'Available', housekeepingStatus: 'Clean' } 
   });
 
-  // Format room stats into a clean object: { Available: 10, Occupied: 5, Maintenance: 1 }
-  const roomStats = roomStatsRaw.reduce((acc, curr) => {
-    acc[curr.operationalStatus] = curr._count;
-    return acc;
-  }, {} as Record<string, number>);
-
-  // 5. Housekeeping Alerts (Dirty rooms or Out of Order)
+  // 4. Alerts (Rooms needing attention)
   const alerts = await prisma.room.findMany({
     where: {
-      ...baseWhere,
+      propertyId,
       OR: [
         { housekeepingStatus: 'Dirty' },
-        { housekeepingStatus: 'OutOfService' },
         { operationalStatus: 'Maintenance' },
-      ],
+        { housekeepingStatus: 'OutOfService' }
+      ]
     },
     select: {
       roomId: true,
       roomNumber: true,
       operationalStatus: true,
-      housekeepingStatus: true,
-    },
-    orderBy: { roomNumber: 'asc' },
+      housekeepingStatus: true
+    }
   });
 
+  // 🌟 HELPER: Reconstruct a virtual 'guest' object so the frontend doesn't need to change
+  const formatReservations = (reservations: any[]) => {
+    return reservations.map(res => ({
+      ...res,
+      guest: {
+        fullName: res.platformGuest?.fullName || res.propertyGuest?.fullName || 'Unknown Guest',
+        phone: res.platformGuest?.phone || res.propertyGuest?.phone || ''
+      },
+      // Ensure balanceDue is a number for the frontend
+      balanceDue: Number(res.balanceDue || 0)
+    }));
+  };
+
   return {
-    arrivals,
-    departures,
-    roomStats,
-    alerts,
-    totalRooms: Object.values(roomStats).reduce((sum: number, count: any) => sum + count, 0),
+    arrivals: formatReservations(arrivals),
+    departures: formatReservations(departures),
+    roomStats: {
+      Total: totalRooms,
+      Available: availableRooms,
+      Occupied: totalRooms - availableRooms
+    },
+    totalRooms,
+    alerts
   };
 };
