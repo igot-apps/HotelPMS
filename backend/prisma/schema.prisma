@@ -32,7 +32,8 @@ model Property {
   address                String?   @db.Text
   city                   String?   @db.VarChar(100)
   country                String    @db.VarChar(100) 
-  gpsCoordinates         String?   @db.VarChar(100)
+  latitude          Float?
+  longitude         Float?
   totalRooms             Int       @default(0)
   checkInTime            String    @default("14:00") @db.VarChar(10)
   checkOutTime           String    @default("11:00") @db.VarChar(10)
