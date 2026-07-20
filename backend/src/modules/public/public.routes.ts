@@ -9,7 +9,7 @@ const prisma = new PrismaClient();
 // 🌟 DISCOVER: Fetch all public properties with search & filters
 // ============================================================
 router.get('/discover', async (req: any, res: Response) => {
-  try {
+  try { 
     const { search, checkIn, checkOut } = req.query;
 
     // Base filter: only show hotels with online booking enabled
