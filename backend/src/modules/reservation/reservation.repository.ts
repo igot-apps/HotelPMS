@@ -1,4 +1,5 @@
 import { PrismaClient } from '../../generated/prisma';
+
 const prisma = new PrismaClient();
 
 export const createReservation = async (data: {
@@ -9,7 +10,7 @@ export const createReservation = async (data: {
   source: string;
   checkInDate: Date;
   checkOutDate: Date;
-  status?: string;
+  status?: any; // 🌟 Changed to 'any' to safely accept Prisma Enum
   notes?: string;
   totalAmount?: number;
   amountPaid?: number;
@@ -33,7 +34,6 @@ export const createReservation = async (data: {
   });
 };
 
-// 🌟 ADDED BACK: This was missing in the previous snippet!
 export const createReservationRoom = async (data: {
   reservationId: number;
   roomId: number;
@@ -134,7 +134,7 @@ export const updateReservation = async (reservationId: number, data: any) => {
   });
 };
 
-export const updateReservationStatus = async (reservationId: number, status: string) => {
+export const updateReservationStatus = async (reservationId: number, status: any) => { // 🌟 Changed to 'any'
   return prisma.reservation.update({
     where: { reservationId },
     data: { status },

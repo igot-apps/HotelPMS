@@ -9,7 +9,45 @@ datasource db {
 }
 
 // ============================================================
-// CORE - PROPERTY (Now the Root Entity / The Hotel)
+// 🌟 ENUMS (Strict allowed values to prevent AI hallucination)
+// ============================================================
+enum SubscriptionStatus {
+  Trial
+  Active
+  Expired
+  Cancelled
+}
+
+enum OperationalStatus {
+  Available
+  Occupied
+  Maintenance
+}
+
+enum HousekeepingStatus {
+  Clean
+  Dirty
+  Inspected
+}
+
+enum ReservationStatus {
+  Pending
+  Confirmed
+  CheckedIn
+  CheckedOut
+  Cancelled
+  NoShow
+}
+
+enum PaymentStatus {
+  Pending
+  Completed
+  Failed
+  Refunded
+}
+
+// ============================================================
+// CORE - PROPERTY
 // ============================================================
 model Property {
   propertyId             Int       @id @default(autoincrement())
@@ -18,7 +56,7 @@ model Property {
   businessName           String    @db.VarChar(200)
   legalName              String?   @db.VarChar(200)
   subscriptionPlan       String    @default("Starter") @db.VarChar(50)
-  subscriptionStatus     String    @default("Trial") @db.VarChar(20)
+  subscriptionStatus     SubscriptionStatus @default(Trial)
   trialEndsAt            DateTime?
   subscriptionEndsAt     DateTime?
   currency               String    @default("GHS") @db.VarChar(10)
@@ -32,8 +70,8 @@ model Property {
   address                String?   @db.Text
   city                   String?   @db.VarChar(100)
   country                String    @db.VarChar(100) 
-  latitude          Float?
-  longitude         Float?
+  latitude               Float?
+  longitude              Float?
   totalRooms             Int       @default(0)
   checkInTime            String    @default("14:00") @db.VarChar(10)
   checkOutTime           String    @default("11:00") @db.VarChar(10)
@@ -41,18 +79,15 @@ model Property {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  // 🌟 NEW: Public Website Content & Settings
   coverImage             String?   @db.Text
-  galleryImages          Json?     // Stores array of image URLs: ["url1", "url2"]
+  galleryImages          Json?
   publicDescription      String?   @db.Text
   cancellationPolicy     String?   @db.Text
   houseRules             String?   @db.Text
-  taxPercentage          Decimal   @default(0.00) @db.Decimal(5, 2) // e.g., 15.00 for 15%
-  isOnlineBookingEnabled Boolean   @default(false) // Master switch for public bookings
-  // 🌟 NEW: Property-specific Paystack integration
-  paystackSecretKey   String?   @db.Text // Encrypted Paystack secret key for this property
+  taxPercentage          Decimal   @default(0.00) @db.Decimal(5, 2)
+  isOnlineBookingEnabled Boolean   @default(false)
+  paystackSecretKey      String?   @db.Text
 
-  // Reverse relations
   users                  User[]
   propertyGuests         PropertyGuest[]
   roomTypes              RoomType[]
@@ -129,13 +164,13 @@ model RolePermission {
 }
 
 // ============================================================
-// GUESTS - PROPERTY LEVEL (Internal Operational Records)
+// GUESTS
 // ============================================================
 model PropertyGuest {
   guestId        Int       @id @default(autoincrement())
   propertyId     Int       
   fullName       String    @db.VarChar(200)
-  phone          String?   @db.VarChar(50) // No unique constraint; receptionists often enter shared/fake numbers
+  phone          String?   @db.VarChar(50)
   idNumber       String?   @db.VarChar(50)
   address        String?   @db.Text
   city           String?   @db.VarChar(100)
@@ -149,18 +184,15 @@ model PropertyGuest {
   reservations   Reservation[]
 
   @@index([propertyId])
-  @@index([phone]) // Indexed for fast searching by reception, but NOT unique
+  @@index([phone])
   @@map("property_guests")
 }
 
-// ============================================================
-// GUESTS - PLATFORM LEVEL (Verified Online Identities)
-// ============================================================
 model PlatformGuest {
   guestId           Int       @id @default(autoincrement())
   fullName          String    @db.VarChar(200)
-  phone             String    @unique @db.VarChar(50) // Verified and unique globally
-  email             String    @unique @db.VarChar(200) // Verified and unique globally
+  phone             String    @unique @db.VarChar(50)
+  email             String    @unique @db.VarChar(200)
   passwordHash      String    @db.Text
   isPhoneVerified   Boolean   @default(false)
   isEmailVerified   Boolean   @default(false)
@@ -189,9 +221,8 @@ model RoomType {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  // 🌟 NEW: Public Website Visuals
   coverImage        String?   @db.Text
-  galleryImages     Json?     // Stores array of image URLs
+  galleryImages     Json?
 
   property          Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
   rooms             Room[]
@@ -204,20 +235,20 @@ model RoomType {
 }
 
 model Room {
-  roomId            Int       @id @default(autoincrement())
-  propertyId        Int
-  roomNumber        String    @db.VarChar(20)
-  roomTypeId        Int
-  floor             Int?
-  operationalStatus String    @default("Available") @db.VarChar(20)
-  housekeepingStatus String   @default("Clean") @db.VarChar(20)
-  notes             String?   @db.Text
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  roomId               Int       @id @default(autoincrement())
+  propertyId           Int
+  roomNumber           String    @db.VarChar(20)
+  roomTypeId           Int
+  floor                Int?
+  operationalStatus    OperationalStatus @default(Available)
+  housekeepingStatus   HousekeepingStatus @default(Clean)
+  notes                String?   @db.Text
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  property          Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
-  roomType          RoomType  @relation(fields: [roomTypeId], references: [roomTypeId])
-  reservationRooms  ReservationRoom[]
+  property             Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
+  roomType             RoomType  @relation(fields: [roomTypeId], references: [roomTypeId])
+  reservationRooms     ReservationRoom[]
 
   @@unique([propertyId, roomNumber])
   @@map("rooms")
@@ -252,23 +283,21 @@ model Reservation {
   reservationId     Int       @id @default(autoincrement())
   propertyId        Int
   
-  // 🌟 NEW: Public Booking Confirmation & Dual Guest Support
-  confirmationCode  String    @unique @default(uuid()) // Generates a unique string like "a1b2c3d4..."
-  propertyGuestId   Int?      // Used for walk-ins / reception bookings
-  platformGuestId   Int?      // Used for online verified bookings
+  confirmationCode  String    @unique @default(uuid())
+  propertyGuestId   Int?
+  platformGuestId   Int?
   
   staffId           Int?
   source            String    @default("Website") @db.VarChar(50)
   checkInDate       DateTime
   checkOutDate      DateTime
-  // 🌟 UPDATED: Added 'NoShow' to the supported statuses for future receptionist workflows
-  status            String    @default("Pending") @db.VarChar(20) // Options: 'Pending', 'Confirmed', 'CheckedIn', 'CheckedOut', 'Cancelled', 'NoShow'
+  status            ReservationStatus @default(Pending)
   notes             String?   @db.Text
   totalAmount       Decimal?  @db.Decimal(10, 2)
   amountPaid        Decimal?  @db.Decimal(10, 2)
   balanceDue        Decimal?  @db.Decimal(10, 2)
   refundDue         Decimal   @default(0) @db.Decimal(10, 2)
-  refundStatus      String    @default("None") @db.VarChar(20) // Options: 'None', 'Pending', 'Processed', 'Waived'
+  refundStatus      String    @default("None") @db.VarChar(20)
   cancellationDate  DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -323,7 +352,7 @@ model Payment {
   paymentDate       DateTime  @default(now())
   gatewayReference  String?   @db.VarChar(200)
   receivedBy        Int?
-  status            String    @default("Completed") @db.VarChar(20)
+  status            PaymentStatus @default(Completed)
   notes             String?   @db.Text
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -359,13 +388,13 @@ model AuditLog {
 }
 
 // ============================================================
-// AMENITIES (Inline Tagging System)
+// AMENITIES
 // ============================================================
 model Amenity {
   amenityId         Int       @id @default(autoincrement())
   propertyId        Int
   name              String    @db.VarChar(100)
-  icon              String?   @db.VarChar(50) // e.g., "wifi", "ac", "tv", "pool"
+  icon              String?   @db.VarChar(50)
   createdAt         DateTime  @default(now())
 
   property          Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)

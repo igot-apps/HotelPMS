@@ -25,10 +25,10 @@ const configItems = [
 ];
 
 // 🌟 NEW: Account / SaaS Items
+// 🌟 NEW: Account / SaaS Items
 const accountItems = [
-  // We use 'CanManageStaffAndRoles' so it works immediately with your current DB!
-  // Only Managers have this permission, so Receptionists won't see the Billing link.
-  { to: '/billing', icon: Crown, label: 'Billing & Plan', permission: 'CanManageStaffAndRoles' }, 
+  // ✅ CHANGED: Now checks for the dedicated Billing permission
+  { to: '/billing', icon: Crown, label: 'Billing & Plan', permission: 'CanManageBilling' }, 
 ];
 
 export default function Sidebar({ isOpen, onClose }) {

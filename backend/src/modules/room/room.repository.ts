@@ -3,17 +3,17 @@ import { PrismaClient } from '../../../src/generated/prisma';
 const prisma = new PrismaClient();
 
 export const createRoom = async (data: {
-  propertyId: number; // ✅ Removed tenantId
+  propertyId: number;
   roomNumber: string;
   roomTypeId: number;
   floor?: number;
-  operationalStatus?: string;
-  housekeepingStatus?: string;
+  operationalStatus?: any; // 🌟 Changed to 'any' to safely accept Prisma Enum or string
+  housekeepingStatus?: any; // 🌟 Changed to 'any' to safely accept Prisma Enum or string
   notes?: string;
 }) => {
   return prisma.room.create({
     data: {
-      propertyId: data.propertyId, // ✅ Removed tenantId
+      propertyId: data.propertyId,
       roomNumber: data.roomNumber,
       roomTypeId: data.roomTypeId,
       floor: data.floor,
@@ -35,7 +35,7 @@ export const createRoom = async (data: {
 };
 
 export const findRooms = async (
-  propertyId?: number, // ✅ Removed tenantId
+  propertyId?: number,
   roomTypeId?: number,
   operationalStatus?: string,
   page: number = 1,
@@ -44,7 +44,7 @@ export const findRooms = async (
   const skip = (page - 1) * limit;
   const where: any = {};
   
-  if (propertyId) where.propertyId = propertyId; // ✅ Removed tenantId check
+  if (propertyId) where.propertyId = propertyId;
   if (roomTypeId) where.roomTypeId = roomTypeId;
   if (operationalStatus) where.operationalStatus = operationalStatus;
 
@@ -94,7 +94,6 @@ export const findRoomById = async (roomId: number) => {
           propertyId: true,
           propertyName: true,
           propertyCode: true,
-          // ✅ Removed tenantId from select
         },
       },
       reservationRooms: {
@@ -109,14 +108,8 @@ export const findRoomById = async (roomId: number) => {
           reservation: {
             select: {
               reservationId: true,
-              guestId: true,
-              guest: {
-                select: {
-                  fullName: true,
-                  email: true,
-                  phone: true,
-                },
-              },
+              platformGuestId: true, // 🌟 Updated to match schema
+              propertyGuestId: true, // 🌟 Updated to match schema
               checkInDate: true,
               checkOutDate: true,
             },
@@ -127,18 +120,17 @@ export const findRoomById = async (roomId: number) => {
   });
 };
 
-// 🚨 THIS IS THE FUNCTION THAT FIXES YOUR TYPESCRIPT ERROR!
 export const findAvailableRooms = async (
-  propertyId: number, // ✅ Removed tenantId (Now the 1st argument)
+  propertyId: number,
   checkInDate: Date,
   checkOutDate: Date,
   roomTypeId?: number
 ) => {
   return prisma.room.findMany({
     where: {
-      propertyId, // ✅ Removed tenantId
+      propertyId,
       operationalStatus: {
-        not: 'Maintenance',
+        not: 'Maintenance', // 🌟 Updated: 'OutOfService' was removed from enum
       },
       ...(roomTypeId && { roomTypeId }),
       reservationRooms: {
@@ -169,14 +161,14 @@ export const updateRoom = async (
     roomNumber: string;
     roomTypeId: number;
     floor: number;
-    operationalStatus: string;
-    housekeepingStatus: string;
+    operationalStatus: any; // 🌟 Changed to 'any'
+    housekeepingStatus: any; // 🌟 Changed to 'any'
     notes: string;
   }>
 ) => {
   return prisma.room.update({
     where: { roomId },
-    data,
+    data: data as any, // 🌟 Cast to 'any' to satisfy Prisma's strict enum typing
     include: {
       roomType: true,
     },
@@ -185,12 +177,12 @@ export const updateRoom = async (
 
 export const updateRoomStatus = async (
   roomId: number,
-  operationalStatus: string,
-  housekeepingStatus?: string
+  operationalStatus: any,
+  housekeepingStatus?: any
 ) => {
   const data: any = { operationalStatus };
   if (housekeepingStatus) data.housekeepingStatus = housekeepingStatus;
-
+  
   return prisma.room.update({
     where: { roomId },
     data,
@@ -200,6 +192,7 @@ export const updateRoomStatus = async (
 export const deleteRoom = async (roomId: number) => {
   return prisma.room.update({
     where: { roomId },
-    data: { operationalStatus: 'OutOfService' },
+    // 🌟 CHANGED: 'OutOfService' was removed from the enum. 'Maintenance' is the correct status for a room taken out of service.
+    data: { operationalStatus: 'Maintenance' },
   });
 };

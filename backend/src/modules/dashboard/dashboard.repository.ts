@@ -61,23 +61,22 @@ export const getOperationalOverview = async (propertyId: number) => {
     where: { propertyId, operationalStatus: 'Available', housekeepingStatus: 'Clean' } 
   });
 
-  // 4. Alerts (Rooms needing attention)
-  const alerts = await prisma.room.findMany({
-    where: {
-      propertyId,
-      OR: [
-        { housekeepingStatus: 'Dirty' },
-        { operationalStatus: 'Maintenance' },
-        { housekeepingStatus: 'OutOfService' }
-      ]
-    },
-    select: {
-      roomId: true,
-      roomNumber: true,
-      operationalStatus: true,
-      housekeepingStatus: true
-    }
-  });
+// 4. Alerts (Rooms needing attention)
+const alerts = await prisma.room.findMany({
+  where: {
+    propertyId,
+    OR: [
+      { housekeepingStatus: 'Dirty' },
+      { operationalStatus: 'Maintenance' } // ✅ This is now sufficient!
+    ]
+  },
+  select: {
+    roomId: true,
+    roomNumber: true,
+    operationalStatus: true,
+    housekeepingStatus: true
+  }
+});
 
   // 🌟 HELPER: Reconstruct a virtual 'guest' object so the frontend doesn't need to change
   const formatReservations = (reservations: any[]) => {

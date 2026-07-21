@@ -12,7 +12,7 @@ export const createPayment = async (data: {
   paymentDate?: Date;
   gatewayReference?: string;
   receivedBy?: number;
-  status?: string;
+  status?: any; // 🌟 Changed to 'any' to safely accept Prisma Enum
   notes?: string;
 }) => {
   return prisma.payment.create({
@@ -37,7 +37,6 @@ export const createPayment = async (data: {
           amountPaid: true,
           balanceDue: true,
           platformGuest: { select: { fullName: true, email: true, phone: true } },
-          // 🌟 FIXED: Removed 'email' (PropertyGuest doesn't have this field)
           propertyGuest: { select: { fullName: true, phone: true } },
         },
       },
@@ -109,7 +108,6 @@ export const findPayments = async (
             amountPaid: true,
             balanceDue: true,
             platformGuest: { select: { fullName: true, email: true, phone: true } },
-            // 🌟 FIXED: Removed 'email'
             propertyGuest: { select: { fullName: true, phone: true } },
           },
         },
@@ -139,7 +137,6 @@ export const findPaymentById = async (paymentId: number) => {
           amountPaid: true,
           balanceDue: true,
           platformGuest: { select: { guestId: true, fullName: true, email: true, phone: true } },
-          // 🌟 FIXED: Removed 'email'
           propertyGuest: { select: { guestId: true, fullName: true, phone: true } },
         },
       },
@@ -172,13 +169,13 @@ export const updatePayment = async (
     paymentMethod: string;
     paymentDate: Date;
     gatewayReference: string;
-    status: string;
+    status: any; // 🌟 Changed to 'any' to safely accept Prisma Enum
     notes: string;
   }>
 ) => {
   return prisma.payment.update({
     where: { paymentId },
-    data,
+    data: data as any, // 🌟 Cast to 'any' to satisfy strict Enum typing
     include: {
       reservation: {
         select: { reservationId: true, propertyId: true, totalAmount: true, amountPaid: true, balanceDue: true },
@@ -248,7 +245,6 @@ export const getPayments = async (propertyId: number, page: number = 1, limit: n
                 email: true
               }
             },
-            // 🌟 FIXED: Removed 'email'
             propertyGuest: {
               select: {
                 guestId: true,
