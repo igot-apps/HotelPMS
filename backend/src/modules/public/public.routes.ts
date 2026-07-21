@@ -24,7 +24,13 @@ const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): 
 // ============================================================
 router.get('/discover', async (req: any, res: Response) => {
   try {
-    const { search, userLat, userLng } = req.query;
+    // 🌟 1. Extract pagination params with safe defaults
+    const { search, userLat, userLng, page = '1', limit = '9' } = req.query;
+    
+    const pageNum = Math.max(1, parseInt(page as string, 10));
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10))); // Cap max limit at 50
+    const skip = (pageNum - 1) * limitNum;
+
     const where: any = { isOnlineBookingEnabled: true };
 
     // Search filter
@@ -37,8 +43,14 @@ router.get('/discover', async (req: any, res: Response) => {
       ];
     }
 
+    // 🌟 2. Get total count for pagination calculations
+    const total = await prisma.property.count({ where });
+
+    // 🌟 3. Get paginated properties
     const properties = await prisma.property.findMany({
       where,
+      skip,
+      take: limitNum,
       select: {
         propertyCode: true,
         propertyName: true,
@@ -52,6 +64,9 @@ router.get('/discover', async (req: any, res: Response) => {
           select: { basePrice: true },
           orderBy: { basePrice: 'asc' },
           take: 1 // Get the lowest price
+        },
+        amenities: {
+          select: { name: true } // 🌟 BONUS: Fetch real amenities from DB
         }
       }
     });
@@ -90,7 +105,7 @@ router.get('/discover', async (req: any, res: Response) => {
         rating: 4.5, 
         distance: distanceText,
         distanceKm: distanceKm, // Used for sorting
-        amenities: ['Free WiFi', 'Parking'] 
+        amenities: p.amenities.map((a: any) => a.name) // 🌟 Use real DB amenities
       };
     });
 
@@ -99,7 +114,17 @@ router.get('/discover', async (req: any, res: Response) => {
       formatted.sort((a, b) => a.distanceKm - b.distanceKm);
     }
 
-    return res.json({ success: true, data: formatted });
+    // 🌟 4. Return paginated response structure
+    return res.json({ 
+      success: true, 
+      data: { 
+        hotels: formatted, 
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum)
+      } 
+    });
   } catch (error: any) {
     console.error('❌ Discover Endpoint Error:', error);
     return res.status(500).json({ success: false, message: error.message });
