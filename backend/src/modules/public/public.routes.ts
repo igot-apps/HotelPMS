@@ -439,4 +439,145 @@ router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Re
   }
 });
 
+// ============================================================
+// 🌟 6. PUBLIC GUEST REGISTRATION
+// ============================================================
+router.post('/auth/register', async (req: any, res: Response) => {
+  try {
+    const { fullName, phone, email, password } = req.body;
+
+    if (!fullName || !phone || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Full name, phone, and password are required' 
+      });
+    }
+
+    // Check if phone already exists
+    const existingGuest = await prisma.platformGuest.findUnique({
+      where: { phone: phone.trim() }
+    });
+
+    if (existingGuest) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'An account with this phone number already exists. Please login instead.' 
+      });
+    }
+
+    // Hash password
+    const bcrypt = require('bcryptjs');
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create guest
+    const guest = await prisma.platformGuest.create({
+      data: {
+        fullName: fullName.trim(),
+        phone: phone.trim(),
+        email: email?.trim() || '',
+        passwordHash: hashedPassword,
+        isPhoneVerified: false,
+        isEmailVerified: false,
+        isActive: true
+      }
+    });
+
+    // Generate JWT token
+    const jwt = require('jsonwebtoken');
+    const token = jwt.sign(
+      { guestId: guest.guestId, type: 'platform_guest' },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '7d' }
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: 'Account created successfully!',
+      data: {
+        guest: {
+          guestId: guest.guestId,
+          fullName: guest.fullName,
+          phone: guest.phone,
+          email: guest.email
+        },
+        token
+      }
+    });
+  } catch (error: any) {
+    console.error('❌ Registration Error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ============================================================
+// 🌟 7. PUBLIC GUEST LOGIN
+// ============================================================
+router.post('/auth/login', async (req: any, res: Response) => {
+  try {
+    const { phone, password } = req.body;
+
+    if (!phone || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Phone and password are required' 
+      });
+    }
+
+    // Find guest by phone
+    const guest = await prisma.platformGuest.findUnique({
+      where: { phone: phone.trim() }
+    });
+
+    if (!guest) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid phone number or password' 
+      });
+    }
+
+    if (!guest.isActive) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Your account has been deactivated. Please contact support.' 
+      });
+    }
+
+    // Verify password
+    const bcrypt = require('bcryptjs');
+    const isValidPassword = await bcrypt.compare(password, guest.passwordHash);
+
+    if (!isValidPassword) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid phone number or password' 
+      });
+    }
+
+    // Generate JWT token
+    const jwt = require('jsonwebtoken');
+    const token = jwt.sign(
+      { guestId: guest.guestId, type: 'platform_guest' },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '7d' }
+    );
+
+    return res.json({
+      success: true,
+      message: 'Login successful!',
+      data: {
+        guest: {
+          guestId: guest.guestId,
+          fullName: guest.fullName,
+          phone: guest.phone,
+          email: guest.email
+        },
+        token
+      }
+    });
+  } catch (error: any) {
+    console.error('❌ Login Error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 export default router;

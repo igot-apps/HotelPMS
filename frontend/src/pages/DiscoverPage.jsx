@@ -8,6 +8,7 @@ import {
   X, Navigation, Crosshair, Map, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import PublicNavbar from '../components/layout/PublicNavbar';
 
 // Helper to map amenity strings to icons
 const AmenityIcon = ({ name }) => {
@@ -224,6 +225,9 @@ export default function DiscoverPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* 🌟 ADD THE NAVBAR HERE */}
+      <PublicNavbar />
+
       {/* 🌟 HERO SECTION WITH SEARCH */}
       <div className="relative bg-gradient-to-br from-primary-600 via-primary-700 to-secondary-700 overflow-hidden">
         <div className="absolute inset-0 opacity-10">

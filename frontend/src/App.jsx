@@ -13,6 +13,8 @@ import PublicHotelPage from './pages/PublicHotelPage';
 import GuestAuthPage from './pages/GuestAuthPage';
 import PublicCheckoutPage from './pages/PublicCheckoutPage';
 import PublicBookingSuccessPage from './pages/PublicBookingSuccessPage';
+import PublicAuthPage from './pages/PublicAuthPage';
+
 
 // Protected Pages (Staff PMS)
 import DashboardPage from './pages/DashboardPage';
@@ -82,6 +84,7 @@ function App() {
         <Route path="/public/:propertyCode/auth" element={<GuestAuthPage />} />
         <Route path="/public/:propertyCode/book/:roomTypeId" element={<PublicCheckoutPage />} />
         <Route path="/public/:propertyCode/booking-success" element={<PublicBookingSuccessPage />} />
+        <Route path="/public/auth" element={<PublicAuthPage />} />
 
         {/* ========================================== */}
         {/* 🔒 PROTECTED ROUTES (Wrapped in Layout)    */}
