@@ -13,8 +13,13 @@ export default function PublicNavbar() {
   const isAuthenticated = !!user;
 
   const handleLogout = () => {
-    logout();
-    navigate('/discover'); // ✅ Redirects back to public discover page
+    logout(); // Clears the Zustand store
+    
+    // 🌟 CRITICAL: Clear localStorage so PublicCheckoutPage forgets the guest
+    localStorage.removeItem('guestInfo');
+    localStorage.removeItem('guestToken');
+    
+    navigate('/discover');
     setIsOpen(false);
   };
 
