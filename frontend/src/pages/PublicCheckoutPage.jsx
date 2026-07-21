@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-// 🌟 UPDATED: Replaced CreditCard with Smartphone for Mobile Money
 import { Calendar, Tag, Loader2, CheckCircle2, ArrowLeft, Smartphone, ShieldCheck, LogIn, X } from 'lucide-react';
 import api from '../lib/axios';
 import toast from 'react-hot-toast';
+import PublicAuthModal from '../components/auth/PublicAuthModal'; // 🌟 Import the new modal
 
 export default function PublicCheckoutPage() {
   const { propertyCode, roomTypeId } = useParams();
@@ -14,17 +14,20 @@ export default function PublicCheckoutPage() {
   const checkIn = searchParams.get('checkIn');
   const checkOut = searchParams.get('checkOut');
 
-  // 🌟 SAFELY parse guest info to prevent "undefined" JSON errors
-  const guestInfoString = localStorage.getItem('guestInfo');
-  const guestInfo = guestInfoString && guestInfoString !== 'undefined' 
-    ? JSON.parse(guestInfoString) 
-    : null;
-  const guestToken = localStorage.getItem('guestToken');
+  // 🌟 Convert to state so it can be updated when the modal closes
+  const [guestInfo, setGuestInfo] = useState(() => {
+    const str = localStorage.getItem('guestInfo');
+    return str && str !== 'undefined' ? JSON.parse(str) : null;
+  });
+  const [guestToken, setGuestToken] = useState(() => localStorage.getItem('guestToken'));
 
   // 🌟 State for the Login Prompt Modal (Soft Gate)
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  
+  // 🌟 State for the Auth Modal
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
-  // 🌟 ONLY redirect if dates are missing. Allow logged-out users to view the page.
+  // ONLY redirect if dates are missing
   useEffect(() => {
     if (!checkIn || !checkOut) {
       navigate(`/public/${propertyCode}`);
@@ -37,7 +40,7 @@ export default function PublicCheckoutPage() {
     queryFn: async () => (await api.get(`/public/${propertyCode}`)).data.data,
   });
 
-  // Fetch Room Types (to find the selected room's price and details)
+  // Fetch Room Types
   const { data: roomTypes, isLoading: isLoadingRooms } = useQuery({
     queryKey: ['publicRooms', propertyCode],
     queryFn: async () => (await api.get(`/public/${propertyCode}/room-types`)).data.data,
@@ -45,7 +48,7 @@ export default function PublicCheckoutPage() {
 
   const selectedRoom = roomTypes?.find(r => r.roomTypeId === parseInt(roomTypeId));
 
-  // 🌟 Calculate Pricing Safely
+  // Calculate Pricing Safely
   const nights = Math.max(1, Math.ceil((new Date(checkOut) - new Date(checkIn)) / (1000 * 60 * 60 * 24)));
   const basePrice = selectedRoom ? parseFloat(selectedRoom.basePrice) : 0;
   const subtotal = basePrice * nights;
@@ -53,10 +56,10 @@ export default function PublicCheckoutPage() {
   const taxAmount = subtotal * (taxRate / 100);
   const totalAmount = subtotal + taxAmount;
 
-  // 🌟 NEW: Payment Initialization Mutation (Creates reservation + Gets Paystack URL)
+  // Payment Initialization Mutation
   const initializePaymentMutation = useMutation({
     mutationFn: async () => {
-      // 1. First, create the reservation (status: Pending/Confirmed, amountPaid: 0)
+      // 1. Create the reservation
       const resData = await api.post(`/public/${propertyCode}/reservations`, {
         checkInDate: checkIn,
         checkOutDate: checkOut,
@@ -70,17 +73,17 @@ export default function PublicCheckoutPage() {
       
       const reservationId = resData.data.data.reservationId;
 
-      // 2. Initialize Paystack with the property's specific key
+      // 2. Initialize Paystack
       const paystackRes = await api.post(`/public/${propertyCode}/payments/initialize`, {
         reservationId,
         email: guestInfo.email || 'guest@example.com',
         amount: totalAmount,
       });
 
-      return paystackRes.data.data; // Contains authorization_url and reference
+      return paystackRes.data.data; 
     },
     onSuccess: (paystackData) => {
-      // 3. Redirect the user's browser to Paystack to complete the MoMo prompt
+      // 3. Redirect to Paystack
       window.location.href = paystackData.authorization_url;
     },
     onError: (err) => {
@@ -90,21 +93,28 @@ export default function PublicCheckoutPage() {
 
   const [confirmationData, setConfirmationData] = useState(null);
 
-  // 🌟 THE SOFT GATE: Show Modal instead of instant redirect
+  // THE SOFT GATE: Show Modal if not logged in
   const handlePay = () => {
     if (!guestToken || !guestInfo) {
-      setShowLoginPrompt(true); // Pop up the modal!
+      setShowLoginPrompt(true); 
       return;
     }
-    // Trigger the payment flow
     initializePaymentMutation.mutate();
   };
 
+  // 🌟 Open the Auth Modal instead of navigating away
   const handleProceedToLogin = () => {
     setShowLoginPrompt(false);
-    navigate(`/public/${propertyCode}/auth`, {
-      state: { from: `/public/${propertyCode}/book/${roomTypeId}?checkIn=${checkIn}&checkOut=${checkOut}` }
-    });
+    setIsAuthModalOpen(true); 
+  };
+
+  // 🌟 Refresh auth state when modal closes
+  const handleAuthModalClose = () => {
+    setIsAuthModalOpen(false);
+    // Re-read from localStorage in case they just logged in via the popup
+    const str = localStorage.getItem('guestInfo');
+    setGuestInfo(str && str !== 'undefined' ? JSON.parse(str) : null);
+    setGuestToken(localStorage.getItem('guestToken'));
   };
 
   if (isLoadingProp || isLoadingRooms) {
@@ -115,7 +125,7 @@ export default function PublicCheckoutPage() {
     );
   }
 
-  // 🌟 SUCCESS STATE: Show Receipt (If redirected back from Paystack later, we can enhance this)
+  // SUCCESS STATE
   if (confirmationData) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -154,7 +164,7 @@ export default function PublicCheckoutPage() {
     );
   }
 
-  // 🌟 CHECKOUT STATE: Show Summary & Pay Button
+  // CHECKOUT STATE
   return (
     <div className="min-h-screen bg-background py-12 px-4">
       <div className="max-w-4xl mx-auto">
@@ -239,7 +249,6 @@ export default function PublicCheckoutPage() {
                 </div>
               </div>
 
-              {/* 🌟 UPDATED: Uses Smartphone icon and triggers Paystack redirect */}
               <button 
                 onClick={handlePay}
                 disabled={initializePaymentMutation.isPending}
@@ -272,16 +281,13 @@ export default function PublicCheckoutPage() {
             >
               <X size={18} />
             </button>
-
             <div className="w-14 h-14 bg-primary-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <LogIn size={24} className="text-primary-600" />
             </div>
-            
             <h3 className="text-xl font-bold text-text mb-2">Login Required</h3>
             <p className="text-sm text-text-muted mb-6">
               Please log in or create a free account to complete your booking and secure your room.
             </p>
-            
             <div className="flex gap-3">
               <button
                 onClick={() => setShowLoginPrompt(false)}
@@ -299,6 +305,14 @@ export default function PublicCheckoutPage() {
           </div>
         </div>
       )}
+
+      {/* 🌟 ========================================== */}
+      {/* 🌟 BEAUTIFUL AUTH MODAL (REUSABLE) */}
+      {/* 🌟 ========================================== */}
+      <PublicAuthModal 
+        isOpen={isAuthModalOpen} 
+        onClose={handleAuthModalClose} 
+      />
     </div>
   );
 }
