@@ -1,55 +1,50 @@
-import { PrismaClient } from '../src/generated/prisma';
+import { PrismaClient } from './generated/prisma';
+
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🔧 Forcing Billing Permissions into Database...\n');
+  const testPhone = '0540883880';
+  console.log(`🔍 Testing Data Isolation for Phone: ${testPhone}\n`);
 
-  // 1. Ensure BOTH possible permission codes exist in the DB
-  const codes = ['CanManageBilling', 'CanManageStaffAndRoles'];
-  for (const code of codes) {
-    await prisma.permission.upsert({
-      where: { code },
-      update: {},
-      create: { code, name: code, category: 'Settings' },
-    });
-  }
-  console.log('✅ Permission codes ensured in database.');
+  // 🛡️ STEP 1: STRICTLY look in the ONLINE guest table (PlatformGuest)
+  // We DO NOT look in PropertyGuest (PMS local guests). This guarantees zero data corruption.
+  const onlineGuest = await prisma.platformGuest.findUnique({
+    where: { phone: testPhone }
+  });
 
-  // 2. Fetch the permissions and roles
-  const perms = await prisma.permission.findMany({ where: { code: { in: codes } } });
-  const admin = await prisma.role.findUnique({ where: { roleName: 'Admin' } });
-  const manager = await prisma.role.findUnique({ where: { roleName: 'Manager' } });
-
-  // 3. Force-link them to Admin
-  if (admin) {
-    for (const p of perms) {
-      await prisma.rolePermission.upsert({
-        where: { roleId_permissionId: { roleId: admin.roleId, permissionId: p.permissionId } },
-        update: {},
-        create: { roleId: admin.roleId, permissionId: p.permissionId },
-      });
-    }
-    console.log('✅ Linked to Admin role.');
+  if (!onlineGuest) {
+    console.log('❌ No ONLINE guest found with this phone.');
+    console.log('✅ (If a local PMS guest has this phone, they are safely isolated in the PropertyGuest table and cannot access this data).');
+    return;
   }
 
-  // 4. Force-link them to Manager
-  if (manager) {
-    for (const p of perms) {
-      await prisma.rolePermission.upsert({
-        where: { roleId_permissionId: { roleId: manager.roleId, permissionId: p.permissionId } },
-        update: {},
-        create: { roleId: manager.roleId, permissionId: p.permissionId },
-      });
-    }
-    console.log('✅ Linked to Manager role.');
-  }
+  console.log(`✅ Found ONLINE Guest: ${onlineGuest.fullName} (ID: ${onlineGuest.guestId})\n`);
 
-  console.log('\n🎉 Done! The database now has the Billing permissions.');
-  console.log('👉 CRITICAL NEXT STEP: You MUST log out and log back in!\n');
+  // 🛡️ STEP 2: Fetch reservations using the ONLINE guest's ID AND enforce source = 'Website'
+  const reservations = await prisma.reservation.findMany({
+    where: {
+      platformGuestId: onlineGuest.guestId, // 🔒 Core security: Only fetch reservations tied to this specific online account
+      source: 'Website'                     // 🔒 Core security: Only fetch web bookings
+    },
+    include: {
+      property: { 
+        select: { propertyName: true, city: true, propertyCode: true } 
+      },
+      reservationRooms: {
+        include: { 
+          roomType: { select: { typeName: true } } 
+        }
+      }
+    },
+    orderBy: { checkInDate: 'desc' }
+  });
+
+  console.log(`📅 Found ${reservations.length} 'Website' Reservation(s) for this online guest:\n`);
+  console.log(JSON.stringify(reservations, null, 2));
 }
 
 main()
-  .catch((e) => console.error('❌ Error:', e))
+  .catch((e) => console.error('❌ Playground Error:', e))
   .finally(async () => {
     await prisma.$disconnect();
   });

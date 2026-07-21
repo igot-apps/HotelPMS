@@ -1,25 +1,45 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { useAuthStore } from '../../store/authStore';
 import { Menu, X, User, LogOut, Calendar, Building2 } from 'lucide-react';
-import PublicAuthModal from "./PublicAuthModal";
+import PublicAuthModal from './PublicAuthModal';
 
 export default function PublicNavbar() {
   const [isOpen, setIsOpen] = useState(false);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false); // 🌟 Modal state
-  
-  const user = useAuthStore((state) => state.user);
-  const logout = useAuthStore((state) => state.logout);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const navigate = useNavigate();
-  const location = useLocation(); 
+  const location = useLocation();
+  
+  // 🌟 STRICT ISOLATION: Read ONLY from public guest localStorage. 
+  // We completely ignore the PMS authStore so staff logins never leak here.
+  const [guestInfo, setGuestInfo] = useState(null);
 
-  const isAuthenticated = !!user;
+  // Check for guest on mount
+  useEffect(() => {
+    const str = localStorage.getItem('guestInfo');
+    setGuestInfo(str && str !== 'undefined' ? JSON.parse(str) : null);
+  }, []);
+
+  // Listen for storage changes (e.g., if the user logs out in another tab)
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const str = localStorage.getItem('guestInfo');
+      setGuestInfo(str && str !== 'undefined' ? JSON.parse(str) : null);
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  const isAuthenticated = !!guestInfo;
 
   const handleLogout = () => {
-    logout(); // Clears the Zustand store
-    // 🌟 CRITICAL: Clear localStorage so PublicCheckoutPage forgets the guest
+    // 🌟 1. Clear ONLY the public guest keys (Leaves PMS staff login completely untouched)
     localStorage.removeItem('guestInfo');
     localStorage.removeItem('guestToken');
+    
+    // 🌟 2. Update local state immediately
+    setGuestInfo(null);
+    
+    // 🌟 3. Redirect to public discover page
     navigate('/discover');
     setIsOpen(false);
   };
@@ -44,13 +64,14 @@ export default function PublicNavbar() {
               
               {isAuthenticated ? (
                 <>
-                  <Link to="/guest/reservations" className="text-sm font-semibold text-text-muted hover:text-primary-600 transition flex items-center gap-1.5">
+                  <Link to="/public/reservations" className="text-sm font-semibold text-text-muted hover:text-primary-600 transition flex items-center gap-1.5">
                     <Calendar size={16} /> My Reservations
                   </Link>
                   <div className="flex items-center gap-3 pl-4 border-l border-border">
                     <div className="flex items-center gap-2 text-sm font-medium text-text">
                       <User size={16} className="text-primary-600" />
-                      <span>{user?.fullName || user?.username || 'Guest'}</span>
+                      {/* 🌟 Display public guest name, never PMS staff name */}
+                      <span>{guestInfo?.fullName || guestInfo?.phone || 'Guest'}</span>
                     </div>
                     <button
                       onClick={handleLogout}
@@ -61,7 +82,6 @@ export default function PublicNavbar() {
                   </div>
                 </>
               ) : (
-                // 🌟 CHANGED: Button to open modal instead of Link
                 <button
                   onClick={() => setIsAuthModalOpen(true)}
                   className="px-4 py-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition shadow-sm shadow-primary-600/20"
@@ -97,7 +117,7 @@ export default function PublicNavbar() {
               {isAuthenticated ? (
                 <>
                   <Link
-                    to="/guest/reservations"
+                    to="/public/reservations"
                     onClick={() => setIsOpen(false)}
                     className="block px-3 py-2.5 text-base font-medium text-text hover:bg-secondary-50 rounded-lg transition flex items-center gap-2"
                   >
@@ -106,7 +126,7 @@ export default function PublicNavbar() {
                   <div className="pt-3 border-t border-border">
                     <div className="px-3 py-2 text-sm font-medium text-text-muted flex items-center gap-2">
                       <User size={16} className="text-primary-600" />
-                      {user?.fullName || user?.username || 'Guest'}
+                      {guestInfo?.fullName || guestInfo?.phone || 'Guest'}
                     </div>
                     <button
                       onClick={handleLogout}
@@ -117,7 +137,6 @@ export default function PublicNavbar() {
                   </div>
                 </>
               ) : (
-                // 🌟 CHANGED: Button to open modal & close mobile menu
                 <button
                   onClick={() => { setIsAuthModalOpen(true); setIsOpen(false); }}
                   className="block w-full text-center px-4 py-2.5 text-base font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition"
@@ -133,7 +152,12 @@ export default function PublicNavbar() {
       {/* 🌟 Render the Auth Modal at the root level so it overlays correctly */}
       <PublicAuthModal 
         isOpen={isAuthModalOpen} 
-        onClose={() => setIsAuthModalOpen(false)} 
+        onClose={() => {
+          setIsAuthModalOpen(false);
+          // 🌟 Re-read localStorage immediately so the navbar updates without a refresh
+          const str = localStorage.getItem('guestInfo');
+          setGuestInfo(str && str !== 'undefined' ? JSON.parse(str) : null);
+        }} 
       />
     </>
   );

@@ -14,6 +14,7 @@ import GuestAuthPage from './pages/GuestAuthPage';
 import PublicCheckoutPage from './pages/PublicCheckoutPage';
 import PublicBookingSuccessPage from './pages/PublicBookingSuccessPage';
 import PublicAuthPage from './pages/PublicAuthPage';
+import PublicReservationsPage from './pages/PublicReservationsPage';
 
 
 // Protected Pages (Staff PMS)
@@ -78,6 +79,7 @@ function App() {
         <Route path="/" element={<DiscoverPage />} /> {/* 🌟 NEW: Main Public Homepage */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register-your-hotel" element={<HotelRegistrationWizard />} />
+        <Route path="/public/reservations" element={<PublicReservationsPage />} />
         
         {/* 🌟 Guest Booking Flow */}
         <Route path="/public/:propertyCode" element={<PublicHotelPage />} />

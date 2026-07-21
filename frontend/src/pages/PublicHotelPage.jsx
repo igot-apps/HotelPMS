@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Calendar, MapPin, Phone, Mail, Tag, Loader2, ChevronRight, ChevronLeft } from 'lucide-react';
 import api from '../lib/axios';
 
+import PublicNavbar from '../components/public/PublicNavbar';
+
 // Helper to fetch property data
 const fetchProperty = async (propertyCode) => {
   const res = await api.get(`/public/${propertyCode}`);
@@ -84,6 +86,9 @@ export default function PublicHotelPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* 🌟 ADD THE NAVBAR HERE */}
+      <PublicNavbar />
+
       {/* 1. Hero Section */}
       <div className="relative h-[400px] w-full bg-secondary-900">
         {property.coverImage ? (

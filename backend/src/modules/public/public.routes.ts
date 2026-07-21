@@ -1,6 +1,8 @@
 import { Router, Response } from 'express';
 import { PrismaClient } from '../../generated/prisma';
 import axios from 'axios';
+import jwt from 'jsonwebtoken'; // Ensure this is imported at the top of the file
+
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -158,6 +160,68 @@ const checkOnlineBookingEnabled = async (propertyCode: string) => {
   if (!property.isOnlineBookingEnabled) throw new Error('Online booking is currently disabled for this property.');
   return property;
 };
+
+// ============================================================
+// 🌟 6. GET GUEST RESERVATIONS (Paginated)
+// ⚠️ MUST BE PLACED BEFORE ANY /:propertyCode ROUTES!
+// ============================================================
+router.get('/reservations', async (req: any, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, message: 'Unauthorized: No token provided' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+    
+    if (decoded.type !== 'platform_guest') {
+      return res.status(403).json({ success: false, message: 'Access denied: Invalid user type' });
+    }
+
+    // 🌟 1. Extract pagination params
+    const { page = '1', limit = '5' } = req.query;
+    const pageNum = Math.max(1, parseInt(page as string, 10));
+    const limitNum = Math.min(20, Math.max(1, parseInt(limit as string, 10))); // Cap at 20
+    const skip = (pageNum - 1) * limitNum;
+
+    const whereClause = { 
+      platformGuestId: decoded.guestId,
+      source: 'Website'
+    };
+
+    // 🌟 2. Get total count for pagination calculations
+    const total = await prisma.reservation.count({ where: whereClause });
+
+    // 🌟 3. Get paginated reservations
+    const reservations = await prisma.reservation.findMany({
+      where: whereClause,
+      include: {
+        property: { select: { propertyName: true, city: true, propertyCode: true } },
+        reservationRooms: { include: { roomType: { select: { typeName: true } } } }
+      },
+      orderBy: { checkInDate: 'desc' },
+      skip,
+      take: limitNum
+    });
+
+    // 🌟 4. Return data with pagination metadata
+    return res.json({ 
+      success: true, 
+      data: reservations,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.ceil(total / limitNum)
+      }
+    });
+  } catch (error: any) {
+    console.error('❌ Fetch Reservations Error:', error);
+    return res.status(401).json({ success: false, message: 'Invalid or expired token' });
+  }
+});
+
 
 // ============================================================
 // 1. GET PUBLIC PROPERTY DETAILS
@@ -596,5 +660,7 @@ router.post('/auth/login', async (req: any, res: Response) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 });
+
+
 
 export default router;

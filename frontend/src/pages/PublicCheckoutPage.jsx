@@ -4,7 +4,9 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { Calendar, Tag, Loader2, CheckCircle2, ArrowLeft, Smartphone, ShieldCheck, LogIn, X } from 'lucide-react';
 import api from '../lib/axios';
 import toast from 'react-hot-toast';
+
 import PublicAuthModal from '../components/public/PublicAuthModal';
+import PublicNavbar from '../components/public/PublicNavbar';
 
 export default function PublicCheckoutPage() {
   const { propertyCode, roomTypeId } = useParams();
@@ -167,6 +169,9 @@ export default function PublicCheckoutPage() {
   // CHECKOUT STATE
   return (
     <div className="min-h-screen bg-background py-12 px-4">
+      {/* 🌟 ADD THE NAVBAR HERE */}
+      <PublicNavbar />
+      
       <div className="max-w-4xl mx-auto">
         <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-text-muted hover:text-text mb-6 transition">
           <ArrowLeft size={16} /> Back to Rooms
