@@ -19,21 +19,45 @@ const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): 
 };
 
 // ============================================================
-// 🌟 0. DISCOVER: Fetch all public properties with GPS sorting
+// 🌟 0. DISCOVER: Fetch all public properties with GPS sorting & TRUE Availability
 // ⚠️ MUST BE FIRST - Before any /:propertyCode routes!
 // ============================================================
 router.get('/discover', async (req: any, res: Response) => {
   try {
-    // 🌟 1. Extract pagination params with safe defaults
-    const { search, userLat, userLng, page = '1', limit = '9' } = req.query;
+    // 🌟 1. Extract pagination and date params
+    const { search, userLat, userLng, checkIn, checkOut, page = '1', limit = '9' } = req.query;
     
     const pageNum = Math.max(1, parseInt(page as string, 10));
-    const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10))); // Cap max limit at 50
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10)));
     const skip = (pageNum - 1) * limitNum;
 
-    const where: any = { isOnlineBookingEnabled: true };
+    // 🌟 2. Build the dynamic WHERE clause
+    const where: any = { 
+      isOnlineBookingEnabled: true,
+      rooms: {
+        some: {
+          operationalStatus: 'Available', // Room must not be in maintenance
+          // 🌟 IF dates are provided, ensure the room has NO overlapping reservations
+          ...(checkIn && checkOut ? {
+            reservationRooms: {
+              none: {
+                reservation: {
+                  status: { in: ['Confirmed', 'CheckedIn'] }, // Ignore Cancelled/Pending
+                  OR: [
+                    { 
+                      checkInDate: { lte: new Date(checkOut as string) }, 
+                      checkOutDate: { gte: new Date(checkIn as string) } 
+                    }
+                  ]
+                }
+              }
+            }
+          } : {})
+        }
+      }
+    };
 
-    // Search filter
+    // Search filter (Name, City, Country)
     if (search && String(search).trim() !== '') {
       const searchTerm = String(search).trim();
       where.OR = [
@@ -43,10 +67,10 @@ router.get('/discover', async (req: any, res: Response) => {
       ];
     }
 
-    // 🌟 2. Get total count for pagination calculations
+    // 🌟 3. Get total count for pagination (respects the availability filter)
     const total = await prisma.property.count({ where });
 
-    // 🌟 3. Get paginated properties
+    // 🌟 4. Get paginated properties
     const properties = await prisma.property.findMany({
       where,
       skip,
@@ -58,25 +82,24 @@ router.get('/discover', async (req: any, res: Response) => {
         country: true,
         publicDescription: true,
         coverImage: true,
-        latitude: true,   // 🌟 Fetch GPS
-        longitude: true,  // 🌟 Fetch GPS
+        latitude: true,
+        longitude: true,
         roomTypes: {
           select: { basePrice: true },
           orderBy: { basePrice: 'asc' },
-          take: 1 // Get the lowest price
+          take: 1
         },
         amenities: {
-          select: { name: true } // 🌟 BONUS: Fetch real amenities from DB
+          select: { name: true }
         }
       }
     });
 
-    // Format and calculate distance if user provided GPS
+    // Format and calculate distance
     let formatted = properties.map(p => {
       let distanceText = 'Distance unknown';
-      let distanceKm = 99999; // Fallback for sorting
+      let distanceKm = 99999;
 
-      // 🌟 CALCULATE DISTANCE if user GPS AND hotel GPS both exist
       if (userLat && userLng && p.latitude && p.longitude) {
         const km = getDistanceKm(
           parseFloat(userLat as string), 
@@ -85,13 +108,7 @@ router.get('/discover', async (req: any, res: Response) => {
           p.longitude
         );
         distanceKm = km;
-        
-        // Format nicely: show meters if < 1km, otherwise km
-        if (km < 1) {
-          distanceText = `${Math.round(km * 1000)} m away`;
-        } else {
-          distanceText = `${km.toFixed(1)} km away`;
-        }
+        distanceText = km < 1 ? `${Math.round(km * 1000)} m away` : `${km.toFixed(1)} km away`;
       }
 
       return {
@@ -104,17 +121,17 @@ router.get('/discover', async (req: any, res: Response) => {
         minPrice: p.roomTypes.length > 0 ? Number(p.roomTypes[0].basePrice) : 0,
         rating: 4.5, 
         distance: distanceText,
-        distanceKm: distanceKm, // Used for sorting
-        amenities: p.amenities.map((a: any) => a.name) // 🌟 Use real DB amenities
+        distanceKm: distanceKm,
+        amenities: p.amenities.map((a: any) => a.name)
       };
     });
 
-    // 🌟 SORT BY DISTANCE if user provided GPS coordinates
+    // Sort by distance if GPS provided
     if (userLat && userLng) {
       formatted.sort((a, b) => a.distanceKm - b.distanceKm);
     }
 
-    // 🌟 4. Return paginated response structure
+    // 🌟 5. Return paginated response
     return res.json({ 
       success: true, 
       data: { 

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { Menu, X, User, LogOut, Calendar, Building2 } from 'lucide-react';
-import PublicAuthModal from '../auth/PublicAuthModal'; // 🌟 Import the new modal
+import PublicAuthModal from "./PublicAuthModal";
 
 export default function PublicNavbar() {
   const [isOpen, setIsOpen] = useState(false);

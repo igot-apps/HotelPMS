@@ -4,7 +4,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { Calendar, Tag, Loader2, CheckCircle2, ArrowLeft, Smartphone, ShieldCheck, LogIn, X } from 'lucide-react';
 import api from '../lib/axios';
 import toast from 'react-hot-toast';
-import PublicAuthModal from '../components/auth/PublicAuthModal'; // 🌟 Import the new modal
+import PublicAuthModal from '../components/public/PublicAuthModal';
 
 export default function PublicCheckoutPage() {
   const { propertyCode, roomTypeId } = useParams();

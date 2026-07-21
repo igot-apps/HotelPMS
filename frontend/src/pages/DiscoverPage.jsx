@@ -8,7 +8,11 @@ import {
   X, Navigation, Crosshair, Map, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import PublicNavbar from '../components/layout/PublicNavbar';
+import PublicNavbar from '../components/public/PublicNavbar';
+//import PublicPropertyCard from '../components/public/PublicPropertyCard';
+
+
+
 
 // Helper to map amenity strings to icons
 const AmenityIcon = ({ name }) => {
