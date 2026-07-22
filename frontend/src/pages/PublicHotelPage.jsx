@@ -196,16 +196,26 @@ export default function PublicHotelPage() {
                     )}
 
                     <div className="flex items-center justify-between pt-4 border-t border-border">
-                      <div className="text-sm text-text-muted">
-                        Max {room.maxOccupancy} Guests • {room.availableRooms} room(s) left
-                      </div>
-                      <button 
-                        onClick={() => handleBookNow(room.roomTypeId)}
-                        className="px-6 py-2.5 bg-primary-600 text-text-inverted font-semibold rounded-lg hover:bg-primary-700 transition flex items-center gap-2"
-                      >
-                        Book Now <ChevronRight size={16} />
-                      </button>
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="text-text-muted">Max {room.maxOccupancy} Guests</span>
+                      
+                      {/* 🌟 HIGHLIGHTED AVAILABILITY BADGE */}
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${
+                        room.availableRooms <= 3 
+                          ? 'bg-danger-50 text-danger-700 border-danger-200' // 🚨 Red if 3 or fewer left
+                          : 'bg-primary-50 text-primary-700 border-primary-200' // 🟢 Blue if plenty left
+                      }`}>
+                        {room.availableRooms} room(s) left
+                      </span>
                     </div>
+                    
+                    <button 
+                      onClick={() => handleBookNow(room.roomTypeId)}
+                      className="px-6 py-2.5 bg-primary-600 text-text-inverted font-semibold rounded-lg hover:bg-primary-700 transition flex items-center gap-2"
+                    >
+                      Book Now <ChevronRight size={16} />
+                    </button>
+                  </div>
                   </div>
                 </div>
               ))}
