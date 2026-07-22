@@ -9,7 +9,7 @@ export default function PublicNavbar() {
   const navigate = useNavigate();
   const location = useLocation();
   
-  // 🌟 STRICT ISOLATION: Read ONLY from public guest localStorage. 
+  // 🛡️ STRICT ISOLATION: Read ONLY from public guest localStorage.
   // We completely ignore the PMS authStore so staff logins never leak here.
   const [guestInfo, setGuestInfo] = useState(null);
 
@@ -32,14 +32,14 @@ export default function PublicNavbar() {
   const isAuthenticated = !!guestInfo;
 
   const handleLogout = () => {
-    // 🌟 1. Clear ONLY the public guest keys (Leaves PMS staff login completely untouched)
+    // 🛡️ Clear ONLY the public guest keys (Leaves PMS staff login completely untouched)
     localStorage.removeItem('guestInfo');
     localStorage.removeItem('guestToken');
     
-    // 🌟 2. Update local state immediately
+    // Update local state immediately
     setGuestInfo(null);
     
-    // 🌟 3. Redirect to public discover page
+    // Redirect to public discover page
     navigate('/discover');
     setIsOpen(false);
   };
@@ -49,14 +49,13 @@ export default function PublicNavbar() {
       <nav className="sticky top-0 z-50 bg-surface/80 backdrop-blur-md border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            
-            {/* 🌟 Logo / Brand */}
+            {/* Logo / Brand */}
             <Link to="/discover" className="flex items-center gap-2 group">
               <Building2 className="text-primary-600 group-hover:text-primary-700 transition" size={28} />
               <span className="text-xl font-black text-text tracking-tight">Stayfolio</span>
             </Link>
 
-            {/* 🌟 Desktop Navigation */}
+            {/* Desktop Navigation */}
             <div className="hidden md:flex items-center gap-8">
               <Link to="/discover" className="text-sm font-semibold text-text-muted hover:text-primary-600 transition">
                 Discover Hotels
@@ -70,7 +69,6 @@ export default function PublicNavbar() {
                   <div className="flex items-center gap-3 pl-4 border-l border-border">
                     <div className="flex items-center gap-2 text-sm font-medium text-text">
                       <User size={16} className="text-primary-600" />
-                      {/* 🌟 Display public guest name, never PMS staff name */}
                       <span>{guestInfo?.fullName || guestInfo?.phone || 'Guest'}</span>
                     </div>
                     <button
@@ -91,7 +89,7 @@ export default function PublicNavbar() {
               )}
             </div>
 
-            {/* 🌟 Mobile Menu Button */}
+            {/* Mobile Menu Button */}
             <button
               onClick={() => setIsOpen(!isOpen)}
               className="md:hidden p-2 rounded-lg text-text-muted hover:bg-secondary-100 transition"
@@ -102,7 +100,7 @@ export default function PublicNavbar() {
           </div>
         </div>
 
-        {/* 🌟 Mobile Menu Dropdown */}
+        {/* Mobile Menu Dropdown */}
         {isOpen && (
           <div className="md:hidden border-t border-border bg-surface shadow-lg">
             <div className="px-4 py-4 space-y-3">
@@ -149,12 +147,12 @@ export default function PublicNavbar() {
         )}
       </nav>
 
-      {/* 🌟 Render the Auth Modal at the root level so it overlays correctly */}
+      {/* Render the Auth Modal */}
       <PublicAuthModal 
         isOpen={isAuthModalOpen} 
         onClose={() => {
           setIsAuthModalOpen(false);
-          // 🌟 Re-read localStorage immediately so the navbar updates without a refresh
+          // Re-read localStorage immediately so the navbar updates without a refresh
           const str = localStorage.getItem('guestInfo');
           setGuestInfo(str && str !== 'undefined' ? JSON.parse(str) : null);
         }} 

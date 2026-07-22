@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { useAuthStore } from '../../store/authStore';
 import api from '../../lib/axios';
 import { X, Mail, Phone, User, Lock, Loader2, Building2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function PublicAuthModal({ isOpen, onClose }) {
   const [isLogin, setIsLogin] = useState(true);
-  const login = useAuthStore((state) => state.login);
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -16,7 +14,6 @@ export default function PublicAuthModal({ isOpen, onClose }) {
     password: '',
   });
 
-  // Prevent background scrolling when modal is open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -26,7 +23,6 @@ export default function PublicAuthModal({ isOpen, onClose }) {
     return () => { document.body.style.overflow = 'unset'; };
   }, [isOpen]);
 
-  // Reset form when modal closes or switches tabs
   useEffect(() => {
     if (!isOpen) {
       setFormData({ fullName: '', phone: '', email: '', password: '' });
@@ -62,16 +58,14 @@ export default function PublicAuthModal({ isOpen, onClose }) {
         const token = data.data.token;
         
         if (guestData && token) {
-          // 1. Update Zustand store
-          login(guestData, token);
-          
-          // 2. Save to localStorage (Crucial for PublicCheckoutPage)
+          // 🛡️ MUTUAL EXCLUSIVITY: Guest login DESTROYS the PMS staff session completely
+          localStorage.removeItem('hotel-pms-auth');
+
+          // Save guest session to its own dedicated keys
           localStorage.setItem('guestInfo', JSON.stringify(guestData));
           localStorage.setItem('guestToken', token);
           
           toast.success(isLogin ? 'Welcome back!' : 'Account created successfully!');
-          
-          // 3. Close the modal automatically
           onClose(); 
         }
       } else {
@@ -97,13 +91,10 @@ export default function PublicAuthModal({ isOpen, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      {/* Click outside to close */}
       <div className="absolute inset-0" onClick={onClose} />
 
-      {/* Modal Content */}
       <div className="relative w-full max-w-md bg-surface border border-border rounded-2xl shadow-2xl p-6 md:p-8 z-10 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
         
-        {/* Close Button */}
         <button 
           onClick={onClose} 
           className="absolute top-4 right-4 p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition"
@@ -111,13 +102,11 @@ export default function PublicAuthModal({ isOpen, onClose }) {
           <X size={20} />
         </button>
 
-        {/* Header */}
         <div className="flex items-center gap-2 mb-6">
           <Building2 className="text-primary-600" size={24} />
           <span className="text-lg font-black text-text tracking-tight">Stayfolio</span>
         </div>
 
-        {/* Tabs */}
         <div className="flex p-1 bg-secondary-100 rounded-lg mb-6">
           <button
             onClick={() => setIsLogin(true)}
@@ -144,7 +133,6 @@ export default function PublicAuthModal({ isOpen, onClose }) {
           {isLogin ? 'Sign in to manage your bookings.' : 'Create an account to book your next stay.'}
         </p>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           {!isLogin && (
             <div>
