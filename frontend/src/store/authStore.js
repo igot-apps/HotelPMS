@@ -25,7 +25,7 @@ export const useAuthStore = create(
       },
       
       logout: () => {
-        // 🛡️ MUTUAL EXCLUSIVITY: Staff logout also cleans up guest keys just in case
+        // 🛡️ Clean up guest keys on staff logout just in case
         localStorage.removeItem('guestInfo');
         localStorage.removeItem('guestToken');
         
@@ -44,7 +44,7 @@ export const useAuthStore = create(
       },
     }),
     {
-      name: 'hotel-pms-auth', // PMS uses this specific key
+      name: 'hotel-pms-auth', // PMS specific key
     }
   )
 );

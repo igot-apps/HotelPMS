@@ -369,21 +369,23 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
       throw new Error('Guest information is required for online bookings.');
     }
 
-    const reservation = await prisma.reservation.create({
-      data: {
-        propertyId: property.propertyId,
-        platformGuestId: finalPlatformGuestId,
-        source: 'Website',
-        checkInDate: cIn,
-        checkOutDate: cOut,
-        status: 'Confirmed',
-        notes: notes || '',
-        totalAmount: finalTotal,
-        amountPaid: 0, 
-        balanceDue: finalTotal,
-      },
-      include: { platformGuest: { select: { fullName: true, phone: true, email: true } } }
-    });
+     const reservation = await prisma.reservation.create({
+   data: {
+     propertyId: property.propertyId,
+     platformGuestId: finalPlatformGuestId,
+     source: 'Website',
+     checkInDate: cIn,
+     checkOutDate: cOut,
+     status: 'Confirmed',
+     notes: notes || '',
+     totalAmount: finalTotal,
+     amountPaid: 0, 
+     balanceDue: finalTotal,
+   },
+   include: { 
+     platformGuest: { select: { fullName: true, phone: true, email: true } } 
+   }
+ });
 
     await prisma.reservationRoom.create({
       data: {

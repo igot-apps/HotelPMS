@@ -66,6 +66,7 @@ export default function ReservationDetailsPage() {
   const openEditModal = () => {
     setEditData({ notes: resData?.notes || '', source: resData?.source || '' });
     setIsEditModalOpen(true);
+    console.log(resData)
   };
 
   const handleSaveEdit = (e) => {
@@ -92,6 +93,8 @@ export default function ReservationDetailsPage() {
 
   const fmt = (val) => parseFloat(val || 0).toFixed(2);
   const balanceDue = parseFloat(statsData?.balanceDue || 0);
+
+
 
   return (
     <div className="space-y-6">
@@ -155,28 +158,43 @@ export default function ReservationDetailsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Guest Info */}
-        <div className="bg-surface p-6 rounded-xl border border-border shadow-sm">
-          <h3 className="text-lg font-bold text-text mb-4 flex items-center gap-2"><User size={18} /> Guest Information</h3>
-          <div className="space-y-3">
-            <div>
-              <p className="text-xs text-text-muted uppercase font-semibold">Full Name</p>
-              <Link to={`/guests`} className="text-sm font-bold text-primary-600 hover:underline">{resData.guest?.fullName}</Link>
-            </div>
-            <div>
-              <p className="text-xs text-text-muted uppercase font-semibold">Phone</p>
-              <p className="text-sm text-text">{resData.guest?.phone}</p>
-            </div>
-            <div>
-              <p className="text-xs text-text-muted uppercase font-semibold">Email</p>
-              <p className="text-sm text-text">{resData.guest?.email || 'N/A'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-text-muted uppercase font-semibold">Booking Source</p>
-              <p className="text-sm text-text font-medium">{resData.source}</p>
-            </div>
-          </div>
-        </div>
+     {/* Guest Info */}
+     <div className="bg-surface p-6 rounded-xl border border-border shadow-sm">
+       <h3 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
+         <User size={18} /> Guest Information
+       </h3>
+       <div className="space-y-3">
+         
+         {/* 🌟 FULL NAME: Check platformGuest (online), then propertyGuest (walk-in), then legacy guest */}
+         <div>
+           <p className="text-xs text-text-muted uppercase font-semibold">Full Name</p>
+           <Link to={`/guests`} className="text-sm font-bold text-primary-600 hover:underline">
+             {resData.platformGuest?.fullName || resData.propertyGuest?.fullName || resData.guest?.fullName || 'N/A'}
+           </Link>
+         </div>
+
+         {/* 🌟 PHONE */}
+         <div>
+           <p className="text-xs text-text-muted uppercase font-semibold">Phone</p>
+           <p className="text-sm text-text">
+             {resData.platformGuest?.phone || resData.propertyGuest?.phone || resData.guest?.phone || 'N/A'}
+           </p>
+         </div>
+
+         {/* 🌟 EMAIL */}
+         <div>
+           <p className="text-xs text-text-muted uppercase font-semibold">Email</p>
+           <p className="text-sm text-text">
+             {resData.platformGuest?.email || resData.propertyGuest?.email || resData.guest?.email || 'N/A'}
+           </p>
+         </div>
+
+         <div>
+           <p className="text-xs text-text-muted uppercase font-semibold">Booking Source</p>
+           <p className="text-sm text-text font-medium">{resData.source}</p>
+         </div>
+       </div>
+     </div>
 
         {/* Room Assignments */}
         <div className="lg:col-span-2 bg-surface p-6 rounded-xl border border-border shadow-sm">
