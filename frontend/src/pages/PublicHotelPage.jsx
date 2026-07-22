@@ -149,23 +149,28 @@ export default function PublicHotelPage() {
           )}
         </div>
 
-        {/* Right Column: Available Rooms */}
+        {/* Right Column: Available Room Types */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold text-text">Available Rooms</h2>
-            <p className="text-sm text-text-muted">{pagination.total} room type(s) found</p>
+            {/* 🌟 UPDATED: More accurate and professional heading */}
+            <h2 className="text-2xl font-bold text-text">Available Room Types</h2>
+            <p className="text-sm text-text-muted">
+              {pagination.total} {pagination.total === 1 ? 'room type' : 'room types'} available
+            </p>
           </div>
           
           {isLoadingRooms ? (
-            <div className="p-12 text-center text-text-muted"><Loader2 className="animate-spin mx-auto mb-2" size={32} /> Searching rooms...</div>
+            <div className="p-12 text-center text-text-muted">
+              <Loader2 className="animate-spin mx-auto mb-2" size={32} /> Searching availability...
+            </div>
           ) : rooms.length === 0 ? (
             <div className="p-12 text-center bg-surface rounded-xl border border-border border-dashed">
-              <p className="text-text-muted font-semibold">No rooms available for these dates.</p>
+              <p className="text-text-muted font-semibold">No room types available for these dates.</p>
               <p className="text-sm text-text-muted mt-1">Please try different dates or contact the hotel directly.</p>
             </div>
           ) : (
             <>
-              {/* Room Cards */}
+              {/* Room Type Cards */}
               {rooms.map((room) => (
                 <div key={room.roomTypeId} className="bg-surface rounded-xl border border-border overflow-hidden hover:shadow-lg transition-shadow">
                   <div className="p-6">
