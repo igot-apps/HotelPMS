@@ -63,6 +63,7 @@ export default function ReservationsPage() {
   const [createdReservation, setCreatedReservation] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
 
+  // Pending confirmation for any destructive/state-changing action
   const [pendingConfirm, setPendingConfirm] = useState(null);
 
   const page = parseInt(searchParams.get('page') || '1');
@@ -170,16 +171,13 @@ export default function ReservationsPage() {
 
   const actionMutation = useMutation({
     mutationFn: ({ id, action }) => {
-      if (action === 'checkin') return checkInReservation(id);
-      if (action === 'checkout') return checkOutReservation(id);
       if (action === 'cancel') return cancelReservation(id);
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       queryClient.invalidateQueries({ queryKey: ['dashboardActive'] });
-      const label = { checkin: 'Checked in', checkout: 'Checked out', cancel: 'Reservation cancelled' }[variables.action];
-      toast.success(label || 'Done');
+      toast.success('Reservation cancelled');
       setPendingConfirm(null);
     },
     onError: (err) => {
@@ -188,6 +186,7 @@ export default function ReservationsPage() {
     },
   });
 
+  // ── Confirmation flow ────────────────────────────────────────
   const askReservationAction = (id, action, title, message, opts = {}) => {
     setPendingConfirm({ kind: 'reservation', id, action, title, message, ...opts });
   };
@@ -212,7 +211,6 @@ export default function ReservationsPage() {
   const handleFilterChange = (key, value) => updateParams({ [key]: value, page: 1 });
   const clearFilters = () => { updateParams({ search: '', status: '', fromDate: '', toDate: '', page: 1 }); setLocalSearch(''); };
 
-  const activeReservationActionId = actionMutation.isPending ? actionMutation.variables?.id : null;
   const activeRoomActionId = roomActionMutation.isPending ? roomActionMutation.variables?.id : null;
 
   return (
@@ -321,39 +319,26 @@ export default function ReservationsPage() {
                   if (res.status === 'CheckedOut') statusClass = 'bg-secondary-100 text-secondary-600';
                   if (res.status === 'Cancelled') statusClass = 'bg-danger-50 text-danger-700 ring-1 ring-danger-600/20';
 
-                  const isThisRowBusy = activeReservationActionId === res.reservationId;
+                  const isExpanded = expandedId === res.reservationId;
 
+                  // 🌟 NEW: Actions now just expand the row instead of checking in all
                   let actions = null;
                   if (res.status === 'Confirmed') {
                     actions = (
                       <button
-                        disabled={isThisRowBusy}
-                        onClick={() => askReservationAction(
-                          res.reservationId, 'checkin',
-                          'Check in reservation?',
-                          `This will check in all rooms for reservation #${res.reservationId}.`,
-                        )}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => setExpandedId(isExpanded ? null : res.reservationId)}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition"
                       >
-                        {isThisRowBusy && actionMutation.variables?.action === 'checkin'
-                          ? <Loader2 size={14} className="animate-spin" />
-                          : <LogIn size={14} />} Check In All
+                        <LogIn size={14} /> Check In
                       </button>
                     );
                   } else if (res.status === 'CheckedIn') {
                     actions = (
                       <button
-                        disabled={isThisRowBusy}
-                        onClick={() => askReservationAction(
-                          res.reservationId, 'checkout',
-                          'Check out reservation?',
-                          `This will check out all rooms for reservation #${res.reservationId}.`,
-                        )}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => setExpandedId(isExpanded ? null : res.reservationId)}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition"
                       >
-                        {isThisRowBusy && actionMutation.variables?.action === 'checkout'
-                          ? <Loader2 size={14} className="animate-spin" />
-                          : <LogOut size={14} />} Check Out All
+                        <LogOut size={14} /> Check Out
                       </button>
                     );
                   }
@@ -363,18 +348,15 @@ export default function ReservationsPage() {
                       <div className="flex items-center justify-end gap-2">
                         {actions}
                         <button
-                          disabled={isThisRowBusy}
                           onClick={() => askReservationAction(
                             res.reservationId, 'cancel',
                             'Cancel reservation?',
                             `This will cancel reservation #${res.reservationId}. This can't be undone from here.`,
                             { danger: true, confirmLabel: 'Cancel Reservation' },
                           )}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-danger-200 text-danger-600 hover:bg-danger-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-danger-200 text-danger-600 hover:bg-danger-50 transition"
                         >
-                          {isThisRowBusy && actionMutation.variables?.action === 'cancel'
-                            ? <Loader2 size={14} className="animate-spin" />
-                            : <XCircle size={14} />} Cancel
+                          <XCircle size={14} /> Cancel
                         </button>
                       </div>
                     );
@@ -382,14 +364,11 @@ export default function ReservationsPage() {
 
                   const balanceDue = parseFloat(res.balanceDue || 0);
                   const hasBalance = balanceDue > 0.01;
-                  const isExpanded = expandedId === res.reservationId;
 
                   return (
                     <Fragment key={res.reservationId}>
-                      {/* 🌟 FIXED: All 7 columns are now perfectly aligned with the headers */}
                       <tr className="border-b border-border last:border-0 hover:bg-secondary-50/50 transition-colors">
-                        
-                        {/* 1. Expand Toggle */}
+                        {/* Expand Toggle */}
                         <td className="px-2 py-4">
                           {res.reservationRooms?.length > 0 && (
                             <button
@@ -403,7 +382,7 @@ export default function ReservationsPage() {
                           )}
                         </td>
 
-                        {/* 2. ID / Guest */}
+                        {/* ID / Guest */}
                         <td className="px-6 py-4">
                           <p className="text-xs font-bold text-text-muted">#{res.reservationId}</p>
                           <p className="text-sm font-semibold text-text">
@@ -411,36 +390,26 @@ export default function ReservationsPage() {
                           </p>
                         </td>
 
-                        {/* 3. Room(s) */}
-                        <td className="px-6 py-4 text-sm text-text font-medium">
-                          {rooms}
-                        </td>
+                        {/* Room(s) */}
+                        <td className="px-6 py-4 text-sm text-text font-medium">{rooms}</td>
 
-                        {/* 4. Dates */}
-                        <td className="px-6 py-4 text-sm text-text-muted">
-                          {checkIn} <span className="mx-1">→</span> {checkOut}
-                        </td>
+                        {/* Dates */}
+                        <td className="px-6 py-4 text-sm text-text-muted">{checkIn} <span className="mx-1">→</span> {checkOut}</td>
 
-                        {/* 5. Status */}
+                        {/* Status */}
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1.5">
-                            <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold ${statusClass}`}>
-                              {res.status}
-                            </span>
+                            <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold ${statusClass}`}>{res.status}</span>
                             {res.status === 'Cancelled' && res.refundStatus === 'Pending' && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-warning-50 text-warning-700 border border-warning-200">
-                                <AlertCircle size={12} /> Refund Due: {parseFloat(res.refundDue || 0).toFixed(2)} GHS
-                              </span>
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-warning-50 text-warning-700 border border-warning-200"><AlertCircle size={12} /> Refund Due: {parseFloat(res.refundDue || 0).toFixed(2)} GHS</span>
                             )}
                             {res.status === 'Cancelled' && res.refundStatus === 'Processed' && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-success-50 text-success-700 border border-success-200">
-                                <Check size={12} /> Refunded
-                              </span>
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-success-50 text-success-700 border border-success-200"><Check size={12} /> Refunded</span>
                             )}
                           </div>
                         </td>
 
-                        {/* 6. Payment */}
+                        {/* Payment */}
                         <td className="px-6 py-4 text-right">
                           <p className="text-sm font-bold text-text">{parseFloat(res.totalAmount || 0).toFixed(2)} GHS</p>
                           {hasBalance ? (
@@ -450,7 +419,7 @@ export default function ReservationsPage() {
                           )}
                         </td>
 
-                        {/* 7. Actions */}
+                        {/* Actions */}
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <Link to={`/reservations/${res.reservationId}`} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" aria-label={`View details for reservation ${res.reservationId}`}><Eye size={16} /></Link>
@@ -459,6 +428,7 @@ export default function ReservationsPage() {
                         </td>
                       </tr>
 
+                      {/* 🌟 EXPANDABLE ROW: Individual Room Management */}
                       {isExpanded && (
                         <tr className="bg-secondary-50/30">
                           <td colSpan="7" className="p-6 border-b border-border">

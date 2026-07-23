@@ -7,7 +7,7 @@ import { recordPayment } from '../api/payments';
 import { useAuthStore } from '../store/authStore';
 import ReservationModal from '../components/reservations/ReservationModal';
 import toast from 'react-hot-toast';
-import { 
+import {
   Search, Calendar, BedDouble, AlertCircle, Users, ChevronRight, Loader2, ShoppingCart, CheckCircle2
 } from 'lucide-react';
 
@@ -15,7 +15,7 @@ export default function AvailabilityPage() {
   const user = useAuthStore((state) => state.user);
   const propertyId = user?.propertyId;
   const queryClient = useQueryClient();
-
+  
   const [checkInDate, setCheckInDate] = useState('');
   const [checkOutDate, setCheckOutDate] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
@@ -26,9 +26,17 @@ export default function AvailabilityPage() {
   // State for the single global booking modal
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
 
+  // 🌟 HELPER: Prevent past dates and invalid ranges
+  const today = new Date().toISOString().split('T')[0];
+  const getMinCheckOut = (checkIn) => {
+    if (!checkIn) return today;
+    const nextDay = new Date(checkIn);
+    nextDay.setDate(nextDay.getDate() + 1);
+    return nextDay.toISOString().split('T')[0];
+  };
+
   // Set default dates (Today to Tomorrow)
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
     setCheckInDate(today);
     setCheckOutDate(tomorrow);
@@ -47,21 +55,26 @@ export default function AvailabilityPage() {
   });
 
   const availableRooms = data || [];
-  
+
   // Calculate nights for price estimation
   const nights = Math.max(1, Math.ceil((new Date(checkOutDate) - new Date(checkInDate)) / (1000 * 60 * 60 * 24)));
 
   const handleSearch = (e) => {
     e.preventDefault();
     if (checkInDate && checkOutDate) {
+      // 🌟 Double-check validation before searching
+      if (new Date(checkInDate) >= new Date(checkOutDate)) {
+        toast.error('Check-out date must be after check-in date.');
+        return;
+      }
       setHasSearched(true);
     }
   };
 
   // 🌟 Toggle room selection by clicking the card
   const toggleRoomSelection = (roomId) => {
-    setSelectedRooms(prev => 
-      prev.includes(roomId) 
+    setSelectedRooms(prev =>
+      prev.includes(roomId)
         ? prev.filter(id => id !== roomId)
         : [...prev, roomId]
     );
@@ -95,7 +108,7 @@ export default function AvailabilityPage() {
         };
         await recordPayment(paymentPayload);
       }
-
+      
       toast.success('Reservation created successfully!');
       
       // 3. Close modal, clear selections, and refresh availability
@@ -103,9 +116,9 @@ export default function AvailabilityPage() {
       setSelectedRooms([]); 
       queryClient.invalidateQueries({ queryKey: ['availability'] });
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
-      
     } catch (err) {
       console.error('Booking failed:', err);
+      toast.error(err.response?.data?.message || 'Failed to create reservation.');
     }
   };
 
@@ -120,6 +133,7 @@ export default function AvailabilityPage() {
 
   return (
     <div className="space-y-6 pb-28"> {/* pb-28 prevents content hiding behind sticky button */}
+      
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-text tracking-tight flex items-center gap-2">
@@ -141,6 +155,7 @@ export default function AvailabilityPage() {
               type="date" 
               value={checkInDate} 
               onChange={(e) => setCheckInDate(e.target.value)} 
+              min={today} // 🌟 Prevents selecting past dates
               required
               className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition" 
             />
@@ -153,6 +168,7 @@ export default function AvailabilityPage() {
               type="date" 
               value={checkOutDate} 
               onChange={(e) => setCheckOutDate(e.target.value)} 
+              min={getMinCheckOut(checkInDate)} // 🌟 Prevents selecting a date before or equal to check-in
               required
               className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition" 
             />
@@ -206,7 +222,7 @@ export default function AvailabilityPage() {
                   const basePrice = parseFloat(room.roomType?.basePrice || 0);
                   const roomTotal = basePrice * nights;
                   const isSelected = selectedRooms.includes(room.roomId);
-
+                  
                   return (
                     <div 
                       key={room.roomId} 
@@ -223,7 +239,7 @@ export default function AvailabilityPage() {
                           <CheckCircle2 size={18} />
                         </div>
                       )}
-
+                      
                       {/* Room Header */}
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex items-center gap-3">
@@ -239,7 +255,7 @@ export default function AvailabilityPage() {
                           Available
                         </span>
                       </div>
-
+                      
                       {/* Room Details */}
                       <div className="space-y-2 mb-4 flex-1">
                         <div className="flex items-center gap-2 text-sm text-text-muted">
@@ -251,7 +267,7 @@ export default function AvailabilityPage() {
                           <span>Up to {room.roomType?.maxOccupancy || 2} Guests</span>
                         </div>
                       </div>
-
+                      
                       {/* Pricing Display */}
                       <div className="border-t border-border pt-4 mt-auto">
                         <div className="flex items-baseline justify-between">
@@ -305,7 +321,6 @@ export default function AvailabilityPage() {
               </p>
             </div>
           </div>
-          
           <button 
             onClick={handleProceedToBook}
             disabled={selectedRooms.length === 0}
@@ -331,7 +346,6 @@ export default function AvailabilityPage() {
         initialData={{
           checkInDate,
           checkOutDate,
-          // 🌟 Pass ONLY the selected room IDs. The modal will pre-select them in Step 2.
           roomIds: selectedRooms, 
         }}
       />
