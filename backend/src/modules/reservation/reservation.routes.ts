@@ -17,5 +17,7 @@ router.put('/:id', reservationController.updateReservation);
 router.delete('/:id', reservationController.cancelReservation);
 router.post('/:id/check-in', reservationController.checkInGuest);
 router.post('/:id/check-out', reservationController.checkOutGuest);
+router.patch('/rooms/:reservationRoomId/status', reservationController.updateReservationRoomStatus);
+
 
 export default router;

@@ -329,6 +329,14 @@ model ReservationRoom {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
+  // 🌟 ==========================================
+  // 🌟 NEW FIELDS FOR INDIVIDUAL ROOM TRACKING
+  // 🌟 ==========================================
+  status              String    @default("Reserved") // 🌟 'Reserved', 'CheckedIn', 'CheckedOut', 'Cancelled'
+  occupantName        String?   // 🌟 Specific person assigned to this room (e.g., "John Doe")
+  actualCheckIn       DateTime? // 🌟 Exact timestamp this specific room was checked in
+  actualCheckOut      DateTime? // 🌟 Exact timestamp this specific room was checked out
+
   reservation         Reservation @relation(fields: [reservationId], references: [reservationId], onDelete: Cascade)
   room                Room      @relation(fields: [roomId], references: [roomId])
   roomType            RoomType  @relation(fields: [roomTypeId], references: [roomTypeId])

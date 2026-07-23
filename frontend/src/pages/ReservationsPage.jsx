@@ -1,12 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { getReservations, createReservation, checkInReservation, checkOutReservation, cancelReservation } from '../api/reservations';
+import { getReservations, createReservation, checkInReservation, checkOutReservation, cancelReservation, updateReservationRoomStatus } from '../api/reservations'; // 🌟 Added updateReservationRoomStatus
 import { recordPayment } from '../api/payments';
 import { useAuthStore } from '../store/authStore';
 import ReservationModal from '../components/reservations/ReservationModal';
-// 🚨 ADDED: Check icon for the "Paid" badge
-import { Search, Plus, CalendarDays, AlertCircle, LogIn, LogOut, XCircle, ChevronLeft, ChevronRight, Eye, X, Check } from 'lucide-react';
+import { 
+  Search, Plus, CalendarDays, AlertCircle, LogIn, LogOut, XCircle, 
+  ChevronLeft, ChevronRight, Eye, X, Check, 
+  ChevronDown, ChevronUp, BedDouble, User // 🌟 Added new icons
+} from 'lucide-react';
+import toast from 'react-hot-toast'; // 🌟 Added toast
 
 export default function ReservationsPage() {
   const user = useAuthStore((state) => state.user);
@@ -16,9 +20,10 @@ export default function ReservationsPage() {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [localSearch, setLocalSearch] = useState(searchParams.get('search') || '');
-  
-  // 🚨 ADDED: State to hold the newly created reservation for the Receipt Flow
   const [createdReservation, setCreatedReservation] = useState(null);
+  
+  // 🌟 NEW: State to track which row is expanded
+  const [expandedId, setExpandedId] = useState(null);
 
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '10');
@@ -68,14 +73,22 @@ export default function ReservationsPage() {
     res.reservationRooms?.some(r => r.room?.roomNumber?.toLowerCase().includes(search.toLowerCase()))
   );
 
-  // 🛡️ BULLETPROOF TWO-STEP MUTATION
+  // 🌟 NEW: Mutation for individual room check-in/out
+  const roomActionMutation = useMutation({
+    mutationFn: ({ id, status }) => updateReservationRoomStatus(id, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reservations'] });
+      toast.success('Room status updated successfully!');
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Failed to update room status');
+    }
+  });
+
   const createMutation = useMutation({
     mutationFn: async (payload) => {
-      // 1. Create the reservation
       const resResponse = await createReservation(payload);
       const newReservation = resResponse.data.data;
-
-      // 2. If there was an initial payment, record it separately
       if (payload.initialPayment > 0.01) {
         const paymentPayload = {
           reservationId: newReservation.reservationId,
@@ -85,23 +98,16 @@ export default function ReservationsPage() {
           gatewayReference: payload.gatewayReference || null,
           notes: 'Initial payment for reservation'
         };
-        try {
-          await recordPayment(paymentPayload);
-        } catch (err) {
-          console.error("❌ Initial payment recording failed:", err);
-        }
+        try { await recordPayment(paymentPayload); } catch (err) { console.error("❌ Initial payment recording failed:", err); }
       }
       return resResponse;
     },
-    // 🚨 UPDATED: Instead of closing the modal, we pass the data to it for the receipt flow
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
       queryClient.invalidateQueries({ queryKey: ['rooms'] }); 
       queryClient.invalidateQueries({ queryKey: ['payments'] }); 
       queryClient.invalidateQueries({ queryKey: ['dashboardActive'] }); 
       queryClient.invalidateQueries({ queryKey: ['dashboardUpcoming'] });
-      
-      // Save the created reservation to trigger the Success/Receipt screen in the Modal
       setCreatedReservation(response.data.data);
     },
   });
@@ -124,6 +130,12 @@ export default function ReservationsPage() {
     actionMutation.mutate({ id, action });
   };
 
+  // 🌟 NEW: Handler for individual room actions
+  const handleRoomAction = (reservationRoomId, status, confirmMsg) => {
+    if (confirmMsg && !window.confirm(confirmMsg)) return;
+    roomActionMutation.mutate({ id: reservationRoomId, status });
+  };
+
   const handleFilterChange = (key, value) => updateParams({ [key]: value, page: 1 });
   const clearFilters = () => { updateParams({ search: '', status: '', fromDate: '', toDate: '', page: 1 }); setLocalSearch(''); };
   const hasActiveFilters = status !== 'all' || fromDate || toDate;
@@ -140,6 +152,7 @@ export default function ReservationsPage() {
         </button>
       </div>
 
+      {/* Filters UI */}
       <div className="bg-surface border border-border rounded-xl p-4 space-y-4">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
@@ -167,25 +180,27 @@ export default function ReservationsPage() {
         )}
       </div>
 
+      {/* 🌟 TABLE WITH EXPANDABLE ROWS */}
       <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-secondary-50/50 border-b border-border">
               <tr>
+                {/* 🌟 NEW: Empty column for the Expand Toggle */}
+                <th className="w-10 px-2 py-3"></th>
                 <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">ID / Guest</th>
                 <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Room(s)</th>
                 <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Dates</th>
                 <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Status</th>
-                {/* 🚨 UPGRADED: Changed "Amount" to "Payment" */}
                 <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider text-right">Payment</th>
                 <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan="6" className="p-12 text-center text-text-muted animate-pulse">Loading...</td></tr>
+                <tr><td colSpan="7" className="p-12 text-center text-text-muted animate-pulse">Loading...</td></tr>
               ) : filteredReservations.length === 0 ? (
-                <tr><td colSpan="6" className="p-12 text-center text-text-muted flex flex-col items-center gap-2"><CalendarDays size={24} /> <p className="font-semibold">No reservations found</p></td></tr>
+                <tr><td colSpan="7" className="p-12 text-center text-text-muted flex flex-col items-center gap-2"><CalendarDays size={24} /> <p className="font-semibold">No reservations found</p></td></tr>
               ) : (
                 filteredReservations.map((res) => {
                   const rooms = res.reservationRooms?.map(r => r.room?.roomNumber).join(', ') || 'N/A';
@@ -197,10 +212,10 @@ export default function ReservationsPage() {
                   if (res.status === 'CheckedIn') statusClass = 'bg-success-50 text-success-700 ring-1 ring-success-600/20';
                   if (res.status === 'CheckedOut') statusClass = 'bg-secondary-100 text-secondary-600';
                   if (res.status === 'Cancelled') statusClass = 'bg-danger-50 text-danger-700 ring-1 ring-danger-600/20';
-                  
+
                   let actions = null;
-                  if (res.status === 'Confirmed') actions = (<button onClick={() => handleAction(res.reservationId, 'checkin', 'Check in this guest?')} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition"><LogIn size={14} /> Check In</button>);
-                  else if (res.status === 'CheckedIn') actions = (<button onClick={() => handleAction(res.reservationId, 'checkout', 'Check out this guest?')} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition"><LogOut size={14} /> Check Out</button>);
+                  if (res.status === 'Confirmed') actions = (<button onClick={() => handleAction(res.reservationId, 'checkin', 'Check in entire reservation?')} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition"><LogIn size={14} /> Check In All</button>);
+                  else if (res.status === 'CheckedIn') actions = (<button onClick={() => handleAction(res.reservationId, 'checkout', 'Check out entire reservation?')} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition"><LogOut size={14} /> Check Out All</button>);
                   
                   if (res.status !== 'CheckedOut' && res.status !== 'Cancelled') {
                     actions = (
@@ -211,65 +226,133 @@ export default function ReservationsPage() {
                     );
                   }
 
-                  // 🚨 NEW: Calculate balance due for the badge
                   const balanceDue = parseFloat(res.balanceDue || 0);
-                  const hasBalance = balanceDue > 0.01; // > 0.01 prevents floating point errors
+                  const hasBalance = balanceDue > 0.01;
+                  const isExpanded = expandedId === res.reservationId;
 
                   return (
-                    <tr key={res.reservationId} className="border-b border-border last:border-0 hover:bg-secondary-50/50 transition-colors">
-                      <td className="px-6 py-4"><p className="text-xs font-bold text-text-muted">#{res.reservationId}</p><p className="text-sm font-semibold text-text">{res.guest?.fullName}</p></td>
-                      <td className="px-6 py-4 text-sm text-text font-medium">{rooms}</td>
-                      <td className="px-6 py-4 text-sm text-text-muted">{checkIn} <span className="mx-1">→</span> {checkOut}</td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-1.5">
-                          {/* Main Status Badge */}
-                          <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold ${statusClass}`}>
-                            {res.status}
-                          </span>
-
-                          {/* 🌟 NEW: Pending Refund Warning Badge */}
-                          {res.status === 'Cancelled' && res.refundStatus === 'Pending' && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-warning-50 text-warning-700 border border-warning-200">
-                              <AlertCircle size={12} /> Refund Due: {parseFloat(res.refundDue || 0).toFixed(2)} GHS
-                            </span>
+                    // 🌟 WRAPPED IN FRAGMENT TO ALLOW EXPANDABLE ROW
+                    <Fragment key={res.reservationId}>
+                      <tr className="border-b border-border last:border-0 hover:bg-secondary-50/50 transition-colors">
+                        {/* 🌟 EXPAND TOGGLE BUTTON */}
+                        <td className="px-2 py-4">
+                          {res.reservationRooms?.length > 0 && (
+                            <button 
+                              onClick={() => setExpandedId(isExpanded ? null : res.reservationId)}
+                              className="p-1.5 rounded-lg hover:bg-secondary-100 text-text-muted transition"
+                              title="View Individual Rooms"
+                            >
+                              {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                            </button>
                           )}
-
-                          {/* 🌟 NEW: Processed Refund Success Badge */}
-                          {res.status === 'Cancelled' && res.refundStatus === 'Processed' && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-success-50 text-success-700 border border-success-200">
-                              <Check size={12} /> Refunded
-                            </span>
+                        </td>
+                        <td className="px-6 py-4"><p className="text-xs font-bold text-text-muted">#{res.reservationId}</p><p className="text-sm font-semibold text-text">{res.guest?.fullName || res.platformGuest?.fullName || 'N/A'}</p></td>
+                        <td className="px-6 py-4 text-sm text-text font-medium">{rooms}</td>
+                        <td className="px-6 py-4 text-sm text-text-muted">{checkIn} <span className="mx-1">→</span> {checkOut}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col gap-1.5">
+                            <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold ${statusClass}`}>{res.status}</span>
+                            {res.status === 'Cancelled' && res.refundStatus === 'Pending' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-warning-50 text-warning-700 border border-warning-200"><AlertCircle size={12} /> Refund Due: {parseFloat(res.refundDue || 0).toFixed(2)} GHS</span>
+                            )}
+                            {res.status === 'Cancelled' && res.refundStatus === 'Processed' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-success-50 text-success-700 border border-success-200"><Check size={12} /> Refunded</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <p className="text-sm font-bold text-text">{parseFloat(res.totalAmount || 0).toFixed(2)} GHS</p>
+                          {hasBalance ? (
+                            <span className="inline-block text-xs font-bold text-danger-600 bg-danger-50 px-2 py-0.5 rounded mt-1">Due: {balanceDue.toFixed(2)} GHS</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-success-600 bg-success-50 px-2 py-0.5 rounded mt-1"><Check size={10} /> Paid</span>
                           )}
-                        </div>
-                      </td>
-                      
-                      {/* 🚨 UPGRADED: Payment Column with Status Badge */}
-                      <td className="px-6 py-4 text-right">
-                        <p className="text-sm font-bold text-text">{parseFloat(res.totalAmount || 0).toFixed(2)} GHS</p>
-                        {hasBalance ? (
-                          <span className="inline-block text-xs font-bold text-danger-600 bg-danger-50 px-2 py-0.5 rounded mt-1">
-                            Due: {balanceDue.toFixed(2)} GHS
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-xs font-bold text-success-600 bg-success-50 px-2 py-0.5 rounded mt-1">
-                            <Check size={10} /> Paid
-                          </span>
-                        )}
-                      </td>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Link to={`/reservations/${res.reservationId}`} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" title="View Details"><Eye size={16} /></Link>
+                            {actions || <span className="text-xs text-text-muted">-</span>}
+                          </div>
+                        </td>
+                      </tr>
 
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Link to={`/reservations/${res.reservationId}`} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" title="View Details"><Eye size={16} /></Link>
-                          {actions || <span className="text-xs text-text-muted">-</span>}
-                        </div>
-                      </td>
-                    </tr>
+                      {/* 🌟 EXPANDABLE ROW CONTENT: INDIVIDUAL ROOM MANAGEMENT */}
+                      {isExpanded && (
+                        <tr className="bg-secondary-50/30">
+                          <td colSpan="7" className="p-6 border-b border-border">
+                            <div className="flex items-center gap-2 mb-4">
+                              <BedDouble size={18} className="text-primary-600" />
+                              <h4 className="text-sm font-bold text-text uppercase tracking-wider">Individual Room Assignments</h4>
+                              <span className="text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full font-semibold">{res.reservationRooms.length} Rooms</span>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {res.reservationRooms.map((rr) => {
+                                // 🌟 Read the individual room status from the database
+                                const roomStatus = rr.status || 'Reserved';
+                                let roomActionBtn = null;
+                                
+                                if (roomStatus === 'Reserved') {
+                                  roomActionBtn = (
+                                    <button 
+                                      onClick={() => handleRoomAction(rr.reservationRoomId, 'CheckedIn', `Check in Room ${rr.room?.roomNumber}?`)}
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition"
+                                    >
+                                      <LogIn size={14} /> Check In Room
+                                    </button>
+                                  );
+                                } else if (roomStatus === 'CheckedIn') {
+                                  roomActionBtn = (
+                                    <button 
+                                      onClick={() => handleRoomAction(rr.reservationRoomId, 'CheckedOut', `Check out Room ${rr.room?.roomNumber}?`)}
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition"
+                                    >
+                                      <LogOut size={14} /> Check Out Room
+                                    </button>
+                                  );
+                                }
+
+                                return (
+                                  <div key={rr.reservationRoomId} className="bg-surface p-4 rounded-xl border border-border shadow-sm flex flex-col gap-3">
+                                    <div className="flex justify-between items-start">
+                                      <div>
+                                        <p className="text-lg font-bold text-text">Room {rr.room?.roomNumber}</p>
+                                        <p className="text-xs text-text-muted">{rr.room?.roomType?.typeName}</p>
+                                      </div>
+                                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                                        roomStatus === 'CheckedIn' ? 'bg-success-50 text-success-700' : 
+                                        roomStatus === 'CheckedOut' ? 'bg-secondary-100 text-secondary-700' : 
+                                        'bg-primary-50 text-primary-700'
+                                      }`}>
+                                        {roomStatus}
+                                      </span>
+                                    </div>
+                                    
+                                    <div className="pt-3 border-t border-border">
+                                      <p className="text-xs text-text-muted mb-1">Occupant Name</p>
+                                      <p className="text-sm font-semibold text-text">{rr.occupantName || 'Not assigned'}</p>
+                                    </div>
+
+                                    <div className="pt-3 border-t border-border flex items-center justify-between mt-auto">
+                                      <p className="text-sm font-bold text-primary-600">{parseFloat(rr.agreedPricePerNight).toFixed(2)} GHS</p>
+                                      {roomActionBtn || <span className="text-xs text-text-muted font-semibold">No actions</span>}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })
               )}
             </tbody>
           </table>
         </div>
+        
+        {/* Pagination UI */}
         <div className="px-6 py-4 border-t border-border bg-secondary-50/30 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <p className="text-sm text-text-muted">Showing <span className="font-semibold text-text">{startItem}</span> to <span className="font-semibold text-text">{endItem}</span> of <span className="font-semibold text-text">{pagination.total}</span></p>
@@ -287,17 +370,12 @@ export default function ReservationsPage() {
         </div>
       </div> 
 
-      {/* 🚨 UPDATED: Pass createdReservation prop and reset it on close */}
       <ReservationModal 
         isOpen={isModalOpen} 
-        onClose={() => {
-          setIsModalOpen(false);
-          setCreatedReservation(null); // Reset state when closing
-          createMutation.reset();
-        }} 
+        onClose={() => { setIsModalOpen(false); setCreatedReservation(null); createMutation.reset(); }} 
         onSubmit={(data) => createMutation.mutate(data)} 
         isLoading={createMutation.isPending} 
-        createdReservation={createdReservation} // Pass the data for the receipt flow
+        createdReservation={createdReservation} 
       />
     </div> 
   );

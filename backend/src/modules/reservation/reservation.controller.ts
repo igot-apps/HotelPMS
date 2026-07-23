@@ -253,3 +253,45 @@ export const getReservationStats = async (req: AuthRequest, res: Response) => {
     });
   }
 };
+
+
+export const updateReservationRoomStatus = async (req: AuthRequest, res: Response) => {
+  try {
+    // 🌟 FIX 1: Explicitly cast the URL param to a string
+    const reservationRoomId = req.params.reservationRoomId as string;
+    
+    // 🌟 FIX 2: Explicitly cast the body fields to strings
+    const status = req.body.status as string;
+    const occupantName = req.body.occupantName as string | undefined;
+    
+    if (!['Reserved', 'CheckedIn', 'CheckedOut', 'Cancelled'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status. Must be Reserved, CheckedIn, CheckedOut, or Cancelled.',
+      });
+    }
+
+    const parsedRoomId = parseInt(reservationRoomId);
+    if (isNaN(parsedRoomId)) {
+      return res.status(400).json({ success: false, message: 'Invalid reservation room ID' });
+    }
+
+    const updatedRoom = await reservationService.updateReservationRoomStatus(
+      parsedRoomId,
+      status,
+      occupantName,
+      req.user?.propertyId // Pass propertyId for security check
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: updatedRoom,
+      message: `Room status updated to ${status}`,
+    });
+  } catch (error: any) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};

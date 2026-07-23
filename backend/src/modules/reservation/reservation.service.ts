@@ -248,3 +248,44 @@ export const updateReservationFinancials = async (
     newAmountPaid
   );
 };
+
+
+export const updateReservationRoomStatus = async (
+  reservationRoomId: number,
+  status: string,
+  occupantName?: string,
+  userPropertyId?: number
+) => {
+  // 1. Fetch the reservation room with its relations to verify property ownership
+  const resRoom = await reservationRepository.findReservationRoomById(reservationRoomId);
+  
+  if (!resRoom) {
+    throw new Error('Reservation room not found');
+  }
+
+  // Security check: Ensure the room belongs to the user's property
+  if (userPropertyId && resRoom.reservation.propertyId !== userPropertyId) {
+    throw new Error('You do not have access to this reservation room');
+  }
+
+  const updateData: any = { status };
+  if (occupantName !== undefined) {
+    updateData.occupantName = occupantName;
+  }
+
+  // 2. Set timestamps and update physical room inventory based on status
+  if (status === 'CheckedIn') {
+    updateData.actualCheckIn = new Date();
+    // Update the physical room status to Occupied
+    await updateRoomStatus(resRoom.roomId, 'Occupied');
+  } else if (status === 'CheckedOut') {
+    updateData.actualCheckOut = new Date();
+    // Update the physical room status to Available and Dirty
+    await updateRoomStatus(resRoom.roomId, 'Available', 'Dirty');
+  }
+
+  // 3. Update the database
+  const updated = await reservationRepository.updateReservationRoomStatus(reservationRoomId, updateData);
+
+  return updated;
+};

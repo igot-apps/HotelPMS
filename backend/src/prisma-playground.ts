@@ -3,44 +3,61 @@ import { PrismaClient } from './generated/prisma';
 const prisma = new PrismaClient();
 
 async function main() {
-  const testPhone = '0540883880';
-  console.log(`🔍 Testing Data Isolation for Phone: ${testPhone}\n`);
+  console.log('🔍 Inspecting Reservation & Room Data Structure...\n');
 
-  // 🛡️ STEP 1: STRICTLY look in the ONLINE guest table (PlatformGuest)
-  // We DO NOT look in PropertyGuest (PMS local guests). This guarantees zero data corruption.
-  const onlineGuest = await prisma.platformGuest.findUnique({
-    where: { phone: testPhone }
-  });
-
-  if (!onlineGuest) {
-    console.log('❌ No ONLINE guest found with this phone.');
-    console.log('✅ (If a local PMS guest has this phone, they are safely isolated in the PropertyGuest table and cannot access this data).');
-    return;
-  }
-
-  console.log(`✅ Found ONLINE Guest: ${onlineGuest.fullName} (ID: ${onlineGuest.guestId})\n`);
-
-  // 🛡️ STEP 2: Fetch reservations using the ONLINE guest's ID AND enforce source = 'Website'
-  const reservations = await prisma.reservation.findMany({
-    where: {
-      platformGuestId: onlineGuest.guestId, // 🔒 Core security: Only fetch reservations tied to this specific online account
-      source: 'Website'                     // 🔒 Core security: Only fetch web bookings
-    },
+  // 1. Fetch a sample reservation with all its relations
+  const sampleReservation = await prisma.reservation.findFirst({
     include: {
-      property: { 
-        select: { propertyName: true, city: true, propertyCode: true } 
-      },
+      propertyGuest: true,
+      platformGuest: true,
       reservationRooms: {
-        include: { 
-          roomType: { select: { typeName: true } } 
+        include: {
+          room: { select: { roomId: true, roomNumber: true } },
+          roomType: { select: { roomTypeId: true, typeName: true } }
         }
       }
-    },
-    orderBy: { checkInDate: 'desc' }
+    }
   });
 
-  console.log(`📅 Found ${reservations.length} 'Website' Reservation(s) for this online guest:\n`);
-  console.log(JSON.stringify(reservations, null, 2));
+  console.log('📅 Sample Reservation Data:');
+  console.log(JSON.stringify(sampleReservation, null, 2));
+
+  // 2. Print the exact field names available on the Reservation model
+  if (sampleReservation) {
+    console.log('\n🔑 Reservation Model Fields:', Object.keys(sampleReservation));
+  }
+
+  // 3. Print the exact field names available on the ReservationRoom model
+  const sampleResRoom = await prisma.reservationRoom.findFirst();
+  if (sampleResRoom) {
+    console.log('\n🛏️ ReservationRoom Model Fields:', Object.keys(sampleResRoom));
+  }
+
+  // 4. Find how many reservations have multiple rooms (Potential Group Bookings)
+  const allReservations = await prisma.reservation.findMany({
+    include: {
+      _count: { select: { reservationRooms: true } }
+    }
+  });
+
+  const multiRoomReservations = allReservations.filter(r => r._count.reservationRooms > 1);
+  
+  console.log(`\n📊 Total Reservations: ${allReservations.length}`);
+  console.log(`👥 Reservations with multiple rooms: ${multiRoomReservations.length}`);
+
+  if (multiRoomReservations.length > 0) {
+    console.log('\n📝 Sample Multi-Room Reservation:');
+    // Fetch the full details of the first multi-room reservation
+    const fullGroupBooking = await prisma.reservation.findUnique({
+      where: { reservationId: multiRoomReservations[0].reservationId },
+      include: {
+        reservationRooms: {
+          include: { room: true, roomType: true }
+        }
+      }
+    });
+    console.log(JSON.stringify(fullGroupBooking, null, 2));
+  }
 }
 
 main()

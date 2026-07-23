@@ -198,3 +198,25 @@ export const getReservationStats = async (reservationId: number) => {
     },
   });
 };
+
+
+export const findReservationRoomById = async (reservationRoomId: number) => {
+  return prisma.reservationRoom.findUnique({
+    where: { reservationRoomId },
+    include: {
+      reservation: { select: { propertyId: true, status: true } },
+      room: { select: { roomId: true, roomNumber: true } },
+    },
+  });
+};
+
+export const updateReservationRoomStatus = async (reservationRoomId: number, data: any) => {
+  return prisma.reservationRoom.update({
+    where: { reservationRoomId },
+    data,
+    include: {
+      room: { select: { roomNumber: true } },
+      roomType: { select: { typeName: true } },
+    },
+  });
+};
