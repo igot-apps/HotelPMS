@@ -230,6 +230,22 @@ export const updateReservationRoomStatus = async (
   if (occupantName !== undefined) updateData.occupantName = occupantName;
 
   if (status === 'CheckedIn') {
+    // 🚨 SAFETY CHECK: Prevent double check-in of the same physical room
+    const conflict = await reservationRepository.findConflictingCheckIn(
+      resRoom.roomId, 
+      reservationRoomId
+    );
+    
+    if (conflict) {
+      const otherGuest = conflict.reservation.platformGuest?.fullName 
+        || conflict.reservation.propertyGuest?.fullName 
+        || 'another guest';
+      throw new Error(
+        `Room ${conflict.room.roomNumber} is already occupied by ${otherGuest} (Reservation #${conflict.reservation.reservationId}). ` +
+        `Please check out the current guest before checking in a new one.`
+      );
+    }
+
     updateData.actualCheckIn = new Date();
     await updateRoomStatus(resRoom.roomId, 'Occupied');
   } else if (status === 'CheckedOut') {

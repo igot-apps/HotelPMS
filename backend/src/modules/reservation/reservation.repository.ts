@@ -183,3 +183,27 @@ export const updateReservationRoomStatus = async (reservationRoomId: number, dat
     include: { room: { select: { roomNumber: true } }, roomType: { select: { typeName: true } } },
   });
 };
+
+// 🚨 SAFETY: Check if a room is already occupied by another active reservation
+export const findConflictingCheckIn = async (roomId: number, excludeReservationRoomId: number) => {
+  return prisma.reservationRoom.findFirst({
+    where: {
+      roomId,
+      status: 'CheckedIn',
+      reservationRoomId: { not: excludeReservationRoomId },
+      reservation: {
+        status: { in: ['Confirmed', 'CheckedIn'] }
+      }
+    },
+    include: {
+      room: { select: { roomNumber: true } },
+      reservation: { 
+        select: { 
+          reservationId: true,
+          propertyGuest: { select: { fullName: true } },
+          platformGuest: { select: { fullName: true } }
+        } 
+      }
+    }
+  });
+};

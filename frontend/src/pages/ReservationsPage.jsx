@@ -8,7 +8,7 @@ import ReservationModal from '../components/reservations/ReservationModal';
 import {
   Search, Plus, CalendarDays, AlertCircle, LogIn, LogOut, XCircle,
   ChevronLeft, ChevronRight, Eye, X, Check,
-  ChevronDown, ChevronUp, BedDouble, Loader2
+  ChevronDown, ChevronUp, BedDouble, Loader2 ,Clock
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -120,19 +120,27 @@ export default function ReservationsPage() {
   const hasActiveFilters = status !== 'all' || !!fromDate || !!toDate || !!search;
 
   const roomActionMutation = useMutation({
-    mutationFn: ({ id, status }) => updateReservationRoomStatus(id, { status }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['reservations'] });
-      queryClient.invalidateQueries({ queryKey: ['rooms'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboardActive'] });
-      toast.success('Room status updated');
-      setPendingConfirm(null);
-    },
-    onError: (err) => {
-      toast.error(err.response?.data?.message || 'Failed to update room status');
-      setPendingConfirm(null);
-    },
-  });
+  mutationFn: ({ id, status }) => updateReservationRoomStatus(id, { status }),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['reservations'] });
+    queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboardActive'] });
+    toast.success('Room status updated');
+    setPendingConfirm(null);
+  },
+  onError: (err) => {
+    // 🌟 FIX: Only show toast if we haven't already shown one for this error
+    const errorMessage = err.response?.data?.message || 'Failed to update room status';
+    
+    // Dismiss any existing toasts first to prevent stacking
+    toast.dismiss();
+    
+    // Show the error once
+    toast.error(errorMessage);
+    
+    setPendingConfirm(null);
+  },
+});
 
   const createMutation = useMutation({
     mutationFn: async (payload) => {
@@ -475,31 +483,104 @@ export default function ReservationsPage() {
                                 }
 
                                 return (
-                                  <div key={rr.reservationRoomId} className="bg-surface p-4 rounded-xl border border-border shadow-sm flex flex-col gap-3">
-                                    <div className="flex justify-between items-start">
-                                      <div>
-                                        <p className="text-lg font-bold text-text">Room {rr.room?.roomNumber}</p>
-                                        <p className="text-xs text-text-muted">{rr.room?.roomType?.typeName}</p>
-                                      </div>
-                                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                                        roomStatus === 'CheckedIn' ? 'bg-success-50 text-success-700' :
-                                        roomStatus === 'CheckedOut' ? 'bg-secondary-100 text-secondary-700' :
-                                        'bg-primary-50 text-primary-700'
-                                      }`}>
-                                        {roomStatus}
-                                      </span>
+                                <div key={rr.reservationRoomId} className="bg-surface p-4 rounded-xl border border-border shadow-sm flex flex-col gap-3">
+                                  <div className="flex justify-between items-start">
+                                    <div>
+                                      <p className="text-lg font-bold text-text">Room {rr.room?.roomNumber}</p>
+                                      <p className="text-xs text-text-muted">{rr.room?.roomType?.typeName}</p>
                                     </div>
-
-                                    <div className="pt-3 border-t border-border">
-                                      <p className="text-xs text-text-muted mb-1">Occupant Name</p>
-                                      <p className="text-sm font-semibold text-text">{rr.occupantName || 'Not assigned'}</p>
-                                    </div>
-
-                                    <div className="pt-3 border-t border-border flex items-center justify-between mt-auto">
-                                      <p className="text-sm font-bold text-primary-600">{parseFloat(rr.agreedPricePerNight).toFixed(2)} GHS</p>
-                                      {roomActionBtn || <span className="text-xs text-text-muted font-semibold">No actions</span>}
-                                    </div>
+                                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                                      roomStatus === 'CheckedIn' ? 'bg-success-50 text-success-700' :
+                                      roomStatus === 'CheckedOut' ? 'bg-secondary-100 text-secondary-700' :
+                                      'bg-primary-50 text-primary-700'
+                                    }`}>
+                                      {roomStatus}
+                                    </span>
                                   </div>
+
+                                  {/* 🌟 EARLY CHECK-IN / LATE CHECK-OUT INDICATORS */}
+                                  {(() => {
+                                    // Property standard times (default 14:00 check-in, 11:00 check-out)
+                                    const standardCheckInHour = 14; // 2 PM
+                                    const standardCheckOutHour = 11; // 11 AM
+
+                                    let earlyCheckInInfo = null;
+                                    let lateCheckOutInfo = null;
+
+                                    // Check for Early Check-in
+                                    if (rr.actualCheckIn && rr.checkInDate) {
+                                      const actual = new Date(rr.actualCheckIn);
+                                      const scheduled = new Date(rr.checkInDate);
+                                      scheduled.setHours(standardCheckInHour, 0, 0, 0);
+                                      
+                                      const diffHours = (scheduled.getTime() - actual.getTime()) / (1000 * 60 * 60);
+                                      
+                                      if (diffHours > 0.5) { // More than 30 minutes early
+                                        earlyCheckInInfo = {
+                                          hoursEarly: Math.round(diffHours * 10) / 10,
+                                          actualTime: actual.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                                          scheduledTime: scheduled.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                                        };
+                                      }
+                                    }
+
+                                    // Check for Late Check-out
+                                    if (rr.actualCheckOut && rr.checkOutDate) {
+                                      const actual = new Date(rr.actualCheckOut);
+                                      const scheduled = new Date(rr.checkOutDate);
+                                      scheduled.setHours(standardCheckOutHour, 0, 0, 0);
+                                      
+                                      const diffHours = (actual.getTime() - scheduled.getTime()) / (1000 * 60 * 60);
+                                      
+                                      if (diffHours > 0.5) { // More than 30 minutes late
+                                        lateCheckOutInfo = {
+                                          hoursLate: Math.round(diffHours * 10) / 10,
+                                          actualTime: actual.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                                          scheduledTime: scheduled.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                                        };
+                                      }
+                                    }
+
+                                    if (!earlyCheckInInfo && !lateCheckOutInfo) return null;
+
+                                    return (
+                                      <div className="space-y-2 pt-3 border-t border-border">
+                                        {earlyCheckInInfo && (
+                                          <div className="flex items-start gap-2 p-2.5 bg-warning-50 border border-warning-200 rounded-lg">
+                                            <Clock size={14} className="text-warning-600 mt-0.5 flex-shrink-0" />
+                                            <div className="flex-1">
+                                              <p className="text-xs font-bold text-warning-700">Early Check-in</p>
+                                              <p className="text-xs text-warning-600">
+                                                Arrived at {earlyCheckInInfo.actualTime} ({earlyCheckInInfo.hoursEarly}h before {earlyCheckInInfo.scheduledTime})
+                                              </p>
+                                            </div>
+                                          </div>
+                                        )}
+                                        {lateCheckOutInfo && (
+                                          <div className="flex items-start gap-2 p-2.5 bg-danger-50 border border-danger-200 rounded-lg">
+                                            <Clock size={14} className="text-danger-600 mt-0.5 flex-shrink-0" />
+                                            <div className="flex-1">
+                                              <p className="text-xs font-bold text-danger-700">Late Check-out</p>
+                                              <p className="text-xs text-danger-600">
+                                                Left at {lateCheckOutInfo.actualTime} ({lateCheckOutInfo.hoursLate}h after {lateCheckOutInfo.scheduledTime})
+                                              </p>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+
+                                  <div className="pt-3 border-t border-border">
+                                    <p className="text-xs text-text-muted mb-1">Occupant Name</p>
+                                    <p className="text-sm font-semibold text-text">{rr.occupantName || 'Not assigned'}</p>
+                                  </div>
+
+                                  <div className="pt-3 border-t border-border flex items-center justify-between mt-auto">
+                                    <p className="text-sm font-bold text-primary-600">{parseFloat(rr.agreedPricePerNight).toFixed(2)} GHS</p>
+                                    {roomActionBtn || <span className="text-xs text-text-muted font-semibold">No actions</span>}
+                                  </div>
+                                </div>
                                 );
                               })}
                             </div>
