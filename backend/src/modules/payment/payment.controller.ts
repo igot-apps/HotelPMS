@@ -2,7 +2,8 @@ import { Request, Response } from 'express';
 import * as paymentService from './payment.service';
 import { AuthRequest } from '../../shared/middleware/auth.middleware';
 
-const getParamId = (req: Request): number => {
+// 🌟 Helper for Payment ID (which is still an Int)
+const getPaymentId = (req: Request): number => {
   const id = req.params.id;
   if (typeof id !== 'string') throw new Error('Invalid ID parameter');
   const parsedId = parseInt(id);
@@ -15,7 +16,6 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
     if (req.user && !req.body.receivedBy) {
       req.body.receivedBy = req.user.userId;
     }
-    // ✅ No need to inject propertyId/tenantId into body, it's tied to the reservation
 
     const payment = await paymentService.recordPayment(req.body);
     return res.status(201).json({
@@ -33,7 +33,6 @@ export const getPayments = async (req: AuthRequest, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     
-    // ✅ Use propertyId from user token
     const propertyId = req.query.propertyId 
       ? parseInt(req.query.propertyId as string) 
       : req.user?.propertyId;
@@ -44,7 +43,8 @@ export const getPayments = async (req: AuthRequest, res: Response) => {
 
     const filters = {
       search: req.query.search as string | undefined, 
-      reservationId: req.query.reservationId ? parseInt(req.query.reservationId as string) : undefined,
+      // 🌟 FIX: reservationId is now a UUID string, so we don't use parseInt
+      reservationId: req.query.reservationId ? (req.query.reservationId as string) : undefined,
       paymentMethod: req.query.paymentMethod as string | undefined,
       status: req.query.status as string | undefined,
       fromDate: req.query.fromDate as string | undefined,
@@ -70,10 +70,9 @@ export const getPayments = async (req: AuthRequest, res: Response) => {
 
 export const getPaymentById = async (req: AuthRequest, res: Response) => {
   try {
-    const paymentId = getParamId(req);
+    const paymentId = getPaymentId(req);
     const payment = await paymentService.getPaymentById(paymentId);
 
-    // ✅ Security check updated to use propertyId via reservation relation
     if (req.user && payment.reservation.propertyId !== req.user.propertyId) {
       return res.status(403).json({ success: false, message: 'You do not have access to this payment' });
     }
@@ -86,13 +85,17 @@ export const getPaymentById = async (req: AuthRequest, res: Response) => {
 
 export const getPaymentsByReservation = async (req: AuthRequest, res: Response) => {
   try {
-    const reservationId = getParamId(req);
+    // 🌟 FIX: reservationId is now a UUID string, so we get it directly from params
+    const reservationId = req.params.id as string;
+    
     const payments = await paymentService.getPaymentsByReservation(reservationId);
 
-    // ✅ Security check updated to use propertyId via reservation relation
     const payment = payments.length > 0 ? payments[0] : null;
-    if (payment && req.user && payment.reservation.propertyId !== req.user.propertyId) {
-      return res.status(403).json({ success: false, message: 'You do not have access to these payments' });
+    if (payment && req.user && payment.reservation?.propertyId !== req.user.propertyId) {    
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have access to this payment',
+      });
     }
 
     return res.status(200).json({ success: true, data: payments, count: payments.length });
@@ -103,10 +106,9 @@ export const getPaymentsByReservation = async (req: AuthRequest, res: Response) 
 
 export const updatePayment = async (req: AuthRequest, res: Response) => {
   try {
-    const paymentId = getParamId(req);
+    const paymentId = getPaymentId(req);
     const payment = await paymentService.getPaymentById(paymentId);
 
-    // ✅ Security check updated to use propertyId via reservation relation
     if (req.user && payment.reservation.propertyId !== req.user.propertyId) {
       return res.status(403).json({ success: false, message: 'You do not have access to this payment' });
     }
@@ -120,10 +122,9 @@ export const updatePayment = async (req: AuthRequest, res: Response) => {
 
 export const deletePayment = async (req: AuthRequest, res: Response) => {
   try {
-    const paymentId = getParamId(req);
+    const paymentId = getPaymentId(req);
     const payment = await paymentService.getPaymentById(paymentId);
 
-    // ✅ Security check updated to use propertyId via reservation relation
     if (req.user && payment.reservation.propertyId !== req.user.propertyId) {
       return res.status(403).json({ success: false, message: 'You do not have access to this payment' });
     }
@@ -137,7 +138,6 @@ export const deletePayment = async (req: AuthRequest, res: Response) => {
 
 export const getPaymentStatistics = async (req: AuthRequest, res: Response) => {
   try {
-    // ✅ Use propertyId from user token
     const propertyId = req.user?.propertyId;
     if (!propertyId) {
       return res.status(400).json({ success: false, message: 'Property ID is required' });

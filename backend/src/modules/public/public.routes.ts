@@ -480,13 +480,13 @@ router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Re
       }
     );
 
-    const transactionData = response.data.data;
-
-    if (transactionData.status === 'success') {
-      const reservationId = parseInt(transactionData.metadata?.reservationId);
-      const amountPaid = transactionData.amount / 100;
-
-      if (reservationId) {
+ const transactionData = response.data.data;
+ if (transactionData.status === 'success') {
+   // ✅ FIX: Treat reservationId as a String (UUID), do NOT use parseInt
+   const reservationId = String(transactionData.metadata?.reservationId); 
+   const amountPaid = transactionData.amount / 100;
+   
+   if (reservationId && reservationId !== 'undefined') {
         const reservation = await prisma.reservation.findUnique({
           where: { reservationId },
           select: { amountPaid: true, status: true }

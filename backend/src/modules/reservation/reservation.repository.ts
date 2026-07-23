@@ -1,5 +1,4 @@
 import { PrismaClient } from '../../generated/prisma';
-
 const prisma = new PrismaClient();
 
 export const createReservation = async (data: {
@@ -10,7 +9,7 @@ export const createReservation = async (data: {
   source: string;
   checkInDate: Date;
   checkOutDate: Date;
-  status?: any; // 🌟 Changed to 'any' to safely accept Prisma Enum
+  status?: any;
   notes?: string;
   totalAmount?: number;
   amountPaid?: number;
@@ -31,11 +30,12 @@ export const createReservation = async (data: {
       amountPaid: data.amountPaid,
       balanceDue: data.balanceDue,
     },
+    include: { reservationRooms: true } // 🌟 Added so service can access it
   });
 };
 
 export const createReservationRoom = async (data: {
-  reservationId: number;
+  reservationId: string; // 🌟 CHANGED TO STRING (UUID)
   roomId: number;
   roomTypeId: number;
   ratePlanId?: number | null;
@@ -57,25 +57,37 @@ export const createReservationRoom = async (data: {
 };
 
 export const findReservations = async (
-  filters: {
-    propertyId?: number;
-    propertyGuestId?: number;
-    platformGuestId?: number;
-    status?: string;
-    fromDate?: Date;
-    toDate?: Date;
+  filters: { 
+    propertyId?: number; 
+    propertyGuestId?: number; 
+    platformGuestId?: number; 
+    search?: string; // 🌟 ADDED
+    status?: string; 
+    fromDate?: Date; 
+    toDate?: Date 
   },
   page: number = 1,
   limit: number = 10
 ) => {
   const skip = (page - 1) * limit;
   const where: any = {};
-
   if (filters.propertyId) where.propertyId = filters.propertyId;
   if (filters.propertyGuestId !== undefined) where.propertyGuestId = filters.propertyGuestId;
   if (filters.platformGuestId !== undefined) where.platformGuestId = filters.platformGuestId;
   if (filters.status) where.status = filters.status;
-  
+
+  // 🌟 ADDED: Search across Guest Names, Phone Numbers, and Room Numbers
+  if (filters.search && filters.search.trim() !== '') {
+    const searchTerm = filters.search.trim();
+    where.OR = [
+      { propertyGuest: { fullName: { contains: searchTerm, mode: 'insensitive' } } },
+      { platformGuest: { fullName: { contains: searchTerm, mode: 'insensitive' } } },
+      { propertyGuest: { phone: { contains: searchTerm } } },
+      { platformGuest: { phone: { contains: searchTerm } } },
+      { reservationRooms: { some: { room: { roomNumber: { contains: searchTerm, mode: 'insensitive' } } } } },
+    ];
+  }
+
   if (filters.fromDate || filters.toDate) {
     where.checkInDate = {};
     if (filters.fromDate) where.checkInDate.gte = filters.fromDate;
@@ -93,22 +105,16 @@ export const findReservations = async (
         propertyGuest: { select: { guestId: true, fullName: true, phone: true } },
         platformGuest: { select: { guestId: true, fullName: true, phone: true, email: true } },
         staff: { select: { userId: true, fullName: true } },
-        reservationRooms: {
-          include: {
-            room: { include: { roomType: true } },
-            ratePlan: true,
-          },
-        },
+        reservationRooms: { include: { room: { include: { roomType: true } }, ratePlan: true } },
         payments: true,
       },
     }),
     prisma.reservation.count({ where }),
   ]);
-
   return { reservations, total, page, limit };
 };
 
-export const findReservationById = async (reservationId: number) => {
+export const findReservationById = async (reservationId: string) => { // 🌟 CHANGED TO STRING
   return prisma.reservation.findUnique({
     where: { reservationId },
     include: {
@@ -116,61 +122,32 @@ export const findReservationById = async (reservationId: number) => {
       propertyGuest: { select: { guestId: true, fullName: true, phone: true } },
       platformGuest: { select: { guestId: true, fullName: true, phone: true, email: true } },
       staff: { select: { userId: true, fullName: true } },
-      reservationRooms: {
-        include: {
-          room: { include: { roomType: true } },
-          ratePlan: true,
-        },
-      },
+      reservationRooms: { include: { room: { include: { roomType: true } }, ratePlan: true } },
       payments: true,
     },
   });
 };
 
-export const updateReservation = async (reservationId: number, data: any) => {
+export const updateReservation = async (reservationId: string, data: any) => { // 🌟 CHANGED TO STRING
+  return prisma.reservation.update({ where: { reservationId }, data });
+};
+
+export const updateReservationStatus = async (reservationId: string, status: any) => { // 🌟 CHANGED TO STRING
+  return prisma.reservation.update({ where: { reservationId }, data: { status } });
+};
+
+export const cancelReservation = async (reservationId: string, data: any) => { // 🌟 CHANGED TO STRING
+  return prisma.reservation.update({ where: { reservationId }, data: { status: 'Cancelled', ...data } });
+};
+
+export const updateReservationFinancials = async (reservationId: string, totalAmount: number, amountPaid: number) => { // 🌟 CHANGED TO STRING
   return prisma.reservation.update({
     where: { reservationId },
-    data,
+    data: { totalAmount, amountPaid, balanceDue: totalAmount - amountPaid },
   });
 };
 
-export const updateReservationStatus = async (reservationId: number, status: any) => { // 🌟 Changed to 'any'
-  return prisma.reservation.update({
-    where: { reservationId },
-    data: { status },
-  });
-};
-
-export const cancelReservation = async (reservationId: number, data: any) => {
-  return prisma.reservation.update({
-    where: { reservationId },
-    data: {
-      status: 'Cancelled',
-      ...data,
-    },
-  });
-};
-
-export const updateReservationFinancials = async (
-  reservationId: number,
-  totalAmount: number,
-  amountPaid: number
-) => {
-  return prisma.reservation.update({
-    where: { reservationId },
-    data: {
-      totalAmount,
-      amountPaid,
-      balanceDue: totalAmount - amountPaid,
-    },
-  });
-};
-
-export const findReservationsByDateRange = async (
-  propertyId: number,
-  fromDate: Date,
-  toDate: Date
-) => {
+export const findReservationsByDateRange = async (propertyId: number, fromDate: Date, toDate: Date) => {
   return prisma.reservation.findMany({
     where: {
       propertyId,
@@ -181,32 +158,21 @@ export const findReservationsByDateRange = async (
         { checkInDate: { lte: fromDate }, checkOutDate: { gte: toDate } },
       ],
     },
-    include: {
-      reservationRooms: {
-        include: { room: true },
-      },
-    },
+    include: { reservationRooms: { include: { room: true } } },
   });
 };
 
-export const getReservationStats = async (reservationId: number) => {
+export const getReservationStats = async (reservationId: string) => { // 🌟 CHANGED TO STRING
   return prisma.reservation.findUnique({
     where: { reservationId },
-    include: {
-      _count: { select: { payments: true } },
-      payments: { select: { amount: true } },
-    },
+    include: { _count: { select: { payments: true } }, payments: { select: { amount: true } } },
   });
 };
-
 
 export const findReservationRoomById = async (reservationRoomId: number) => {
   return prisma.reservationRoom.findUnique({
     where: { reservationRoomId },
-    include: {
-      reservation: { select: { propertyId: true, status: true } },
-      room: { select: { roomId: true, roomNumber: true } },
-    },
+    include: { reservation: { select: { propertyId: true, status: true } }, room: { select: { roomId: true, roomNumber: true } } },
   });
 };
 
@@ -214,9 +180,6 @@ export const updateReservationRoomStatus = async (reservationRoomId: number, dat
   return prisma.reservationRoom.update({
     where: { reservationRoomId },
     data,
-    include: {
-      room: { select: { roomNumber: true } },
-      roomType: { select: { typeName: true } },
-    },
+    include: { room: { select: { roomNumber: true } }, roomType: { select: { typeName: true } } },
   });
 };

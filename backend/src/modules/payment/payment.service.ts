@@ -7,20 +7,23 @@ export const recordPayment = async (data: any) => {
   if (data.amount <= 0) throw new Error('Amount must be greater than 0');
   if (!data.paymentMethod) throw new Error('Payment method is required');
 
+  // 🌟 findReservationById now expects a string (UUID)
   const reservation = await findReservationById(data.reservationId);
   if (!reservation) throw new Error('Reservation not found');
+
   if (reservation.status === 'Cancelled') {
     throw new Error('Cannot record payment for cancelled reservation');
   }
 
   const amount = Number(data.amount);
   const accummulatedPayments = await paymentRepository.calculateAccumulatedPayment(data.reservationId);
+
   if (amount + accummulatedPayments > Number(reservation.totalAmount)) {
     throw new Error('Payment amount exceeds total reservation amount');
   }
 
   const payment = await paymentRepository.createPayment({
-    reservationId: data.reservationId,
+    reservationId: data.reservationId, // 🌟 Already a string
     amount: data.amount,
     paymentMethod: data.paymentMethod,
     paymentDate: data.paymentDate ? new Date(data.paymentDate) : undefined,
@@ -41,9 +44,9 @@ export const recordPayment = async (data: any) => {
 };
 
 export const getPayments = async (
-  propertyId: number, 
+  propertyId: number,
   filters: {
-    reservationId?: number;
+    reservationId?: string; // 🌟 CHANGED TO STRING
     paymentMethod?: string;
     status?: string;
     fromDate?: string;
@@ -60,7 +63,7 @@ export const getPayments = async (
     propertyId,
     {
       search: filters.search,
-      reservationId: filters.reservationId,
+      reservationId: filters.reservationId, // 🌟 Now passes string correctly
       paymentMethod: filters.paymentMethod,
       status: filters.status,
       fromDate,
@@ -77,7 +80,7 @@ export const getPaymentById = async (paymentId: number) => {
   return payment;
 };
 
-export const getPaymentsByReservation = async (reservationId: number) => {
+export const getPaymentsByReservation = async (reservationId: string) => { // 🌟 CHANGED TO STRING
   return paymentRepository.findPaymentsByReservation(reservationId);
 };
 
@@ -109,7 +112,7 @@ export const updatePayment = async (paymentId: number, data: any) => {
 };
 
 // ✅ UPGRADED: Now respects the "Flag & Review" workflow
-export const processRefund = async (paymentId: number) => { // ✅ Removed unused staffId
+export const processRefund = async (paymentId: number) => {
   const payment = await paymentRepository.findPaymentById(paymentId);
   if (!payment) throw new Error('Payment not found');
   if (payment.status === 'Refunded') throw new Error('This payment has already been refunded');
@@ -137,7 +140,6 @@ export const processRefund = async (paymentId: number) => { // ✅ Removed unuse
   );
 
   // 3. Update the Reservation's refund status to 'Processed'
-  // ✅ FIXED: Calling updateReservation directly since it's imported at the top
   await updateReservation(reservation.reservationId, {
     refundStatus: 'Processed',
   });
@@ -145,6 +147,6 @@ export const processRefund = async (paymentId: number) => { // ✅ Removed unuse
   return updatedPayment;
 };
 
-export const getPaymentStatistics = async (propertyId: number) => { 
+export const getPaymentStatistics = async (propertyId: number) => {
   return paymentRepository.getPaymentStats(propertyId);
 };

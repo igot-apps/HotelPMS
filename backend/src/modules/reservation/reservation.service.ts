@@ -3,21 +3,16 @@ import { findAvailableRooms, updateRoomStatus } from '../room/room.repository';
 import { updateGuestLastStay } from '../guest/guest.repository';
 
 export const createReservation = async (data: any) => {
-  // Validate required fields
   if (!data.propertyId) throw new Error('Property ID is required');
-  
-  // 🌟 UPDATED: Support both PropertyGuest (PMS) and PlatformGuest (Online)
   if (!data.propertyGuestId && !data.platformGuestId) {
     throw new Error('Either Property Guest ID or Platform Guest ID is required');
   }
-  
   if (!data.checkInDate) throw new Error('Check-in date is required');
   if (!data.checkOutDate) throw new Error('Check-out date is required');
   if (!data.rooms || data.rooms.length === 0) {
     throw new Error('At least one room is required');
   }
 
-  // 🚨 1. NORMALIZE DATES TO MIDNIGHT
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const checkIn = new Date(data.checkInDate);
@@ -25,17 +20,13 @@ export const createReservation = async (data: any) => {
   const checkOut = new Date(data.checkOutDate);
   checkOut.setHours(0, 0, 0, 0);
 
-  // 🚨 2. PREVENT PAST DATES
   if (checkIn < today) {
     throw new Error('Check-in date cannot be in the past. For walk-ins, please select today\'s date.');
   }
-
-  // 🚨 3. VALIDATE STAY LENGTH
   if (checkIn >= checkOut) {
     throw new Error('Check-out date must be at least one day after the check-in date.');
   }
 
-  // Check availability for all rooms
   for (const roomData of data.rooms) {
     const availableRooms = await findAvailableRooms(
       data.propertyId,
@@ -43,21 +34,18 @@ export const createReservation = async (data: any) => {
       checkOut,
       roomData.roomTypeId
     );
-
     const roomExists = availableRooms.some((r: any) => r.roomId === roomData.roomId);
     if (!roomExists) {
       throw new Error(`Room ${roomData.roomId} is not available for the selected dates`);
     }
   }
 
-  // Calculate total amount
   const nights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
   let totalAmount = 0;
   for (const roomData of data.rooms) {
     totalAmount += roomData.agreedPricePerNight * nights;
   }
 
-  // 🌟 UPDATED: Create reservation with the new guest fields
   const reservation = await reservationRepository.createReservation({
     propertyId: data.propertyId,
     propertyGuestId: data.propertyGuestId || null,
@@ -73,10 +61,9 @@ export const createReservation = async (data: any) => {
     balanceDue: totalAmount,
   });
 
-  // Create reservation rooms
   for (const roomData of data.rooms) {
     await reservationRepository.createReservationRoom({
-      reservationId: reservation.reservationId,
+      reservationId: reservation.reservationId, // 🌟 Now accepts string (UUID)
       roomId: roomData.roomId,
       roomTypeId: roomData.roomTypeId,
       ratePlanId: roomData.ratePlanId,
@@ -94,6 +81,7 @@ export const getReservations = async (
     propertyId?: number;
     propertyGuestId?: number;
     platformGuestId?: number;
+    search?: string;
     status?: string;
     fromDate?: string;
     toDate?: string;
@@ -103,12 +91,13 @@ export const getReservations = async (
 ) => {
   const fromDate = filters.fromDate ? new Date(filters.fromDate) : undefined;
   const toDate = filters.toDate ? new Date(filters.toDate) : undefined;
-
+  
   return reservationRepository.findReservations(
     {
       propertyId: filters.propertyId,
       propertyGuestId: filters.propertyGuestId,
       platformGuestId: filters.platformGuestId,
+      search: filters.search,
       status: filters.status,
       fromDate,
       toDate,
@@ -118,48 +107,38 @@ export const getReservations = async (
   );
 };
 
-export const getReservationById = async (reservationId: number) => {
+export const getReservationById = async (reservationId: string) => { // 🌟 CHANGED TO STRING
   const reservation = await reservationRepository.findReservationById(reservationId);
   if (!reservation) throw new Error('Reservation not found');
   return reservation;
 };
 
-export const updateReservation = async (reservationId: number, data: any) => {
+export const updateReservation = async (reservationId: string, data: any) => { // 🌟 CHANGED TO STRING
   const reservation = await reservationRepository.findReservationById(reservationId);
   if (!reservation) throw new Error('Reservation not found');
-
   if (data.status === 'Cancelled' && reservation.status !== 'Cancelled') {
     for (const rr of reservation.reservationRooms) {
       await updateRoomStatus(rr.roomId, 'Available');
     }
   }
-
   return reservationRepository.updateReservation(reservationId, data);
 };
 
-export const cancelReservation = async (reservationId: number) => {
+export const cancelReservation = async (reservationId: string) => { // 🌟 CHANGED TO STRING
   const reservation = await reservationRepository.findReservationById(reservationId);
   if (!reservation) throw new Error('Reservation not found');
-
   if (reservation.status === 'CheckedIn') {
     throw new Error('Cannot cancel a checked-in reservation');
   }
-
   if (reservation.status === 'Cancelled') {
     throw new Error('This reservation is already cancelled');
   }
-
-  // 1. Release the rooms back to inventory
   for (const rr of reservation.reservationRooms) {
     await updateRoomStatus(rr.roomId, 'Available');
   }
-
-  // 2. Calculate Refund Due (MVP Logic: 100% of amountPaid is refundable)
   const amountPaid = Number(reservation.amountPaid || 0);
   const refundDue = amountPaid;
   const refundStatus = refundDue > 0 ? 'Pending' : 'None';
-
-  // 3. Update the reservation with the new financial flags
   return reservationRepository.cancelReservation(reservationId, {
     refundDue,
     refundStatus,
@@ -167,43 +146,32 @@ export const cancelReservation = async (reservationId: number) => {
   });
 };
 
-export const checkInGuest = async (reservationId: number) => {
+export const checkInGuest = async (reservationId: string) => { // 🌟 CHANGED TO STRING
   const reservation = await reservationRepository.findReservationById(reservationId);
   if (!reservation) throw new Error('Reservation not found');
-
   if (reservation.status !== 'Confirmed') {
     throw new Error('Reservation must be confirmed to check in');
   }
-
   await reservationRepository.updateReservationStatus(reservationId, 'CheckedIn');
-
   for (const rr of reservation.reservationRooms) {
     await updateRoomStatus(rr.roomId, 'Occupied');
   }
-
-  // 🌟 UPDATED: Update the correct guest type's last stay date
   if (reservation.propertyGuestId) {
     await updateGuestLastStay(reservation.propertyGuestId);
   }
-  // Note: If it's a platformGuestId, we can add updatePlatformGuestLastStay() here in the future.
-
   return reservationRepository.findReservationById(reservationId);
 };
 
-export const checkOutGuest = async (reservationId: number) => {
+export const checkOutGuest = async (reservationId: string) => { // 🌟 CHANGED TO STRING
   const reservation = await reservationRepository.findReservationById(reservationId);
   if (!reservation) throw new Error('Reservation not found');
-
   if (reservation.status !== 'CheckedIn') {
     throw new Error('Reservation must be checked in to check out');
   }
-
   await reservationRepository.updateReservationStatus(reservationId, 'CheckedOut');
-
   for (const rr of reservation.reservationRooms) {
     await updateRoomStatus(rr.roomId, 'Available', 'Dirty');
   }
-
   return reservationRepository.findReservationById(reservationId);
 };
 
@@ -214,34 +182,29 @@ export const getReservationsByDateRange = async (
 ) => {
   const from = new Date(fromDate);
   const to = new Date(toDate);
-
   if (from > to) {
     throw new Error('From date must be before to date');
   }
-
   return reservationRepository.findReservationsByDateRange(propertyId, from, to);
 };
 
-export const getReservationStats = async (reservationId: number) => {
+export const getReservationStats = async (reservationId: string) => { // 🌟 CHANGED TO STRING
   const stats = await reservationRepository.getReservationStats(reservationId);
   if (!stats) throw new Error('Reservation not found');
   return stats;
 };
 
 export const updateReservationFinancials = async (
-  reservationId: number,
+  reservationId: string, // 🌟 CHANGED TO STRING
   amountPaid: number
 ) => {
   const reservation = await reservationRepository.findReservationById(reservationId);
   if (!reservation) throw new Error('Reservation not found');
-
   const totalAmount = Number(reservation.totalAmount || 0);
   const newAmountPaid = Number(reservation.amountPaid || 0) + amountPaid;
-
   if (newAmountPaid > totalAmount) {
     throw new Error('Amount paid cannot exceed total amount');
   }
-
   return reservationRepository.updateReservationFinancials(
     reservationId,
     totalAmount,
@@ -249,43 +212,30 @@ export const updateReservationFinancials = async (
   );
 };
 
-
+// 🌟 NEW: Function to update individual room status (Check-in/Check-out)
 export const updateReservationRoomStatus = async (
   reservationRoomId: number,
   status: string,
   occupantName?: string,
   userPropertyId?: number
 ) => {
-  // 1. Fetch the reservation room with its relations to verify property ownership
   const resRoom = await reservationRepository.findReservationRoomById(reservationRoomId);
+  if (!resRoom) throw new Error('Reservation room not found');
   
-  if (!resRoom) {
-    throw new Error('Reservation room not found');
-  }
-
-  // Security check: Ensure the room belongs to the user's property
   if (userPropertyId && resRoom.reservation.propertyId !== userPropertyId) {
     throw new Error('You do not have access to this reservation room');
   }
 
   const updateData: any = { status };
-  if (occupantName !== undefined) {
-    updateData.occupantName = occupantName;
-  }
+  if (occupantName !== undefined) updateData.occupantName = occupantName;
 
-  // 2. Set timestamps and update physical room inventory based on status
   if (status === 'CheckedIn') {
     updateData.actualCheckIn = new Date();
-    // Update the physical room status to Occupied
     await updateRoomStatus(resRoom.roomId, 'Occupied');
   } else if (status === 'CheckedOut') {
     updateData.actualCheckOut = new Date();
-    // Update the physical room status to Available and Dirty
     await updateRoomStatus(resRoom.roomId, 'Available', 'Dirty');
   }
 
-  // 3. Update the database
-  const updated = await reservationRepository.updateReservationRoomStatus(reservationRoomId, updateData);
-
-  return updated;
+  return reservationRepository.updateReservationRoomStatus(reservationRoomId, updateData);
 };

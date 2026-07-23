@@ -280,7 +280,7 @@ model RatePlan {
 // RESERVATIONS
 // ============================================================
 model Reservation {
-  reservationId     String    @id @default(uuid()) // 🌟 CHANGED TO UUID
+  reservationId     Int       @id @default(autoincrement())
   propertyId        Int
   
   confirmationCode  String    @unique @default(uuid())
@@ -319,7 +319,7 @@ model Reservation {
 
 model ReservationRoom {
   reservationRoomId   Int       @id @default(autoincrement())
-  reservationId       String    // 🌟 CHANGED TO STRING (Matches Reservation UUID)
+  reservationId       Int
   roomId              Int
   roomTypeId          Int
   ratePlanId          Int?
@@ -329,10 +329,13 @@ model ReservationRoom {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  status              String    @default("Reserved")
-  occupantName        String?
-  actualCheckIn       DateTime?
-  actualCheckOut      DateTime?
+  // 🌟 ==========================================
+  // 🌟 NEW FIELDS FOR INDIVIDUAL ROOM TRACKING
+  // 🌟 ==========================================
+  status              String    @default("Reserved") // 🌟 'Reserved', 'CheckedIn', 'CheckedOut', 'Cancelled'
+  occupantName        String?   // 🌟 Specific person assigned to this room (e.g., "John Doe")
+  actualCheckIn       DateTime? // 🌟 Exact timestamp this specific room was checked in
+  actualCheckOut      DateTime? // 🌟 Exact timestamp this specific room was checked out
 
   reservation         Reservation @relation(fields: [reservationId], references: [reservationId], onDelete: Cascade)
   room                Room      @relation(fields: [roomId], references: [roomId])
@@ -351,7 +354,7 @@ model ReservationRoom {
 // ============================================================
 model Payment {
   paymentId         Int       @id @default(autoincrement())
-  reservationId     String    // 🌟 CHANGED TO STRING (Matches Reservation UUID)
+  reservationId     Int
   amount            Decimal   @db.Decimal(10, 2)
   paymentMethod     String    @db.VarChar(50)
   paymentDate       DateTime  @default(now())
@@ -369,8 +372,6 @@ model Payment {
   @@index([paymentDate])
   @@map("payments")
 }
-
-
 
 // ============================================================
 // AUDIT LOG

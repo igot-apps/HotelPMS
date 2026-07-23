@@ -6,13 +6,13 @@ const prisma = new PrismaClient();
 // CREATE PAYMENT
 // ============================================================
 export const createPayment = async (data: {
-  reservationId: number;
+  reservationId: string; // 🌟 CHANGED TO STRING (UUID)
   amount: number;
   paymentMethod: string;
   paymentDate?: Date;
   gatewayReference?: string;
   receivedBy?: number;
-  status?: any; // 🌟 Changed to 'any' to safely accept Prisma Enum
+  status?: any;
   notes?: string;
 }) => {
   return prisma.payment.create({
@@ -51,7 +51,7 @@ export const createPayment = async (data: {
 export const findPayments = async (
   propertyId: number,
   filters: {
-    reservationId?: number;
+    reservationId?: string; // 🌟 CHANGED TO STRING
     paymentMethod?: string;
     status?: string;
     fromDate?: Date;
@@ -68,17 +68,14 @@ export const findPayments = async (
 
   if (filters.search) {
     const searchStr = String(filters.search);
-    const searchNum = parseInt(searchStr);
     where.OR = [
       { gatewayReference: { contains: searchStr, mode: 'insensitive' } },
       { reservation: { platformGuest: { fullName: { contains: searchStr, mode: 'insensitive' } } } },
       { reservation: { propertyGuest: { fullName: { contains: searchStr, mode: 'insensitive' } } } },
       { reservation: { platformGuest: { phone: { contains: searchStr } } } },
       { reservation: { propertyGuest: { phone: { contains: searchStr } } } },
+      { reservationId: searchStr }, // 🌟 CHANGED: reservationId is now a UUID string
     ];
-    if (!isNaN(searchNum)) {
-      where.OR.push({ reservationId: searchNum });
-    }
   }
 
   if (filters.reservationId) where.reservationId = filters.reservationId;
@@ -148,7 +145,7 @@ export const findPaymentById = async (paymentId: number) => {
 // ============================================================
 // FIND PAYMENTS BY RESERVATION
 // ============================================================
-export const findPaymentsByReservation = async (reservationId: number) => {
+export const findPaymentsByReservation = async (reservationId: string) => { // 🌟 CHANGED TO STRING
   return prisma.payment.findMany({
     where: { reservationId },
     orderBy: { paymentDate: 'desc' },
@@ -169,13 +166,13 @@ export const updatePayment = async (
     paymentMethod: string;
     paymentDate: Date;
     gatewayReference: string;
-    status: any; // 🌟 Changed to 'any' to safely accept Prisma Enum
+    status: any;
     notes: string;
   }>
 ) => {
   return prisma.payment.update({
     where: { paymentId },
-    data: data as any, // 🌟 Cast to 'any' to satisfy strict Enum typing
+    data: data as any,
     include: {
       reservation: {
         select: { reservationId: true, propertyId: true, totalAmount: true, amountPaid: true, balanceDue: true },
@@ -197,7 +194,7 @@ export const deletePayment = async (paymentId: number) => {
 // ============================================================
 // CALCULATE ACCUMULATED PAYMENT
 // ============================================================
-export const calculateAccumulatedPayment = async (reservationId: number): Promise<number> => {
+export const calculateAccumulatedPayment = async (reservationId: string): Promise<number> => { // 🌟 CHANGED TO STRING
   const result = await prisma.payment.aggregate({
     where: {
       reservationId: reservationId,
