@@ -1,29 +1,71 @@
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { getReservations, createReservation, checkInReservation, checkOutReservation, cancelReservation, updateReservationRoomStatus } from '../api/reservations'; // 🌟 Added updateReservationRoomStatus
+import { getReservations, createReservation, checkInReservation, checkOutReservation, cancelReservation, updateReservationRoomStatus } from '../api/reservations';
 import { recordPayment } from '../api/payments';
 import { useAuthStore } from '../store/authStore';
 import ReservationModal from '../components/reservations/ReservationModal';
-import { 
-  Search, Plus, CalendarDays, AlertCircle, LogIn, LogOut, XCircle, 
-  ChevronLeft, ChevronRight, Eye, X, Check, 
-  ChevronDown, ChevronUp, BedDouble, User // 🌟 Added new icons
+import {
+  Search, Plus, CalendarDays, AlertCircle, LogIn, LogOut, XCircle,
+  ChevronLeft, ChevronRight, Eye, X, Check,
+  ChevronDown, ChevronUp, BedDouble, Loader2
 } from 'lucide-react';
-import toast from 'react-hot-toast'; // 🌟 Added toast
+import toast from 'react-hot-toast';
+
+// ─────────────────────────────────────────────────────────────
+// Lightweight confirmation modal — replaces window.confirm()
+// ─────────────────────────────────────────────────────────────
+function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', danger = false, isLoading = false, onConfirm, onCancel }) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="confirm-dialog-title"
+      onClick={(e) => { if (e.target === e.currentTarget && !isLoading) onCancel(); }}
+    >
+      <div className="bg-surface border border-border rounded-xl shadow-lg w-full max-w-sm p-5">
+        <h3 id="confirm-dialog-title" className="text-base font-bold text-text mb-1.5">{title}</h3>
+        <p className="text-sm text-text-muted mb-5">{message}</p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            disabled={isLoading}
+            className="px-3 py-1.5 text-sm font-semibold rounded-lg border border-border text-text hover:bg-secondary-50 transition disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isLoading}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg text-text-inverted transition disabled:opacity-60 ${
+              danger ? 'bg-danger-600 hover:bg-danger-700' : 'bg-primary-600 hover:bg-primary-700'
+            }`}
+          >
+            {isLoading && <Loader2 size={14} className="animate-spin" />}
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ReservationsPage() {
   const user = useAuthStore((state) => state.user);
   const propertyId = user?.propertyId;
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [localSearch, setLocalSearch] = useState(searchParams.get('search') || '');
   const [createdReservation, setCreatedReservation] = useState(null);
-  
-  // 🌟 NEW: State to track which row is expanded
   const [expandedId, setExpandedId] = useState(null);
+
+  // Pending confirmation for any destructive/state-changing action
+  // { kind: 'reservation' | 'room', id, action/status, title, message, danger, confirmLabel }
+  const [pendingConfirm, setPendingConfirm] = useState(null);
 
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '10');
@@ -41,14 +83,26 @@ export default function ReservationsPage() {
     setSearchParams(newParams, { replace: true });
   };
 
+  // Debounced search, with a "pending" flag so the UI can show a spinner
+  // between the keystroke and the actual query update.
+  const [isSearchPending, setIsSearchPending] = useState(false);
   useEffect(() => {
+    if (localSearch === search) return;
+    setIsSearchPending(true);
     const timer = setTimeout(() => {
-      if (localSearch !== search) updateParams({ search: localSearch, page: 1 });
+      updateParams({ search: localSearch, page: 1 });
+      setIsSearchPending(false);
     }, 500);
     return () => clearTimeout(timer);
   }, [localSearch]);
 
-  const { data, isLoading, isPlaceholderData } = useQuery({
+  // Reset row expansion whenever the visible result set changes underneath it,
+  // so we never hold "expanded" state for a reservation that's scrolled out of view.
+  useEffect(() => {
+    setExpandedId(null);
+  }, [page, search, status, fromDate, toDate]);
+
+  const { data, isLoading, isFetching, isPlaceholderData, isError, error, refetch } = useQuery({
     queryKey: ['reservations', propertyId, status, page, limit, search, fromDate, toDate],
     queryFn: () => {
       const params = { propertyId, limit, page };
@@ -68,21 +122,23 @@ export default function ReservationsPage() {
   const startItem = pagination.total > 0 ? (page - 1) * limit + 1 : 0;
   const endItem = Math.min(page * limit, pagination.total);
 
-  const filteredReservations = reservations.filter(res =>
-    res.guest?.fullName?.toLowerCase().includes(search.toLowerCase()) ||
-    res.reservationRooms?.some(r => r.room?.roomNumber?.toLowerCase().includes(search.toLowerCase()))
-  );
+  // Server already applies `search` — trust it as the source of truth so the
+  // "Total matching" count and the rendered rows never disagree.
+  const hasActiveFilters = status !== 'all' || !!fromDate || !!toDate || !!search;
 
-  // 🌟 NEW: Mutation for individual room check-in/out
   const roomActionMutation = useMutation({
     mutationFn: ({ id, status }) => updateReservationRoomStatus(id, { status }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
-      toast.success('Room status updated successfully!');
+      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardActive'] });
+      toast.success('Room status updated');
+      setPendingConfirm(null);
     },
     onError: (err) => {
       toast.error(err.response?.data?.message || 'Failed to update room status');
-    }
+      setPendingConfirm(null);
+    },
   });
 
   const createMutation = useMutation({
@@ -98,17 +154,25 @@ export default function ReservationsPage() {
           gatewayReference: payload.gatewayReference || null,
           notes: 'Initial payment for reservation'
         };
-        try { await recordPayment(paymentPayload); } catch (err) { console.error("❌ Initial payment recording failed:", err); }
+        try {
+          await recordPayment(paymentPayload);
+        } catch (err) {
+          console.error('Initial payment recording failed:', err);
+          toast.error('Reservation created, but the initial payment failed to record. Please add it manually.');
+        }
       }
       return resResponse;
     },
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
-      queryClient.invalidateQueries({ queryKey: ['rooms'] }); 
-      queryClient.invalidateQueries({ queryKey: ['payments'] }); 
-      queryClient.invalidateQueries({ queryKey: ['dashboardActive'] }); 
+      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardActive'] });
       queryClient.invalidateQueries({ queryKey: ['dashboardUpcoming'] });
       setCreatedReservation(response.data.data);
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Failed to create reservation');
     },
   });
 
@@ -118,27 +182,48 @@ export default function ReservationsPage() {
       if (action === 'checkout') return checkOutReservation(id);
       if (action === 'cancel') return cancelReservation(id);
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       queryClient.invalidateQueries({ queryKey: ['dashboardActive'] });
+      const label = { checkin: 'Checked in', checkout: 'Checked out', cancel: 'Reservation cancelled' }[variables.action];
+      toast.success(label || 'Done');
+      setPendingConfirm(null);
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Action failed — please try again');
+      setPendingConfirm(null);
     },
   });
 
-  const handleAction = (id, action, confirmMsg) => {
-    if (confirmMsg && !window.confirm(confirmMsg)) return;
-    actionMutation.mutate({ id, action });
+  // ── Confirmation flow ────────────────────────────────────────
+  const askReservationAction = (id, action, title, message, opts = {}) => {
+    setPendingConfirm({ kind: 'reservation', id, action, title, message, ...opts });
   };
 
-  // 🌟 NEW: Handler for individual room actions
-  const handleRoomAction = (reservationRoomId, status, confirmMsg) => {
-    if (confirmMsg && !window.confirm(confirmMsg)) return;
-    roomActionMutation.mutate({ id: reservationRoomId, status });
+  const askRoomAction = (reservationRoomId, roomStatus, title, message, opts = {}) => {
+    setPendingConfirm({ kind: 'room', id: reservationRoomId, status: roomStatus, title, message, ...opts });
   };
+
+  const handleConfirm = () => {
+    if (!pendingConfirm) return;
+    if (pendingConfirm.kind === 'reservation') {
+      actionMutation.mutate({ id: pendingConfirm.id, action: pendingConfirm.action });
+    } else {
+      roomActionMutation.mutate({ id: pendingConfirm.id, status: pendingConfirm.status });
+    }
+  };
+
+  const isConfirmLoading =
+    (pendingConfirm?.kind === 'reservation' && actionMutation.isPending) ||
+    (pendingConfirm?.kind === 'room' && roomActionMutation.isPending);
 
   const handleFilterChange = (key, value) => updateParams({ [key]: value, page: 1 });
   const clearFilters = () => { updateParams({ search: '', status: '', fromDate: '', toDate: '', page: 1 }); setLocalSearch(''); };
-  const hasActiveFilters = status !== 'all' || fromDate || toDate;
+
+  // Track which specific row/room is mid-action so only that control shows a spinner
+  const activeReservationActionId = actionMutation.isPending ? actionMutation.variables?.id : null;
+  const activeRoomActionId = roomActionMutation.isPending ? roomActionMutation.variables?.id : null;
 
   return (
     <div className="space-y-6">
@@ -157,7 +242,16 @@ export default function ReservationsPage() {
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
-            <input type="text" placeholder="Search guest or room..." value={localSearch} onChange={(e) => setLocalSearch(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-lg text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
+            <input
+              type="text"
+              placeholder="Search guest or room..."
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
+              className="w-full pl-9 pr-9 py-2 bg-background border border-border rounded-lg text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
+            />
+            {isSearchPending && (
+              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted animate-spin" size={16} aria-label="Searching" />
+            )}
           </div>
           <select value={status} onChange={(e) => handleFilterChange('status', e.target.value)} className="px-3 py-2 bg-background border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20">
             <option value="all">All Statuses</option><option value="Confirmed">Confirmed</option><option value="CheckedIn">Checked In</option><option value="CheckedOut">Checked Out</option><option value="Cancelled">Cancelled</option>
@@ -180,13 +274,12 @@ export default function ReservationsPage() {
         )}
       </div>
 
-      {/* 🌟 TABLE WITH EXPANDABLE ROWS */}
+      {/* TABLE */}
       <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-secondary-50/50 border-b border-border">
               <tr>
-                {/* 🌟 NEW: Empty column for the Expand Toggle */}
                 <th className="w-10 px-2 py-3"></th>
                 <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">ID / Guest</th>
                 <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Room(s)</th>
@@ -196,32 +289,103 @@ export default function ReservationsPage() {
                 <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider text-right">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className={isPlaceholderData ? 'opacity-60 pointer-events-none transition-opacity' : 'transition-opacity'}>
               {isLoading ? (
-                <tr><td colSpan="7" className="p-12 text-center text-text-muted animate-pulse">Loading...</td></tr>
-              ) : filteredReservations.length === 0 ? (
-                <tr><td colSpan="7" className="p-12 text-center text-text-muted flex flex-col items-center gap-2"><CalendarDays size={24} /> <p className="font-semibold">No reservations found</p></td></tr>
+                <tr><td colSpan="7" className="p-12 text-center text-text-muted"><Loader2 className="mx-auto mb-2 animate-spin" size={22} /> Loading...</td></tr>
+              ) : isError ? (
+                <tr>
+                  <td colSpan="7" className="p-12 text-center">
+                    <div className="flex flex-col items-center gap-2 text-danger-600">
+                      <AlertCircle size={24} />
+                      <p className="font-semibold">Couldn't load reservations</p>
+                      <p className="text-xs text-text-muted">{error?.response?.data?.message || error?.message || 'Something went wrong'}</p>
+                      <button onClick={() => refetch()} className="mt-1 text-xs font-semibold text-primary-600 hover:underline">Try again</button>
+                    </div>
+                  </td>
+                </tr>
+              ) : reservations.length === 0 ? (
+                <tr>
+                  <td colSpan="7" className="p-12 text-center text-text-muted">
+                    <div className="flex flex-col items-center gap-2">
+                      <CalendarDays size={24} />
+                      <p className="font-semibold">No reservations found</p>
+                      {hasActiveFilters ? (
+                        <button onClick={clearFilters} className="text-xs font-semibold text-primary-600 hover:underline">
+                          Clear filters and try again
+                        </button>
+                      ) : (
+                        <p className="text-xs">New bookings will show up here</p>
+                      )}
+                    </div>
+                  </td>
+                </tr>
               ) : (
-                filteredReservations.map((res) => {
+                reservations.map((res) => {
                   const rooms = res.reservationRooms?.map(r => r.room?.roomNumber).join(', ') || 'N/A';
                   const checkIn = new Date(res.checkInDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                   const checkOut = new Date(res.checkOutDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                  
+
                   let statusClass = 'bg-secondary-100 text-secondary-700';
                   if (res.status === 'Confirmed') statusClass = 'bg-primary-50 text-primary-700 ring-1 ring-primary-600/20';
                   if (res.status === 'CheckedIn') statusClass = 'bg-success-50 text-success-700 ring-1 ring-success-600/20';
                   if (res.status === 'CheckedOut') statusClass = 'bg-secondary-100 text-secondary-600';
                   if (res.status === 'Cancelled') statusClass = 'bg-danger-50 text-danger-700 ring-1 ring-danger-600/20';
 
+                  const isThisRowBusy = activeReservationActionId === res.reservationId;
+
                   let actions = null;
-                  if (res.status === 'Confirmed') actions = (<button onClick={() => handleAction(res.reservationId, 'checkin', 'Check in entire reservation?')} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition"><LogIn size={14} /> Check In All</button>);
-                  else if (res.status === 'CheckedIn') actions = (<button onClick={() => handleAction(res.reservationId, 'checkout', 'Check out entire reservation?')} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition"><LogOut size={14} /> Check Out All</button>);
-                  
+                  if (res.status === 'Confirmed') {
+                    actions = (
+                      <button
+                        disabled={isThisRowBusy}
+                        onClick={() => askReservationAction(
+                          res.reservationId, 'checkin',
+                          'Check in reservation?',
+                          `This will check in all rooms for reservation #${res.reservationId}.`,
+                        )}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isThisRowBusy && actionMutation.variables?.action === 'checkin'
+                          ? <Loader2 size={14} className="animate-spin" />
+                          : <LogIn size={14} />} Check In All
+                      </button>
+                    );
+                  } else if (res.status === 'CheckedIn') {
+                    actions = (
+                      <button
+                        disabled={isThisRowBusy}
+                        onClick={() => askReservationAction(
+                          res.reservationId, 'checkout',
+                          'Check out reservation?',
+                          `This will check out all rooms for reservation #${res.reservationId}.`,
+                        )}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isThisRowBusy && actionMutation.variables?.action === 'checkout'
+                          ? <Loader2 size={14} className="animate-spin" />
+                          : <LogOut size={14} />} Check Out All
+                      </button>
+                    );
+                  }
+
                   if (res.status !== 'CheckedOut' && res.status !== 'Cancelled') {
                     actions = (
                       <div className="flex items-center justify-end gap-2">
                         {actions}
-                        <button onClick={() => handleAction(res.reservationId, 'cancel', 'Cancel this reservation?')} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-danger-200 text-danger-600 hover:bg-danger-50 transition"><XCircle size={14} /> Cancel</button>
+                        <button
+                          disabled={isThisRowBusy}
+                          onClick={() => askReservationAction(
+                            res.reservationId, 'cancel',
+                            'Cancel reservation?',
+                            `This will cancel reservation #${res.reservationId}. This can't be undone from here.`,
+                            { danger: true, confirmLabel: 'Cancel Reservation' },
+                          )}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-danger-200 text-danger-600 hover:bg-danger-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isThisRowBusy && actionMutation.variables?.action === 'cancel'
+                            ? <Loader2 size={14} className="animate-spin" />
+                            : <XCircle size={14} />} Cancel
+                        </button>
                       </div>
                     );
                   }
@@ -231,16 +395,15 @@ export default function ReservationsPage() {
                   const isExpanded = expandedId === res.reservationId;
 
                   return (
-                    // 🌟 WRAPPED IN FRAGMENT TO ALLOW EXPANDABLE ROW
                     <Fragment key={res.reservationId}>
                       <tr className="border-b border-border last:border-0 hover:bg-secondary-50/50 transition-colors">
-                        {/* 🌟 EXPAND TOGGLE BUTTON */}
                         <td className="px-2 py-4">
                           {res.reservationRooms?.length > 0 && (
-                            <button 
+                            <button
                               onClick={() => setExpandedId(isExpanded ? null : res.reservationId)}
                               className="p-1.5 rounded-lg hover:bg-secondary-100 text-text-muted transition"
-                              title="View Individual Rooms"
+                              aria-expanded={isExpanded}
+                              aria-label={isExpanded ? `Collapse rooms for reservation ${res.reservationId}` : `Expand rooms for reservation ${res.reservationId}`}
                             >
                               {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                             </button>
@@ -270,13 +433,12 @@ export default function ReservationsPage() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Link to={`/reservations/${res.reservationId}`} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" title="View Details"><Eye size={16} /></Link>
+                            <Link to={`/reservations/${res.reservationId}`} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" aria-label={`View details for reservation ${res.reservationId}`}><Eye size={16} /></Link>
                             {actions || <span className="text-xs text-text-muted">-</span>}
                           </div>
                         </td>
                       </tr>
 
-                      {/* 🌟 EXPANDABLE ROW CONTENT: INDIVIDUAL ROOM MANAGEMENT */}
                       {isExpanded && (
                         <tr className="bg-secondary-50/30">
                           <td colSpan="7" className="p-6 border-b border-border">
@@ -285,29 +447,39 @@ export default function ReservationsPage() {
                               <h4 className="text-sm font-bold text-text uppercase tracking-wider">Individual Room Assignments</h4>
                               <span className="text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full font-semibold">{res.reservationRooms.length} Rooms</span>
                             </div>
-                            
+
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                               {res.reservationRooms.map((rr) => {
-                                // 🌟 Read the individual room status from the database
                                 const roomStatus = rr.status || 'Reserved';
+                                const isThisRoomBusy = activeRoomActionId === rr.reservationRoomId;
                                 let roomActionBtn = null;
-                                
+
                                 if (roomStatus === 'Reserved') {
                                   roomActionBtn = (
-                                    <button 
-                                      onClick={() => handleRoomAction(rr.reservationRoomId, 'CheckedIn', `Check in Room ${rr.room?.roomNumber}?`)}
-                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition"
+                                    <button
+                                      disabled={isThisRoomBusy}
+                                      onClick={() => askRoomAction(
+                                        rr.reservationRoomId, 'CheckedIn',
+                                        'Check in room?',
+                                        `Check in Room ${rr.room?.roomNumber}?`,
+                                      )}
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                      <LogIn size={14} /> Check In Room
+                                      {isThisRoomBusy ? <Loader2 size={14} className="animate-spin" /> : <LogIn size={14} />} Check In Room
                                     </button>
                                   );
                                 } else if (roomStatus === 'CheckedIn') {
                                   roomActionBtn = (
-                                    <button 
-                                      onClick={() => handleRoomAction(rr.reservationRoomId, 'CheckedOut', `Check out Room ${rr.room?.roomNumber}?`)}
-                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition"
+                                    <button
+                                      disabled={isThisRoomBusy}
+                                      onClick={() => askRoomAction(
+                                        rr.reservationRoomId, 'CheckedOut',
+                                        'Check out room?',
+                                        `Check out Room ${rr.room?.roomNumber}?`,
+                                      )}
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                      <LogOut size={14} /> Check Out Room
+                                      {isThisRoomBusy ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />} Check Out Room
                                     </button>
                                   );
                                 }
@@ -320,14 +492,14 @@ export default function ReservationsPage() {
                                         <p className="text-xs text-text-muted">{rr.room?.roomType?.typeName}</p>
                                       </div>
                                       <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                                        roomStatus === 'CheckedIn' ? 'bg-success-50 text-success-700' : 
-                                        roomStatus === 'CheckedOut' ? 'bg-secondary-100 text-secondary-700' : 
+                                        roomStatus === 'CheckedIn' ? 'bg-success-50 text-success-700' :
+                                        roomStatus === 'CheckedOut' ? 'bg-secondary-100 text-secondary-700' :
                                         'bg-primary-50 text-primary-700'
                                       }`}>
                                         {roomStatus}
                                       </span>
                                     </div>
-                                    
+
                                     <div className="pt-3 border-t border-border">
                                       <p className="text-xs text-text-muted mb-1">Occupant Name</p>
                                       <p className="text-sm font-semibold text-text">{rr.occupantName || 'Not assigned'}</p>
@@ -351,11 +523,14 @@ export default function ReservationsPage() {
             </tbody>
           </table>
         </div>
-        
-        {/* Pagination UI */}
+
+        {/* Pagination */}
         <div className="px-6 py-4 border-t border-border bg-secondary-50/30 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <p className="text-sm text-text-muted">Showing <span className="font-semibold text-text">{startItem}</span> to <span className="font-semibold text-text">{endItem}</span> of <span className="font-semibold text-text">{pagination.total}</span></p>
+            <p className="text-sm text-text-muted">
+              Showing <span className="font-semibold text-text">{startItem}</span> to <span className="font-semibold text-text">{endItem}</span> of <span className="font-semibold text-text">{pagination.total}</span>
+              {isFetching && !isLoading && <Loader2 className="inline-block ml-2 animate-spin align-[-2px]" size={13} aria-label="Refreshing" />}
+            </p>
             <select value={limit} onChange={(e) => updateParams({ limit: e.target.value, page: 1 })} className="text-sm border border-border rounded-lg px-2 py-1 bg-surface text-text outline-none focus:ring-2 focus:ring-primary-500/20">
               <option value="10">10 / page</option><option value="25">25 / page</option><option value="50">50 / page</option><option value="100">100 / page</option>
             </select>
@@ -368,15 +543,26 @@ export default function ReservationsPage() {
             <button onClick={() => updateParams({ page: totalPages })} disabled={page === totalPages || !pagination.total || isPlaceholderData} className="px-2 py-1 text-sm font-medium rounded-lg border border-border bg-surface hover:bg-secondary-50 disabled:opacity-40 disabled:cursor-not-allowed transition">Last</button>
           </div>
         </div>
-      </div> 
+      </div>
 
-      <ReservationModal 
-        isOpen={isModalOpen} 
-        onClose={() => { setIsModalOpen(false); setCreatedReservation(null); createMutation.reset(); }} 
-        onSubmit={(data) => createMutation.mutate(data)} 
-        isLoading={createMutation.isPending} 
-        createdReservation={createdReservation} 
+      <ReservationModal
+        isOpen={isModalOpen}
+        onClose={() => { setIsModalOpen(false); setCreatedReservation(null); createMutation.reset(); }}
+        onSubmit={(data) => createMutation.mutate(data)}
+        isLoading={createMutation.isPending}
+        createdReservation={createdReservation}
       />
-    </div> 
+
+      <ConfirmDialog
+        open={!!pendingConfirm}
+        title={pendingConfirm?.title}
+        message={pendingConfirm?.message}
+        confirmLabel={pendingConfirm?.confirmLabel || 'Confirm'}
+        danger={!!pendingConfirm?.danger}
+        isLoading={isConfirmLoading}
+        onConfirm={handleConfirm}
+        onCancel={() => setPendingConfirm(null)}
+      />
+    </div>
   );
 }

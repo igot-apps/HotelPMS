@@ -3,7 +3,11 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../lib/axios';
 import PublicNavbar from '../components/public/PublicNavbar';
-import { Calendar, MapPin, Loader2, Search, ArrowLeft, Clock, CheckCircle2, XCircle, CreditCard, ChevronLeft, ChevronRight } from 'lucide-react';
+import { 
+  Calendar, MapPin, Loader2, Search, ArrowLeft, Clock, 
+  CheckCircle2, XCircle, CreditCard, ChevronLeft, ChevronRight, 
+  BedDouble, ChevronRight as ChevronRightIcon, Receipt
+} from 'lucide-react';
 
 // 🌟 REUSABLE PAGINATION COMPONENT
 const Pagination = ({ currentPage, totalPages, onPageChange }) => {
@@ -78,10 +82,10 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
 export default function PublicReservationsPage() {
   const navigate = useNavigate();
   const [token, setToken] = useState(null);
-  
-  // 🌟 NEW: Pagination state
+
+  // 🌟 Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 5; // Show 5 reservations per page
+  const ITEMS_PER_PAGE = 5;
 
   useEffect(() => {
     const guestToken = localStorage.getItem('guestToken');
@@ -93,11 +97,11 @@ export default function PublicReservationsPage() {
   }, [navigate]);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['guestReservations', currentPage], // 🌟 Refetch on page change
+    queryKey: ['guestReservations', currentPage],
     queryFn: async () => {
       const res = await api.get('/public/reservations', {
         headers: { Authorization: `Bearer ${token}` },
-        params: { page: currentPage, limit: ITEMS_PER_PAGE } // 🌟 Send pagination params
+        params: { page: currentPage, limit: ITEMS_PER_PAGE }
       });
       return {
         reservations: res.data.data,
@@ -114,7 +118,7 @@ export default function PublicReservationsPage() {
   const handlePageChange = (page) => {
     if (page >= 1 && page <= totalPages && page !== currentPage) {
       setCurrentPage(page);
-      window.scrollTo({ top: 0, behavior: 'smooth' }); // Smooth scroll to top
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
@@ -133,6 +137,27 @@ export default function PublicReservationsPage() {
     }
   };
 
+  // 🌟 Helper for cleaner date formatting (e.g., "Jul 22, 2026")
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  // 🌟 Premium Skeleton Loader
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <PublicNavbar />
+        <div className="max-w-5xl mx-auto px-4 py-12 space-y-6 animate-pulse">
+          <div className="h-8 w-48 bg-secondary-100 rounded-lg" />
+          <div className="h-4 w-64 bg-secondary-100 rounded-lg" />
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-48 bg-surface rounded-xl border border-border" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <PublicNavbar />
@@ -149,32 +174,29 @@ export default function PublicReservationsPage() {
           </div>
         </div>
 
-        {/* Loading State */}
-        {isLoading && (
-          <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <Loader2 className="animate-spin text-primary-500" size={40} />
-            <p className="text-text-muted font-semibold">Loading your reservations...</p>
-          </div>
-        )}
-
         {/* Error State */}
         {isError && (
           <div className="text-center py-16 bg-surface border border-border rounded-2xl">
             <XCircle size={48} className="mx-auto text-danger-500 mb-4" />
             <h3 className="text-xl font-bold text-text mb-2">Failed to load reservations</h3>
-            <p className="text-text-muted mb-6">Please try logging out and back in.</p>
+            <p className="text-text-muted mb-6">Please try logging out and back in, or check your connection.</p>
+            <button onClick={() => window.location.reload()} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
+              Retry
+            </button>
           </div>
         )}
 
         {/* Empty State */}
-        {!isLoading && !isError && reservations.length === 0 && (
+        {!isError && reservations.length === 0 && (
           <div className="text-center py-16 bg-surface border border-border rounded-2xl">
-            <Search size={48} className="mx-auto text-text-muted mb-4 opacity-50" />
+            <div className="w-16 h-16 bg-secondary-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Search size={32} className="text-text-muted" />
+            </div>
             <h3 className="text-xl font-bold text-text mb-2">No reservations yet</h3>
-            <p className="text-text-muted mb-6">You haven't booked any stays with us yet.</p>
+            <p className="text-text-muted mb-6 max-w-md mx-auto">You haven't booked any stays with us yet. Start exploring our beautiful properties!</p>
             <Link 
               to="/discover" 
-              className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition shadow-lg shadow-primary-600/20"
             >
               <Calendar size={18} /> Discover Hotels
             </Link>
@@ -182,54 +204,80 @@ export default function PublicReservationsPage() {
         )}
 
         {/* Reservations List */}
-        {!isLoading && !isError && reservations.length > 0 && (
+        {!isError && reservations.length > 0 && (
           <>
             <div className="space-y-4">
-              {reservations.map((res) => (
-                <div key={res.reservationId} className="bg-surface border border-border rounded-xl p-6 hover:shadow-md transition">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-                    <div>
-                      <div className="flex items-center gap-3 mb-1">
-                        <h3 className="text-lg font-bold text-text">{res.property?.propertyName}</h3>
-                        {getStatusBadge(res.status)}
-                      </div>
-                      <p className="text-sm text-text-muted flex items-center gap-1.5">
-                        <MapPin size={14} /> {res.property?.city}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-text-muted uppercase tracking-wider font-semibold">Confirmation Code</p>
-                      <p className="text-lg font-black text-primary-600 tracking-widest">{res.confirmationCode}</p>
-                    </div>
-                  </div>
+              {reservations.map((res) => {
+                // 🌟 Smart multi-room display
+                const roomCount = res.reservationRooms?.length || 1;
+                const roomTypeName = res.reservationRooms?.[0]?.roomType?.typeName || 'Standard Room';
+                const displayRoomText = roomCount > 1 ? `${roomCount}x ${roomTypeName}` : roomTypeName;
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-border">
-                    <div>
-                      <p className="text-xs text-text-muted mb-1">Dates</p>
-                      <p className="text-sm font-semibold text-text">
-                        {new Date(res.checkInDate).toLocaleDateString()} – {new Date(res.checkOutDate).toLocaleDateString()}
-                      </p>
+                return (
+                  <div key={res.reservationId} className="group bg-surface border border-border rounded-xl p-6 hover:shadow-lg hover:border-primary-200 transition-all duration-300">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2 flex-wrap">
+                          <h3 className="text-lg font-bold text-text group-hover:text-primary-600 transition-colors">
+                            {res.property?.propertyName}
+                          </h3>
+                          {getStatusBadge(res.status)}
+                        </div>
+                        <p className="text-sm text-text-muted flex items-center gap-1.5 mb-3">
+                          <MapPin size={14} className="flex-shrink-0" /> {res.property?.city}, {res.property?.country || 'Ghana'}
+                        </p>
+                        
+                        <div className="flex flex-wrap gap-4 text-sm">
+                          <div className="flex items-center gap-2 text-text-muted">
+                            <Calendar size={14} className="text-primary-600" />
+                            <span className="font-medium text-text">{formatDate(res.checkInDate)} – {formatDate(res.checkOutDate)}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-text-muted">
+                            <BedDouble size={14} className="text-primary-600" />
+                            <span className="font-medium text-text">{displayRoomText}</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="text-right md:text-right flex-shrink-0">
+                        <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-1">Confirmation Code</p>
+                        <p className="text-sm font-black text-primary-600 tracking-widest bg-primary-50 px-3 py-1.5 rounded-lg border border-primary-100 inline-block">
+                          {res.confirmationCode}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs text-text-muted mb-1">Room</p>
-                      <p className="text-sm font-semibold text-text">
-                        {res.reservationRooms[0]?.roomType?.typeName || 'Standard Room'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-text-muted mb-1 flex items-center gap-1"><CreditCard size={12} /> Payment</p>
-                      <p className="text-sm font-bold text-text">
-                        GH₵ {Number(res.amountPaid).toFixed(2)} 
-                        {Number(res.balanceDue) > 0 && (
-                          <span className="text-xs font-normal text-danger-600 ml-1">
-                            (Balance: GH₵ {Number(res.balanceDue).toFixed(2)})
-                          </span>
-                        )}
-                      </p>
+
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-4 border-t border-border gap-4">
+                      <div className="flex items-center gap-2">
+                        <CreditCard size={16} className="text-text-muted" />
+                        <div className="text-sm">
+                          <span className="font-bold text-text">GH₵ {Number(res.amountPaid).toFixed(2)}</span>
+                          <span className="text-text-muted"> paid</span>
+                          {Number(res.balanceDue) > 0 && (
+                            <span className="text-xs font-bold text-danger-600 bg-danger-50 px-2 py-0.5 rounded ml-2 border border-danger-100">
+                              Balance: GH₵ {Number(res.balanceDue).toFixed(2)}
+                            </span>
+                          )}
+                          {Number(res.balanceDue) === 0 && Number(res.amountPaid) > 0 && (
+                            <span className="text-xs font-bold text-success-600 bg-success-50 px-2 py-0.5 rounded ml-2 border border-success-100 inline-flex items-center gap-1">
+                              <CheckCircle2 size={10} /> Fully Paid
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* 🌟 Action Button for future details view */}
+                      <Link 
+                        to={`/public/reservations/${res.reservationId}`} 
+                        className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-lg transition border border-primary-100"
+                      >
+                        <Receipt size={16} /> View Details
+                        <ChevronRightIcon size={16} />
+                      </Link>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* 🌟 PAGINATION CONTROLS */}
