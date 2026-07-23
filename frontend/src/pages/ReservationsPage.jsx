@@ -470,11 +470,15 @@ export default function ReservationsPage() {
                                   roomActionBtn = (
                                     <button
                                       disabled={isThisRoomBusy}
-                                      onClick={() => askRoomAction(
-                                        rr.reservationRoomId, 'CheckedOut',
-                                        'Check out room?',
-                                        `Check out Room ${rr.room?.roomNumber}?`,
-                                      )}
+                                      onClick={() => {
+                                        const occupant = rr.occupantName || 'Not assigned';
+                                        askRoomAction(
+                                          rr.reservationRoomId, 
+                                          'CheckedOut',
+                                          'Confirm Check-out',
+                                          `You are about to check out Room ${rr.room?.roomNumber}.\n\nOccupant: ${occupant}\n\nPlease verify this is the correct guest before proceeding.`,
+                                        );
+                                      }}
                                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                       {isThisRoomBusy ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />} Check Out Room
@@ -498,78 +502,92 @@ export default function ReservationsPage() {
                                     </span>
                                   </div>
 
-                                  {/* 🌟 EARLY CHECK-IN / LATE CHECK-OUT INDICATORS */}
-                                  {(() => {
-                                    // Property standard times (default 14:00 check-in, 11:00 check-out)
-                                    const standardCheckInHour = 14; // 2 PM
-                                    const standardCheckOutHour = 11; // 11 AM
-
-                                    let earlyCheckInInfo = null;
-                                    let lateCheckOutInfo = null;
-
-                                    // Check for Early Check-in
-                                    if (rr.actualCheckIn && rr.checkInDate) {
-                                      const actual = new Date(rr.actualCheckIn);
-                                      const scheduled = new Date(rr.checkInDate);
-                                      scheduled.setHours(standardCheckInHour, 0, 0, 0);
-                                      
-                                      const diffHours = (scheduled.getTime() - actual.getTime()) / (1000 * 60 * 60);
-                                      
-                                      if (diffHours > 0.5) { // More than 30 minutes early
-                                        earlyCheckInInfo = {
-                                          hoursEarly: Math.round(diffHours * 10) / 10,
-                                          actualTime: actual.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-                                          scheduledTime: scheduled.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-                                        };
-                                      }
-                                    }
-
-                                    // Check for Late Check-out
-                                    if (rr.actualCheckOut && rr.checkOutDate) {
-                                      const actual = new Date(rr.actualCheckOut);
-                                      const scheduled = new Date(rr.checkOutDate);
-                                      scheduled.setHours(standardCheckOutHour, 0, 0, 0);
-                                      
-                                      const diffHours = (actual.getTime() - scheduled.getTime()) / (1000 * 60 * 60);
-                                      
-                                      if (diffHours > 0.5) { // More than 30 minutes late
-                                        lateCheckOutInfo = {
-                                          hoursLate: Math.round(diffHours * 10) / 10,
-                                          actualTime: actual.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-                                          scheduledTime: scheduled.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-                                        };
-                                      }
-                                    }
-
-                                    if (!earlyCheckInInfo && !lateCheckOutInfo) return null;
-
-                                    return (
-                                      <div className="space-y-2 pt-3 border-t border-border">
-                                        {earlyCheckInInfo && (
-                                          <div className="flex items-start gap-2 p-2.5 bg-warning-50 border border-warning-200 rounded-lg">
-                                            <Clock size={14} className="text-warning-600 mt-0.5 flex-shrink-0" />
-                                            <div className="flex-1">
-                                              <p className="text-xs font-bold text-warning-700">Early Check-in</p>
-                                              <p className="text-xs text-warning-600">
-                                                Arrived at {earlyCheckInInfo.actualTime} ({earlyCheckInInfo.hoursEarly}h before {earlyCheckInInfo.scheduledTime})
+                                  {/* 🌟 ACTUAL CHECK-IN/CHECK-OUT TIMES WITH EARLY/LATE INDICATORS */}
+                                  {(rr.actualCheckIn || rr.actualCheckOut) && (
+                                    <div className="space-y-2 pt-3 border-t border-border">
+                                      {/* Actual Check-in Time */}
+                                      {rr.actualCheckIn && (
+                                        <div className="flex items-start gap-2">
+                                          <LogIn size={14} className="text-success-600 mt-0.5 flex-shrink-0" />
+                                          <div className="flex-1">
+                                            <p className="text-xs font-bold text-text">Checked In</p>
+                                            <div className="flex items-center gap-2">
+                                              <p className="text-xs text-text-muted">
+                                                {new Date(rr.actualCheckIn).toLocaleString('en-US', { 
+                                                  month: 'short', 
+                                                  day: 'numeric',
+                                                  hour: '2-digit', 
+                                                  minute: '2-digit' 
+                                                })}
                                               </p>
+                                              {(() => {
+                                                const actual = new Date(rr.actualCheckIn);
+                                                const standard = new Date(rr.checkInDate);
+                                                standard.setHours(14, 0, 0, 0); // 2 PM
+                                                const diffHours = (standard.getTime() - actual.getTime()) / (1000 * 60 * 60);
+                                                
+                                                if (diffHours > 0.5) {
+                                                  return (
+                                                    <span className="text-[10px] font-bold text-warning-700 bg-warning-50 px-1.5 py-0.5 rounded border border-warning-200">
+                                                      {Math.round(diffHours * 10) / 10}h early
+                                                    </span>
+                                                  );
+                                                } else if (diffHours < -0.5) {
+                                                  return (
+                                                    <span className="text-[10px] font-bold text-danger-700 bg-danger-50 px-1.5 py-0.5 rounded border border-danger-200">
+                                                      {Math.round(Math.abs(diffHours) * 10) / 10}h late
+                                                    </span>
+                                                  );
+                                                }
+                                                return null;
+                                              })()}
                                             </div>
                                           </div>
-                                        )}
-                                        {lateCheckOutInfo && (
-                                          <div className="flex items-start gap-2 p-2.5 bg-danger-50 border border-danger-200 rounded-lg">
-                                            <Clock size={14} className="text-danger-600 mt-0.5 flex-shrink-0" />
-                                            <div className="flex-1">
-                                              <p className="text-xs font-bold text-danger-700">Late Check-out</p>
-                                              <p className="text-xs text-danger-600">
-                                                Left at {lateCheckOutInfo.actualTime} ({lateCheckOutInfo.hoursLate}h after {lateCheckOutInfo.scheduledTime})
+                                        </div>
+                                      )}
+
+                                      {/* Actual Check-out Time */}
+                                      {rr.actualCheckOut && (
+                                        <div className="flex items-start gap-2">
+                                          <LogOut size={14} className="text-primary-600 mt-0.5 flex-shrink-0" />
+                                          <div className="flex-1">
+                                            <p className="text-xs font-bold text-text">Checked Out</p>
+                                            <div className="flex items-center gap-2">
+                                              <p className="text-xs text-text-muted">
+                                                {new Date(rr.actualCheckOut).toLocaleString('en-US', { 
+                                                  month: 'short', 
+                                                  day: 'numeric',
+                                                  hour: '2-digit', 
+                                                  minute: '2-digit' 
+                                                })}
                                               </p>
+                                              {(() => {
+                                                const actual = new Date(rr.actualCheckOut);
+                                                const standard = new Date(rr.checkOutDate);
+                                                standard.setHours(11, 0, 0, 0); // 11 AM
+                                                const diffHours = (actual.getTime() - standard.getTime()) / (1000 * 60 * 60);
+                                                
+                                                if (diffHours > 0.5) {
+                                                  return (
+                                                    <span className="text-[10px] font-bold text-danger-700 bg-danger-50 px-1.5 py-0.5 rounded border border-danger-200">
+                                                      {Math.round(diffHours * 10) / 10}h late
+                                                    </span>
+                                                  );
+                                                } else if (diffHours < -0.5) {
+                                                  return (
+                                                    <span className="text-[10px] font-bold text-success-700 bg-success-50 px-1.5 py-0.5 rounded border border-success-200">
+                                                      {Math.round(Math.abs(diffHours) * 10) / 10}h early
+                                                    </span>
+                                                  );
+                                                }
+                                                return null;
+                                              })()}
                                             </div>
                                           </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })()}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
 
                                   <div className="pt-3 border-t border-border">
                                     <p className="text-xs text-text-muted mb-1">Occupant Name</p>
