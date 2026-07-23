@@ -63,8 +63,6 @@ export default function ReservationsPage() {
   const [createdReservation, setCreatedReservation] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
 
-  // Pending confirmation for any destructive/state-changing action
-  // { kind: 'reservation' | 'room', id, action/status, title, message, danger, confirmLabel }
   const [pendingConfirm, setPendingConfirm] = useState(null);
 
   const page = parseInt(searchParams.get('page') || '1');
@@ -83,8 +81,6 @@ export default function ReservationsPage() {
     setSearchParams(newParams, { replace: true });
   };
 
-  // Debounced search, with a "pending" flag so the UI can show a spinner
-  // between the keystroke and the actual query update.
   const [isSearchPending, setIsSearchPending] = useState(false);
   useEffect(() => {
     if (localSearch === search) return;
@@ -96,8 +92,6 @@ export default function ReservationsPage() {
     return () => clearTimeout(timer);
   }, [localSearch]);
 
-  // Reset row expansion whenever the visible result set changes underneath it,
-  // so we never hold "expanded" state for a reservation that's scrolled out of view.
   useEffect(() => {
     setExpandedId(null);
   }, [page, search, status, fromDate, toDate]);
@@ -122,8 +116,6 @@ export default function ReservationsPage() {
   const startItem = pagination.total > 0 ? (page - 1) * limit + 1 : 0;
   const endItem = Math.min(page * limit, pagination.total);
 
-  // Server already applies `search` — trust it as the source of truth so the
-  // "Total matching" count and the rendered rows never disagree.
   const hasActiveFilters = status !== 'all' || !!fromDate || !!toDate || !!search;
 
   const roomActionMutation = useMutation({
@@ -196,7 +188,6 @@ export default function ReservationsPage() {
     },
   });
 
-  // ── Confirmation flow ────────────────────────────────────────
   const askReservationAction = (id, action, title, message, opts = {}) => {
     setPendingConfirm({ kind: 'reservation', id, action, title, message, ...opts });
   };
@@ -221,7 +212,6 @@ export default function ReservationsPage() {
   const handleFilterChange = (key, value) => updateParams({ [key]: value, page: 1 });
   const clearFilters = () => { updateParams({ search: '', status: '', fromDate: '', toDate: '', page: 1 }); setLocalSearch(''); };
 
-  // Track which specific row/room is mid-action so only that control shows a spinner
   const activeReservationActionId = actionMutation.isPending ? actionMutation.variables?.id : null;
   const activeRoomActionId = roomActionMutation.isPending ? roomActionMutation.variables?.id : null;
 
@@ -396,7 +386,10 @@ export default function ReservationsPage() {
 
                   return (
                     <Fragment key={res.reservationId}>
+                      {/* 🌟 FIXED: All 7 columns are now perfectly aligned with the headers */}
                       <tr className="border-b border-border last:border-0 hover:bg-secondary-50/50 transition-colors">
+                        
+                        {/* 1. Expand Toggle */}
                         <td className="px-2 py-4">
                           {res.reservationRooms?.length > 0 && (
                             <button
@@ -409,20 +402,45 @@ export default function ReservationsPage() {
                             </button>
                           )}
                         </td>
-                        <td className="px-6 py-4"><p className="text-xs font-bold text-text-muted">#{res.reservationId}</p><p className="text-sm font-semibold text-text">{res.guest?.fullName || res.platformGuest?.fullName || 'N/A'}</p></td>
-                        <td className="px-6 py-4 text-sm text-text font-medium">{rooms}</td>
-                        <td className="px-6 py-4 text-sm text-text-muted">{checkIn} <span className="mx-1">→</span> {checkOut}</td>
+
+                        {/* 2. ID / Guest */}
+                        <td className="px-6 py-4">
+                          <p className="text-xs font-bold text-text-muted">#{res.reservationId}</p>
+                          <p className="text-sm font-semibold text-text">
+                            {res.platformGuest?.fullName || res.propertyGuest?.fullName || 'N/A'}
+                          </p>
+                        </td>
+
+                        {/* 3. Room(s) */}
+                        <td className="px-6 py-4 text-sm text-text font-medium">
+                          {rooms}
+                        </td>
+
+                        {/* 4. Dates */}
+                        <td className="px-6 py-4 text-sm text-text-muted">
+                          {checkIn} <span className="mx-1">→</span> {checkOut}
+                        </td>
+
+                        {/* 5. Status */}
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1.5">
-                            <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold ${statusClass}`}>{res.status}</span>
+                            <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold ${statusClass}`}>
+                              {res.status}
+                            </span>
                             {res.status === 'Cancelled' && res.refundStatus === 'Pending' && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-warning-50 text-warning-700 border border-warning-200"><AlertCircle size={12} /> Refund Due: {parseFloat(res.refundDue || 0).toFixed(2)} GHS</span>
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-warning-50 text-warning-700 border border-warning-200">
+                                <AlertCircle size={12} /> Refund Due: {parseFloat(res.refundDue || 0).toFixed(2)} GHS
+                              </span>
                             )}
                             {res.status === 'Cancelled' && res.refundStatus === 'Processed' && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-success-50 text-success-700 border border-success-200"><Check size={12} /> Refunded</span>
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-success-50 text-success-700 border border-success-200">
+                                <Check size={12} /> Refunded
+                              </span>
                             )}
                           </div>
                         </td>
+
+                        {/* 6. Payment */}
                         <td className="px-6 py-4 text-right">
                           <p className="text-sm font-bold text-text">{parseFloat(res.totalAmount || 0).toFixed(2)} GHS</p>
                           {hasBalance ? (
@@ -431,6 +449,8 @@ export default function ReservationsPage() {
                             <span className="inline-flex items-center gap-1 text-xs font-bold text-success-600 bg-success-50 px-2 py-0.5 rounded mt-1"><Check size={10} /> Paid</span>
                           )}
                         </td>
+
+                        {/* 7. Actions */}
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <Link to={`/reservations/${res.reservationId}`} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" aria-label={`View details for reservation ${res.reservationId}`}><Eye size={16} /></Link>
