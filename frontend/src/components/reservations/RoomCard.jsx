@@ -1,14 +1,19 @@
-import { LogIn, LogOut, Loader2, Clock } from 'lucide-react';
+import { useState } from 'react';
+import { LogIn, LogOut, Loader2, Clock, Pencil, Check, X } from 'lucide-react';
 
 export default function RoomCard({ 
   rr, 
   res, 
   isThisRoomBusy, 
+  isUpdatingOccupant,
   onCheckIn, 
   onCheckOut, 
-  onExtend 
+  onExtend,
+  onUpdateOccupant
 }) {
   const roomStatus = rr.status || 'Reserved';
+  const [isEditingOccupant, setIsEditingOccupant] = useState(false);
+  const [occupantInput, setOccupantInput] = useState(rr.occupantName || '');
   
   // Determine which action button to show
   let roomActionBtn = null;
@@ -46,11 +51,21 @@ export default function RoomCard({
     );
   }
 
-  // 🌟 Helper: Compare two dates ignoring time, return difference in days
-  const getDateDiffInDays = (date1, date2) => {
-    const d1 = new Date(date1.getFullYear(), date1.getMonth(), date1.getDate());
-    const d2 = new Date(date2.getFullYear(), date2.getMonth(), date2.getDate());
-    return Math.round((d1.getTime() - d2.getTime()) / (1000 * 60 * 60 * 24));
+  // 🌟 Handle occupant name save
+  const handleSaveOccupant = () => {
+    const trimmed = occupantInput.trim();
+    if (!trimmed) {
+      return;
+    }
+    if (trimmed !== (rr.occupantName || '')) {
+      onUpdateOccupant(rr.reservationRoomId, trimmed);
+    }
+    setIsEditingOccupant(false);
+  };
+
+  const handleCancelEdit = () => {
+    setOccupantInput(rr.occupantName || '');
+    setIsEditingOccupant(false);
   };
 
   return (
@@ -70,70 +85,65 @@ export default function RoomCard({
         </span>
       </div>
 
-      {/* Actual Check-in/Check-out Times with Early/Late Indicators (DATE-ONLY comparison) */}
+      {/* Actual Check-in/Check-out Times with Early/Late Indicators */}
       {(rr.actualCheckIn || rr.actualCheckOut) && (
         <div className="space-y-2 pt-3 border-t border-border">
-          {/* Check-in */}
-          {rr.actualCheckIn && (() => {
-            const actual = new Date(rr.actualCheckIn);
-            const scheduled = new Date(rr.checkInDate);
-            const dayDiff = getDateDiffInDays(actual, scheduled); // positive = late, negative = early
-            
-            return (
-              <div className="flex items-start gap-2">
-                <LogIn size={14} className="text-success-600 mt-0.5 flex-shrink-0" />
-                <div className="flex-1">
-                  <p className="text-xs font-bold text-text">Checked In</p>
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs text-text-muted">
-                      {actual.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </p>
-                    {dayDiff > 0 && (
-                      <span className="text-[10px] font-bold text-danger-700 bg-danger-50 px-1.5 py-0.5 rounded border border-danger-200">
-                        {dayDiff} day{dayDiff !== 1 ? 's' : ''} late
-                      </span>
-                    )}
-                    {dayDiff < 0 && (
-                      <span className="text-[10px] font-bold text-warning-700 bg-warning-50 px-1.5 py-0.5 rounded border border-warning-200">
-                        {Math.abs(dayDiff)} day{Math.abs(dayDiff) !== 1 ? 's' : ''} early
-                      </span>
-                    )}
-                  </div>
+          {rr.actualCheckIn && (
+            <div className="flex items-start gap-2">
+              <LogIn size={14} className="text-success-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-xs font-bold text-text">Checked In</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-text-muted">
+                    {new Date(rr.actualCheckIn).toLocaleString('en-US', { 
+                      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+                    })}
+                  </p>
+                  {(() => {
+                    const actual = new Date(rr.actualCheckIn);
+                    const scheduled = new Date(rr.checkInDate);
+                    const actualDateOnly = new Date(actual.getFullYear(), actual.getMonth(), actual.getDate());
+                    const scheduledDateOnly = new Date(scheduled.getFullYear(), scheduled.getMonth(), scheduled.getDate());
+                    const dayDiff = Math.round((actualDateOnly.getTime() - scheduledDateOnly.getTime()) / (1000 * 60 * 60 * 24));
+                    if (dayDiff > 0) {
+                      return <span className="text-[10px] font-bold text-danger-700 bg-danger-50 px-1.5 py-0.5 rounded border border-danger-200">{dayDiff} day{dayDiff !== 1 ? 's' : ''} late</span>;
+                    } else if (dayDiff < 0) {
+                      return <span className="text-[10px] font-bold text-warning-700 bg-warning-50 px-1.5 py-0.5 rounded border border-warning-200">{Math.abs(dayDiff)} day{Math.abs(dayDiff) !== 1 ? 's' : ''} early</span>;
+                    }
+                    return null;
+                  })()}
                 </div>
               </div>
-            );
-          })()}
-
-          {/* Check-out */}
-          {rr.actualCheckOut && (() => {
-            const actual = new Date(rr.actualCheckOut);
-            const scheduled = new Date(rr.checkOutDate);
-            const dayDiff = getDateDiffInDays(actual, scheduled); // positive = late, negative = early
-            
-            return (
-              <div className="flex items-start gap-2">
-                <LogOut size={14} className="text-primary-600 mt-0.5 flex-shrink-0" />
-                <div className="flex-1">
-                  <p className="text-xs font-bold text-text">Checked Out</p>
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs text-text-muted">
-                      {actual.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </p>
-                    {dayDiff > 0 && (
-                      <span className="text-[10px] font-bold text-danger-700 bg-danger-50 px-1.5 py-0.5 rounded border border-danger-200">
-                        {dayDiff} day{dayDiff !== 1 ? 's' : ''} late
-                      </span>
-                    )}
-                    {dayDiff < 0 && (
-                      <span className="text-[10px] font-bold text-success-700 bg-success-50 px-1.5 py-0.5 rounded border border-success-200">
-                        {Math.abs(dayDiff)} day{Math.abs(dayDiff) !== 1 ? 's' : ''} early
-                      </span>
-                    )}
-                  </div>
+            </div>
+          )}
+          {rr.actualCheckOut && (
+            <div className="flex items-start gap-2">
+              <LogOut size={14} className="text-primary-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-xs font-bold text-text">Checked Out</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-text-muted">
+                    {new Date(rr.actualCheckOut).toLocaleString('en-US', { 
+                      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+                    })}
+                  </p>
+                  {(() => {
+                    const actual = new Date(rr.actualCheckOut);
+                    const scheduled = new Date(rr.checkOutDate);
+                    const actualDateOnly = new Date(actual.getFullYear(), actual.getMonth(), actual.getDate());
+                    const scheduledDateOnly = new Date(scheduled.getFullYear(), scheduled.getMonth(), scheduled.getDate());
+                    const dayDiff = Math.round((actualDateOnly.getTime() - scheduledDateOnly.getTime()) / (1000 * 60 * 60 * 24));
+                    if (dayDiff > 0) {
+                      return <span className="text-[10px] font-bold text-danger-700 bg-danger-50 px-1.5 py-0.5 rounded border border-danger-200">{dayDiff} day{dayDiff !== 1 ? 's' : ''} late</span>;
+                    } else if (dayDiff < 0) {
+                      return <span className="text-[10px] font-bold text-success-700 bg-success-50 px-1.5 py-0.5 rounded border border-success-200">{Math.abs(dayDiff)} day{Math.abs(dayDiff) !== 1 ? 's' : ''} early</span>;
+                    }
+                    return null;
+                  })()}
                 </div>
               </div>
-            );
-          })()}
+            </div>
+          )}
         </div>
       )}
 
@@ -152,10 +162,63 @@ export default function RoomCard({
         </div>
       )}
 
-      {/* Occupant Name */}
+      {/* 🌟 OCCUPANT NAME - Now Editable Inline */}
       <div className="pt-3 border-t border-border">
-        <p className="text-xs text-text-muted mb-1">Occupant Name</p>
-        <p className="text-sm font-semibold text-text">{rr.occupantName || 'Not assigned'}</p>
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-xs text-text-muted">Occupant Name</p>
+          {!isEditingOccupant && (
+            <button
+              onClick={() => {
+                setOccupantInput(rr.occupantName || '');
+                setIsEditingOccupant(true);
+              }}
+              className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary-600 hover:text-primary-700 transition"
+              title="Edit occupant name"
+            >
+              <Pencil size={10} /> Edit
+            </button>
+          )}
+        </div>
+        
+        {isEditingOccupant ? (
+          <div className="flex items-center gap-1.5">
+            <input
+              type="text"
+              value={occupantInput}
+              onChange={(e) => setOccupantInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveOccupant();
+                if (e.key === 'Escape') handleCancelEdit();
+              }}
+              disabled={isUpdatingOccupant}
+              autoFocus
+              className="flex-1 px-2 py-1 text-sm bg-background border border-primary-300 rounded-md text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition disabled:opacity-50"
+              placeholder="Enter occupant name"
+            />
+            <button
+              onClick={handleSaveOccupant}
+              disabled={isUpdatingOccupant || !occupantInput.trim()}
+              className="p-1.5 rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Save"
+            >
+              {isUpdatingOccupant ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+            </button>
+            <button
+              onClick={handleCancelEdit}
+              disabled={isUpdatingOccupant}
+              className="p-1.5 rounded-md bg-secondary-100 text-text hover:bg-secondary-200 transition disabled:opacity-50"
+              title="Cancel"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm font-semibold text-text">
+            {rr.occupantName || (
+              <span className="text-text-muted font-normal italic">Not assigned — click Edit to set</span>
+            )}
+          </p>
+        )}
       </div>
 
       {/* Price and Action Button */}

@@ -320,3 +320,18 @@ export const extendReservationRoom = async (
 
   return updatedRoom;
 };
+
+export const updateOccupantName = async (
+  reservationRoomId: number,
+  occupantName: string,
+  userPropertyId?: number
+) => {
+  const resRoom = await reservationRepository.findReservationRoomById(reservationRoomId);
+  if (!resRoom) throw new Error('Reservation room not found');
+  
+  if (userPropertyId && resRoom.reservation.propertyId !== userPropertyId) {
+    throw new Error('You do not have access to this reservation room');
+  }
+
+  return reservationRepository.updateReservationRoomStatus(reservationRoomId, { occupantName });
+};

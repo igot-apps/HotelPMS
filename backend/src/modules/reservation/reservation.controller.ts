@@ -211,3 +211,33 @@ export const extendReservationRoom = async (req: AuthRequest, res: Response) => 
     });
   }
 };
+
+export const updateOccupantName = async (req: AuthRequest, res: Response) => {
+  try {
+    const reservationRoomIdStr = req.params.reservationRoomId as string;
+    const reservationRoomId = parseInt(reservationRoomIdStr);
+    const { occupantName } = req.body;
+
+    if (isNaN(reservationRoomId)) {
+      return res.status(400).json({ success: false, message: 'Invalid reservation room ID' });
+    }
+
+    if (!occupantName || occupantName.trim() === '') {
+      return res.status(400).json({ success: false, message: 'Occupant name is required' });
+    }
+
+    const updatedRoom = await reservationService.updateOccupantName(
+      reservationRoomId,
+      occupantName.trim(),
+      req.user?.propertyId
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: updatedRoom,
+      message: 'Occupant name updated successfully',
+    });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+};

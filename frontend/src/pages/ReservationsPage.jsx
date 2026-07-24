@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { getReservations, createReservation, cancelReservation, updateReservationRoomStatus, extendReservationRoom } from '../api/reservations';
+import { getReservations, createReservation, cancelReservation, updateReservationRoomStatus, extendReservationRoom, updateOccupantName } from '../api/reservations';
 import { recordPayment } from '../api/payments';
 import { useAuthStore } from '../store/authStore';
 import ReservationModal from '../components/reservations/ReservationModal';
@@ -167,6 +167,19 @@ export default function ReservationsPage() {
       setPendingConfirm(null);
     },
   });
+
+  const updateOccupantMutation = useMutation({
+  mutationFn: ({ id, occupantName }) => updateOccupantName(id, occupantName),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['reservations'] });
+    toast.success('Occupant name updated');
+  },
+  onError: (err) => {
+    toast.error(err.response?.data?.message || 'Failed to update occupant name');
+  },
+});
+
+const updatingOccupantId = updateOccupantMutation.isPending ? updateOccupantMutation.variables?.id : null;
 
   const createMutation = useMutation({
     mutationFn: async (payload) => {
@@ -482,6 +495,7 @@ export default function ReservationsPage() {
                                   rr={rr}
                                   res={res}
                                   isThisRoomBusy={activeRoomActionId === rr.reservationRoomId}
+                                  isUpdatingOccupant={updatingOccupantId === rr.reservationRoomId}
                                   onCheckIn={(room, mainGuestName) => {
                                     askRoomAction(
                                       room.reservationRoomId,
@@ -520,6 +534,9 @@ export default function ReservationsPage() {
                                     } else if (newDate && newDate <= currentCheckOut) {
                                       toast.error('New date must be after current check-out date.');
                                     }
+                                  }}
+                                  onUpdateOccupant={(reservationRoomId, occupantName) => {
+                                    updateOccupantMutation.mutate({ id: reservationRoomId, occupantName });
                                   }}
                                 />
                               ))}

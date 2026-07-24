@@ -45,3 +45,6 @@ export const getReservationsByDateRange = (fromDate, toDate, propertyId) => {
 
    export const extendReservationRoom = (reservationRoomId, newCheckOutDate) => 
   api.patch(`/reservations/rooms/${reservationRoomId}/extend`, { newCheckOutDate });
+
+   export const updateOccupantName = (reservationRoomId, occupantName) => 
+  api.patch(`/reservations/rooms/${reservationRoomId}/occupant`, { occupantName });
