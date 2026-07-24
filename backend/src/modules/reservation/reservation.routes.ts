@@ -20,5 +20,5 @@ router.post('/:id/check-out', reservationController.checkOutGuest);
 
 // 🌟 Individual Reservation Room Status Update
 router.patch('/rooms/:reservationRoomId/status', reservationController.updateReservationRoomStatus);
-
+router.patch('/rooms/:reservationRoomId/extend', reservationController.extendReservationRoom);
 export default router;

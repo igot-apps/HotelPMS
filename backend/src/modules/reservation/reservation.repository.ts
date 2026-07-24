@@ -1,6 +1,9 @@
 import { PrismaClient } from '../../generated/prisma';
 const prisma = new PrismaClient();
 
+// ============================================================
+// CREATE RESERVATION
+// ============================================================
 export const createReservation = async (data: {
   propertyId: number;
   propertyGuestId?: number | null;
@@ -30,10 +33,13 @@ export const createReservation = async (data: {
       amountPaid: data.amountPaid,
       balanceDue: data.balanceDue,
     },
-    include: { reservationRooms: true } // 🌟 Added so service can access it
+    include: { reservationRooms: true }
   });
 };
 
+// ============================================================
+// CREATE RESERVATION ROOM
+// ============================================================
 export const createReservationRoom = async (data: {
   reservationId: string; // 🌟 CHANGED TO STRING (UUID)
   roomId: number;
@@ -56,12 +62,15 @@ export const createReservationRoom = async (data: {
   });
 };
 
+// ============================================================
+// FIND RESERVATIONS (with filters and pagination)
+// ============================================================
 export const findReservations = async (
   filters: { 
     propertyId?: number; 
     propertyGuestId?: number; 
     platformGuestId?: number; 
-    search?: string; // 🌟 ADDED
+    search?: string;
     status?: string; 
     fromDate?: Date; 
     toDate?: Date 
@@ -76,7 +85,6 @@ export const findReservations = async (
   if (filters.platformGuestId !== undefined) where.platformGuestId = filters.platformGuestId;
   if (filters.status) where.status = filters.status;
 
-  // 🌟 ADDED: Search across Guest Names, Phone Numbers, and Room Numbers
   if (filters.search && filters.search.trim() !== '') {
     const searchTerm = filters.search.trim();
     where.OR = [
@@ -114,7 +122,10 @@ export const findReservations = async (
   return { reservations, total, page, limit };
 };
 
-export const findReservationById = async (reservationId: string) => { // 🌟 CHANGED TO STRING
+// ============================================================
+// FIND RESERVATION BY ID
+// ============================================================
+export const findReservationById = async (reservationId: string) => {
   return prisma.reservation.findUnique({
     where: { reservationId },
     include: {
@@ -128,25 +139,40 @@ export const findReservationById = async (reservationId: string) => { // 🌟 CH
   });
 };
 
-export const updateReservation = async (reservationId: string, data: any) => { // 🌟 CHANGED TO STRING
+// ============================================================
+// UPDATE RESERVATION
+// ============================================================
+export const updateReservation = async (reservationId: string, data: any) => {
   return prisma.reservation.update({ where: { reservationId }, data });
 };
 
-export const updateReservationStatus = async (reservationId: string, status: any) => { // 🌟 CHANGED TO STRING
+// ============================================================
+// UPDATE RESERVATION STATUS
+// ============================================================
+export const updateReservationStatus = async (reservationId: string, status: any) => {
   return prisma.reservation.update({ where: { reservationId }, data: { status } });
 };
 
-export const cancelReservation = async (reservationId: string, data: any) => { // 🌟 CHANGED TO STRING
+// ============================================================
+// CANCEL RESERVATION
+// ============================================================
+export const cancelReservation = async (reservationId: string, data: any) => {
   return prisma.reservation.update({ where: { reservationId }, data: { status: 'Cancelled', ...data } });
 };
 
-export const updateReservationFinancials = async (reservationId: string, totalAmount: number, amountPaid: number) => { // 🌟 CHANGED TO STRING
+// ============================================================
+// UPDATE RESERVATION FINANCIALS
+// ============================================================
+export const updateReservationFinancials = async (reservationId: string, totalAmount: number, amountPaid: number) => {
   return prisma.reservation.update({
     where: { reservationId },
     data: { totalAmount, amountPaid, balanceDue: totalAmount - amountPaid },
   });
 };
 
+// ============================================================
+// FIND RESERVATIONS BY DATE RANGE
+// ============================================================
 export const findReservationsByDateRange = async (propertyId: number, fromDate: Date, toDate: Date) => {
   return prisma.reservation.findMany({
     where: {
@@ -162,20 +188,35 @@ export const findReservationsByDateRange = async (propertyId: number, fromDate: 
   });
 };
 
-export const getReservationStats = async (reservationId: string) => { // 🌟 CHANGED TO STRING
+// ============================================================
+// GET RESERVATION STATS
+// ============================================================
+export const getReservationStats = async (reservationId: string) => {
   return prisma.reservation.findUnique({
     where: { reservationId },
-    include: { _count: { select: { payments: true } }, payments: { select: { amount: true } } },
+    include: { 
+      _count: { select: { payments: true } }, 
+      payments: { select: { amount: true } } 
+    },
   });
 };
 
+// ============================================================
+// FIND RESERVATION ROOM BY ID
+// ============================================================
 export const findReservationRoomById = async (reservationRoomId: number) => {
   return prisma.reservationRoom.findUnique({
     where: { reservationRoomId },
-    include: { reservation: { select: { propertyId: true, status: true } }, room: { select: { roomId: true, roomNumber: true } } },
+    include: { 
+      reservation: { select: { propertyId: true, status: true, amountPaid: true } }, 
+      room: { select: { roomId: true, roomNumber: true } } 
+    },
   });
 };
 
+// ============================================================
+// UPDATE RESERVATION ROOM STATUS
+// ============================================================
 export const updateReservationRoomStatus = async (reservationRoomId: number, data: any) => {
   return prisma.reservationRoom.update({
     where: { reservationRoomId },
@@ -184,7 +225,63 @@ export const updateReservationRoomStatus = async (reservationRoomId: number, dat
   });
 };
 
+// ============================================================
+// 🌟 NEW: Check if room is already booked during the extended dates
+// ============================================================
+export const findConflictingReservationRoom = async (
+  roomId: number,
+  excludeReservationRoomId: number,
+  newCheckOutDate: Date,
+  currentCheckOutDate: Date
+) => {
+  return prisma.reservationRoom.findFirst({
+    where: {
+      roomId,
+      reservationRoomId: { not: excludeReservationRoomId },
+      reservation: {
+        status: { in: ['Confirmed', 'CheckedIn'] },
+        OR: [
+          {
+            checkInDate: { lte: newCheckOutDate },
+            checkOutDate: { gte: currentCheckOutDate }
+          }
+        ]
+      }
+    },
+    include: {
+      room: { select: { roomNumber: true } },
+      reservation: {
+        select: {
+          reservationId: true,
+          propertyGuest: { select: { fullName: true } },
+          platformGuest: { select: { fullName: true } }
+        }
+      }
+    }
+  });
+};
+
+// ============================================================
+// 🌟 NEW: Update the check-out date for a specific room
+// ============================================================
+export const updateReservationRoomCheckOutDate = async (
+  reservationRoomId: number,
+  newCheckOutDate: Date
+) => {
+  return prisma.reservationRoom.update({
+    where: { reservationRoomId },
+    data: { checkOutDate: newCheckOutDate },
+    include: {
+      room: { select: { roomNumber: true } },
+      roomType: { select: { typeName: true } },
+      reservation: { select: { amountPaid: true } }
+    }
+  });
+};
+
+// ============================================================
 // 🚨 SAFETY: Check if a room is already occupied by another active reservation
+// ============================================================
 export const findConflictingCheckIn = async (roomId: number, excludeReservationRoomId: number) => {
   return prisma.reservationRoom.findFirst({
     where: {

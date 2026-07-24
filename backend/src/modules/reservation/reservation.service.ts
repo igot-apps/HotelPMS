@@ -255,3 +255,65 @@ export const updateReservationRoomStatus = async (
 
   return reservationRepository.updateReservationRoomStatus(reservationRoomId, updateData);
 };
+
+// 🌟 NEW: Extend a guest's stay (check room availability first)
+export const extendReservationRoom = async (
+  reservationRoomId: number,
+  newCheckOutDate: string,
+  userPropertyId?: number
+) => {
+  const resRoom = await reservationRepository.findReservationRoomById(reservationRoomId);
+  if (!resRoom) throw new Error('Reservation room not found');
+  
+  if (userPropertyId && resRoom.reservation.propertyId !== userPropertyId) {
+    throw new Error('You do not have access to this reservation room');
+  }
+
+  if (resRoom.status !== 'CheckedIn') {
+    throw new Error('Can only extend stay for checked-in rooms');
+  }
+
+  const newCheckOut = new Date(newCheckOutDate);
+  const currentCheckOut = new Date(resRoom.checkOutDate);
+  
+  if (newCheckOut <= currentCheckOut) {
+    throw new Error('New check-out date must be after current check-out date');
+  }
+
+  // 🚨 CHECK: Is this room available for the extended dates? (Uses Repository)
+  const conflictingBooking = await reservationRepository.findConflictingReservationRoom(
+    resRoom.roomId,
+    reservationRoomId,
+    newCheckOut,
+    currentCheckOut
+  );
+
+  if (conflictingBooking) {
+    const otherGuest = conflictingBooking.reservation.platformGuest?.fullName 
+      || conflictingBooking.reservation.propertyGuest?.fullName 
+      || 'another guest';
+    throw new Error(
+      `Room ${conflictingBooking.room.roomNumber} is already booked by ${otherGuest} ` +
+      `from ${new Date(conflictingBooking.checkInDate).toLocaleDateString()} to ${new Date(conflictingBooking.checkOutDate).toLocaleDateString()}. ` +
+      `Cannot extend stay for this room.`
+    );
+  }
+
+  // ✅ Update the reservation room dates (Uses Repository)
+  const updatedRoom = await reservationRepository.updateReservationRoomCheckOutDate(
+    reservationRoomId,
+    newCheckOut
+  );
+
+  // 🌟 Recalculate the reservation's total amount
+  const nights = Math.ceil((newCheckOut.getTime() - new Date(resRoom.checkInDate).getTime()) / (1000 * 60 * 60 * 24));
+  const newTotal = parseFloat(resRoom.agreedPricePerNight.toString()) * nights;
+  
+  await reservationRepository.updateReservationFinancials(
+    resRoom.reservationId,
+    newTotal,
+    Number(updatedRoom.reservation.amountPaid || 0)
+  );
+
+  return updatedRoom;
+};

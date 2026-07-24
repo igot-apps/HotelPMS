@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { getReservations, createReservation, cancelReservation, updateReservationRoomStatus } from '../api/reservations';
+import { getReservations, createReservation, cancelReservation, updateReservationRoomStatus, extendReservationRoom } from '../api/reservations';
 import { recordPayment } from '../api/payments';
 import { useAuthStore } from '../store/authStore';
 import ReservationModal from '../components/reservations/ReservationModal';
@@ -29,7 +29,7 @@ function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', danger 
         <h3 id="confirm-dialog-title" className="text-base font-bold text-text mb-1.5">{title}</h3>
         <p className="text-sm text-text-muted mb-4 whitespace-pre-line">{message}</p>
         
-        {/* Optional Input Field */}
+        {/* Optional Input Field for Occupant Name */}
         {inputLabel && (
           <div className="mb-4">
             <label className="block text-xs font-semibold text-text-muted mb-1.5">{inputLabel}</label>
@@ -146,9 +146,22 @@ export default function ReservationsPage() {
       setPendingConfirm(null);
     },
     onError: (err) => {
-      const errorMessage = err.response?.data?.message || 'Failed to update room status';
       toast.dismiss();
-      toast.error(errorMessage);
+      toast.error(err.response?.data?.message || 'Failed to update room status');
+      setPendingConfirm(null);
+    },
+  });
+
+  // 🌟 NEW: Extend stay mutation
+  const extendStayMutation = useMutation({
+    mutationFn: ({ id, newCheckOutDate }) => extendReservationRoom(id, newCheckOutDate),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reservations'] });
+      toast.success('Stay extended successfully!');
+      setPendingConfirm(null);
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Failed to extend stay');
       setPendingConfirm(null);
     },
   });
@@ -213,7 +226,7 @@ export default function ReservationsPage() {
     setPendingConfirm({ kind: 'room', id: reservationRoomId, status: roomStatus, title, message, ...opts });
   };
 
-  // 🌟 Handle confirm - now passes occupantName for room check-ins
+  // 🌟 Handle confirm - now passes occupantName for check-ins and handles extend
   const handleConfirm = () => {
     if (!pendingConfirm) return;
     if (pendingConfirm.kind === 'reservation') {
@@ -224,9 +237,16 @@ export default function ReservationsPage() {
         status: pendingConfirm.status 
       };
       
-      // If checking in and there's an input value, include it as occupantName
       if (pendingConfirm.status === 'CheckedIn' && pendingConfirm.inputValue) {
         payload.occupantName = pendingConfirm.inputValue;
+      }
+      
+      if (pendingConfirm.status === 'extend' && pendingConfirm.newCheckOutDate) {
+        extendStayMutation.mutate({ 
+          id: pendingConfirm.id, 
+          newCheckOutDate: pendingConfirm.newCheckOutDate 
+        });
+        return;
       }
       
       roomActionMutation.mutate(payload);
@@ -235,7 +255,8 @@ export default function ReservationsPage() {
 
   const isConfirmLoading =
     (pendingConfirm?.kind === 'reservation' && actionMutation.isPending) ||
-    (pendingConfirm?.kind === 'room' && roomActionMutation.isPending);
+    (pendingConfirm?.kind === 'room' && roomActionMutation.isPending) ||
+    (pendingConfirm?.kind === 'room' && extendStayMutation.isPending);
 
   const handleFilterChange = (key, value) => updateParams({ [key]: value, page: 1 });
   const clearFilters = () => { updateParams({ search: '', status: '', fromDate: '', toDate: '', page: 1 }); setLocalSearch(''); };
@@ -480,21 +501,50 @@ export default function ReservationsPage() {
                                   );
                                 } else if (roomStatus === 'CheckedIn') {
                                   roomActionBtn = (
-                                    <button
-                                      disabled={isThisRoomBusy}
-                                      onClick={() => {
-                                        const occupant = rr.occupantName || 'Not assigned';
-                                        askRoomAction(
-                                          rr.reservationRoomId, 
-                                          'CheckedOut',
-                                          'Confirm Check-out',
-                                          `You are about to check out Room ${rr.room?.roomNumber}.\n\nOccupant: ${occupant}\n\nPlease verify this is the correct guest before proceeding.`,
-                                        );
-                                      }}
-                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                      {isThisRoomBusy ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />} Check Out Room
-                                    </button>
+                                    <div className="flex gap-2">
+                                      <button
+                                        disabled={isThisRoomBusy}
+                                        onClick={() => {
+                                          const occupant = rr.occupantName || 'Not assigned';
+                                          askRoomAction(
+                                            rr.reservationRoomId, 
+                                            'CheckedOut',
+                                            'Confirm Check-out',
+                                            `You are about to check out Room ${rr.room?.roomNumber}.\n\nOccupant: ${occupant}\n\nPlease verify this is the correct guest before proceeding.`,
+                                          );
+                                        }}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                      >
+                                        {isThisRoomBusy ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />} Check Out Room
+                                      </button>
+                                      
+                                      {/* 🌟 NEW: Extend Stay Button */}
+                                      <button
+                                        disabled={isThisRoomBusy}
+                                        onClick={() => {
+                                          const currentCheckOut = new Date(rr.checkOutDate).toISOString().split('T')[0];
+                                          const newDate = prompt(
+                                            `Extend stay for Room ${rr.room?.roomNumber}\n\nCurrent check-out: ${currentCheckOut}\n\nEnter new check-out date (YYYY-MM-DD):`,
+                                            currentCheckOut
+                                          );
+                                          
+                                          if (newDate && newDate > currentCheckOut) {
+                                            askRoomAction(
+                                              rr.reservationRoomId,
+                                              'extend',
+                                              'Extend Stay?',
+                                              `Extend Room ${rr.room?.roomNumber} from ${currentCheckOut} to ${newDate}?`,
+                                              { newCheckOutDate: newDate }
+                                            );
+                                          } else if (newDate && newDate <= currentCheckOut) {
+                                            toast.error('New date must be after current check-out date.');
+                                          }
+                                        }}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-warning-600 text-text-inverted hover:bg-warning-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                      >
+                                        <Clock size={14} /> Extend
+                                      </button>
+                                    </div>
                                   );
                                 }
 
@@ -514,7 +564,7 @@ export default function ReservationsPage() {
                                       </span>
                                     </div>
 
-                                    {/* Actual Check-in/Check-out Times with Early/Late Indicators */}
+                                    {/* 🌟 ACTUAL CHECK-IN/CHECK-OUT TIMES WITH EARLY/LATE INDICATORS */}
                                     {(rr.actualCheckIn || rr.actualCheckOut) && (
                                       <div className="space-y-2 pt-3 border-t border-border">
                                         {rr.actualCheckIn && (

@@ -176,3 +176,38 @@ export const updateReservationRoomStatus = async (req: AuthRequest, res: Respons
     return res.status(400).json({ success: false, message: error.message });
   }
 };
+
+export const extendReservationRoom = async (req: AuthRequest, res: Response) => {
+  try {
+    // 🌟 FIX: Explicitly cast the URL param to a string to satisfy TypeScript
+    const reservationRoomIdStr = req.params.reservationRoomId as string;
+    const reservationRoomId = parseInt(reservationRoomIdStr);
+    
+    const { newCheckOutDate } = req.body;
+
+    if (isNaN(reservationRoomId)) {
+      return res.status(400).json({ success: false, message: 'Invalid reservation room ID' });
+    }
+
+    if (!newCheckOutDate) {
+      return res.status(400).json({ success: false, message: 'New check-out date is required' });
+    }
+
+    const updatedRoom = await reservationService.extendReservationRoom(
+      reservationRoomId,
+      newCheckOutDate,
+      req.user?.propertyId // Pass propertyId for security check
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: updatedRoom,
+      message: 'Stay extended successfully',
+    });
+  } catch (error: any) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
