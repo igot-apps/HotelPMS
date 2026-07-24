@@ -262,15 +262,19 @@ export const findConflictingReservationRoom = async (
 };
 
 // ============================================================
-// 🌟 NEW: Update the check-out date for a specific room
+// 🌟 NEW: Update the check-out date for a specific room (and track original)
 // ============================================================
 export const updateReservationRoomCheckOutDate = async (
   reservationRoomId: number,
-  newCheckOutDate: Date
+  newCheckOutDate: Date,
+  originalCheckOutDate?: Date // 🌟 Added to track the first extension
 ) => {
   return prisma.reservationRoom.update({
     where: { reservationRoomId },
-    data: { checkOutDate: newCheckOutDate },
+    data: { 
+      checkOutDate: newCheckOutDate,
+      ...(originalCheckOutDate && { originalCheckOutDate }) // 🌟 Only update if provided
+    },
     include: {
       room: { select: { roomNumber: true } },
       roomType: { select: { typeName: true } },

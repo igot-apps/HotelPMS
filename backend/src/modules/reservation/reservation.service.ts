@@ -256,7 +256,6 @@ export const updateReservationRoomStatus = async (
   return reservationRepository.updateReservationRoomStatus(reservationRoomId, updateData);
 };
 
-// 🌟 NEW: Extend a guest's stay (check room availability first)
 export const extendReservationRoom = async (
   reservationRoomId: number,
   newCheckOutDate: string,
@@ -280,7 +279,10 @@ export const extendReservationRoom = async (
     throw new Error('New check-out date must be after current check-out date');
   }
 
-  // 🚨 CHECK: Is this room available for the extended dates? (Uses Repository)
+  // 🌟 Capture original date if this is the first extension
+  const originalCheckOut = resRoom.originalCheckOutDate || currentCheckOut;
+
+  // 🚨 CHECK: Is this room available for the extended dates?
   const conflictingBooking = await reservationRepository.findConflictingReservationRoom(
     resRoom.roomId,
     reservationRoomId,
@@ -299,13 +301,14 @@ export const extendReservationRoom = async (
     );
   }
 
-  // ✅ Update the reservation room dates (Uses Repository)
+  // ✅ CORRECTED: Use the repository function instead of direct prisma call
   const updatedRoom = await reservationRepository.updateReservationRoomCheckOutDate(
     reservationRoomId,
-    newCheckOut
+    newCheckOut,
+    originalCheckOut // 🌟 Passes the original date to be saved in the DB
   );
 
-  // 🌟 Recalculate the reservation's total amount
+  // 🌟 Recalculate the reservation's total amount based on the NEW check-out date
   const nights = Math.ceil((newCheckOut.getTime() - new Date(resRoom.checkInDate).getTime()) / (1000 * 60 * 60 * 24));
   const newTotal = parseFloat(resRoom.agreedPricePerNight.toString()) * nights;
   

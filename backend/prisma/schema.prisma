@@ -325,6 +325,7 @@ model ReservationRoom {
   ratePlanId          Int?
   checkInDate         DateTime
   checkOutDate        DateTime
+  originalCheckOutDate DateTime?
   agreedPricePerNight Decimal   @db.Decimal(10, 2)
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
