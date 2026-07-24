@@ -1,21 +1,21 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { getReservations, createReservation, checkInReservation, checkOutReservation, cancelReservation, updateReservationRoomStatus } from '../api/reservations';
+import { getReservations, createReservation, cancelReservation, updateReservationRoomStatus } from '../api/reservations';
 import { recordPayment } from '../api/payments';
 import { useAuthStore } from '../store/authStore';
 import ReservationModal from '../components/reservations/ReservationModal';
 import {
   Search, Plus, CalendarDays, AlertCircle, LogIn, LogOut, XCircle,
   ChevronLeft, ChevronRight, Eye, X, Check,
-  ChevronDown, ChevronUp, BedDouble, Loader2 ,Clock
+  ChevronDown, ChevronUp, BedDouble, Loader2, Clock
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 // ─────────────────────────────────────────────────────────────
-// Lightweight confirmation modal — replaces window.confirm()
+// Lightweight confirmation modal with optional input field
 // ─────────────────────────────────────────────────────────────
-function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', danger = false, isLoading = false, onConfirm, onCancel }) {
+function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', danger = false, isLoading = false, onConfirm, onCancel, inputLabel, inputValue, onInputChange }) {
   if (!open) return null;
   return (
     <div
@@ -27,7 +27,22 @@ function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', danger 
     >
       <div className="bg-surface border border-border rounded-xl shadow-lg w-full max-w-sm p-5">
         <h3 id="confirm-dialog-title" className="text-base font-bold text-text mb-1.5">{title}</h3>
-        <p className="text-sm text-text-muted mb-5">{message}</p>
+        <p className="text-sm text-text-muted mb-4 whitespace-pre-line">{message}</p>
+        
+        {/* Optional Input Field */}
+        {inputLabel && (
+          <div className="mb-4">
+            <label className="block text-xs font-semibold text-text-muted mb-1.5">{inputLabel}</label>
+            <input
+              type="text"
+              value={inputValue || ''}
+              onChange={(e) => onInputChange && onInputChange(e.target.value)}
+              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
+              autoFocus
+            />
+          </div>
+        )}
+        
         <div className="flex justify-end gap-2">
           <button
             onClick={onCancel}
@@ -62,8 +77,6 @@ export default function ReservationsPage() {
   const [localSearch, setLocalSearch] = useState(searchParams.get('search') || '');
   const [createdReservation, setCreatedReservation] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
-
-  // Pending confirmation for any destructive/state-changing action
   const [pendingConfirm, setPendingConfirm] = useState(null);
 
   const page = parseInt(searchParams.get('page') || '1');
@@ -116,31 +129,29 @@ export default function ReservationsPage() {
   const totalPages = Math.ceil(pagination.total / limit);
   const startItem = pagination.total > 0 ? (page - 1) * limit + 1 : 0;
   const endItem = Math.min(page * limit, pagination.total);
-
   const hasActiveFilters = status !== 'all' || !!fromDate || !!toDate || !!search;
 
+  // 🌟 Room action mutation - now accepts occupantName
   const roomActionMutation = useMutation({
-  mutationFn: ({ id, status }) => updateReservationRoomStatus(id, { status }),
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ['reservations'] });
-    queryClient.invalidateQueries({ queryKey: ['rooms'] });
-    queryClient.invalidateQueries({ queryKey: ['dashboardActive'] });
-    toast.success('Room status updated');
-    setPendingConfirm(null);
-  },
-  onError: (err) => {
-    // 🌟 FIX: Only show toast if we haven't already shown one for this error
-    const errorMessage = err.response?.data?.message || 'Failed to update room status';
-    
-    // Dismiss any existing toasts first to prevent stacking
-    toast.dismiss();
-    
-    // Show the error once
-    toast.error(errorMessage);
-    
-    setPendingConfirm(null);
-  },
-});
+    mutationFn: ({ id, status, occupantName }) => {
+      const data = { status };
+      if (occupantName !== undefined) data.occupantName = occupantName;
+      return updateReservationRoomStatus(id, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reservations'] });
+      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardActive'] });
+      toast.success('Room status updated');
+      setPendingConfirm(null);
+    },
+    onError: (err) => {
+      const errorMessage = err.response?.data?.message || 'Failed to update room status';
+      toast.dismiss();
+      toast.error(errorMessage);
+      setPendingConfirm(null);
+    },
+  });
 
   const createMutation = useMutation({
     mutationFn: async (payload) => {
@@ -194,7 +205,6 @@ export default function ReservationsPage() {
     },
   });
 
-  // ── Confirmation flow ────────────────────────────────────────
   const askReservationAction = (id, action, title, message, opts = {}) => {
     setPendingConfirm({ kind: 'reservation', id, action, title, message, ...opts });
   };
@@ -203,12 +213,23 @@ export default function ReservationsPage() {
     setPendingConfirm({ kind: 'room', id: reservationRoomId, status: roomStatus, title, message, ...opts });
   };
 
+  // 🌟 Handle confirm - now passes occupantName for room check-ins
   const handleConfirm = () => {
     if (!pendingConfirm) return;
     if (pendingConfirm.kind === 'reservation') {
       actionMutation.mutate({ id: pendingConfirm.id, action: pendingConfirm.action });
     } else {
-      roomActionMutation.mutate({ id: pendingConfirm.id, status: pendingConfirm.status });
+      const payload = { 
+        id: pendingConfirm.id, 
+        status: pendingConfirm.status 
+      };
+      
+      // If checking in and there's an input value, include it as occupantName
+      if (pendingConfirm.status === 'CheckedIn' && pendingConfirm.inputValue) {
+        payload.occupantName = pendingConfirm.inputValue;
+      }
+      
+      roomActionMutation.mutate(payload);
     }
   };
 
@@ -329,7 +350,6 @@ export default function ReservationsPage() {
 
                   const isExpanded = expandedId === res.reservationId;
 
-                  // 🌟 NEW: Actions now just expand the row instead of checking in all
                   let actions = null;
                   if (res.status === 'Confirmed') {
                     actions = (
@@ -376,7 +396,6 @@ export default function ReservationsPage() {
                   return (
                     <Fragment key={res.reservationId}>
                       <tr className="border-b border-border last:border-0 hover:bg-secondary-50/50 transition-colors">
-                        {/* Expand Toggle */}
                         <td className="px-2 py-4">
                           {res.reservationRooms?.length > 0 && (
                             <button
@@ -389,22 +408,14 @@ export default function ReservationsPage() {
                             </button>
                           )}
                         </td>
-
-                        {/* ID / Guest */}
                         <td className="px-6 py-4">
                           <p className="text-xs font-bold text-text-muted">#{res.reservationId}</p>
                           <p className="text-sm font-semibold text-text">
                             {res.platformGuest?.fullName || res.propertyGuest?.fullName || 'N/A'}
                           </p>
                         </td>
-
-                        {/* Room(s) */}
                         <td className="px-6 py-4 text-sm text-text font-medium">{rooms}</td>
-
-                        {/* Dates */}
                         <td className="px-6 py-4 text-sm text-text-muted">{checkIn} <span className="mx-1">→</span> {checkOut}</td>
-
-                        {/* Status */}
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1.5">
                             <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold ${statusClass}`}>{res.status}</span>
@@ -416,8 +427,6 @@ export default function ReservationsPage() {
                             )}
                           </div>
                         </td>
-
-                        {/* Payment */}
                         <td className="px-6 py-4 text-right">
                           <p className="text-sm font-bold text-text">{parseFloat(res.totalAmount || 0).toFixed(2)} GHS</p>
                           {hasBalance ? (
@@ -426,8 +435,6 @@ export default function ReservationsPage() {
                             <span className="inline-flex items-center gap-1 text-xs font-bold text-success-600 bg-success-50 px-2 py-0.5 rounded mt-1"><Check size={10} /> Paid</span>
                           )}
                         </td>
-
-                        {/* Actions */}
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <Link to={`/reservations/${res.reservationId}`} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" aria-label={`View details for reservation ${res.reservationId}`}><Eye size={16} /></Link>
@@ -436,7 +443,6 @@ export default function ReservationsPage() {
                         </td>
                       </tr>
 
-                      {/* 🌟 EXPANDABLE ROW: Individual Room Management */}
                       {isExpanded && (
                         <tr className="bg-secondary-50/30">
                           <td colSpan="7" className="p-6 border-b border-border">
@@ -453,13 +459,19 @@ export default function ReservationsPage() {
                                 let roomActionBtn = null;
 
                                 if (roomStatus === 'Reserved') {
+                                  const mainGuestName = res.platformGuest?.fullName || res.propertyGuest?.fullName || '';
                                   roomActionBtn = (
                                     <button
                                       disabled={isThisRoomBusy}
                                       onClick={() => askRoomAction(
-                                        rr.reservationRoomId, 'CheckedIn',
+                                        rr.reservationRoomId, 
+                                        'CheckedIn',
                                         'Check in room?',
-                                        `Check in Room ${rr.room?.roomNumber}?`,
+                                        `You are about to check in Room ${rr.room?.roomNumber}.\n\nPlease confirm or update the occupant name below.`,
+                                        {
+                                          inputLabel: 'Occupant Name',
+                                          inputValue: rr.occupantName || mainGuestName,
+                                        }
                                       )}
                                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
@@ -487,118 +499,114 @@ export default function ReservationsPage() {
                                 }
 
                                 return (
-                                <div key={rr.reservationRoomId} className="bg-surface p-4 rounded-xl border border-border shadow-sm flex flex-col gap-3">
-                                  <div className="flex justify-between items-start">
-                                    <div>
-                                      <p className="text-lg font-bold text-text">Room {rr.room?.roomNumber}</p>
-                                      <p className="text-xs text-text-muted">{rr.room?.roomType?.typeName}</p>
+                                  <div key={rr.reservationRoomId} className="bg-surface p-4 rounded-xl border border-border shadow-sm flex flex-col gap-3">
+                                    <div className="flex justify-between items-start">
+                                      <div>
+                                        <p className="text-lg font-bold text-text">Room {rr.room?.roomNumber}</p>
+                                        <p className="text-xs text-text-muted">{rr.room?.roomType?.typeName}</p>
+                                      </div>
+                                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                                        roomStatus === 'CheckedIn' ? 'bg-success-50 text-success-700' :
+                                        roomStatus === 'CheckedOut' ? 'bg-secondary-100 text-secondary-700' :
+                                        'bg-primary-50 text-primary-700'
+                                      }`}>
+                                        {roomStatus}
+                                      </span>
                                     </div>
-                                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                                      roomStatus === 'CheckedIn' ? 'bg-success-50 text-success-700' :
-                                      roomStatus === 'CheckedOut' ? 'bg-secondary-100 text-secondary-700' :
-                                      'bg-primary-50 text-primary-700'
-                                    }`}>
-                                      {roomStatus}
-                                    </span>
-                                  </div>
 
-                                  {/* 🌟 ACTUAL CHECK-IN/CHECK-OUT TIMES WITH EARLY/LATE INDICATORS */}
-                                  {(rr.actualCheckIn || rr.actualCheckOut) && (
-                                    <div className="space-y-2 pt-3 border-t border-border">
-                                      {/* Actual Check-in Time */}
-                                      {rr.actualCheckIn && (
-                                        <div className="flex items-start gap-2">
-                                          <LogIn size={14} className="text-success-600 mt-0.5 flex-shrink-0" />
-                                          <div className="flex-1">
-                                            <p className="text-xs font-bold text-text">Checked In</p>
-                                            <div className="flex items-center gap-2">
-                                              <p className="text-xs text-text-muted">
-                                                {new Date(rr.actualCheckIn).toLocaleString('en-US', { 
-                                                  month: 'short', 
-                                                  day: 'numeric',
-                                                  hour: '2-digit', 
-                                                  minute: '2-digit' 
-                                                })}
-                                              </p>
-                                              {(() => {
-                                                const actual = new Date(rr.actualCheckIn);
-                                                const standard = new Date(rr.checkInDate);
-                                                standard.setHours(14, 0, 0, 0); // 2 PM
-                                                const diffHours = (standard.getTime() - actual.getTime()) / (1000 * 60 * 60);
-                                                
-                                                if (diffHours > 0.5) {
-                                                  return (
-                                                    <span className="text-[10px] font-bold text-warning-700 bg-warning-50 px-1.5 py-0.5 rounded border border-warning-200">
-                                                      {Math.round(diffHours * 10) / 10}h early
-                                                    </span>
-                                                  );
-                                                } else if (diffHours < -0.5) {
-                                                  return (
-                                                    <span className="text-[10px] font-bold text-danger-700 bg-danger-50 px-1.5 py-0.5 rounded border border-danger-200">
-                                                      {Math.round(Math.abs(diffHours) * 10) / 10}h late
-                                                    </span>
-                                                  );
-                                                }
-                                                return null;
-                                              })()}
+                                    {/* Actual Check-in/Check-out Times with Early/Late Indicators */}
+                                    {(rr.actualCheckIn || rr.actualCheckOut) && (
+                                      <div className="space-y-2 pt-3 border-t border-border">
+                                        {rr.actualCheckIn && (
+                                          <div className="flex items-start gap-2">
+                                            <LogIn size={14} className="text-success-600 mt-0.5 flex-shrink-0" />
+                                            <div className="flex-1">
+                                              <p className="text-xs font-bold text-text">Checked In</p>
+                                              <div className="flex items-center gap-2">
+                                                <p className="text-xs text-text-muted">
+                                                  {new Date(rr.actualCheckIn).toLocaleString('en-US', { 
+                                                    month: 'short', 
+                                                    day: 'numeric',
+                                                    hour: '2-digit', 
+                                                    minute: '2-digit' 
+                                                  })}
+                                                </p>
+                                                {(() => {
+                                                  const actual = new Date(rr.actualCheckIn);
+                                                  const standard = new Date(rr.checkInDate);
+                                                  standard.setHours(14, 0, 0, 0);
+                                                  const diffHours = (standard.getTime() - actual.getTime()) / (1000 * 60 * 60);
+                                                  if (diffHours > 0.5) {
+                                                    return (
+                                                      <span className="text-[10px] font-bold text-warning-700 bg-warning-50 px-1.5 py-0.5 rounded border border-warning-200">
+                                                        {Math.round(diffHours * 10) / 10}h early
+                                                      </span>
+                                                    );
+                                                  } else if (diffHours < -0.5) {
+                                                    return (
+                                                      <span className="text-[10px] font-bold text-danger-700 bg-danger-50 px-1.5 py-0.5 rounded border border-danger-200">
+                                                        {Math.round(Math.abs(diffHours) * 10) / 10}h late
+                                                      </span>
+                                                    );
+                                                  }
+                                                  return null;
+                                                })()}
+                                              </div>
                                             </div>
                                           </div>
-                                        </div>
-                                      )}
+                                        )}
 
-                                      {/* Actual Check-out Time */}
-                                      {rr.actualCheckOut && (
-                                        <div className="flex items-start gap-2">
-                                          <LogOut size={14} className="text-primary-600 mt-0.5 flex-shrink-0" />
-                                          <div className="flex-1">
-                                            <p className="text-xs font-bold text-text">Checked Out</p>
-                                            <div className="flex items-center gap-2">
-                                              <p className="text-xs text-text-muted">
-                                                {new Date(rr.actualCheckOut).toLocaleString('en-US', { 
-                                                  month: 'short', 
-                                                  day: 'numeric',
-                                                  hour: '2-digit', 
-                                                  minute: '2-digit' 
-                                                })}
-                                              </p>
-                                              {(() => {
-                                                const actual = new Date(rr.actualCheckOut);
-                                                const standard = new Date(rr.checkOutDate);
-                                                standard.setHours(11, 0, 0, 0); // 11 AM
-                                                const diffHours = (actual.getTime() - standard.getTime()) / (1000 * 60 * 60);
-                                                
-                                                if (diffHours > 0.5) {
-                                                  return (
-                                                    <span className="text-[10px] font-bold text-danger-700 bg-danger-50 px-1.5 py-0.5 rounded border border-danger-200">
-                                                      {Math.round(diffHours * 10) / 10}h late
-                                                    </span>
-                                                  );
-                                                } else if (diffHours < -0.5) {
-                                                  return (
-                                                    <span className="text-[10px] font-bold text-success-700 bg-success-50 px-1.5 py-0.5 rounded border border-success-200">
-                                                      {Math.round(Math.abs(diffHours) * 10) / 10}h early
-                                                    </span>
-                                                  );
-                                                }
-                                                return null;
-                                              })()}
+                                        {rr.actualCheckOut && (
+                                          <div className="flex items-start gap-2">
+                                            <LogOut size={14} className="text-primary-600 mt-0.5 flex-shrink-0" />
+                                            <div className="flex-1">
+                                              <p className="text-xs font-bold text-text">Checked Out</p>
+                                              <div className="flex items-center gap-2">
+                                                <p className="text-xs text-text-muted">
+                                                  {new Date(rr.actualCheckOut).toLocaleString('en-US', { 
+                                                    month: 'short', 
+                                                    day: 'numeric',
+                                                    hour: '2-digit', 
+                                                    minute: '2-digit' 
+                                                  })}
+                                                </p>
+                                                {(() => {
+                                                  const actual = new Date(rr.actualCheckOut);
+                                                  const standard = new Date(rr.checkOutDate);
+                                                  standard.setHours(11, 0, 0, 0);
+                                                  const diffHours = (actual.getTime() - standard.getTime()) / (1000 * 60 * 60);
+                                                  if (diffHours > 0.5) {
+                                                    return (
+                                                      <span className="text-[10px] font-bold text-danger-700 bg-danger-50 px-1.5 py-0.5 rounded border border-danger-200">
+                                                        {Math.round(diffHours * 10) / 10}h late
+                                                      </span>
+                                                    );
+                                                  } else if (diffHours < -0.5) {
+                                                    return (
+                                                      <span className="text-[10px] font-bold text-success-700 bg-success-50 px-1.5 py-0.5 rounded border border-success-200">
+                                                        {Math.round(Math.abs(diffHours) * 10) / 10}h early
+                                                      </span>
+                                                    );
+                                                  }
+                                                  return null;
+                                                })()}
+                                              </div>
                                             </div>
                                           </div>
-                                        </div>
-                                      )}
+                                        )}
+                                      </div>
+                                    )}
+
+                                    <div className="pt-3 border-t border-border">
+                                      <p className="text-xs text-text-muted mb-1">Occupant Name</p>
+                                      <p className="text-sm font-semibold text-text">{rr.occupantName || 'Not assigned'}</p>
                                     </div>
-                                  )}
 
-                                  <div className="pt-3 border-t border-border">
-                                    <p className="text-xs text-text-muted mb-1">Occupant Name</p>
-                                    <p className="text-sm font-semibold text-text">{rr.occupantName || 'Not assigned'}</p>
+                                    <div className="pt-3 border-t border-border flex items-center justify-between mt-auto">
+                                      <p className="text-sm font-bold text-primary-600">{parseFloat(rr.agreedPricePerNight).toFixed(2)} GHS</p>
+                                      {roomActionBtn || <span className="text-xs text-text-muted font-semibold">No actions</span>}
+                                    </div>
                                   </div>
-
-                                  <div className="pt-3 border-t border-border flex items-center justify-between mt-auto">
-                                    <p className="text-sm font-bold text-primary-600">{parseFloat(rr.agreedPricePerNight).toFixed(2)} GHS</p>
-                                    {roomActionBtn || <span className="text-xs text-text-muted font-semibold">No actions</span>}
-                                  </div>
-                                </div>
                                 );
                               })}
                             </div>
@@ -651,6 +659,9 @@ export default function ReservationsPage() {
         isLoading={isConfirmLoading}
         onConfirm={handleConfirm}
         onCancel={() => setPendingConfirm(null)}
+        inputLabel={pendingConfirm?.inputLabel}
+        inputValue={pendingConfirm?.inputValue}
+        onInputChange={(value) => setPendingConfirm(prev => prev ? { ...prev, inputValue: value } : null)}
       />
     </div>
   );
