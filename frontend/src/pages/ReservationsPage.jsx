@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+import RoomCard from '../components/reservations/RoomCard';
+
 // ─────────────────────────────────────────────────────────────
 // Lightweight confirmation modal with optional input field
 // ─────────────────────────────────────────────────────────────
@@ -474,205 +476,53 @@ export default function ReservationsPage() {
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              {res.reservationRooms.map((rr) => {
-                                const roomStatus = rr.status || 'Reserved';
-                                const isThisRoomBusy = activeRoomActionId === rr.reservationRoomId;
-                                let roomActionBtn = null;
-
-                                if (roomStatus === 'Reserved') {
-                                  const mainGuestName = res.platformGuest?.fullName || res.propertyGuest?.fullName || '';
-                                  roomActionBtn = (
-                                    <button
-                                      disabled={isThisRoomBusy}
-                                      onClick={() => askRoomAction(
-                                        rr.reservationRoomId, 
-                                        'CheckedIn',
-                                        'Check in room?',
-                                        `You are about to check in Room ${rr.room?.roomNumber}.\n\nPlease confirm or update the occupant name below.`,
-                                        {
-                                          inputLabel: 'Occupant Name',
-                                          inputValue: rr.occupantName || mainGuestName,
-                                        }
-                                      )}
-                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                      {isThisRoomBusy ? <Loader2 size={14} className="animate-spin" /> : <LogIn size={14} />} Check In Room
-                                    </button>
-                                  );
-                                } else if (roomStatus === 'CheckedIn') {
-                                  roomActionBtn = (
-                                    <div className="flex gap-2">
-                                      <button
-                                        disabled={isThisRoomBusy}
-                                        onClick={() => {
-                                          const occupant = rr.occupantName || 'Not assigned';
-                                          askRoomAction(
-                                            rr.reservationRoomId, 
-                                            'CheckedOut',
-                                            'Confirm Check-out',
-                                            `You are about to check out Room ${rr.room?.roomNumber}.\n\nOccupant: ${occupant}\n\nPlease verify this is the correct guest before proceeding.`,
-                                          );
-                                        }}
-                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                      >
-                                        {isThisRoomBusy ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />} Check Out Room
-                                      </button>
-                                      
-                                      {/* 🌟 NEW: Extend Stay Button */}
-                                      <button
-                                        disabled={isThisRoomBusy}
-                                        onClick={() => {
-                                          const currentCheckOut = new Date(rr.checkOutDate).toISOString().split('T')[0];
-                                          const newDate = prompt(
-                                            `Extend stay for Room ${rr.room?.roomNumber}\n\nCurrent check-out: ${currentCheckOut}\n\nEnter new check-out date (YYYY-MM-DD):`,
-                                            currentCheckOut
-                                          );
-                                          
-                                          if (newDate && newDate > currentCheckOut) {
-                                            askRoomAction(
-                                              rr.reservationRoomId,
-                                              'extend',
-                                              'Extend Stay?',
-                                              `Extend Room ${rr.room?.roomNumber} from ${currentCheckOut} to ${newDate}?`,
-                                              { newCheckOutDate: newDate }
-                                            );
-                                          } else if (newDate && newDate <= currentCheckOut) {
-                                            toast.error('New date must be after current check-out date.');
-                                          }
-                                        }}
-                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-warning-600 text-text-inverted hover:bg-warning-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                      >
-                                        <Clock size={14} /> Extend
-                                      </button>
-                                    </div>
-                                  );
-                                }
-
-                                return (
-                                  <div key={rr.reservationRoomId} className="bg-surface p-4 rounded-xl border border-border shadow-sm flex flex-col gap-3">
-                                    <div className="flex justify-between items-start">
-                                      <div>
-                                        <p className="text-lg font-bold text-text">Room {rr.room?.roomNumber}</p>
-                                        <p className="text-xs text-text-muted">{rr.room?.roomType?.typeName}</p>
-                                      </div>
-                                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                                        roomStatus === 'CheckedIn' ? 'bg-success-50 text-success-700' :
-                                        roomStatus === 'CheckedOut' ? 'bg-secondary-100 text-secondary-700' :
-                                        'bg-primary-50 text-primary-700'
-                                      }`}>
-                                        {roomStatus}
-                                      </span>
-                                    </div>
-
-                                    {/* 🌟 ACTUAL CHECK-IN/CHECK-OUT TIMES WITH EARLY/LATE INDICATORS */}
-{(rr.actualCheckIn || rr.actualCheckOut) && (
-  <div className="space-y-2 pt-3 border-t border-border">
-    {rr.actualCheckIn && (
-      <div className="flex items-start gap-2">
-        <LogIn size={14} className="text-success-600 mt-0.5 flex-shrink-0" />
-        <div className="flex-1">
-          <p className="text-xs font-bold text-text">Checked In</p>
-          <div className="flex items-center gap-2">
-            <p className="text-xs text-text-muted">
-              {new Date(rr.actualCheckIn).toLocaleString('en-US', { 
-                month: 'short', 
-                day: 'numeric',
-                hour: '2-digit', 
-                minute: '2-digit' 
-              })}
-            </p>
-            {(() => {
-              const actual = new Date(rr.actualCheckIn);
-              const standard = new Date(rr.checkInDate);
-              standard.setHours(14, 0, 0, 0);
-              const diffHours = (standard.getTime() - actual.getTime()) / (1000 * 60 * 60);
-              if (diffHours > 0.5) {
-                return (
-                  <span className="text-[10px] font-bold text-warning-700 bg-warning-50 px-1.5 py-0.5 rounded border border-warning-200">
-                    {Math.round(diffHours * 10) / 10}h early
-                  </span>
-                );
-              } else if (diffHours < -0.5) {
-                return (
-                  <span className="text-[10px] font-bold text-danger-700 bg-danger-50 px-1.5 py-0.5 rounded border border-danger-200">
-                    {Math.round(Math.abs(diffHours) * 10) / 10}h late
-                  </span>
-                );
-              }
-              return null;
-            })()}
-          </div>
-        </div>
-      </div>
-    )}
-    {rr.actualCheckOut && (
-      <div className="flex items-start gap-2">
-        <LogOut size={14} className="text-primary-600 mt-0.5 flex-shrink-0" />
-        <div className="flex-1">
-          <p className="text-xs font-bold text-text">Checked Out</p>
-          <div className="flex items-center gap-2">
-            <p className="text-xs text-text-muted">
-              {new Date(rr.actualCheckOut).toLocaleString('en-US', { 
-                month: 'short', 
-                day: 'numeric',
-                hour: '2-digit', 
-                minute: '2-digit' 
-              })}
-            </p>
-            {(() => {
-              const actual = new Date(rr.actualCheckOut);
-              const standard = new Date(rr.checkOutDate);
-              standard.setHours(11, 0, 0, 0);
-              const diffHours = (actual.getTime() - standard.getTime()) / (1000 * 60 * 60);
-              if (diffHours > 0.5) {
-                return (
-                  <span className="text-[10px] font-bold text-danger-700 bg-danger-50 px-1.5 py-0.5 rounded border border-danger-200">
-                    {Math.round(diffHours * 10) / 10}h late
-                  </span>
-                );
-              } else if (diffHours < -0.5) {
-                return (
-                  <span className="text-[10px] font-bold text-success-700 bg-success-50 px-1.5 py-0.5 rounded border border-success-200">
-                    {Math.round(Math.abs(diffHours) * 10) / 10}h early
-                  </span>
-                );
-              }
-              return null;
-            })()}
-          </div>
-        </div>
-      </div>
-    )}
-  </div>
-)}
-
-                                    {/* 🌟 NEW: EXTENDED STAY INDICATOR */}
-                                    {rr.originalCheckOutDate && (
-                                      <div className="flex items-start gap-2 p-2.5 bg-primary-50 border border-primary-200 rounded-lg mt-3 mb-3">
-                                        <Clock size={14} className="text-primary-600 mt-0.5 flex-shrink-0" />
-                                        <div className="flex-1">
-                                          <p className="text-xs font-bold text-primary-700">Stay Extended</p>
-                                          <p className="text-xs text-primary-600">
-                                            Original: {new Date(rr.originalCheckOutDate).toLocaleDateString()} 
-                                            <span className="mx-1">→</span> 
-                                            New: {new Date(rr.checkOutDate).toLocaleDateString()}
-                                          </p>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    <div className="pt-3 border-t border-border">
-                                      <p className="text-xs text-text-muted mb-1">Occupant Name</p>
-                                      <p className="text-sm font-semibold text-text">{rr.occupantName || 'Not assigned'}</p>
-                                    </div>
-
-                                    <div className="pt-3 border-t border-border flex items-center justify-between mt-auto">
-                                      <p className="text-sm font-bold text-primary-600">{parseFloat(rr.agreedPricePerNight).toFixed(2)} GHS</p>
-                                      {roomActionBtn || <span className="text-xs text-text-muted font-semibold">No actions</span>}
-                                    </div>
-                                  </div>
-                                );
-                              })}
+                              {res.reservationRooms.map((rr) => (
+                                <RoomCard
+                                  key={rr.reservationRoomId}
+                                  rr={rr}
+                                  res={res}
+                                  isThisRoomBusy={activeRoomActionId === rr.reservationRoomId}
+                                  onCheckIn={(room, mainGuestName) => {
+                                    askRoomAction(
+                                      room.reservationRoomId,
+                                      'CheckedIn',
+                                      'Check in room?',
+                                      `You are about to check in Room ${room.room?.roomNumber}.\n\nPlease confirm or update the occupant name below.`,
+                                      {
+                                        inputLabel: 'Occupant Name',
+                                        inputValue: room.occupantName || mainGuestName,
+                                      }
+                                    );
+                                  }}
+                                  onCheckOut={(room) => {
+                                    const occupant = room.occupantName || 'Not assigned';
+                                    askRoomAction(
+                                      room.reservationRoomId,
+                                      'CheckedOut',
+                                      'Confirm Check-out',
+                                      `You are about to check out Room ${room.room?.roomNumber}.\n\nOccupant: ${occupant}\n\nPlease verify this is the correct guest before proceeding.`,
+                                    );
+                                  }}
+                                  onExtend={(room) => {
+                                    const currentCheckOut = new Date(room.checkOutDate).toISOString().split('T')[0];
+                                    const newDate = prompt(
+                                      `Extend stay for Room ${room.room?.roomNumber}\n\nCurrent check-out: ${currentCheckOut}\n\nEnter new check-out date (YYYY-MM-DD):`,
+                                      currentCheckOut
+                                    );
+                                    if (newDate && newDate > currentCheckOut) {
+                                      askRoomAction(
+                                        room.reservationRoomId,
+                                        'extend',
+                                        'Extend Stay?',
+                                        `Extend Room ${room.room?.roomNumber} from ${currentCheckOut} to ${newDate}?`,
+                                        { newCheckOutDate: newDate }
+                                      );
+                                    } else if (newDate && newDate <= currentCheckOut) {
+                                      toast.error('New date must be after current check-out date.');
+                                    }
+                                  }}
+                                />
+                              ))}
                             </div>
                           </td>
                         </tr>
