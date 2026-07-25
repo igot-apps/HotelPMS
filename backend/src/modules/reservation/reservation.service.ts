@@ -58,12 +58,12 @@ export const createReservation = async (data: any) => {
     notes: data.notes,
     totalAmount,
     amountPaid: 0,
-    balanceDue: totalAmount,
+    // 🌟 REMOVED: balanceDue is now calculated on-demand
   });
 
   for (const roomData of data.rooms) {
     await reservationRepository.createReservationRoom({
-      reservationId: reservation.reservationId, // 🌟 Now accepts string (UUID)
+      reservationId: reservation.reservationId,
       roomId: roomData.roomId,
       roomTypeId: roomData.roomTypeId,
       ratePlanId: roomData.ratePlanId,
@@ -146,32 +146,43 @@ export const cancelReservation = async (reservationId: string) => { // 🌟 CHAN
   });
 };
 
-export const checkInGuest = async (reservationId: string) => { // 🌟 CHANGED TO STRING
+export const checkInGuest = async (reservationId: string) => {
   const reservation = await reservationRepository.findReservationById(reservationId);
   if (!reservation) throw new Error('Reservation not found');
+
   if (reservation.status !== 'Confirmed') {
     throw new Error('Reservation must be confirmed to check in');
   }
-  await reservationRepository.updateReservationStatus(reservationId, 'CheckedIn');
+
+  // 🌟 CHANGED: 'CheckedIn' → 'InHouse' at reservation level
+  await reservationRepository.updateReservationStatus(reservationId, 'InHouse');
+
   for (const rr of reservation.reservationRooms) {
     await updateRoomStatus(rr.roomId, 'Occupied');
   }
+
   if (reservation.propertyGuestId) {
     await updateGuestLastStay(reservation.propertyGuestId);
   }
+
   return reservationRepository.findReservationById(reservationId);
 };
 
-export const checkOutGuest = async (reservationId: string) => { // 🌟 CHANGED TO STRING
+export const checkOutGuest = async (reservationId: string) => {
   const reservation = await reservationRepository.findReservationById(reservationId);
   if (!reservation) throw new Error('Reservation not found');
+
   if (reservation.status !== 'InHouse') {
     throw new Error('Reservation must be checked in to check out');
   }
-  await reservationRepository.updateReservationStatus(reservationId, 'CheckedOut');
+
+  // 🌟 CHANGED: 'CheckedOut' → 'Completed' at reservation level
+  await reservationRepository.updateReservationStatus(reservationId, 'Completed');
+
   for (const rr of reservation.reservationRooms) {
     await updateRoomStatus(rr.roomId, 'Available', 'Dirty');
   }
+
   return reservationRepository.findReservationById(reservationId);
 };
 
@@ -297,34 +308,45 @@ export const extendReservationRoom = async (
   );
 
   if (conflictingBooking) {
-    const otherGuest = conflictingBooking.reservation.platformGuest?.fullName 
-      || conflictingBooking.reservation.propertyGuest?.fullName 
+    const conflictData = conflictingBooking as any;
+    const otherGuest = conflictData.reservation?.platformGuest?.fullName 
+      || conflictData.reservation?.propertyGuest?.fullName 
       || 'another guest';
     throw new Error(
-      `Room ${conflictingBooking.room.roomNumber} is already booked by ${otherGuest} ` +
-      `from ${new Date(conflictingBooking.checkInDate).toLocaleDateString()} to ${new Date(conflictingBooking.checkOutDate).toLocaleDateString()}. ` +
+      `Room ${conflictData.room?.roomNumber} is already booked by ${otherGuest} ` +
+      `from ${new Date(conflictData.checkInDate).toLocaleDateString()} to ${new Date(conflictData.checkOutDate).toLocaleDateString()}. ` +
       `Cannot extend stay for this room.`
     );
   }
 
-  // ✅ CORRECTED: Use the repository function instead of direct prisma call
-  const updatedRoom = await reservationRepository.updateReservationRoomCheckOutDate(
+  // ✅ 1. Update the specific room's check-out date
+  await reservationRepository.updateReservationRoomCheckOutDate(
     reservationRoomId,
     newCheckOut,
-    originalCheckOut // 🌟 Passes the original date to be saved in the DB
+    originalCheckOut
   );
 
-  // 🌟 Recalculate the reservation's total amount based on the NEW check-out date
-  const nights = Math.ceil((newCheckOut.getTime() - new Date(resRoom.checkInDate).getTime()) / (1000 * 60 * 60 * 24));
-  const newTotal = parseFloat(resRoom.agreedPricePerNight.toString()) * nights;
+  // 🌟 2. CRITICAL: Recalculate the ENTIRE reservation's total amount (multi-room safe)
+  const fullReservation = await reservationRepository.findReservationById(resRoom.reservationId);
+  if (!fullReservation) throw new Error('Reservation not found after update');
   
+  let grandTotal = 0;
+  for (const room of fullReservation.reservationRooms) {
+    const roomCheckOut = room.reservationRoomId === reservationRoomId ? newCheckOut : new Date(room.checkOutDate);
+    const roomCheckIn = new Date(room.checkInDate);
+    const roomNights = Math.ceil((roomCheckOut.getTime() - roomCheckIn.getTime()) / (1000 * 60 * 60 * 24));
+    grandTotal += parseFloat(room.agreedPricePerNight.toString()) * roomNights;
+  }
+
+  // 3. Update financials with the correct grand total
   await reservationRepository.updateReservationFinancials(
     resRoom.reservationId,
-    newTotal,
-    Number(updatedRoom.reservation.amountPaid || 0)
+    grandTotal,
+    Number(fullReservation.amountPaid || 0)
   );
 
-  return updatedRoom;
+  // 4. Return the freshly updated room data
+  return reservationRepository.findReservationRoomById(reservationRoomId);
 };
 
 export const updateOccupantName = async (

@@ -15,7 +15,7 @@ export const getOperationalOverview = async (propertyId: number) => {
         gte: today,
         lte: endOfToday
       },
-      // 🌟 CHANGED: 'CheckedIn' is now 'InHouse' at the reservation level
+      // 🌟 CHANGED: 'CheckedIn' → 'InHouse'
       status: { in: ['Confirmed', 'InHouse'] }
     },
     include: {
@@ -38,7 +38,7 @@ export const getOperationalOverview = async (propertyId: number) => {
         gte: today,
         lte: endOfToday
       },
-      // 🌟 CHANGED: 'CheckedIn' is now 'InHouse' at the reservation level
+      // 🌟 CHANGED: 'CheckedIn' → 'InHouse'
       status: { in: ['Confirmed', 'InHouse'] }
     },
     include: {
@@ -76,16 +76,21 @@ export const getOperationalOverview = async (propertyId: number) => {
     }
   });
 
-  // 🌟 HELPER: Reconstruct a virtual 'guest' object so the frontend doesn't need to change
+  // 🌟 HELPER: Calculate balanceDue on-demand + reconstruct virtual guest
   const formatReservations = (reservations: any[]) => {
-    return reservations.map(res => ({
-      ...res,
-      guest: {
-        fullName: res.platformGuest?.fullName || res.propertyGuest?.fullName || 'Unknown Guest',
-        phone: res.platformGuest?.phone || res.propertyGuest?.phone || ''
-      },
-      balanceDue: Number(res.balanceDue || 0)
-    }));
+    return reservations.map(res => {
+      const totalAmount = Number(res.totalAmount || 0);
+      const amountPaid = Number(res.amountPaid || 0);
+      return {
+        ...res,
+        guest: {
+          fullName: res.platformGuest?.fullName || res.propertyGuest?.fullName || 'Unknown Guest',
+          phone: res.platformGuest?.phone || res.propertyGuest?.phone || ''
+        },
+        // 🌟 CALCULATED ON-DEMAND
+        balanceDue: Math.max(0, totalAmount - amountPaid)
+      };
+    });
   };
 
   return {

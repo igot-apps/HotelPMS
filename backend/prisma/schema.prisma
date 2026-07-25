@@ -296,7 +296,6 @@ model Reservation {
   notes             String?   @db.Text
   totalAmount       Decimal?  @db.Decimal(10, 2)
   amountPaid        Decimal?  @db.Decimal(10, 2)
-  balanceDue        Decimal?  @db.Decimal(10, 2)
   refundDue         Decimal   @default(0) @db.Decimal(10, 2)
   refundStatus      String    @default("None") @db.VarChar(20)
   cancellationDate  DateTime?

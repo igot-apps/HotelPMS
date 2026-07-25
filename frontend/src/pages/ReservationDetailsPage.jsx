@@ -4,9 +4,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getReservationById, getReservationStats, updateReservation } from '../api/reservations';
 import { recordPayment } from '../api/payments';
 import { useAuthStore } from '../store/authStore';
-import { 
-  ArrowLeft, User, BedDouble, CreditCard, FileText, Edit2, X, Loader2, 
-  CalendarDays, DollarSign, Clock, CheckCircle2, AlertCircle, Plus, Printer,ChevronDown
+import {
+  ArrowLeft, User, BedDouble, CreditCard, FileText, Edit2, X, Loader2,
+  CalendarDays, DollarSign, Clock, CheckCircle2, AlertCircle, Plus, Printer, ChevronDown
 } from 'lucide-react';
 import ReceiptModal from '../components/reservations/ReceiptModal';
 import ThermalReceiptModal from '../components/reservations/ThermalReceiptModal';
@@ -20,9 +20,9 @@ export default function ReservationDetailsPage() {
   // States for Modals
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [isReceiptOpen, setIsReceiptOpen] = useState(false); // Receipt Modal State
+  const [isReceiptOpen, setIsReceiptOpen] = useState(false);
   const [isThermalReceiptOpen, setIsThermalReceiptOpen] = useState(false);
-  
+
   // States for Form Data
   const [editData, setEditData] = useState({ notes: '', source: '' });
   const [paymentData, setPaymentData] = useState({
@@ -53,7 +53,8 @@ export default function ReservationDetailsPage() {
   });
 
   const paymentMutation = useMutation({
-    mutationFn: (data) => recordPayment({ ...data, reservationId: parseInt(id) }),
+    // 🌟 FIXED: reservationId is now a UUID string, not parseInt
+    mutationFn: (data) => recordPayment({ ...data, reservationId: id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reservation', id] });
       queryClient.invalidateQueries({ queryKey: ['reservationStats', id] });
@@ -66,7 +67,6 @@ export default function ReservationDetailsPage() {
   const openEditModal = () => {
     setEditData({ notes: resData?.notes || '', source: resData?.source || '' });
     setIsEditModalOpen(true);
-    console.log(resData)
   };
 
   const handleSaveEdit = (e) => {
@@ -91,10 +91,11 @@ export default function ReservationDetailsPage() {
   if (isLoadingRes) return <div className="p-8 text-center text-text-muted">Loading reservation details...</div>;
   if (!resData) return <div className="p-8 text-center text-danger-600">Reservation not found.</div>;
 
+  // ✅ CALCULATED ON-DEMAND from the single source of truth
   const fmt = (val) => parseFloat(val || 0).toFixed(2);
-  const balanceDue = parseFloat(statsData?.balanceDue || 0);
-
-
+  const totalAmount = parseFloat(resData?.totalAmount || 0);
+  const amountPaid = parseFloat(resData?.amountPaid || 0);
+  const balanceDue = Math.max(0, totalAmount - amountPaid); // 🌟 NO MORE stale DB column
 
   return (
     <div className="space-y-6">
@@ -107,35 +108,40 @@ export default function ReservationDetailsPage() {
           <div>
             <h1 className="text-2xl font-bold text-text">Reservation #{resData.reservationId}</h1>
             <p className="text-sm text-text-muted flex items-center gap-2 mt-1">
-              <CalendarDays size={14} /> 
+              <CalendarDays size={14} />
               {new Date(resData.checkInDate).toLocaleDateString()} → {new Date(resData.checkOutDate).toLocaleDateString()}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {/* 🌟 UPDATED: Professional Status Badge */}
           <span className={`px-3 py-1.5 rounded-lg text-sm font-bold ${
-            resData.status === 'CheckedIn' ? 'bg-success-50 text-success-700' :
+            resData.status === 'InHouse' ? 'bg-success-50 text-success-700' :
+            resData.status === 'Completed' ? 'bg-secondary-100 text-secondary-700' :
             resData.status === 'Confirmed' ? 'bg-primary-50 text-primary-700' :
-            resData.status === 'Cancelled' ? 'bg-danger-50 text-danger-700' : 'bg-secondary-100 text-secondary-700'
+            resData.status === 'Cancelled' ? 'bg-danger-50 text-danger-700' :
+            resData.status === 'Expired' ? 'bg-warning-50 text-warning-700' :
+            resData.status === 'NoShow' ? 'bg-orange-50 text-orange-700' :
+            'bg-secondary-100 text-secondary-700'
           }`}>
             {resData.status}
           </span>
-                    {/* Print Options Dropdown */}
+
+          {/* Print Options Dropdown */}
           <div className="relative group">
             <button className="inline-flex items-center gap-2 px-4 py-2 bg-surface border border-border text-text text-sm font-semibold rounded-lg hover:bg-secondary-50 transition">
               <Printer size={16} /> Print <ChevronDown size={14} />
             </button>
-            {/* Dropdown Menu */}
             <div className="absolute right-0 mt-2 w-56 bg-surface border border-border rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-              <button 
-                onClick={() => setIsReceiptOpen(true)} 
+              <button
+                onClick={() => setIsReceiptOpen(true)}
                 className="w-full text-left px-4 py-3 text-sm text-text hover:bg-secondary-50 transition flex flex-col border-b border-border"
               >
                 <span className="font-semibold">A4 Guest Folio</span>
                 <span className="text-xs text-text-muted">Detailed invoice for standard printers</span>
               </button>
-              <button 
-                onClick={() => setIsThermalReceiptOpen(true)} 
+              <button
+                onClick={() => setIsThermalReceiptOpen(true)}
                 className="w-full text-left px-4 py-3 text-sm text-text hover:bg-secondary-50 transition flex flex-col"
               >
                 <span className="font-semibold">80mm Thermal Receipt</span>
@@ -143,6 +149,7 @@ export default function ReservationDetailsPage() {
               </button>
             </div>
           </div>
+
           <button onClick={openEditModal} className="inline-flex items-center gap-2 px-4 py-2 bg-surface border border-border text-text text-sm font-semibold rounded-lg hover:bg-secondary-50 transition">
             <Edit2 size={16} /> Edit Details
           </button>
@@ -151,50 +158,43 @@ export default function ReservationDetailsPage() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard icon={DollarSign} label="Total Amount" value={`${fmt(statsData?.totalAmount)} GHS`} color="primary" />
-        <StatCard icon={CreditCard} label="Total Paid" value={`${fmt(statsData?.totalPaid)} GHS`} color="success" />
-        <StatCard icon={AlertCircle} label="Balance Due" value={`${fmt(statsData?.balanceDue)} GHS`} color={balanceDue > 0 ? "danger" : "success"} />
+        <StatCard icon={DollarSign} label="Total Amount" value={`${fmt(totalAmount)} GHS`} color="primary" />
+        <StatCard icon={CreditCard} label="Total Paid" value={`${fmt(amountPaid)} GHS`} color="success" />
+        <StatCard icon={AlertCircle} label="Balance Due" value={`${fmt(balanceDue)} GHS`} color={balanceDue > 0 ? "danger" : "success"} />
         <StatCard icon={Clock} label="Total Nights" value={`${statsData?.totalNights || 0} Nights`} color="secondary" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-     {/* Guest Info */}
-     <div className="bg-surface p-6 rounded-xl border border-border shadow-sm">
-       <h3 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
-         <User size={18} /> Guest Information
-       </h3>
-       <div className="space-y-3">
-         
-         {/* 🌟 FULL NAME: Check platformGuest (online), then propertyGuest (walk-in), then legacy guest */}
-         <div>
-           <p className="text-xs text-text-muted uppercase font-semibold">Full Name</p>
-           <Link to={`/guests`} className="text-sm font-bold text-primary-600 hover:underline">
-             {resData.platformGuest?.fullName || resData.propertyGuest?.fullName || resData.guest?.fullName || 'N/A'}
-           </Link>
-         </div>
-
-         {/* 🌟 PHONE */}
-         <div>
-           <p className="text-xs text-text-muted uppercase font-semibold">Phone</p>
-           <p className="text-sm text-text">
-             {resData.platformGuest?.phone || resData.propertyGuest?.phone || resData.guest?.phone || 'N/A'}
-           </p>
-         </div>
-
-         {/* 🌟 EMAIL */}
-         <div>
-           <p className="text-xs text-text-muted uppercase font-semibold">Email</p>
-           <p className="text-sm text-text">
-             {resData.platformGuest?.email || resData.propertyGuest?.email || resData.guest?.email || 'N/A'}
-           </p>
-         </div>
-
-         <div>
-           <p className="text-xs text-text-muted uppercase font-semibold">Booking Source</p>
-           <p className="text-sm text-text font-medium">{resData.source}</p>
-         </div>
-       </div>
-     </div>
+        {/* Guest Info */}
+        <div className="bg-surface p-6 rounded-xl border border-border shadow-sm">
+          <h3 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
+            <User size={18} /> Guest Information
+          </h3>
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs text-text-muted uppercase font-semibold">Full Name</p>
+              <Link to={`/guests`} className="text-sm font-bold text-primary-600 hover:underline">
+                {resData.platformGuest?.fullName || resData.propertyGuest?.fullName || 'N/A'}
+              </Link>
+            </div>
+            <div>
+              <p className="text-xs text-text-muted uppercase font-semibold">Phone</p>
+              <p className="text-sm text-text">
+                {resData.platformGuest?.phone || resData.propertyGuest?.phone || 'N/A'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-text-muted uppercase font-semibold">Email</p>
+              <p className="text-sm text-text">
+                {resData.platformGuest?.email || resData.propertyGuest?.email || 'N/A'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-text-muted uppercase font-semibold">Booking Source</p>
+              <p className="text-sm text-text font-medium">{resData.source}</p>
+            </div>
+          </div>
+        </div>
 
         {/* Room Assignments */}
         <div className="lg:col-span-2 bg-surface p-6 rounded-xl border border-border shadow-sm">
@@ -220,16 +220,15 @@ export default function ReservationDetailsPage() {
       <div className="bg-surface p-6 rounded-xl border border-border shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-text flex items-center gap-2"><CreditCard size={18} /> Payment History</h3>
-          
-          <button 
-            onClick={() => setIsPaymentModalOpen(true)} 
-            disabled={balanceDue <= 0 && resData.status !== 'CheckedIn'}
+          <button
+            onClick={() => setIsPaymentModalOpen(true)}
+            // 🌟 FIXED: 'CheckedIn' → 'InHouse'
+            disabled={balanceDue <= 0 && resData.status !== 'InHouse'}
             className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus size={16} /> Record Payment
           </button>
         </div>
-
         {resData.payments?.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
@@ -275,7 +274,6 @@ export default function ReservationDetailsPage() {
               </div>
               <button onClick={() => setIsPaymentModalOpen(false)} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted"><X size={20} /></button>
             </div>
-            
             <form onSubmit={handleRecordPayment} className="p-6 space-y-4">
               {paymentMutation.isError && (
                 <div className="p-3 bg-danger-50 border border-danger-100 text-danger-600 text-sm rounded-lg flex items-start gap-2">
@@ -283,7 +281,6 @@ export default function ReservationDetailsPage() {
                   <span>{paymentMutation.error?.response?.data?.message || 'Failed to record payment'}</span>
                 </div>
               )}
-
               <div>
                 <label className="block text-sm font-semibold text-text mb-1.5">Amount (GHS) *</label>
                 <input type="number" step="0.01" name="amount" value={paymentData.amount} onChange={handlePaymentChange} required placeholder={fmt(balanceDue)} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
@@ -305,7 +302,6 @@ export default function ReservationDetailsPage() {
                 <label className="block text-sm font-semibold text-text mb-1.5">Notes</label>
                 <input type="text" name="notes" value={paymentData.notes} onChange={handlePaymentChange} placeholder="e.g., Partial payment (Optional)" className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
               </div>
-
               <div className="flex justify-end gap-3 pt-4 border-t border-border">
                 <button type="button" onClick={() => setIsPaymentModalOpen(false)} className="px-5 py-2.5 text-sm font-semibold text-text bg-surface border border-border rounded-lg hover:bg-secondary-50">Cancel</button>
                 <button type="submit" disabled={paymentMutation.isPending} className="px-5 py-2.5 text-sm font-semibold text-text-inverted bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2">
@@ -353,40 +349,48 @@ export default function ReservationDetailsPage() {
       )}
 
       {/* ========================================== */}
-      {/* 👇 3. RECEIPT MODAL (CORRECTLY PLACED) 👇  */}
+      {/* 3. RECEIPT MODALS                          */}
       {/* ========================================== */}
-            {/* A4 Guest Folio Modal */}
-      <ReceiptModal 
-        isOpen={isReceiptOpen} 
-        onClose={() => setIsReceiptOpen(false)} 
-        reservation={resData} 
-        stats={statsData} 
+      <ReceiptModal
+        isOpen={isReceiptOpen}
+        onClose={() => setIsReceiptOpen(false)}
+        reservation={resData}
+        stats={{
+          totalAmount,
+          totalPaid: amountPaid,
+          balanceDue,
+          totalNights: statsData?.totalNights || 0
+        }}
       />
-
-      {/* 👇 NEW: 80mm Thermal Receipt Modal 👇 */}
-      <ThermalReceiptModal 
-        isOpen={isThermalReceiptOpen} 
-        onClose={() => setIsThermalReceiptOpen(false)} 
-        reservation={resData} 
-        stats={statsData} 
+      <ThermalReceiptModal
+        isOpen={isThermalReceiptOpen}
+        onClose={() => setIsThermalReceiptOpen(false)}
+        reservation={resData}
+        stats={{
+          totalAmount,
+          totalPaid: amountPaid,
+          balanceDue,
+          totalNights: statsData?.totalNights || 0
+        }}
       />
-
     </div>
   );
 }
 
 // ==========================================
-// Helper Component (No changes here)
+// Helper Component
 // ==========================================
 function StatCard({ icon: Icon, label, value, color }) {
   const colorMap = {
-    primary: 'bg-primary-50 text-primary-600', success: 'bg-success-50 text-success-600',
-    danger: 'bg-danger-50 text-danger-600', secondary: 'bg-secondary-100 text-secondary-600',
+    primary: 'bg-primary-50 text-primary-600',
+    success: 'bg-success-50 text-success-600',
+    danger: 'bg-danger-50 text-danger-600',
+    secondary: 'bg-secondary-100 text-secondary-600',
   };
   return (
     <div className="bg-surface p-5 rounded-xl border border-border shadow-sm">
       <div className="flex items-center gap-3 mb-3">
-        <div className={`p-2 rounded-lg ${colorMap[color]}`}><Icon size={18} /></div>
+        <div className={`p-2 rounded-lg ${colorMap[color]}`}> <Icon size={18} /> </div>
         <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">{label}</p>
       </div>
       <h3 className="text-2xl font-bold text-text">{value}</h3>

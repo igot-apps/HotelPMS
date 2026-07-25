@@ -26,7 +26,6 @@ export const recordPayment = async (data: any) => {
     reservationId: data.reservationId, // 🌟 Already a string
     amount: data.amount,
     paymentMethod: data.paymentMethod,
-    paymentDate: data.paymentDate ? new Date(data.paymentDate) : undefined,
     gatewayReference: data.gatewayReference,
     receivedBy: data.receivedBy,
     status: data.status || 'Completed',

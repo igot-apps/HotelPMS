@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { 
-  getReservations, 
-  createReservation, 
-  cancelReservation, 
-  updateReservationRoomStatus, 
-  extendReservationRoom, 
+import {
+  getReservations,
+  createReservation,
+  cancelReservation,
+  updateReservationRoomStatus,
+  extendReservationRoom,
   updateOccupantName,
   markAsNoShow // 🌟 NEW: Import for No Show action
 } from '../api/reservations';
@@ -210,9 +210,9 @@ export default function ReservationsPage() {
       if (payload.initialPayment > 0.01) {
         const paymentPayload = {
           reservationId: newReservation.reservationId,
-          amount: payload.initialPayment,
+          amount: parseFloat(payload.initialPayment), // ✅ Ensure it's a number for Prisma Decimal
           paymentMethod: payload.paymentMethod,
-          propertyId: payload.propertyId,
+          // propertyId removed
           gatewayReference: payload.gatewayReference || null,
           notes: 'Initial payment for reservation'
         };
@@ -331,14 +331,18 @@ export default function ReservationsPage() {
               <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted animate-spin" size={16} aria-label="Searching" />
             )}
           </div>
-          <select value={status} onChange={(e) => handleFilterChange('status', e.target.value)} className="px-3 py-2 bg-background border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20">
+          <select 
+            value={status} 
+            onChange={(e) => handleFilterChange('status', e.target.value)} 
+            className="px-3 py-2 bg-background border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+          >
             <option value="all">All Statuses</option>
             <option value="Confirmed">Confirmed</option>
-            <option value="InHouse">In-House</option> {/* 🌟 NEW */}
-            <option value="Completed">Completed</option> {/* 🌟 NEW */}
+            <option value="InHouse">In-House</option>
+            <option value="Completed">Completed</option>
             <option value="Cancelled">Cancelled</option>
-            <option value="Expired">Expired</option> {/* 🌟 NEW */}
-            <option value="NoShow">No Show</option> {/* 🌟 NEW */}
+            <option value="Expired">Expired</option>
+            <option value="NoShow">No Show</option>
           </select>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-border">
@@ -478,7 +482,10 @@ export default function ReservationsPage() {
                     );
                   }
 
-                  const balanceDue = parseFloat(res.balanceDue || 0);
+                  // ✅ NEW: Calculated on-demand from the single source of truth
+                  const totalAmount = parseFloat(res.totalAmount || 0);
+                  const amountPaid = parseFloat(res.amountPaid || 0);
+                  const balanceDue = Math.max(0, totalAmount - amountPaid);
                   const hasBalance = balanceDue > 0.01;
 
                   return (
@@ -612,7 +619,10 @@ export default function ReservationsPage() {
               {isFetching && !isLoading && <Loader2 className="inline-block ml-2 animate-spin align-[-2px]" size={13} aria-label="Refreshing" />}
             </p>
             <select value={limit} onChange={(e) => updateParams({ limit: e.target.value, page: 1 })} className="text-sm border border-border rounded-lg px-2 py-1 bg-surface text-text outline-none focus:ring-2 focus:ring-primary-500/20">
-              <option value="10">10 / page</option><option value="25">25 / page</option><option value="50">50 / page</option><option value="100">100 / page</option>
+              <option value="10">10 / page</option>
+              <option value="25">25 / page</option>
+              <option value="50">50 / page</option>
+              <option value="100">100 / page</option>
             </select>
           </div>
           <div className="flex items-center gap-1">

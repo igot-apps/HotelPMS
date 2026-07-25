@@ -73,14 +73,18 @@ export const findRoomTypeById = async (roomTypeId: number) => {
       rooms: {
         include: {
           reservationRooms: {
-            where: { reservation: { status: { in: ['Confirmed', 'InHouse'] } } }, // 🌟 CHANGED to InHouse
+            where: { 
+              reservation: { 
+                // 🌟 CHANGED: 'CheckedIn' → 'InHouse'
+                status: { in: ['Confirmed', 'InHouse'] } 
+              } 
+            },
           },
         },
       },
       ratePlans: true,
       _count: { select: { rooms: true, ratePlans: true } },
-      // 🌟 ADDED: Include amenities when fetching a single room type (for editing)
-      amenities: { include: { amenity: true } }, 
+      amenities: { include: { amenity: true } },
     },
   });
 };

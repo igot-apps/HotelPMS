@@ -26,25 +26,22 @@ const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): 
 // ============================================================
 router.get('/discover', async (req: any, res: Response) => {
   try {
-    // 🌟 1. Extract pagination and date params
     const { search, userLat, userLng, checkIn, checkOut, page = '1', limit = '9' } = req.query;
-    
     const pageNum = Math.max(1, parseInt(page as string, 10));
     const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10)));
     const skip = (pageNum - 1) * limitNum;
 
-    // 🌟 2. Build the dynamic WHERE clause
     const where: any = { 
       isOnlineBookingEnabled: true,
       rooms: {
         some: {
-          operationalStatus: 'Available', // Room must not be in maintenance
-          // 🌟 IF dates are provided, ensure the room has NO overlapping reservations
+          operationalStatus: 'Available',
           ...(checkIn && checkOut ? {
             reservationRooms: {
               none: {
                 reservation: {
-                  status: { in: ['Confirmed', 'InHouse'] }, // Ignore Cancelled/Pending
+                  // 🌟 CHANGED: 'CheckedIn' → 'InHouse'
+                  status: { in: ['Confirmed', 'InHouse'] },
                   OR: [
                     { 
                       checkInDate: { lte: new Date(checkOut as string) }, 
@@ -59,7 +56,6 @@ router.get('/discover', async (req: any, res: Response) => {
       }
     };
 
-    // Search filter (Name, City, Country)
     if (search && String(search).trim() !== '') {
       const searchTerm = String(search).trim();
       where.OR = [
@@ -69,10 +65,8 @@ router.get('/discover', async (req: any, res: Response) => {
       ];
     }
 
-    // 🌟 3. Get total count for pagination (respects the availability filter)
     const total = await prisma.property.count({ where });
 
-    // 🌟 4. Get paginated properties
     const properties = await prisma.property.findMany({
       where,
       skip,
@@ -97,7 +91,6 @@ router.get('/discover', async (req: any, res: Response) => {
       }
     });
 
-    // Format and calculate distance
     let formatted = properties.map(p => {
       let distanceText = 'Distance unknown';
       let distanceKm = 99999;
@@ -128,12 +121,10 @@ router.get('/discover', async (req: any, res: Response) => {
       };
     });
 
-    // Sort by distance if GPS provided
     if (userLat && userLng) {
       formatted.sort((a, b) => a.distanceKm - b.distanceKm);
     }
 
-    // 🌟 5. Return paginated response
     return res.json({ 
       success: true, 
       data: { 
@@ -258,7 +249,7 @@ router.get('/:propertyCode/room-types', async (req: any, res: Response) => {
     const property = await checkOnlineBookingEnabled(propertyCode);
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
-    
+
     const roomTypes = await prisma.roomType.findMany({
       where: { propertyId: property.propertyId, isActive: true },
       orderBy: { basePrice: 'asc' },
@@ -282,6 +273,7 @@ router.get('/:propertyCode/room-types', async (req: any, res: Response) => {
               roomTypeId: rt.roomTypeId,
               reservation: {
                 propertyId: property.propertyId,
+                // 🌟 CHANGED: 'CheckedIn' → 'InHouse'
                 status: { in: ['Confirmed', 'InHouse'] },
                 OR: [{ checkInDate: { lte: checkOutDate }, checkOutDate: { gte: checkInDate } }]
               }
@@ -297,7 +289,7 @@ router.get('/:propertyCode/room-types', async (req: any, res: Response) => {
     const total = availableRoomTypes.length;
     const totalPages = Math.ceil(total / limitNum);
     const paginatedData = availableRoomTypes.slice((pageNum - 1) * limitNum, pageNum * limitNum);
-    
+
     return res.json({ 
       success: true, 
       data: paginatedData,
@@ -319,11 +311,11 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
     const { propertyCode } = req.params;
     const { checkInDate, checkOutDate, roomTypeId, guestFullName, guestPhone, guestEmail, platformGuestId, agreedPricePerNight, notes } = req.body;
     const property = await checkOnlineBookingEnabled(propertyCode);
-    
+
     const cIn = new Date(checkInDate);
     const cOut = new Date(checkOutDate);
     if (cIn >= cOut) throw new Error('Check-out date must be after check-in date.');
-    
+
     const nights = Math.ceil((cOut.getTime() - cIn.getTime()) / (1000 * 60 * 60 * 24));
     const baseTotal = parseFloat(agreedPricePerNight) * nights;
     const taxAmount = baseTotal * (parseFloat(property.taxPercentage as any) / 100);
@@ -337,6 +329,7 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
         reservationRooms: {
           none: {
             reservation: {
+              // 🌟 CHANGED: 'CheckedIn' → 'InHouse'
               status: { in: ['Confirmed', 'InHouse'] },
               OR: [{ checkInDate: { lte: cOut }, checkOutDate: { gte: cIn } }]
             }
@@ -369,23 +362,23 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
       throw new Error('Guest information is required for online bookings.');
     }
 
-     const reservation = await prisma.reservation.create({
-   data: {
-     propertyId: property.propertyId,
-     platformGuestId: finalPlatformGuestId,
-     source: 'Website',
-     checkInDate: cIn,
-     checkOutDate: cOut,
-     status: 'Confirmed',
-     notes: notes || '',
-     totalAmount: finalTotal,
-     amountPaid: 0, 
-     balanceDue: finalTotal,
-   },
-   include: { 
-     platformGuest: { select: { fullName: true, phone: true, email: true } } 
-   }
- });
+    const reservation = await prisma.reservation.create({
+      data: {
+        propertyId: property.propertyId,
+        platformGuestId: finalPlatformGuestId,
+        source: 'Website',
+        checkInDate: cIn,
+        checkOutDate: cOut,
+        status: 'Confirmed',
+        notes: notes || '',
+        totalAmount: finalTotal,
+        amountPaid: 0,
+        // 🌟 REMOVED: balanceDue is now calculated on-demand
+      },
+      include: { 
+        platformGuest: { select: { fullName: true, phone: true, email: true } } 
+      }
+    });
 
     await prisma.reservationRoom.create({
       data: {
@@ -464,7 +457,7 @@ router.post('/:propertyCode/payments/initialize', async (req: any, res: Response
 router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Response) => {
   try {
     const { propertyCode, reference } = req.params;
-    const property = await prisma.property.findUnique({ 
+    const property = await prisma.property.findUnique({
       where: { propertyCode },
       select: { propertyId: true, paystackSecretKey: true }
     });
@@ -480,13 +473,12 @@ router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Re
       }
     );
 
- const transactionData = response.data.data;
- if (transactionData.status === 'success') {
-   // ✅ FIX: Treat reservationId as a String (UUID), do NOT use parseInt
-   const reservationId = String(transactionData.metadata?.reservationId); 
-   const amountPaid = transactionData.amount / 100;
-   
-   if (reservationId && reservationId !== 'undefined') {
+    const transactionData = response.data.data;
+    if (transactionData.status === 'success') {
+      const reservationId = String(transactionData.metadata?.reservationId);
+      const amountPaid = transactionData.amount / 100;
+
+      if (reservationId && reservationId !== 'undefined') {
         const reservation = await prisma.reservation.findUnique({
           where: { reservationId },
           select: { amountPaid: true, status: true }
@@ -495,7 +487,8 @@ router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Re
         if (reservation && Number(reservation.amountPaid) === 0) {
           await prisma.reservation.update({
             where: { reservationId },
-            data: { amountPaid: { increment: amountPaid }, balanceDue: { decrement: amountPaid }, status: 'Confirmed' }
+            // 🌟 REMOVED: balanceDue is now calculated on-demand
+            data: { amountPaid: { increment: amountPaid }, status: 'Confirmed' }
           });
 
           await prisma.payment.create({

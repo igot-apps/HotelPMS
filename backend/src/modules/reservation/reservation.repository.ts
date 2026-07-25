@@ -16,7 +16,6 @@ export const createReservation = async (data: {
   notes?: string;
   totalAmount?: number;
   amountPaid?: number;
-  balanceDue?: number;
 }) => {
   return prisma.reservation.create({
     data: {
@@ -31,7 +30,6 @@ export const createReservation = async (data: {
       notes: data.notes,
       totalAmount: data.totalAmount,
       amountPaid: data.amountPaid,
-      balanceDue: data.balanceDue,
     },
     include: { reservationRooms: true }
   });
@@ -166,7 +164,11 @@ export const cancelReservation = async (reservationId: string, data: any) => {
 export const updateReservationFinancials = async (reservationId: string, totalAmount: number, amountPaid: number) => {
   return prisma.reservation.update({
     where: { reservationId },
-    data: { totalAmount, amountPaid, balanceDue: totalAmount - amountPaid },
+    data: { 
+      totalAmount, 
+      amountPaid 
+      // 🌟 REMOVED: balanceDue is now calculated on-demand
+    },
   });
 };
 

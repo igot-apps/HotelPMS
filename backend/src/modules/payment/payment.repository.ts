@@ -1,17 +1,15 @@
 import { PrismaClient } from '../../generated/prisma';
-
 const prisma = new PrismaClient();
 
 // ============================================================
 // CREATE PAYMENT
 // ============================================================
 export const createPayment = async (data: {
-  reservationId: string; // 🌟 CHANGED TO STRING (UUID)
+  reservationId: string;
   amount: number;
   paymentMethod: string;
-  paymentDate?: Date;
-  gatewayReference?: string;
-  receivedBy?: number;
+  gatewayReference?: string | null;
+  receivedBy?: number | null;
   status?: any;
   notes?: string;
 }) => {
@@ -20,7 +18,7 @@ export const createPayment = async (data: {
       reservationId: data.reservationId,
       amount: data.amount,
       paymentMethod: data.paymentMethod,
-      paymentDate: data.paymentDate || new Date(),
+      paymentDate: new Date(), // 🌟 Automatically sets current date/time
       gatewayReference: data.gatewayReference,
       receivedBy: data.receivedBy,
       status: data.status || 'Completed',
@@ -35,13 +33,10 @@ export const createPayment = async (data: {
           propertyGuestId: true,
           totalAmount: true,
           amountPaid: true,
-          balanceDue: true,
-          platformGuest: { select: { fullName: true, email: true, phone: true } },
-          propertyGuest: { select: { fullName: true, phone: true } },
-        },
-      },
-      receiver: { select: { userId: true, fullName: true, username: true } },
-    },
+          // 🌟 REMOVED: balanceDue is no longer in the schema
+        }
+      }
+    }
   });
 };
 
@@ -51,7 +46,7 @@ export const createPayment = async (data: {
 export const findPayments = async (
   propertyId: number,
   filters: {
-    reservationId?: string; // 🌟 CHANGED TO STRING
+    reservationId?: string;
     paymentMethod?: string;
     status?: string;
     fromDate?: Date;
@@ -74,14 +69,14 @@ export const findPayments = async (
       { reservation: { propertyGuest: { fullName: { contains: searchStr, mode: 'insensitive' } } } },
       { reservation: { platformGuest: { phone: { contains: searchStr } } } },
       { reservation: { propertyGuest: { phone: { contains: searchStr } } } },
-      { reservationId: searchStr }, // 🌟 CHANGED: reservationId is now a UUID string
+      { reservationId: searchStr },
     ];
   }
 
   if (filters.reservationId) where.reservationId = filters.reservationId;
   if (filters.paymentMethod) where.paymentMethod = filters.paymentMethod;
   if (filters.status) where.status = filters.status;
-  
+
   if (filters.fromDate || filters.toDate) {
     where.paymentDate = {};
     if (filters.fromDate) where.paymentDate.gte = filters.fromDate;
@@ -103,7 +98,7 @@ export const findPayments = async (
             propertyGuestId: true,
             totalAmount: true,
             amountPaid: true,
-            balanceDue: true,
+            // 🌟 REMOVED: balanceDue is no longer in the schema
             platformGuest: { select: { fullName: true, email: true, phone: true } },
             propertyGuest: { select: { fullName: true, phone: true } },
           },
@@ -132,7 +127,7 @@ export const findPaymentById = async (paymentId: number) => {
           propertyGuestId: true,
           totalAmount: true,
           amountPaid: true,
-          balanceDue: true,
+          // 🌟 REMOVED: balanceDue is no longer in the schema
           platformGuest: { select: { guestId: true, fullName: true, email: true, phone: true } },
           propertyGuest: { select: { guestId: true, fullName: true, phone: true } },
         },
@@ -145,7 +140,7 @@ export const findPaymentById = async (paymentId: number) => {
 // ============================================================
 // FIND PAYMENTS BY RESERVATION
 // ============================================================
-export const findPaymentsByReservation = async (reservationId: string) => { // 🌟 CHANGED TO STRING
+export const findPaymentsByReservation = async (reservationId: string) => {
   return prisma.payment.findMany({
     where: { reservationId },
     orderBy: { paymentDate: 'desc' },
@@ -175,7 +170,13 @@ export const updatePayment = async (
     data: data as any,
     include: {
       reservation: {
-        select: { reservationId: true, propertyId: true, totalAmount: true, amountPaid: true, balanceDue: true },
+        select: {
+          reservationId: true,
+          propertyId: true,
+          totalAmount: true,
+          amountPaid: true,
+          // 🌟 REMOVED: balanceDue is no longer in the schema
+        },
       },
     },
   });
@@ -194,7 +195,7 @@ export const deletePayment = async (paymentId: number) => {
 // ============================================================
 // CALCULATE ACCUMULATED PAYMENT
 // ============================================================
-export const calculateAccumulatedPayment = async (reservationId: string): Promise<number> => { // 🌟 CHANGED TO STRING
+export const calculateAccumulatedPayment = async (reservationId: string): Promise<number> => {
   const result = await prisma.payment.aggregate({
     where: {
       reservationId: reservationId,
@@ -233,7 +234,7 @@ export const getPayments = async (propertyId: number, page: number = 1, limit: n
             propertyGuestId: true,
             totalAmount: true,
             amountPaid: true,
-            balanceDue: true,
+            // 🌟 REMOVED: balanceDue is no longer in the schema
             platformGuest: {
               select: {
                 guestId: true,
