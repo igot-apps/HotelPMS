@@ -33,10 +33,11 @@ enum HousekeepingStatus {
 enum ReservationStatus {
   Pending
   Confirmed
-  CheckedIn
-  CheckedOut
+  InHouse      // 🌟 NEW: Replaces "CheckedIn" at the reservation level
+  Completed    // 🌟 NEW: Replaces "CheckedOut" at the reservation level
   Cancelled
-  NoShow
+  Expired      // 🌟 NEW: Auto-set when check-in date passes with no action
+  NoShow       // 🌟 KEPT: Explicitly marked by receptionist as a no-show
 }
 
 enum PaymentStatus {

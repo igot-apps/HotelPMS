@@ -177,7 +177,7 @@ export const findReservationsByDateRange = async (propertyId: number, fromDate: 
   return prisma.reservation.findMany({
     where: {
       propertyId,
-      status: { in: ['Confirmed', 'CheckedIn'] },
+      status: { in: ['Confirmed', 'InHouse'] }, // ✅ NEW: Changed to InHouse
       OR: [
         { checkInDate: { gte: fromDate, lte: toDate } },
         { checkOutDate: { gte: fromDate, lte: toDate } },
@@ -239,7 +239,7 @@ export const findConflictingReservationRoom = async (
       roomId,
       reservationRoomId: { not: excludeReservationRoomId },
       reservation: {
-        status: { in: ['Confirmed', 'CheckedIn'] },
+        status: { in: ['Confirmed', 'InHouse'] }, // 🌟 UPDATED to InHouse
         OR: [
           {
             checkInDate: { lte: newCheckOutDate },
@@ -290,10 +290,10 @@ export const findConflictingCheckIn = async (roomId: number, excludeReservationR
   return prisma.reservationRoom.findFirst({
     where: {
       roomId,
-      status: 'CheckedIn',
+      status: 'CheckedIn', // Room status is still 'CheckedIn'
       reservationRoomId: { not: excludeReservationRoomId },
       reservation: {
-        status: { in: ['Confirmed', 'CheckedIn'] }
+        status: { in: ['Confirmed', 'InHouse'] } // 🌟 UPDATED to InHouse
       }
     },
     include: {
@@ -306,5 +306,49 @@ export const findConflictingCheckIn = async (roomId: number, excludeReservationR
         } 
       }
     }
+  });
+};
+
+// ============================================================
+// 🌟 PHASE 2: DERIVE RESERVATION STATUS FROM ROOMS
+// ============================================================
+export const deriveReservationStatus = async (reservationId: string) => {
+  const rooms = await prisma.reservationRoom.findMany({
+    where: { reservationId },
+    select: { status: true },
+  });
+
+  if (rooms.length === 0) return 'Pending';
+
+  const allCheckedOut = rooms.every(r => r.status === 'CheckedOut');
+  const anyCheckedIn = rooms.some(r => r.status === 'CheckedIn');
+
+  if (allCheckedOut) return 'Completed';
+  if (anyCheckedIn) return 'InHouse';
+  return 'Confirmed';
+};
+
+// ============================================================
+// 🌟 PHASE 2: MARK RESERVATION AS NO-SHOW
+// ============================================================
+export const markReservationAsNoShow = async (reservationId: string) => {
+  return prisma.reservation.update({
+    where: { reservationId },
+    data: {
+      status: 'NoShow',
+      cancellationDate: new Date(),
+      // Release all rooms back to Available + Clean
+      reservationRooms: {
+        updateMany: {
+          where: { status: 'Reserved' },
+          data: { status: 'CheckedOut' }, // Mark as "checked out" so they don't block inventory
+        },
+      },
+    },
+    include: {
+      reservationRooms: {
+        include: { room: true },
+      },
+    },
   });
 };

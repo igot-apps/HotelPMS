@@ -48,3 +48,6 @@ export const getReservationsByDateRange = (fromDate, toDate, propertyId) => {
 
    export const updateOccupantName = (reservationRoomId, occupantName) => 
   api.patch(`/reservations/rooms/${reservationRoomId}/occupant`, { occupantName });
+
+   export const markAsNoShow = (reservationId) => 
+  api.patch(`/reservations/${reservationId}/no-show`);

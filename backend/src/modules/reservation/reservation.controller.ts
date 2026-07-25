@@ -241,3 +241,22 @@ export const updateOccupantName = async (req: AuthRequest, res: Response) => {
     return res.status(400).json({ success: false, message: error.message });
   }
 };
+
+export const markAsNoShow = async (req: AuthRequest, res: Response) => {
+  try {
+    const reservationId = req.params.id as string;
+    
+    const updated = await reservationService.markAsNoShow(
+      reservationId,
+      req.user?.propertyId
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: updated,
+      message: 'Reservation marked as no-show. Rooms released back to inventory.',
+    });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+};

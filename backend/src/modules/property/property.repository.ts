@@ -122,8 +122,9 @@ export const getPropertyStats = async (propertyId: number) => {
         where: { operationalStatus: 'Occupied' },
         select: { roomId: true },
       },
+      // 🌟 CHANGED: 'CheckedIn' is now 'InHouse'
       reservations: {
-        where: { status: 'CheckedIn' },
+        where: { status: 'InHouse' },
         select: { reservationId: true },
       },
     },

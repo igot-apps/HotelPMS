@@ -15,48 +15,50 @@ export default function RoomCard({
   const [isEditingOccupant, setIsEditingOccupant] = useState(false);
   const [occupantInput, setOccupantInput] = useState(rr.occupantName || '');
   
-  // Determine which action button to show
+  // 🌟 Check if room lifecycle is complete (CheckedOut)
+  const isRoomComplete = roomStatus === 'CheckedOut';
+  
   let roomActionBtn = null;
   
-  if (roomStatus === 'Reserved') {
-    const mainGuestName = res.platformGuest?.fullName || res.propertyGuest?.fullName || '';
-    roomActionBtn = (
-      <button
-        disabled={isThisRoomBusy}
-        onClick={() => onCheckIn(rr, mainGuestName)}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {isThisRoomBusy ? <Loader2 size={14} className="animate-spin" /> : <LogIn size={14} />} Check In Room
-      </button>
-    );
-  } else if (roomStatus === 'CheckedIn') {
-    roomActionBtn = (
-      <div className="flex gap-2">
+  // 🌟 Only show action buttons if room is NOT CheckedOut
+  if (!isRoomComplete) {
+    if (roomStatus === 'Reserved') {
+      const mainGuestName = res.platformGuest?.fullName || res.propertyGuest?.fullName || '';
+      roomActionBtn = (
         <button
           disabled={isThisRoomBusy}
-          onClick={() => onCheckOut(rr)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={() => onCheckIn(rr, mainGuestName)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isThisRoomBusy ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />} Check Out Room
+          {isThisRoomBusy ? <Loader2 size={14} className="animate-spin" /> : <LogIn size={14} />} Check In Room
         </button>
-        
-        <button
-          disabled={isThisRoomBusy}
-          onClick={() => onExtend(rr)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-warning-600 text-text-inverted hover:bg-warning-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Clock size={14} /> Extend
-        </button>
-      </div>
-    );
+      );
+    } else if (roomStatus === 'CheckedIn') {
+      roomActionBtn = (
+        <div className="flex gap-2">
+          <button
+            disabled={isThisRoomBusy}
+            onClick={() => onCheckOut(rr)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isThisRoomBusy ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />} Check Out Room
+          </button>
+          
+          <button
+            disabled={isThisRoomBusy}
+            onClick={() => onExtend(rr)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-warning-600 text-text-inverted hover:bg-warning-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Clock size={14} /> Extend
+          </button>
+        </div>
+      );
+    }
   }
 
-  // 🌟 Handle occupant name save
   const handleSaveOccupant = () => {
     const trimmed = occupantInput.trim();
-    if (!trimmed) {
-      return;
-    }
+    if (!trimmed) return;
     if (trimmed !== (rr.occupantName || '')) {
       onUpdateOccupant(rr.reservationRoomId, trimmed);
     }
@@ -69,7 +71,9 @@ export default function RoomCard({
   };
 
   return (
-    <div className="bg-surface p-4 rounded-xl border border-border shadow-sm flex flex-col gap-3">
+    <div className={`bg-surface p-4 rounded-xl border shadow-sm flex flex-col gap-3 ${
+      isRoomComplete ? 'border-secondary-200 opacity-75' : 'border-border'
+    }`}>
       {/* Room Header */}
       <div className="flex justify-between items-start">
         <div>
@@ -85,7 +89,7 @@ export default function RoomCard({
         </span>
       </div>
 
-      {/* Actual Check-in/Check-out Times with Early/Late Indicators */}
+      {/* Actual Check-in/Check-out Times */}
       {(rr.actualCheckIn || rr.actualCheckOut) && (
         <div className="space-y-2 pt-3 border-t border-border">
           {rr.actualCheckIn && (
@@ -162,11 +166,11 @@ export default function RoomCard({
         </div>
       )}
 
-      {/* 🌟 OCCUPANT NAME - Now Editable Inline */}
+      {/* Occupant Name - Editable only if room is NOT CheckedOut */}
       <div className="pt-3 border-t border-border">
         <div className="flex items-center justify-between mb-1">
           <p className="text-xs text-text-muted">Occupant Name</p>
-          {!isEditingOccupant && (
+          {!isEditingOccupant && !isRoomComplete && (
             <button
               onClick={() => {
                 setOccupantInput(rr.occupantName || '');
@@ -215,7 +219,7 @@ export default function RoomCard({
         ) : (
           <p className="text-sm font-semibold text-text">
             {rr.occupantName || (
-              <span className="text-text-muted font-normal italic">Not assigned — click Edit to set</span>
+              <span className="text-text-muted font-normal italic">Not assigned{!isRoomComplete && ' — click Edit to set'}</span>
             )}
           </p>
         )}
@@ -224,7 +228,13 @@ export default function RoomCard({
       {/* Price and Action Button */}
       <div className="pt-3 border-t border-border flex items-center justify-between mt-auto">
         <p className="text-sm font-bold text-primary-600">{parseFloat(rr.agreedPricePerNight).toFixed(2)} GHS</p>
-        {roomActionBtn || <span className="text-xs text-text-muted font-semibold">No actions</span>}
+        {roomActionBtn || (
+          isRoomComplete ? (
+            <span className="text-xs text-text-muted font-semibold italic">Completed</span>
+          ) : (
+            <span className="text-xs text-text-muted font-semibold">No actions</span>
+          )
+        )}
       </div>
     </div>
   );

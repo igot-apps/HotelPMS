@@ -22,4 +22,5 @@ router.post('/:id/check-out', reservationController.checkOutGuest);
 router.patch('/rooms/:reservationRoomId/status', reservationController.updateReservationRoomStatus);
 router.patch('/rooms/:reservationRoomId/extend', reservationController.extendReservationRoom);
 router.patch('/rooms/:reservationRoomId/occupant', reservationController.updateOccupantName);
+router.patch('/:id/no-show', reservationController.markAsNoShow);
 export default router;

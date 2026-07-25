@@ -73,7 +73,7 @@ export const findRoomTypeById = async (roomTypeId: number) => {
       rooms: {
         include: {
           reservationRooms: {
-            where: { reservation: { status: { in: ['Confirmed', 'CheckedIn'] } } },
+            where: { reservation: { status: { in: ['Confirmed', 'InHouse'] } } }, // 🌟 CHANGED to InHouse
           },
         },
       },

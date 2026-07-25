@@ -69,7 +69,7 @@ export const findRooms = async (
               where: {
                 reservation: {
                   status: {
-                    in: ['Confirmed', 'CheckedIn'],
+                    in: ['Confirmed', 'InHouse'],
                   },
                 },
               },
@@ -100,7 +100,7 @@ export const findRoomById = async (roomId: number) => {
         where: {
           reservation: {
             status: {
-              in: ['Confirmed', 'CheckedIn'],
+              in: ['Confirmed', 'InHouse'] // 🌟 CHANGED to InHouse,
             },
           },
         },
@@ -130,14 +130,14 @@ export const findAvailableRooms = async (
     where: {
       propertyId,
       operationalStatus: {
-        not: 'Maintenance', // 🌟 Updated: 'OutOfService' was removed from enum
+        not: 'Maintenance', 
       },
       ...(roomTypeId && { roomTypeId }),
       reservationRooms: {
         none: {
           reservation: {
             status: {
-              in: ['Confirmed', 'CheckedIn'],
+              in: ['Confirmed', 'InHouse'] // ✅ CORRECT: Only one 'status'
             },
           },
           checkInDate: {

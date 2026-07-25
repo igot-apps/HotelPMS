@@ -1,18 +1,25 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { getReservations, createReservation, cancelReservation, updateReservationRoomStatus, extendReservationRoom, updateOccupantName } from '../api/reservations';
+import { 
+  getReservations, 
+  createReservation, 
+  cancelReservation, 
+  updateReservationRoomStatus, 
+  extendReservationRoom, 
+  updateOccupantName,
+  markAsNoShow // 🌟 NEW: Import for No Show action
+} from '../api/reservations';
 import { recordPayment } from '../api/payments';
 import { useAuthStore } from '../store/authStore';
 import ReservationModal from '../components/reservations/ReservationModal';
+import RoomCard from '../components/reservations/RoomCard'; // 🌟 NEW: Extracted component
 import {
   Search, Plus, CalendarDays, AlertCircle, LogIn, LogOut, XCircle,
   ChevronLeft, ChevronRight, Eye, X, Check,
   ChevronDown, ChevronUp, BedDouble, Loader2, Clock
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-import RoomCard from '../components/reservations/RoomCard';
 
 // ─────────────────────────────────────────────────────────────
 // Lightweight confirmation modal with optional input field
@@ -31,7 +38,6 @@ function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', danger 
         <h3 id="confirm-dialog-title" className="text-base font-bold text-text mb-1.5">{title}</h3>
         <p className="text-sm text-text-muted mb-4 whitespace-pre-line">{message}</p>
         
-        {/* Optional Input Field for Occupant Name */}
         {inputLabel && (
           <div className="mb-4">
             <label className="block text-xs font-semibold text-text-muted mb-1.5">{inputLabel}</label>
@@ -133,7 +139,7 @@ export default function ReservationsPage() {
   const endItem = Math.min(page * limit, pagination.total);
   const hasActiveFilters = status !== 'all' || !!fromDate || !!toDate || !!search;
 
-  // 🌟 Room action mutation - now accepts occupantName
+  // 🌟 Room action mutation
   const roomActionMutation = useMutation({
     mutationFn: ({ id, status, occupantName }) => {
       const data = { status };
@@ -154,7 +160,7 @@ export default function ReservationsPage() {
     },
   });
 
-  // 🌟 NEW: Extend stay mutation
+  // 🌟 Extend stay mutation
   const extendStayMutation = useMutation({
     mutationFn: ({ id, newCheckOutDate }) => extendReservationRoom(id, newCheckOutDate),
     onSuccess: () => {
@@ -168,18 +174,34 @@ export default function ReservationsPage() {
     },
   });
 
+  // 🌟 Update occupant name mutation
   const updateOccupantMutation = useMutation({
-  mutationFn: ({ id, occupantName }) => updateOccupantName(id, occupantName),
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ['reservations'] });
-    toast.success('Occupant name updated');
-  },
-  onError: (err) => {
-    toast.error(err.response?.data?.message || 'Failed to update occupant name');
-  },
-});
+    mutationFn: ({ id, occupantName }) => updateOccupantName(id, occupantName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reservations'] });
+      toast.success('Occupant name updated');
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Failed to update occupant name');
+    },
+  });
 
-const updatingOccupantId = updateOccupantMutation.isPending ? updateOccupantMutation.variables?.id : null;
+  const updatingOccupantId = updateOccupantMutation.isPending ? updateOccupantMutation.variables?.id : null;
+
+  // 🌟 No Show mutation
+  const noShowMutation = useMutation({
+    mutationFn: ({ id }) => markAsNoShow(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reservations'] });
+      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+      toast.success('Reservation marked as No Show. Rooms released.');
+      setPendingConfirm(null);
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Failed to mark as No Show');
+      setPendingConfirm(null);
+    },
+  });
 
   const createMutation = useMutation({
     mutationFn: async (payload) => {
@@ -241,11 +263,15 @@ const updatingOccupantId = updateOccupantMutation.isPending ? updateOccupantMuta
     setPendingConfirm({ kind: 'room', id: reservationRoomId, status: roomStatus, title, message, ...opts });
   };
 
-  // 🌟 Handle confirm - now passes occupantName for check-ins and handles extend
+  // 🌟 Handle confirm - handles check-ins, extends, and no-shows
   const handleConfirm = () => {
     if (!pendingConfirm) return;
     if (pendingConfirm.kind === 'reservation') {
-      actionMutation.mutate({ id: pendingConfirm.id, action: pendingConfirm.action });
+      if (pendingConfirm.action === 'noShow') {
+        noShowMutation.mutate({ id: pendingConfirm.id });
+      } else {
+        actionMutation.mutate({ id: pendingConfirm.id, action: pendingConfirm.action });
+      }
     } else {
       const payload = { 
         id: pendingConfirm.id, 
@@ -269,9 +295,8 @@ const updatingOccupantId = updateOccupantMutation.isPending ? updateOccupantMuta
   };
 
   const isConfirmLoading =
-    (pendingConfirm?.kind === 'reservation' && actionMutation.isPending) ||
-    (pendingConfirm?.kind === 'room' && roomActionMutation.isPending) ||
-    (pendingConfirm?.kind === 'room' && extendStayMutation.isPending);
+    (pendingConfirm?.kind === 'reservation' && (actionMutation.isPending || noShowMutation.isPending)) ||
+    (pendingConfirm?.kind === 'room' && (roomActionMutation.isPending || extendStayMutation.isPending));
 
   const handleFilterChange = (key, value) => updateParams({ [key]: value, page: 1 });
   const clearFilters = () => { updateParams({ search: '', status: '', fromDate: '', toDate: '', page: 1 }); setLocalSearch(''); };
@@ -307,7 +332,13 @@ const updatingOccupantId = updateOccupantMutation.isPending ? updateOccupantMuta
             )}
           </div>
           <select value={status} onChange={(e) => handleFilterChange('status', e.target.value)} className="px-3 py-2 bg-background border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20">
-            <option value="all">All Statuses</option><option value="Confirmed">Confirmed</option><option value="CheckedIn">Checked In</option><option value="CheckedOut">Checked Out</option><option value="Cancelled">Cancelled</option>
+            <option value="all">All Statuses</option>
+            <option value="Confirmed">Confirmed</option>
+            <option value="InHouse">In-House</option> {/* 🌟 NEW */}
+            <option value="Completed">Completed</option> {/* 🌟 NEW */}
+            <option value="Cancelled">Cancelled</option>
+            <option value="Expired">Expired</option> {/* 🌟 NEW */}
+            <option value="NoShow">No Show</option> {/* 🌟 NEW */}
           </select>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-border">
@@ -378,25 +409,46 @@ const updatingOccupantId = updateOccupantMutation.isPending ? updateOccupantMuta
                   const checkIn = new Date(res.checkInDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                   const checkOut = new Date(res.checkOutDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
+                  // 🌟 UPDATED: Professional Status Colors
                   let statusClass = 'bg-secondary-100 text-secondary-700';
                   if (res.status === 'Confirmed') statusClass = 'bg-primary-50 text-primary-700 ring-1 ring-primary-600/20';
-                  if (res.status === 'CheckedIn') statusClass = 'bg-success-50 text-success-700 ring-1 ring-success-600/20';
-                  if (res.status === 'CheckedOut') statusClass = 'bg-secondary-100 text-secondary-600';
+                  if (res.status === 'InHouse') statusClass = 'bg-success-50 text-success-700 ring-1 ring-success-600/20';
+                  if (res.status === 'Completed') statusClass = 'bg-secondary-100 text-secondary-600';
                   if (res.status === 'Cancelled') statusClass = 'bg-danger-50 text-danger-700 ring-1 ring-danger-600/20';
+                  if (res.status === 'Expired') statusClass = 'bg-warning-50 text-warning-700 ring-1 ring-warning-600/20';
+                  if (res.status === 'NoShow') statusClass = 'bg-orange-50 text-orange-700 ring-1 ring-orange-600/20';
 
                   const isExpanded = expandedId === res.reservationId;
+                  const isPastCheckIn = new Date(res.checkInDate) < new Date();
 
+                  // 🌟 UPDATED: Actions with No Show support
                   let actions = null;
                   if (res.status === 'Confirmed') {
                     actions = (
-                      <button
-                        onClick={() => setExpandedId(isExpanded ? null : res.reservationId)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition"
-                      >
-                        <LogIn size={14} /> Check In
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => setExpandedId(isExpanded ? null : res.reservationId)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition"
+                        >
+                          <LogIn size={14} /> Check In
+                        </button>
+                        {isPastCheckIn && (
+                          <button
+                            onClick={() => askReservationAction(
+                              res.reservationId, 
+                              'noShow',
+                              'Mark as No Show?',
+                              `This will mark reservation #${res.reservationId} as a No Show and release the rooms back to inventory. This cannot be undone.`,
+                              { danger: true, confirmLabel: 'Mark as No Show' }
+                            )}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-orange-200 text-orange-600 hover:bg-orange-50 transition"
+                          >
+                            <AlertCircle size={14} /> No Show
+                          </button>
+                        )}
+                      </div>
                     );
-                  } else if (res.status === 'CheckedIn') {
+                  } else if (res.status === 'InHouse') {
                     actions = (
                       <button
                         onClick={() => setExpandedId(isExpanded ? null : res.reservationId)}
@@ -407,7 +459,7 @@ const updatingOccupantId = updateOccupantMutation.isPending ? updateOccupantMuta
                     );
                   }
 
-                  if (res.status !== 'CheckedOut' && res.status !== 'Cancelled') {
+                  if (res.status !== 'Completed' && res.status !== 'Cancelled' && res.status !== 'NoShow' && res.status !== 'Expired') {
                     actions = (
                       <div className="flex items-center justify-end gap-2">
                         {actions}
@@ -597,4 +649,3 @@ const updatingOccupantId = updateOccupantMutation.isPending ? updateOccupantMuta
     </div>
   );
 }
-

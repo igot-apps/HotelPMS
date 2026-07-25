@@ -127,7 +127,7 @@ export const updateReservation = async (reservationId: string, data: any) => { /
 export const cancelReservation = async (reservationId: string) => { // 🌟 CHANGED TO STRING
   const reservation = await reservationRepository.findReservationById(reservationId);
   if (!reservation) throw new Error('Reservation not found');
-  if (reservation.status === 'CheckedIn') {
+  if (reservation.status === 'InHouse') {
     throw new Error('Cannot cancel a checked-in reservation');
   }
   if (reservation.status === 'Cancelled') {
@@ -165,7 +165,7 @@ export const checkInGuest = async (reservationId: string) => { // 🌟 CHANGED T
 export const checkOutGuest = async (reservationId: string) => { // 🌟 CHANGED TO STRING
   const reservation = await reservationRepository.findReservationById(reservationId);
   if (!reservation) throw new Error('Reservation not found');
-  if (reservation.status !== 'CheckedIn') {
+  if (reservation.status !== 'InHouse') {
     throw new Error('Reservation must be checked in to check out');
   }
   await reservationRepository.updateReservationStatus(reservationId, 'CheckedOut');
@@ -212,7 +212,6 @@ export const updateReservationFinancials = async (
   );
 };
 
-// 🌟 NEW: Function to update individual room status (Check-in/Check-out)
 export const updateReservationRoomStatus = async (
   reservationRoomId: number,
   status: string,
@@ -230,7 +229,7 @@ export const updateReservationRoomStatus = async (
   if (occupantName !== undefined) updateData.occupantName = occupantName;
 
   if (status === 'CheckedIn') {
-    // 🚨 SAFETY CHECK: Prevent double check-in of the same physical room
+    // 🚨 SAFETY: Prevent double check-in of the same physical room
     const conflict = await reservationRepository.findConflictingCheckIn(
       resRoom.roomId, 
       reservationRoomId
@@ -253,7 +252,14 @@ export const updateReservationRoomStatus = async (
     await updateRoomStatus(resRoom.roomId, 'Available', 'Dirty');
   }
 
-  return reservationRepository.updateReservationRoomStatus(reservationRoomId, updateData);
+  // Update the room
+  const updatedRoom = await reservationRepository.updateReservationRoomStatus(reservationRoomId, updateData);
+
+  // 🌟 PHASE 2: AUTO-DERIVE the parent reservation status
+  const newReservationStatus = await reservationRepository.deriveReservationStatus(resRoom.reservationId);
+  await reservationRepository.updateReservationStatus(resRoom.reservationId, newReservationStatus);
+
+  return updatedRoom;
 };
 
 export const extendReservationRoom = async (
@@ -334,4 +340,26 @@ export const updateOccupantName = async (
   }
 
   return reservationRepository.updateReservationRoomStatus(reservationRoomId, { occupantName });
+};
+
+// 🌟 PHASE 2: Mark reservation as No-Show
+export const markAsNoShow = async (reservationId: string, userPropertyId?: number) => {
+  const reservation = await reservationRepository.findReservationById(reservationId);
+  if (!reservation) throw new Error('Reservation not found');
+  
+  if (userPropertyId && reservation.propertyId !== userPropertyId) {
+    throw new Error('You do not have access to this reservation');
+  }
+
+  if (reservation.status !== 'Confirmed') {
+    throw new Error(`Cannot mark as no-show. Reservation is currently "${reservation.status}". Only "Confirmed" reservations can be marked as no-show.`);
+  }
+
+  // Check if any room is already checked in
+  const hasCheckedInRoom = reservation.reservationRooms.some(r => r.status === 'CheckedIn');
+  if (hasCheckedInRoom) {
+    throw new Error('Cannot mark as no-show. At least one room is already checked in.');
+  }
+
+  return reservationRepository.markReservationAsNoShow(reservationId);
 };

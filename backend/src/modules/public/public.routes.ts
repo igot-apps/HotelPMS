@@ -44,7 +44,7 @@ router.get('/discover', async (req: any, res: Response) => {
             reservationRooms: {
               none: {
                 reservation: {
-                  status: { in: ['Confirmed', 'CheckedIn'] }, // Ignore Cancelled/Pending
+                  status: { in: ['Confirmed', 'InHouse'] }, // Ignore Cancelled/Pending
                   OR: [
                     { 
                       checkInDate: { lte: new Date(checkOut as string) }, 
@@ -282,7 +282,7 @@ router.get('/:propertyCode/room-types', async (req: any, res: Response) => {
               roomTypeId: rt.roomTypeId,
               reservation: {
                 propertyId: property.propertyId,
-                status: { in: ['Confirmed', 'CheckedIn'] },
+                status: { in: ['Confirmed', 'InHouse'] },
                 OR: [{ checkInDate: { lte: checkOutDate }, checkOutDate: { gte: checkInDate } }]
               }
             }
@@ -337,7 +337,7 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
         reservationRooms: {
           none: {
             reservation: {
-              status: { in: ['Confirmed', 'CheckedIn'] },
+              status: { in: ['Confirmed', 'InHouse'] },
               OR: [{ checkInDate: { lte: cOut }, checkOutDate: { gte: cIn } }]
             }
           }

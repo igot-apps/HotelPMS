@@ -54,7 +54,8 @@ export const findGuests = async (
           select: {
             reservations: {
               where: {
-                status: { in: ['Confirmed', 'CheckedIn', 'CheckedOut'] },
+                // 🌟 CHANGED: Updated to new enum values
+                status: { in: ['Confirmed', 'InHouse', 'Completed'] },
               },
             },
           },
@@ -89,14 +90,12 @@ export const findGuestById = async (guestId: number) => {
   });
 };
 
-// 🌟 Adapted to search by phone since PropertyGuest no longer has email/username
 export const findGuestByPhone = async (propertyId: number, phone: string) => {
   return prisma.propertyGuest.findFirst({
     where: { propertyId, phone, isActive: true },
   });
 };
 
-// 🌟 Kept for backward compatibility with controllers, but searches by phone
 export const findGuestByEmail = async (propertyId: number, contact: string) => {
   return prisma.propertyGuest.findFirst({
     where: { 
@@ -138,7 +137,8 @@ export const getGuestStats = async (guestId: number) => {
     where: { guestId },
     include: {
       reservations: {
-        where: { status: { in: ['CheckedOut', 'Cancelled'] } },
+        // 🌟 CHANGED: Updated to new enum values
+        where: { status: { in: ['Completed', 'Cancelled'] } },
         include: { payments: true },
       },
     },
@@ -146,8 +146,9 @@ export const getGuestStats = async (guestId: number) => {
 
   if (!guest) return null;
 
+  // 🌟 CHANGED: 'CheckedOut' is now 'Completed'
   const completedReservations = guest.reservations.filter(
-    (r: any) => r.status === 'CheckedOut'
+    (r: any) => r.status === 'Completed'
   );
 
   const totalSpent = guest.reservations.reduce((sum: number, r: any) => {
@@ -158,7 +159,6 @@ export const getGuestStats = async (guestId: number) => {
     return sum + paid;
   }, 0);
 
-  // Calculate last stay date from reservations
   const sortedReservations = [...guest.reservations].sort(
     (a: any, b: any) => new Date(b.checkInDate).getTime() - new Date(a.checkInDate).getTime()
   );
@@ -178,7 +178,7 @@ export const getGuestStats = async (guestId: number) => {
 
 export const getGuestReservations = async (guestId: number) => {
   return prisma.reservation.findMany({
-    where: { propertyGuestId: guestId }, // 🌟 Updated to use the new relation name
+    where: { propertyGuestId: guestId },
     orderBy: { createdAt: 'desc' },
     include: {
       property: { select: { propertyId: true, propertyName: true } },
@@ -192,9 +192,6 @@ export const getGuestReservations = async (guestId: number) => {
   });
 };
 
-// 🌟 Adapted: Since we no longer store totalStays/lastStayDate as direct columns, 
-// this is now a no-op that just returns the guest to prevent controller crashes.
-// Stats are now dynamically calculated in getGuestStats.
 export const updateGuestLastStay = async (guestId: number) => {
   return prisma.propertyGuest.findUnique({ where: { guestId } });
 };
