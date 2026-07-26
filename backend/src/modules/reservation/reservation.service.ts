@@ -2,6 +2,16 @@ import * as reservationRepository from './reservation.repository';
 import { findAvailableRooms, updateRoomStatus } from '../room/room.repository';
 import { updateGuestLastStay } from '../guest/guest.repository';
 
+// 🌟 HELPER: Generate a short, easy-to-read confirmation code (e.g., "RES-8X9K2P")
+const generateConfirmationCode = (): string => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Omitted 0, O, 1, I to avoid confusion
+  let code = 'RES-';
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+};
+
 export const createReservation = async (data: any) => {
   if (!data.propertyId) throw new Error('Property ID is required');
   if (!data.propertyGuestId && !data.platformGuestId) {
@@ -58,7 +68,7 @@ export const createReservation = async (data: any) => {
     notes: data.notes,
     totalAmount,
     amountPaid: 0,
-    // 🌟 REMOVED: balanceDue is now calculated on-demand
+    confirmationCode: generateConfirmationCode(), // 🌟 ADDED: Generates short code
   });
 
   for (const roomData of data.rooms) {

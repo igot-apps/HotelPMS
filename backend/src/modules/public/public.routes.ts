@@ -7,6 +7,16 @@ import jwt from 'jsonwebtoken'; // Ensure this is imported at the top of the fil
 const router = Router();
 const prisma = new PrismaClient();
 
+// 🌟 HELPER: Generate a short, easy-to-read confirmation code (e.g., "RES-8X9K2P")
+const generateConfirmationCode = (): string => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Omitted 0, O, 1, I to avoid confusion
+  let code = 'RES-';
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+};
+
 // 🌟 HELPER: Haversine Formula to calculate distance in KM
 const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
   const R = 6371; // Earth's radius in KM
@@ -362,23 +372,24 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
       throw new Error('Guest information is required for online bookings.');
     }
 
-    const reservation = await prisma.reservation.create({
-      data: {
-        propertyId: property.propertyId,
-        platformGuestId: finalPlatformGuestId,
-        source: 'Website',
-        checkInDate: cIn,
-        checkOutDate: cOut,
-        status: 'Confirmed',
-        notes: notes || '',
-        totalAmount: finalTotal,
-        amountPaid: 0,
-        // 🌟 REMOVED: balanceDue is now calculated on-demand
-      },
-      include: { 
-        platformGuest: { select: { fullName: true, phone: true, email: true } } 
-      }
-    });
+      const reservation = await prisma.reservation.create({
+    data: {
+      propertyId: property.propertyId,
+      platformGuestId: finalPlatformGuestId,
+      source: 'Website',
+      checkInDate: cIn,
+      checkOutDate: cOut,
+      status: 'Confirmed',
+      notes: notes || '',
+      totalAmount: finalTotal,
+      amountPaid: 0,
+      confirmationCode: generateConfirmationCode(), // 🌟 ADDED: Generates short code
+      // 🌟 REMOVED: balanceDue is no longer in the schema
+    },
+    include: {
+      platformGuest: { select: { fullName: true, phone: true, email: true } }
+    }
+  });
 
     await prisma.reservationRoom.create({
       data: {

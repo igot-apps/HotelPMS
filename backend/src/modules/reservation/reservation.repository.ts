@@ -16,6 +16,7 @@ export const createReservation = async (data: {
   notes?: string;
   totalAmount?: number;
   amountPaid?: number;
+  confirmationCode: string; // 🌟 ADDED
 }) => {
   return prisma.reservation.create({
     data: {
@@ -30,6 +31,7 @@ export const createReservation = async (data: {
       notes: data.notes,
       totalAmount: data.totalAmount,
       amountPaid: data.amountPaid,
+      confirmationCode: data.confirmationCode, // 🌟 ADDED
     },
     include: { reservationRooms: true }
   });

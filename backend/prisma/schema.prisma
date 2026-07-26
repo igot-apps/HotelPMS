@@ -284,7 +284,7 @@ model Reservation {
   reservationId     String    @id @default(uuid()) // 🌟 CHANGED TO UUID
   propertyId        Int
   
-  confirmationCode  String    @unique @default(uuid())
+  confirmationCode  String    @unique
   propertyGuestId   Int?
   platformGuestId   Int?
   
