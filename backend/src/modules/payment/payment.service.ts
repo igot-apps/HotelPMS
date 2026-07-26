@@ -20,7 +20,7 @@ export const recordPayment = async (data: any) => {
 
   if (amount + accummulatedPayments > Number(reservation.totalAmount)) {
     throw new Error('Payment amount exceeds total reservation amount');
-  }
+  } 
 
   const payment = await paymentRepository.createPayment({
     reservationId: data.reservationId, // 🌟 Already a string
