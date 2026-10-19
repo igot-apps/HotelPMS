@@ -321,12 +321,12 @@ export default function ReservationsPage() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
             <input
-              type="text"
-              placeholder="Search guest or room..."
-              value={localSearch}
-              onChange={(e) => setLocalSearch(e.target.value)}
-              className="w-full pl-9 pr-9 py-2 bg-background border border-border rounded-lg text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
-            />
+           type="text"
+           placeholder="Search by name, phone, room, or confirmation code..."
+           value={localSearch}
+           onChange={(e) => setLocalSearch(e.target.value)}
+           className="w-full pl-9 pr-9 py-2 bg-background border border-border rounded-lg text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
+         />
             {isSearchPending && (
               <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted animate-spin" size={16} aria-label="Searching" />
             )}
@@ -503,12 +503,15 @@ export default function ReservationsPage() {
                             </button>
                           )}
                         </td>
-                        <td className="px-6 py-4">
-                          <p className="text-xs font-bold text-text-muted">#{res.reservationId}</p>
-                          <p className="text-sm font-semibold text-text">
-                            {res.platformGuest?.fullName || res.propertyGuest?.fullName || 'N/A'}
-                          </p>
-                        </td>
+                                             <td className="px-6 py-4">
+                       {/* 🌟 NEW: Show short Confirmation Code prominently */}
+                       <p className="text-sm font-bold text-primary-600 tracking-wider">
+                         {res.confirmationCode || `#${res.reservationId.slice(0, 8)}`}
+                       </p>
+                       <p className="text-xs font-medium text-text mt-0.5">
+                         {res.platformGuest?.fullName || res.propertyGuest?.fullName || 'N/A'}
+                       </p>
+                     </td>
                         <td className="px-6 py-4 text-sm text-text font-medium">{rooms}</td>
                         <td className="px-6 py-4 text-sm text-text-muted">{checkIn} <span className="mx-1">→</span> {checkOut}</td>
                         <td className="px-6 py-4">

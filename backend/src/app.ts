@@ -16,7 +16,7 @@ import paymentRoutes from './modules/payment/payment.routes';
 import reportRoutes from './modules/reports/report.routes';
 import userRoutes from './modules/user/user.routes';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
-import paystackRoutes from './modules/paystack/paystack.routes'; // 🌟 NEW: Paystack Integration
+import paystackRoutes from './modules/payment/payment.routes'; // ✅ NEW: Moved to payment module
 import amenityRoutes from './modules/amenity/amenity.routes';
 import publicRoutes from './modules/public/public.routes';
 import publicAuthRoutes from './modules/public/public-auth.routes';

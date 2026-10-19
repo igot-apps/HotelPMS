@@ -79,10 +79,18 @@ router.post('/login', async (req: any, res: Response) => {
       return res.status(404).json({ success: false, message: 'Guest not found. Please check your phone number and try again.' });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, guest.passwordHash);
-    if (!isPasswordValid) {
-      return res.status(401).json({ success: false, message: 'Invalid password' });
-    }
+      // 🌟 NEW: Handle guests who booked without a password (One-time quick checkout)
+      if (!guest.passwordHash) {
+        return res.status(401).json({ 
+          success: false, 
+          message: 'This phone number was used for a quick booking and does not have a password. Please use your confirmation code to check in, or contact the hotel to set up an account.' 
+        });
+      }
+
+      const isPasswordValid = await bcrypt.compare(password, guest.passwordHash);
+      if (!isPasswordValid) {
+        return res.status(401).json({ success: false, message: 'Invalid password' });
+      }
 
     if (!guest.isActive) {
       return res.status(403).json({ success: false, message: 'Account is deactivated' });

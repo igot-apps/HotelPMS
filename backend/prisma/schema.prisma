@@ -193,8 +193,8 @@ model PlatformGuest {
   guestId           Int       @id @default(autoincrement())
   fullName          String    @db.VarChar(200)
   phone             String    @unique @db.VarChar(50)
-  email             String    @unique @db.VarChar(200)
-  passwordHash      String    @db.Text
+  email             String?   @unique @db.VarChar(200)
+  passwordHash      String?    @db.Text
   isPhoneVerified   Boolean   @default(false)
   isEmailVerified   Boolean   @default(false)
   isActive          Boolean   @default(true)

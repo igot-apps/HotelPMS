@@ -33,6 +33,7 @@ export const getReservations = async (req: AuthRequest, res: Response) => {
     const filters = {
       propertyId: req.query.propertyId ? parseInt(req.query.propertyId as string) : undefined,
       guestId: req.query.guestId ? parseInt(req.query.guestId as string) : undefined,
+      search: req.query.search as string | undefined, // 🌟 ADDED: Pass the search parameter to the service!
       status: req.query.status as string | undefined,
       fromDate: req.query.fromDate as string | undefined,
       toDate: req.query.toDate as string | undefined,

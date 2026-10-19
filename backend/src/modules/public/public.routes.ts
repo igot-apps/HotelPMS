@@ -352,6 +352,7 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
       return res.status(400).json({ success: false, message: 'Sorry, this room type is no longer available for the selected dates.' });
     }
 
+    // ✅ NEW (Seamless guest checkout without password)
     let finalPlatformGuestId = platformGuestId;
     if (!finalPlatformGuestId && guestFullName && guestPhone) {
       const guest = await prisma.platformGuest.upsert({
@@ -360,9 +361,11 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
         create: { 
           fullName: guestFullName.trim(), 
           phone: guestPhone.trim(), 
-          email: guestEmail?.trim() || '', 
-          passwordHash: 'PENDING_VERIFICATION',
-          isPhoneVerified: false 
+          email: guestEmail?.trim() || undefined, // 🌟 Use undefined instead of '' to avoid unique constraint errors
+          // 🌟 REMOVED: passwordHash is omitted since it's now optional for guest checkout
+          isPhoneVerified: false,
+          isEmailVerified: false,
+          isActive: true
         }
       });
       finalPlatformGuestId = guest.guestId;
@@ -557,11 +560,12 @@ router.post('/auth/register', async (req: any, res: Response) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create guest
+    // ✅ NEW
     const guest = await prisma.platformGuest.create({
       data: {
         fullName: fullName.trim(),
         phone: phone.trim(),
-        email: email?.trim() || '',
+        email: email?.trim() || undefined, // 🌟 Saves as NULL if empty, avoiding unique constraint
         passwordHash: hashedPassword,
         isPhoneVerified: false,
         isEmailVerified: false,

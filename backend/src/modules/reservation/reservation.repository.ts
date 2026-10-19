@@ -92,7 +92,10 @@ export const findReservations = async (
       { platformGuest: { fullName: { contains: searchTerm, mode: 'insensitive' } } },
       { propertyGuest: { phone: { contains: searchTerm } } },
       { platformGuest: { phone: { contains: searchTerm } } },
+      // ✅ FIX: roomNumber is a String in the database, so we always use 'contains'
       { reservationRooms: { some: { room: { roomNumber: { contains: searchTerm, mode: 'insensitive' } } } } },
+      { confirmationCode: { contains: searchTerm, mode: 'insensitive' } },
+      { reservationId: { contains: searchTerm, mode: 'insensitive' } },
     ];
   }
 
