@@ -503,13 +503,18 @@ export default function ReservationsPage() {
                             </button>
                           )}
                         </td>
-                                             <td className="px-6 py-4">
-                       {/* 🌟 NEW: Show short Confirmation Code prominently */}
+                     <td className="px-6 py-4">
+                       {/* 1. Confirmation Code */}
                        <p className="text-sm font-bold text-primary-600 tracking-wider">
                          {res.confirmationCode || `#${res.reservationId.slice(0, 8)}`}
                        </p>
+                       {/* 2. Guest Name */}
                        <p className="text-xs font-medium text-text mt-0.5">
                          {res.platformGuest?.fullName || res.propertyGuest?.fullName || 'N/A'}
+                       </p>
+                       {/* 3. Phone Number (New) */}
+                       <p className="text-xs text-text-muted mt-0.5">
+                         {res.platformGuest?.phone || res.propertyGuest?.phone || 'N/A'}
                        </p>
                      </td>
                         <td className="px-6 py-4 text-sm text-text font-medium">{rooms}</td>
