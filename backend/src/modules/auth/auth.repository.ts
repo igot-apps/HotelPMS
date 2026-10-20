@@ -1,5 +1,4 @@
-import { PrismaClient } from '../../../src/generated/prisma';
-const prisma = new PrismaClient();
+import { prisma } from '../../shared/utils/prisma';
 
 export const findUserByUsernameOrEmail = async (identifier: string) => {
   return prisma.user.findFirst({

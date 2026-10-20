@@ -1,5 +1,4 @@
-import { PrismaClient } from '../../../src/generated/prisma';
-const prisma = new PrismaClient();
+import { prisma } from '../../shared/utils/prisma';
 
 // ✅ Changed data to 'any' to prevent TypeScript strict type errors on optional fields
 export const createProperty = async (data: any) => {

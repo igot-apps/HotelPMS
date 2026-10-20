@@ -1,10 +1,9 @@
 import { Router, Response } from 'express';
-import { PrismaClient } from '../../generated/prisma';
+import { prisma } from '../../shared/utils/prisma';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
 const router = Router();
-const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key';
 
 // 1. Register a new Platform Guest

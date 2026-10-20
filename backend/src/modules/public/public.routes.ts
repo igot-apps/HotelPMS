@@ -1,11 +1,10 @@
 import { Router, Response } from 'express';
-import { PrismaClient } from '../../generated/prisma';
+import { prisma } from '../../shared/utils/prisma';
 import axios from 'axios';
 import jwt from 'jsonwebtoken'; // Ensure this is imported at the top of the file
 
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // 🌟 HELPER: Generate a short, easy-to-read confirmation code (e.g., "RES-8X9K2P")
 const generateConfirmationCode = (): string => {
