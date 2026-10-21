@@ -1,5 +1,7 @@
 import * as roomRepository from './room.repository';
 
+
+
 export const createRoom = async (data: any) => {
   // ✅ Removed tenantId check
   if (!data.propertyId) throw new Error('Property ID is required');
@@ -74,9 +76,18 @@ export const updateRoomStatus = async (
   return roomRepository.updateRoomStatus(roomId, operationalStatus, housekeepingStatus);
 };
 
+// 🌟 SOFT DELETE: Deactivates the room
 export const deleteRoom = async (roomId: number) => {
   const room = await roomRepository.findRoomById(roomId);
   if (!room) throw new Error('Room not found');
   
   return roomRepository.deleteRoom(roomId);
+};
+
+// 🌟 HARD DELETE: Permanently removes the room
+export const hardDeleteRoom = async (roomId: number) => {
+  const room = await roomRepository.findRoomById(roomId);
+  if (!room) throw new Error('Room not found');
+  
+  return roomRepository.hardDeleteRoom(roomId);
 };

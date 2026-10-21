@@ -41,13 +41,14 @@ router.get('/', roomController.getRooms); // Open to all authenticated staff
 router.get('/available', roomController.getAvailableRooms); // Open to all authenticated staff
 router.get('/:id', roomController.getRoomById);
 
+// 🌟 NEW: Hard delete route (MUST be before /:id to avoid route conflicts)
+router.delete('/:id/hard', requirePermission('CanDeleteRoom'), roomController.hardDeleteRoom);
+
 // Managers can update room details (like room number or floor)
 router.put('/:id', requirePermission('CanUpdateRoom'), roomController.updateRoom);
-
 // Housekeeping & Receptionists can update room status (Clean/Dirty/Maintenance)
 router.patch('/:id/status', requirePermission('CanUpdateRoomStatus'), roomController.updateRoomStatus);
-
-// Only Managers can delete rooms
+// Only Managers can soft-delete (deactivate) rooms
 router.delete('/:id', requirePermission('CanDeleteRoom'), roomController.deleteRoom);
 
 export default router;

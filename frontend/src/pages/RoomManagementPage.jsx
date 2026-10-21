@@ -3,27 +3,27 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
 import {
   getRooms, createRoom, updateRoom, deleteRoom, updateRoomStatus,
-  getRoomTypes 
+  getRoomTypes, hardDeleteRoom // 🌟 ADDED hardDeleteRoom
 } from '../api/rooms';
 import RequirePermission from '../components/RequirePermission';
-import RoomTypeModal from '../components/catalog/RoomTypeModal'; 
-import AmenityManagementModal from '../components/catalog/AmenityManagementModal'; // 🌟 NEW IMPORT
+import RoomTypeModal from '../components/catalog/RoomTypeModal';
+import AmenityManagementModal from '../components/catalog/AmenityManagementModal';
 import toast from 'react-hot-toast';
 import {
-  BedDouble, Layers, Plus, Edit2, Trash2, Loader2, Sparkles, AlertCircle, X, Users, Tag // 🌟 Added Tag icon
+  BedDouble, Layers, Plus, Edit2, Trash2, Loader2, Sparkles, AlertCircle, X, Tag
 } from 'lucide-react';
 
 export default function RoomManagementPage() {
   const user = useAuthStore((state) => state.user);
   const propertyId = user?.propertyId;
   const queryClient = useQueryClient();
-  
+
   const [activeTab, setActiveTab] = useState('rooms');
-  
+
   // Modal States
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
-  const [isAmenityModalOpen, setIsAmenityModalOpen] = useState(false); // 🌟 NEW STATE
+  const [isAmenityModalOpen, setIsAmenityModalOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState(null);
   const [editingType, setEditingType] = useState(null);
 
@@ -43,7 +43,7 @@ export default function RoomManagementPage() {
   const rooms = roomsData || [];
   const roomTypes = typesData || [];
 
-  // Room Mutations
+  // Mutations
   const roomMutation = useMutation({
     mutationFn: ({ id, data }) => id ? updateRoom(id, data) : createRoom(data),
     onSuccess: () => {
@@ -59,8 +59,34 @@ export default function RoomManagementPage() {
     mutationFn: (id) => deleteRoom(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
-      toast.success('Room deactivated.');
+      toast.success('Room deactivated (soft delete).');
     },
+  });
+
+  // 🌟 NEW: Hard Delete Mutation
+  const hardDeleteRoomMutation = useMutation({
+    mutationFn: (id) => hardDeleteRoom(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+      toast.success('Room permanently deleted.');
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Failed to delete room.');
+    }
+  });
+
+  // 🌟 ROOM TYPE DELETION MUTATION
+  const deleteRoomTypeMutation = useMutation({
+    mutationFn: (id) => {
+      // Note: Ensure deleteRoomType is imported from '../api/rooms' if not already
+      // For now, assuming it's handled or you will add it to the import above
+      return import('../api/rooms').then(module => module.deleteRoomType(id));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['roomTypes'] });
+      toast.success('Room type deleted.');
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Failed to delete room type.'),
   });
 
   const statusMutation = useMutation({
@@ -71,12 +97,23 @@ export default function RoomManagementPage() {
     },
   });
 
-  // Handlers
   const handleSaveRoom = (data) => {
     if (editingRoom) {
       roomMutation.mutate({ id: editingRoom.roomId, data });
     } else {
       roomMutation.mutate({ data });
+    }
+  };
+
+  // 🌟 SAFETY CHECK FOR DELETING ROOM TYPES
+  const handleDeleteType = (id, name, roomCount) => {
+    if (roomCount > 0) {
+      //  BLOCK DELETION IF ROOMS EXIST
+      toast.error(`Cannot delete "${name}". ${roomCount} room(s) are using this type. Please delete the rooms first.`);
+      return;
+    }
+    if (window.confirm(`Delete "${name}"? This cannot be undone.`)) {
+      deleteRoomTypeMutation.mutate(id);
     }
   };
 
@@ -109,22 +146,25 @@ export default function RoomManagementPage() {
       {activeTab === 'rooms' && (
         <RoomsTab 
           rooms={rooms} 
+          roomTypes={roomTypes}
           isLoading={isLoadingRooms}
           onAdd={() => { setEditingRoom(null); setIsRoomModalOpen(true); }}
           onEdit={(room) => { setEditingRoom(room); setIsRoomModalOpen(true); }}
-          onDelete={(id, num) => window.confirm(`Deactivate Room ${num}?`) && deleteRoomMutation.mutate(id)}
+          // 🌟 CHANGED: Now uses hard delete with a stronger warning
+          onDelete={(id, num) => window.confirm(`⚠️ PERMANENTLY DELETE Room ${num}? This cannot be undone and will fail if the room has reservation history.`) && hardDeleteRoomMutation.mutate(id)}
           onStatusChange={(id, op, hk) => statusMutation.mutate({ id, data: { operationalStatus: op, housekeepingStatus: hk } })}
         />
       )}
-      
+
       {activeTab === 'types' && (
         <TypesTab 
           types={roomTypes} 
           isLoading={isLoadingTypes}
           onAdd={() => { setEditingType(null); setIsTypeModalOpen(true); }}
           onEdit={(type) => { setEditingType(type); setIsTypeModalOpen(true); }}
-          onDelete={(id, name) => window.confirm(`Delete "${name}"? Ensure no rooms are using it.`) && deleteRoomType(id)} // Note: You'll need to ensure deleteRoomType is imported or handled if used here, or remove this prop if not needed.
-          onManageAmenities={() => setIsAmenityModalOpen(true)} // 🌟 NEW PROP
+          // 🌟 PASS THE SAFE DELETE HANDLER
+          onDelete={(id, name, count) => handleDeleteType(id, name, count)} 
+          onManageAmenities={() => setIsAmenityModalOpen(true)} 
         />
       )}
 
@@ -140,7 +180,6 @@ export default function RoomManagementPage() {
         />
       )}
 
-      {/* 🌟 ADVANCED ROOM TYPE MODAL */}
       {isTypeModalOpen && (
         <RoomTypeModal 
           isOpen={isTypeModalOpen}
@@ -153,13 +192,11 @@ export default function RoomManagementPage() {
         />
       )}
 
-      {/* 🌟 AMENITY MANAGEMENT MODAL */}
       {isAmenityModalOpen && (
         <AmenityManagementModal 
           isOpen={isAmenityModalOpen} 
           onClose={() => {
             setIsAmenityModalOpen(false);
-            // 🌟 THE MAGIC FIX: Force the parent page to refetch Room Types
             queryClient.invalidateQueries({ queryKey: ['roomTypes'] }); 
           }} 
         />
@@ -171,16 +208,23 @@ export default function RoomManagementPage() {
 // ==========================================
 // Sub-Components
 // ==========================================
+function RoomsTab({ rooms, isLoading, onAdd, onEdit, onDelete, onStatusChange, roomTypes }) {
+  const hasRoomTypes = roomTypes && roomTypes.length > 0;
 
-function RoomsTab({ rooms, isLoading, onAdd, onEdit, onDelete, onStatusChange }) {
   return (
     <div className="bg-surface border border-border rounded-xl shadow-sm overflow-hidden">
       <div className="p-4 border-b border-border flex justify-between items-center bg-secondary-50/30">
         <h3 className="text-sm font-bold text-text">Physical Rooms</h3>
         <RequirePermission permission="CanCreateRoom">
-          <button onClick={onAdd} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm">
-            <Plus size={16} /> Add New Room
-          </button>
+          {hasRoomTypes ? (
+            <button onClick={onAdd} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm">
+              <Plus size={16} /> Add New Room
+            </button>
+          ) : (
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-warning-50 text-warning-700 text-sm font-semibold rounded-lg border border-warning-200 cursor-not-allowed">
+              <AlertCircle size={16} /> Create a Room Type first
+            </div>
+          )}
         </RequirePermission>
       </div>
       <div className="overflow-x-auto">
@@ -198,13 +242,17 @@ function RoomsTab({ rooms, isLoading, onAdd, onEdit, onDelete, onStatusChange })
             {isLoading ? (
               <tr> <td colSpan="5" className="p-12 text-center text-text-muted animate-pulse">Loading rooms...</td> </tr>
             ) : rooms.length === 0 ? (
-              <tr> <td colSpan="5" className="p-12 text-center text-text-muted">No rooms found. Click "Add New Room" to create one.</td> </tr>
+              <tr> 
+                <td colSpan="5" className="p-12 text-center text-text-muted">
+                  {hasRoomTypes ? 'No rooms found. Click "Add New Room" to create one.' : 'No rooms found. Please create a Room Type first.'}
+                </td> 
+              </tr>
             ) : (
               rooms.map((room) => (
                 <tr key={room.roomId} className="border-b border-border last:border-0 hover:bg-secondary-50/50 transition">
                   <td className="px-6 py-4"> <p className="text-lg font-bold text-text">{room.roomNumber}</p> </td>
                   <td className="px-6 py-4">
-                    <p className="text-sm font-semibold text-text">{room.roomType?.typeName}</p>
+                    <p className="text-sm font-semibold text-text">{room.roomType?.typeName || 'No Type'}</p>
                     <p className="text-xs text-text-muted">Floor {room.floor}</p>
                   </td>
                   <td className="px-6 py-4">
@@ -220,12 +268,12 @@ function RoomsTab({ rooms, isLoading, onAdd, onEdit, onDelete, onStatusChange })
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <RequirePermission permission="CanUpdateRoomStatus">
-                        <button onClick={() => onStatusChange(room.roomId, room.operationalStatus, room.housekeepingStatus === 'Clean' ? 'Dirty' : 'Clean')} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" title="Toggle Clean/Dirty">
+                        <button onClick={() => onStatusChange(room.roomId, room.operationalStatus, room.housekeepingStatus === 'Clean' ? 'Dirty' : 'Clean')} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition">
                           <Sparkles size={16} />
                         </button>
                       </RequirePermission>
                       <RequirePermission permission="CanUpdateRoom">
-                        <button onClick={() => onEdit(room)} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" title="Edit Room"> <Edit2 size={16} /> </button>
+                        <button onClick={() => onEdit(room)} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition"> <Edit2 size={16} /> </button>
                       </RequirePermission>
                       <RequirePermission permission="CanDeleteRoom">
                         <button onClick={() => onDelete(room.roomId, room.roomNumber)} className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition" title="Delete Room"> <Trash2 size={16} /> </button>
@@ -242,21 +290,15 @@ function RoomsTab({ rooms, isLoading, onAdd, onEdit, onDelete, onStatusChange })
   );
 }
 
-// 🌟 UPGRADED TypesTab to show Amenities Badges and Manage Button
 function TypesTab({ types, isLoading, onAdd, onEdit, onDelete, onManageAmenities }) {
   return (
     <div className="bg-surface border border-border rounded-xl shadow-sm overflow-hidden">
       <div className="p-4 border-b border-border flex justify-between items-center bg-secondary-50/30">
         <h3 className="text-sm font-bold text-text">Room Types & Rates</h3>
         <div className="flex gap-2">
-          {/* 🌟 NEW BUTTON: Manage Master Amenities */}
-          <button 
-            onClick={onManageAmenities} 
-            className="inline-flex items-center gap-2 px-4 py-2 bg-secondary-100 text-text text-sm font-semibold rounded-lg hover:bg-secondary-200 transition shadow-sm border border-border"
-          >
+          <button onClick={onManageAmenities} className="inline-flex items-center gap-2 px-4 py-2 bg-secondary-100 text-text text-sm font-semibold rounded-lg hover:bg-secondary-200 transition shadow-sm border border-border">
             <Tag size={16} /> Manage Amenities
           </button>
-          
           <RequirePermission permission="CanCreateRoomType">
             <button onClick={onAdd} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm">
               <Plus size={16} /> Add Room Type
@@ -289,16 +331,11 @@ function TypesTab({ types, isLoading, onAdd, onEdit, onDelete, onManageAmenities
                   </td>
                   <td className="px-6 py-4">
                     <p className="text-sm text-text-muted max-w-xs truncate mb-2">{type.description || '-'}</p>
-                    {/* 🌟 Display Amenities Badges */}
                     {type.amenities && type.amenities.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
                         {type.amenities.map((link) => (
-                          <span 
-                            key={link.amenity.amenityId} 
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-secondary-100 text-secondary-700 border border-secondary-200"
-                          >
-                            <Tag size={10} />
-                            {link.amenity.name}
+                          <span key={link.amenity.amenityId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-secondary-100 text-secondary-700 border border-secondary-200">
+                            <Tag size={10} /> {link.amenity.name}
                           </span>
                         ))}
                       </div>
@@ -309,10 +346,17 @@ function TypesTab({ types, isLoading, onAdd, onEdit, onDelete, onManageAmenities
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <RequirePermission permission="CanUpdateRoomType">
-                        <button onClick={() => onEdit(type)} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" title="Edit Type"> <Edit2 size={16} /> </button>
+                        <button onClick={() => onEdit(type)} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition"> <Edit2 size={16} /> </button>
                       </RequirePermission>
                       <RequirePermission permission="CanDeleteRoomType">
-                        <button onClick={() => onDelete(type.roomTypeId, type.typeName)} className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition" title="Delete Type"> <Trash2 size={16} /> </button>
+                        {/* 🌟 PASS ROOM COUNT TO DELETE HANDLER */}
+                        <button 
+                          onClick={() => onDelete(type.roomTypeId, type.typeName, type._count?.rooms || 0)} 
+                          className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition" 
+                          title="Delete Type"
+                        > 
+                          <Trash2 size={16} /> 
+                        </button>
                       </RequirePermission>
                     </div>
                   </td>
@@ -386,7 +430,7 @@ function RoomModal({ room, roomTypes, propertyId, onClose, onSave, isLoading }) 
               <select name="housekeepingStatus" value={formData.housekeepingStatus} onChange={handleChange} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20">
                 <option value="Clean">Clean</option>
                 <option value="Dirty">Dirty</option>
-                <option value="OutOfService">Out of Service</option>
+                {/* 🌟 REMOVED: Out of Service option */}
               </select>
             </div>
           </div>

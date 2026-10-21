@@ -189,10 +189,17 @@ export const updateRoomStatus = async (
   });
 };
 
+// 🌟 SOFT DELETE: Deactivates the room (used by other parts of the app)
 export const deleteRoom = async (roomId: number) => {
   return prisma.room.update({
     where: { roomId },
-    // 🌟 CHANGED: 'OutOfService' was removed from the enum. 'Maintenance' is the correct status for a room taken out of service.
     data: { operationalStatus: 'Maintenance' },
+  });
+};
+
+// 🌟 HARD DELETE: Permanently removes the room (used only by Room Management)
+export const hardDeleteRoom = async (roomId: number) => {
+  return prisma.room.delete({
+    where: { roomId },
   });
 };

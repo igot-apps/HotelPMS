@@ -4,35 +4,91 @@ import { useQuery } from '@tanstack/react-query';
 import { getOperationalOverview } from '../api/dashboard';
 import { getProperties } from '../api/properties';
 import { useAuthStore } from '../store/authStore';
-import { 
-  UserPlus, UserMinus, BedDouble, Sparkles, AlertTriangle, 
+import {
+  UserPlus, UserMinus, BedDouble, Sparkles, AlertTriangle,
   Calendar, Search, CreditCard, RefreshCw, LayoutGrid, ArrowRight,
-  Loader2, Building2
+  Loader2, Building2, CheckCircle2
 } from 'lucide-react';
+
+// ==========================================
+// 🌟 NEW: ONBOARDING CHECKLIST COMPONENT
+// ==========================================
+const SetupChecklist = () => {
+  const steps = [
+    { 
+      id: 1, 
+      title: 'Create Room Types', 
+      desc: 'Define your categories (e.g., Standard, Deluxe) and set base prices.', 
+      link: '/room-management', // ✅ FIXED
+      icon: BedDouble 
+    },
+    { 
+      id: 2, 
+      title: 'Add Physical Rooms', 
+      desc: 'Add your actual room numbers (e.g., 101, 102) and assign them to a type.', 
+      link: '/room-management', // ✅ FIXED
+      icon: Building2 
+    },
+    { 
+      id: 3, 
+      title: 'Enable Online Booking', 
+      desc: 'Turn on public bookings to start accepting reservations from your website.', 
+      link: '/properties', 
+      icon: CheckCircle2 
+    },
+  ];
+
+  return (
+    <div className="bg-gradient-to-br from-primary-50 to-white border border-primary-100 rounded-2xl p-6 shadow-sm">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="p-2.5 bg-primary-600 rounded-xl shadow-sm shadow-primary-600/20">
+          <Sparkles size={20} className="text-white" />
+        </div>
+        <div>
+          <h2 className="text-lg font-bold text-text">Welcome to Hotel PMS! Let's get you set up. 🚀</h2>
+          <p className="text-sm text-text-muted">Complete these 4 steps to start managing your property.</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {steps.map((step) => (
+          <Link 
+            key={step.id} 
+            to={step.link}
+            className="group flex items-start gap-4 p-4 bg-white rounded-xl border border-border hover:border-primary-300 hover:shadow-md transition-all duration-300"
+          >
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center font-bold text-sm group-hover:bg-primary-600 group-hover:text-white transition-colors">
+              {step.id}
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-bold text-text group-hover:text-primary-600 transition-colors flex items-center gap-2">
+                {step.title}
+                <ArrowRight size={14} className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+              </h3>
+              <p className="text-xs text-text-muted mt-1 leading-relaxed">{step.desc}</p>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 export default function DashboardPage() {
   const user = useAuthStore((state) => state.user);
-  
-  // 🚨 CHECK IF USER IS TIED TO A SPECIFIC PROPERTY
   const userPropertyId = user?.propertyId;
   const isPropertySpecific = !!userPropertyId;
 
-  // Initialize state with user's property ID if they have one
   const [propertyId, setPropertyId] = useState(userPropertyId || '');
 
-  // Fetch Properties (Only needed if user is a Manager and can switch)
   const { data: propsData } = useQuery({
     queryKey: ['properties'],
     queryFn: () => getProperties().then(res => res.data.data || res.data || []),
-    enabled: !isPropertySpecific, // 🚨 Don't fetch if user is property-specific
+    enabled: !isPropertySpecific,
   });
+
   const properties = propsData || [];
+  const currentPropertyName = user?.propertyName || 'All Properties';
 
-  // Find the property name for the header
-// ✅ REPLACE WITH THIS:
-const currentPropertyName = user?.propertyName || 'All Properties';
-
-  // Fetch Operational Data
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['operationalOverview', propertyId],
     queryFn: () => {
@@ -40,7 +96,7 @@ const currentPropertyName = user?.propertyName || 'All Properties';
       if (propertyId) params.propertyId = propertyId;
       return getOperationalOverview(params).then(res => res.data.data);
     },
-    refetchInterval: 60000, 
+    refetchInterval: 60000,
   });
 
   const arrivals = data?.arrivals || [];
@@ -48,6 +104,9 @@ const currentPropertyName = user?.propertyName || 'All Properties';
   const roomStats = data?.roomStats || {};
   const alerts = data?.alerts || [];
   const totalRooms = data?.totalRooms || 0;
+
+  // 🌟 DETECT FRESH ACCOUNT: If total rooms is 0, show the checklist
+  const isFreshAccount = data && totalRooms === 0;
 
   const currentHour = new Date().getHours();
   const greeting = currentHour < 12 ? 'Good morning' : currentHour < 18 ? 'Good afternoon' : 'Good evening';
@@ -62,7 +121,6 @@ const currentPropertyName = user?.propertyName || 'All Properties';
         <div>
           <h1 className="text-2xl font-bold text-text tracking-tight flex items-center gap-2 flex-wrap">
             {greeting}, {user?.fullName?.split(' ')[0] || 'Team'}! 👋
-            {/* 🚨 SHOW PROPERTY NAME IF SPECIFIC */}
             {isPropertySpecific && (
               <span className="text-lg font-semibold text-primary-600 bg-primary-50 px-3 py-1 rounded-lg border border-primary-100">
                 <Building2 size={16} className="inline mr-1 -mt-1" />
@@ -72,7 +130,6 @@ const currentPropertyName = user?.propertyName || 'All Properties';
           </h1>
           <p className="text-text-muted text-sm mt-1">{todayStr} • Here is your shift overview.</p>
         </div>
-        
         <div className="flex items-center gap-3">
           <button 
             onClick={() => refetch()} 
@@ -80,8 +137,6 @@ const currentPropertyName = user?.propertyName || 'All Properties';
           >
             <RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} /> Refresh
           </button>
-          
-          {/* 🚨 ONLY SHOW DROPDOWN IF USER IS NOT PROPERTY-SPECIFIC (e.g. Manager) */}
           {!isPropertySpecific && (
             <select 
               value={propertyId} 
@@ -107,8 +162,11 @@ const currentPropertyName = user?.propertyName || 'All Properties';
 
       {data && (
         <>
+          {/* 🌟 ONBOARDING CHECKLIST (Only shows for fresh accounts) */}
+          {isFreshAccount && <SetupChecklist />}
+
           {/* ========================================== */}
-          {/* 🌟 OPERATIONAL KPI CARDS                   */}
+          {/*  OPERATIONAL KPI CARDS                   */}
           {/* ========================================== */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <OpCard icon={UserPlus} label="Arrivals Today" value={arrivals.length} subtext="Confirmed Check-ins" color="primary" />
@@ -118,10 +176,9 @@ const currentPropertyName = user?.propertyName || 'All Properties';
           </div>
 
           {/* ========================================== */}
-          {/* 🌟 MAIN ACTION LISTS                       */}
+          {/*  MAIN ACTION LISTS                       */}
           {/* ========================================== */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
             {/* Today's Arrivals */}
             <div className="bg-surface border border-border rounded-xl shadow-sm flex flex-col overflow-hidden">
               <div className="p-4 border-b border-border bg-primary-50/50 flex items-center justify-between">
@@ -184,10 +241,9 @@ const currentPropertyName = user?.propertyName || 'All Properties';
           </div>
 
           {/* ========================================== */}
-          {/* 🌟 BOTTOM ROW: ALERTS & QUICK ACTIONS      */}
+          {/*  BOTTOM ROW: ALERTS & QUICK ACTIONS      */}
           {/* ========================================== */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
             {/* Housekeeping / Maintenance Alerts */}
             <div className="lg:col-span-2 bg-surface border border-border rounded-xl p-6 shadow-sm">
               <h3 className="text-sm font-bold text-text mb-4 flex items-center gap-2">
@@ -234,7 +290,6 @@ const currentPropertyName = user?.propertyName || 'All Properties';
                 <QuickLink to="/reservations" icon={Calendar} label="All Reservations" color="secondary" />
               </div>
             </div>
-
           </div>
         </>
       )}
@@ -245,7 +300,6 @@ const currentPropertyName = user?.propertyName || 'All Properties';
 // ==========================================
 // REUSABLE COMPONENTS
 // ==========================================
-
 function OpCard({ icon: Icon, label, value, subtext, color }) {
   const colorMap = {
     primary: 'bg-primary-50 text-primary-600',
@@ -279,8 +333,8 @@ function QuickLink({ to, icon: Icon, label, color }) {
   };
 
   return (
-    <Link 
-      to={to} 
+    <Link
+      to={to}
       className={`flex items-center gap-3 p-3 rounded-lg border border-border transition-all group ${colorMap[color]}`}
     >
       <Icon size={18} />

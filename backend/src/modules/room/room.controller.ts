@@ -167,3 +167,30 @@ export const deleteRoom = async (req: AuthRequest, res: Response) => {
     return res.status(400).json({ success: false, message: error.message });
   }
 };
+
+// 🌟 NEW: Hard Delete Room (Permanent deletion for Room Management page)
+export const hardDeleteRoom = async (req: AuthRequest, res: Response) => {
+  try {
+    const roomId = getParamId(req);
+    const room = await roomService.getRoomById(roomId);
+    
+    // Security check
+    if (req.user?.propertyId && room.propertyId !== req.user.propertyId) {
+      return res.status(403).json({ success: false, message: 'You do not have access to this room' });
+    }
+    
+    // Safety check: Prevent deleting rooms with active reservations
+    if (room.reservationRooms && room.reservationRooms.length > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Cannot permanently delete a room with active or past reservations. Please use "Maintenance" status instead, or remove the reservation links first.' 
+      });
+    }
+    
+    // Permanent deletion
+    await roomService.hardDeleteRoom(roomId);
+    return res.status(200).json({ success: true, message: 'Room permanently deleted' });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+};

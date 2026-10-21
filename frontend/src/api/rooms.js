@@ -78,3 +78,8 @@ export const updateRoomType = (id, data) => {
 export const deleteRoomType = (id) => {
   return api.delete(`/rooms/types/${id}`);
 };
+
+// 🌟 NEW: Hard delete a physical room (Manager only - permanent deletion)
+export const hardDeleteRoom = (id) => {
+  return api.delete(`/rooms/${id}/hard`);
+};

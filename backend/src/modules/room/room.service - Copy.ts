@@ -1,5 +1,10 @@
 import * as roomRepository from './room.repository';
 
+// 🌟 NEW: Hard Delete Room (Permanent deletion)
+export const hardDeleteRoom = async (roomId: number) => {
+  return roomRepository.hardDeleteRoom(roomId);
+};
+
 export const createRoom = async (data: any) => {
   // ✅ Removed tenantId check
   if (!data.propertyId) throw new Error('Property ID is required');
