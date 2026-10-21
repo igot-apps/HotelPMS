@@ -59,3 +59,10 @@ export const deleteRoomType = async (roomTypeId: number) => {
   
   return roomTypeRepository.deleteRoomType(roomTypeId);
 };
+
+// 🌟 NEW: Hard Delete Room Type
+export const hardDeleteRoomType = async (roomTypeId: number) => {
+  const roomType = await roomTypeRepository.findRoomTypeById(roomTypeId);
+  if (!roomType) throw new Error('Room type not found');
+  return roomTypeRepository.hardDeleteRoomType(roomTypeId);
+};

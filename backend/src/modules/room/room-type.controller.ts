@@ -156,3 +156,30 @@ export const deleteRoomType = async (req: AuthRequest, res: Response) => {
     });
   }
 };
+
+// 🌟 NEW: Hard Delete Room Type (Permanent deletion for Room Management page)
+export const hardDeleteRoomType = async (req: AuthRequest, res: Response) => {
+  try {
+    const roomTypeId = getParamId(req);
+    const roomType = await roomTypeService.getRoomTypeById(roomTypeId);
+    
+    // Security check
+    if (req.user && roomType.propertyId !== req.user.propertyId) {
+      return res.status(403).json({ success: false, message: 'You do not have access to this room type' });
+    }
+
+    // Safety check: Prevent deleting room types that have rooms assigned
+    if (roomType._count && roomType._count.rooms > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Cannot permanently delete "${roomType.typeName}". It has ${roomType._count.rooms} room(s) assigned to it. Please delete the rooms first.` 
+      });
+    }
+
+    // Permanent deletion
+    await roomTypeService.hardDeleteRoomType(roomTypeId);
+    return res.status(200).json({ success: true, message: 'Room type permanently deleted' });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+};

@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
 import {
-  getRooms, createRoom, updateRoom, deleteRoom, updateRoomStatus,
-  getRoomTypes, hardDeleteRoom // 🌟 ADDED hardDeleteRoom
+  getRooms, createRoom, updateRoom, updateRoomStatus,
+  getRoomTypes, hardDeleteRoom, hardDeleteRoomType // 🌟 UPDATED IMPORTS
 } from '../api/rooms';
 import RequirePermission from '../components/RequirePermission';
 import RoomTypeModal from '../components/catalog/RoomTypeModal';
@@ -19,8 +19,6 @@ export default function RoomManagementPage() {
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState('rooms');
-
-  // Modal States
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
   const [isAmenityModalOpen, setIsAmenityModalOpen] = useState(false);
@@ -55,36 +53,21 @@ export default function RoomManagementPage() {
     onError: (err) => toast.error(err.response?.data?.message || 'Failed to save room'),
   });
 
-  const deleteRoomMutation = useMutation({
-    mutationFn: (id) => deleteRoom(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rooms'] });
-      toast.success('Room deactivated (soft delete).');
-    },
-  });
-
-  // 🌟 NEW: Hard Delete Mutation
+  // 🌟 HARD DELETE MUTATIONS
   const hardDeleteRoomMutation = useMutation({
     mutationFn: (id) => hardDeleteRoom(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       toast.success('Room permanently deleted.');
     },
-    onError: (err) => {
-      toast.error(err.response?.data?.message || 'Failed to delete room.');
-    }
+    onError: (err) => toast.error(err.response?.data?.message || 'Failed to delete room.'),
   });
 
-  // 🌟 ROOM TYPE DELETION MUTATION
-  const deleteRoomTypeMutation = useMutation({
-    mutationFn: (id) => {
-      // Note: Ensure deleteRoomType is imported from '../api/rooms' if not already
-      // For now, assuming it's handled or you will add it to the import above
-      return import('../api/rooms').then(module => module.deleteRoomType(id));
-    },
+  const hardDeleteRoomTypeMutation = useMutation({
+    mutationFn: (id) => hardDeleteRoomType(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['roomTypes'] });
-      toast.success('Room type deleted.');
+      toast.success('Room type permanently deleted.');
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Failed to delete room type.'),
   });
@@ -105,15 +88,20 @@ export default function RoomManagementPage() {
     }
   };
 
-  // 🌟 SAFETY CHECK FOR DELETING ROOM TYPES
+  //  SAFETY CHECK HANDLERS
+  const handleDeleteRoom = (id, num) => {
+    if (window.confirm(`⚠️ PERMANENTLY DELETE Room ${num}? This cannot be undone.`)) {
+      hardDeleteRoomMutation.mutate(id);
+    }
+  };
+
   const handleDeleteType = (id, name, roomCount) => {
     if (roomCount > 0) {
-      //  BLOCK DELETION IF ROOMS EXIST
       toast.error(`Cannot delete "${name}". ${roomCount} room(s) are using this type. Please delete the rooms first.`);
       return;
     }
-    if (window.confirm(`Delete "${name}"? This cannot be undone.`)) {
-      deleteRoomTypeMutation.mutate(id);
+    if (window.confirm(`⚠️ PERMANENTLY DELETE "${name}"? This cannot be undone.`)) {
+      hardDeleteRoomTypeMutation.mutate(id);
     }
   };
 
@@ -124,7 +112,6 @@ export default function RoomManagementPage() {
         <p className="text-text-muted text-sm mt-1">Configure physical rooms, categories, base pricing, and amenities.</p>
       </div>
 
-      {/* Tabs */}
       <div className="border-b border-border">
         <nav className="flex gap-6">
           <button 
@@ -142,7 +129,6 @@ export default function RoomManagementPage() {
         </nav>
       </div>
 
-      {/* Tab Content */}
       {activeTab === 'rooms' && (
         <RoomsTab 
           rooms={rooms} 
@@ -150,8 +136,7 @@ export default function RoomManagementPage() {
           isLoading={isLoadingRooms}
           onAdd={() => { setEditingRoom(null); setIsRoomModalOpen(true); }}
           onEdit={(room) => { setEditingRoom(room); setIsRoomModalOpen(true); }}
-          // 🌟 CHANGED: Now uses hard delete with a stronger warning
-          onDelete={(id, num) => window.confirm(`⚠️ PERMANENTLY DELETE Room ${num}? This cannot be undone and will fail if the room has reservation history.`) && hardDeleteRoomMutation.mutate(id)}
+          onDelete={(id, num) => handleDeleteRoom(id, num)}
           onStatusChange={(id, op, hk) => statusMutation.mutate({ id, data: { operationalStatus: op, housekeepingStatus: hk } })}
         />
       )}
@@ -162,13 +147,11 @@ export default function RoomManagementPage() {
           isLoading={isLoadingTypes}
           onAdd={() => { setEditingType(null); setIsTypeModalOpen(true); }}
           onEdit={(type) => { setEditingType(type); setIsTypeModalOpen(true); }}
-          // 🌟 PASS THE SAFE DELETE HANDLER
           onDelete={(id, name, count) => handleDeleteType(id, name, count)} 
           onManageAmenities={() => setIsAmenityModalOpen(true)} 
         />
       )}
 
-      {/* Modals */}
       {isRoomModalOpen && (
         <RoomModal 
           room={editingRoom} 
@@ -349,7 +332,6 @@ function TypesTab({ types, isLoading, onAdd, onEdit, onDelete, onManageAmenities
                         <button onClick={() => onEdit(type)} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition"> <Edit2 size={16} /> </button>
                       </RequirePermission>
                       <RequirePermission permission="CanDeleteRoomType">
-                        {/* 🌟 PASS ROOM COUNT TO DELETE HANDLER */}
                         <button 
                           onClick={() => onDelete(type.roomTypeId, type.typeName, type._count?.rooms || 0)} 
                           className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition" 
@@ -430,7 +412,6 @@ function RoomModal({ room, roomTypes, propertyId, onClose, onSave, isLoading }) 
               <select name="housekeepingStatus" value={formData.housekeepingStatus} onChange={handleChange} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20">
                 <option value="Clean">Clean</option>
                 <option value="Dirty">Dirty</option>
-                {/* 🌟 REMOVED: Out of Service option */}
               </select>
             </div>
           </div>

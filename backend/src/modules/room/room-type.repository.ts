@@ -155,3 +155,10 @@ export const getRoomTypeStats = async (roomTypeId: number) => {
     isActive: stats.isActive,
   };
 };
+
+// 🌟 NEW: Hard Delete Room Type (Permanent deletion)
+export const hardDeleteRoomType = async (roomTypeId: number) => {
+  return prisma.roomType.delete({
+    where: { roomTypeId },
+  });
+};

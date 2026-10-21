@@ -21,6 +21,8 @@ router.get('/types/:id', roomTypeController.getRoomTypeById);
 router.get('/types/:id/stats', roomTypeController.getRoomTypeStats);
 router.put('/types/:id', requirePermission('CanUpdateRoomType'), roomTypeController.updateRoomType);
 router.delete('/types/:id', requirePermission('CanDeleteRoomType'), roomTypeController.deleteRoomType);
+// 🌟 NEW: Hard delete route for Room Types
+router.delete('/types/:id/hard', requirePermission('CanDeleteRoomType'), roomTypeController.hardDeleteRoomType);
 
 // ============================================================
 // Rate Plan Routes (MUST come BEFORE /:id routes)
@@ -41,7 +43,7 @@ router.get('/', roomController.getRooms); // Open to all authenticated staff
 router.get('/available', roomController.getAvailableRooms); // Open to all authenticated staff
 router.get('/:id', roomController.getRoomById);
 
-// 🌟 NEW: Hard delete route (MUST be before /:id to avoid route conflicts)
+// 🌟 NEW: Hard delete route (MUST be before the generic /:id delete route)
 router.delete('/:id/hard', requirePermission('CanDeleteRoom'), roomController.hardDeleteRoom);
 
 // Managers can update room details (like room number or floor)
