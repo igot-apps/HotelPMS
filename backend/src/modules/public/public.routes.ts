@@ -200,7 +200,10 @@ router.get('/reservations', async (req: any, res: Response) => {
         property: { select: { propertyName: true, city: true, propertyCode: true } },
         reservationRooms: { include: { roomType: { select: { typeName: true } } } }
       },
-      orderBy: { checkInDate: 'desc' },
+      orderBy: [
+     { checkInDate: 'desc' },
+     { createdAt: 'desc' } 
+   ],
       skip,
       take: limitNum
     });

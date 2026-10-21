@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '../lib/axios';
+import toast from 'react-hot-toast';
 import PublicNavbar from '../components/public/PublicNavbar';
-import { 
-  Calendar, MapPin, Loader2, Search, ArrowLeft, Clock, 
-  CheckCircle2, XCircle, CreditCard, ChevronLeft, ChevronRight, 
-  BedDouble, ChevronRight as ChevronRightIcon, Receipt
+import {
+  Calendar, MapPin, Loader2, Search, ArrowLeft, Clock,
+  CheckCircle2, XCircle, CreditCard, ChevronLeft, ChevronRight,
+  BedDouble, ChevronRight as ChevronRightIcon
 } from 'lucide-react';
 
 // 🌟 REUSABLE PAGINATION COMPONENT
@@ -56,8 +57,8 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
                 key={page}
                 onClick={() => onPageChange(page)}
                 className={`min-w-[40px] h-10 px-3 text-sm font-semibold rounded-lg transition ${
-                  isActive
-                    ? 'bg-primary-600 text-white shadow-md shadow-primary-600/30'
+                  isActive 
+                    ? 'bg-primary-600 text-white shadow-md shadow-primary-600/30' 
                     : 'bg-surface border border-border text-text hover:bg-secondary-50 hover:border-primary-200'
                 }`}
               >
@@ -82,8 +83,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
 export default function PublicReservationsPage() {
   const navigate = useNavigate();
   const [token, setToken] = useState(null);
-
-  // 🌟 Pagination state
+  
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 5;
 
@@ -122,13 +122,42 @@ export default function PublicReservationsPage() {
     }
   };
 
+  // 🌟 PAYMENT RETRY MUTATION
+  const retryPaymentMutation = useMutation({
+    mutationFn: async (reservation) => {
+      const totalAmount = Number(reservation.totalAmount || 0);
+      const amountPaid = Number(reservation.amountPaid || 0);
+      const balanceDue = Math.max(0, totalAmount - amountPaid);
+      const amountToPay = balanceDue > 0 ? balanceDue : totalAmount;
+
+      const res = await api.post(`/public/${reservation.property.propertyCode}/payments/initialize`, {
+        reservationId: reservation.reservationId,
+        email: reservation.platformGuest?.email || 'guest@stayfolio.com',
+        amount: amountToPay,
+      });
+      return res.data.data;
+    },
+    onSuccess: (paystackData) => {
+      if (paystackData.authorization_url) {
+        window.location.href = paystackData.authorization_url;
+      } else {
+        toast.error('Failed to initialize payment.');
+      }
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Payment initialization failed.');
+    }
+  });
+
   const getStatusBadge = (status) => {
     switch (status) {
       case 'Confirmed':
         return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-primary-50 text-primary-700 border border-primary-100"><CheckCircle2 size={12} /> Confirmed</span>;
       case 'CheckedIn':
+      case 'InHouse':
         return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-success-50 text-success-700 border border-success-100"><Clock size={12} /> Checked In</span>;
       case 'CheckedOut':
+      case 'Completed':
         return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-secondary-50 text-secondary-700 border border-secondary-100"><CheckCircle2 size={12} /> Completed</span>;
       case 'Cancelled':
         return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-danger-50 text-danger-700 border border-danger-100"><XCircle size={12} /> Cancelled</span>;
@@ -137,12 +166,10 @@ export default function PublicReservationsPage() {
     }
   };
 
-  // 🌟 Helper for cleaner date formatting (e.g., "Jul 22, 2026")
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
-  // 🌟 Premium Skeleton Loader
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -161,9 +188,7 @@ export default function PublicReservationsPage() {
   return (
     <div className="min-h-screen bg-background">
       <PublicNavbar />
-
       <div className="max-w-5xl mx-auto px-4 py-12">
-        {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <button onClick={() => navigate(-1)} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition">
             <ArrowLeft size={20} />
@@ -174,44 +199,39 @@ export default function PublicReservationsPage() {
           </div>
         </div>
 
-        {/* Error State */}
         {isError && (
           <div className="text-center py-16 bg-surface border border-border rounded-2xl">
             <XCircle size={48} className="mx-auto text-danger-500 mb-4" />
             <h3 className="text-xl font-bold text-text mb-2">Failed to load reservations</h3>
-            <p className="text-text-muted mb-6">Please try logging out and back in, or check your connection.</p>
-            <button onClick={() => window.location.reload()} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
-              Retry
-            </button>
+            <button onClick={() => window.location.reload()} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">Retry</button>
           </div>
         )}
 
-        {/* Empty State */}
         {!isError && reservations.length === 0 && (
           <div className="text-center py-16 bg-surface border border-border rounded-2xl">
             <div className="w-16 h-16 bg-secondary-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Search size={32} className="text-text-muted" />
             </div>
             <h3 className="text-xl font-bold text-text mb-2">No reservations yet</h3>
-            <p className="text-text-muted mb-6 max-w-md mx-auto">You haven't booked any stays with us yet. Start exploring our beautiful properties!</p>
-            <Link 
-              to="/discover" 
-              className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition shadow-lg shadow-primary-600/20"
-            >
+            <Link to="/discover" className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition">
               <Calendar size={18} /> Discover Hotels
             </Link>
           </div>
         )}
 
-        {/* Reservations List */}
         {!isError && reservations.length > 0 && (
           <>
             <div className="space-y-4">
               {reservations.map((res) => {
-                // 🌟 Smart multi-room display
                 const roomCount = res.reservationRooms?.length || 1;
                 const roomTypeName = res.reservationRooms?.[0]?.roomType?.typeName || 'Standard Room';
                 const displayRoomText = roomCount > 1 ? `${roomCount}x ${roomTypeName}` : roomTypeName;
+
+                // 🌟 CALCULATE BALANCE LOCALLY
+                const totalAmount = Number(res.totalAmount || 0);
+                const amountPaid = Number(res.amountPaid || 0);
+                const balanceDue = Math.max(0, totalAmount - amountPaid);
+                const isFullyPaid = balanceDue < 0.01;
 
                 return (
                   <div key={res.reservationId} className="group bg-surface border border-border rounded-xl p-6 hover:shadow-lg hover:border-primary-200 transition-all duration-300">
@@ -226,7 +246,6 @@ export default function PublicReservationsPage() {
                         <p className="text-sm text-text-muted flex items-center gap-1.5 mb-3">
                           <MapPin size={14} className="flex-shrink-0" /> {res.property?.city}, {res.property?.country || 'Ghana'}
                         </p>
-                        
                         <div className="flex flex-wrap gap-4 text-sm">
                           <div className="flex items-center gap-2 text-text-muted">
                             <Calendar size={14} className="text-primary-600" />
@@ -238,7 +257,6 @@ export default function PublicReservationsPage() {
                           </div>
                         </div>
                       </div>
-                      
                       <div className="text-right md:text-right flex-shrink-0">
                         <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-1">Confirmation Code</p>
                         <p className="text-sm font-black text-primary-600 tracking-widest bg-primary-50 px-3 py-1.5 rounded-lg border border-primary-100 inline-block">
@@ -251,36 +269,52 @@ export default function PublicReservationsPage() {
                       <div className="flex items-center gap-2">
                         <CreditCard size={16} className="text-text-muted" />
                         <div className="text-sm">
-                          <span className="font-bold text-text">GH₵ {Number(res.amountPaid).toFixed(2)}</span>
+                          <span className="font-bold text-text">GH₵ {amountPaid.toFixed(2)}</span>
                           <span className="text-text-muted"> paid</span>
-                          {Number(res.balanceDue) > 0 && (
+                          {!isFullyPaid && (
                             <span className="text-xs font-bold text-danger-600 bg-danger-50 px-2 py-0.5 rounded ml-2 border border-danger-100">
-                              Balance: GH₵ {Number(res.balanceDue).toFixed(2)}
+                              Balance: GH₵ {balanceDue.toFixed(2)}
                             </span>
                           )}
-                          {Number(res.balanceDue) === 0 && Number(res.amountPaid) > 0 && (
-                            <span className="text-xs font-bold text-success-600 bg-success-50 px-2 py-0.5 rounded ml-2 border border-success-100 inline-flex items-center gap-1">
-                              <CheckCircle2 size={10} /> Fully Paid
+                          {isFullyPaid && amountPaid > 0 && (
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded ml-2 border inline-flex items-center gap-1 ${
+                              res.status === 'Cancelled' 
+                                ? 'text-warning-700 bg-warning-50 border-warning-200' //  Show Warning if Cancelled
+                                : 'text-success-600 bg-success-50 border-success-100' //  Show Success if Active
+                            }`}>
+                              {res.status === 'Cancelled' ? 'Refund Due' : 'Fully Paid'}
                             </span>
                           )}
                         </div>
                       </div>
-                      
-                      {/* 🌟 Action Button for future details view */}
-                      <Link 
-                        to={`/public/reservations/${res.reservationId}`} 
-                        className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-lg transition border border-primary-100"
-                      >
-                        <Receipt size={16} /> View Details
-                        <ChevronRightIcon size={16} />
-                      </Link>
+
+                      {/* 🌟 ACTION BUTTONS (No "View Details") */}
+                      <div className="w-full sm:w-auto">
+                        {res.status === 'Cancelled' ? (
+                          <span className="block w-full text-center text-sm font-semibold text-text-muted bg-secondary-50 px-4 py-2.5 rounded-lg border border-secondary-100">
+                            Reservation Cancelled
+                          </span>
+                        ) : !isFullyPaid ? (
+                          <button
+                            onClick={() => retryPaymentMutation.mutate(res)}
+                            disabled={retryPaymentMutation.isPending}
+                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition shadow-md shadow-primary-600/20 disabled:opacity-50"
+                          >
+                            <CreditCard size={18} /> 
+                            {retryPaymentMutation.isPending ? 'Processing...' : `Pay Balance (GH₵ ${balanceDue.toFixed(2)})`}
+                          </button>
+                        ) : (
+                          <span className="block w-full text-center text-sm font-semibold text-success-600 bg-success-50 px-4 py-2.5 rounded-lg border border-success-100">
+                            <CheckCircle2 size={14} className="inline mr-1" /> Payment Complete
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* 🌟 PAGINATION CONTROLS */}
             <Pagination
               currentPage={currentPage}
               totalPages={totalPages}
