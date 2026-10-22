@@ -7,13 +7,12 @@ import PublicNavbar from '../components/public/PublicNavbar';
 import {
   Calendar, MapPin, Loader2, Search, ArrowLeft, Clock,
   CheckCircle2, XCircle, CreditCard, ChevronLeft, ChevronRight,
-  BedDouble, ChevronRight as ChevronRightIcon
+  BedDouble
 } from 'lucide-react';
 
-// 🌟 REUSABLE PAGINATION COMPONENT
+//  REUSABLE PAGINATION COMPONENT
 const Pagination = ({ currentPage, totalPages, onPageChange }) => {
   if (totalPages <= 1) return null;
-
   const getPageNumbers = () => {
     const pages = [];
     const maxVisible = 5;
@@ -30,7 +29,6 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
     }
     return pages;
   };
-
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-12 pt-8 border-t border-border">
       <p className="text-sm text-text-muted">
@@ -56,11 +54,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
               <button
                 key={page}
                 onClick={() => onPageChange(page)}
-                className={`min-w-[40px] h-10 px-3 text-sm font-semibold rounded-lg transition ${
-                  isActive 
-                    ? 'bg-primary-600 text-white shadow-md shadow-primary-600/30' 
-                    : 'bg-surface border border-border text-text hover:bg-secondary-50 hover:border-primary-200'
-                }`}
+                className={`min-w-[40px] h-10 px-3 text-sm font-semibold rounded-lg transition ${isActive ? 'bg-primary-600 text-white shadow-md shadow-primary-600/30' : 'bg-surface border border-border text-text hover:bg-secondary-50 hover:border-primary-200'}`}
               >
                 {page}
               </button>
@@ -83,7 +77,6 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
 export default function PublicReservationsPage() {
   const navigate = useNavigate();
   const [token, setToken] = useState(null);
-  
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 5;
 
@@ -111,7 +104,14 @@ export default function PublicReservationsPage() {
     enabled: !!token,
   });
 
-  const reservations = data?.reservations || [];
+  // 🌟 FIX: Sort reservations so the newest (unpaid) ones appear at the top
+  const reservations = (data?.reservations || []).sort((a, b) => {
+    // Sort by creation date descending (newest first). 
+    // Fallback to checkInDate just in case createdAt is missing.
+    const dateA = new Date(a.createdAt || a.checkInDate);
+    const dateB = new Date(b.createdAt || b.checkInDate);
+    return dateB - dateA; 
+  });
   const pagination = data?.pagination || { total: 0, totalPages: 1, page: 1 };
   const totalPages = pagination.totalPages;
 
@@ -149,7 +149,26 @@ export default function PublicReservationsPage() {
     }
   });
 
-  const getStatusBadge = (status) => {
+  // 🌟 FIXED LOGIC: Check actual DB status FIRST, then check payment status
+  const getStatusBadge = (status, isFullyPaid) => {
+    // 1. If the receptionist actually cancelled it, show Cancelled (Red)
+    if (status === 'Cancelled') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-danger-50 text-danger-700 border border-danger-100">
+          <XCircle size={12} /> Cancelled
+        </span>
+      );
+    }
+    // 2. If it's NOT cancelled, but they haven't paid, show Awaiting Payment (Yellow)
+    if (!isFullyPaid) {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-warning-50 text-warning-700 border border-warning-100">
+          <Clock size={12} /> Awaiting Payment
+        </span>
+      );
+    }
+
+    // 3. If fully paid, show normal statuses
     switch (status) {
       case 'Confirmed':
         return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-primary-50 text-primary-700 border border-primary-100"><CheckCircle2 size={12} /> Confirmed</span>;
@@ -159,8 +178,6 @@ export default function PublicReservationsPage() {
       case 'CheckedOut':
       case 'Completed':
         return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-secondary-50 text-secondary-700 border border-secondary-100"><CheckCircle2 size={12} /> Completed</span>;
-      case 'Cancelled':
-        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-danger-50 text-danger-700 border border-danger-100"><XCircle size={12} /> Cancelled</span>;
       default:
         return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-secondary-50 text-secondary-700 border border-secondary-100">{status}</span>;
     }
@@ -226,8 +243,8 @@ export default function PublicReservationsPage() {
                 const roomCount = res.reservationRooms?.length || 1;
                 const roomTypeName = res.reservationRooms?.[0]?.roomType?.typeName || 'Standard Room';
                 const displayRoomText = roomCount > 1 ? `${roomCount}x ${roomTypeName}` : roomTypeName;
-
-                // 🌟 CALCULATE BALANCE LOCALLY
+                
+                //  CALCULATE BALANCE LOCALLY
                 const totalAmount = Number(res.totalAmount || 0);
                 const amountPaid = Number(res.amountPaid || 0);
                 const balanceDue = Math.max(0, totalAmount - amountPaid);
@@ -241,7 +258,8 @@ export default function PublicReservationsPage() {
                           <h3 className="text-lg font-bold text-text group-hover:text-primary-600 transition-colors">
                             {res.property?.propertyName}
                           </h3>
-                          {getStatusBadge(res.status)}
+                          {/* 🌟 Pass isFullyPaid to badge */}
+                          {getStatusBadge(res.status, isFullyPaid)}
                         </div>
                         <p className="text-sm text-text-muted flex items-center gap-1.5 mb-3">
                           <MapPin size={14} className="flex-shrink-0" /> {res.property?.city}, {res.property?.country || 'Ghana'}
@@ -273,14 +291,14 @@ export default function PublicReservationsPage() {
                           <span className="text-text-muted"> paid</span>
                           {!isFullyPaid && (
                             <span className="text-xs font-bold text-danger-600 bg-danger-50 px-2 py-0.5 rounded ml-2 border border-danger-100">
-                              Balance: GH₵ {balanceDue.toFixed(2)}
+                              Balance: GH {balanceDue.toFixed(2)}
                             </span>
                           )}
                           {isFullyPaid && amountPaid > 0 && (
                             <span className={`text-xs font-bold px-2 py-0.5 rounded ml-2 border inline-flex items-center gap-1 ${
                               res.status === 'Cancelled' 
-                                ? 'text-warning-700 bg-warning-50 border-warning-200' //  Show Warning if Cancelled
-                                : 'text-success-600 bg-success-50 border-success-100' //  Show Success if Active
+                                ? 'text-warning-700 bg-warning-50 border-warning-200' 
+                                : 'text-success-600 bg-success-50 border-success-100'
                             }`}>
                               {res.status === 'Cancelled' ? 'Refund Due' : 'Fully Paid'}
                             </span>
@@ -288,11 +306,11 @@ export default function PublicReservationsPage() {
                         </div>
                       </div>
 
-                      {/* 🌟 ACTION BUTTONS (No "View Details") */}
+                      {/* 🌟 FIXED ACTION BUTTONS: Blocks payment if receptionist cancelled it */}
                       <div className="w-full sm:w-auto">
                         {res.status === 'Cancelled' ? (
-                          <span className="block w-full text-center text-sm font-semibold text-text-muted bg-secondary-50 px-4 py-2.5 rounded-lg border border-secondary-100">
-                            Reservation Cancelled
+                          <span className="block w-full text-center text-sm font-semibold text-danger-600 bg-danger-50 px-4 py-2.5 rounded-lg border border-danger-200">
+                            <XCircle size={14} className="inline mr-1" /> Reservation Cancelled
                           </span>
                         ) : !isFullyPaid ? (
                           <button
@@ -314,7 +332,6 @@ export default function PublicReservationsPage() {
                 );
               })}
             </div>
-
             <Pagination
               currentPage={currentPage}
               totalPages={totalPages}
