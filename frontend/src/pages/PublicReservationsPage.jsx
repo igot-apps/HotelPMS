@@ -123,20 +123,25 @@ export default function PublicReservationsPage() {
   };
 
   // 🌟 PAYMENT RETRY MUTATION
-  const retryPaymentMutation = useMutation({
-    mutationFn: async (reservation) => {
-      const totalAmount = Number(reservation.totalAmount || 0);
-      const amountPaid = Number(reservation.amountPaid || 0);
-      const balanceDue = Math.max(0, totalAmount - amountPaid);
-      const amountToPay = balanceDue > 0 ? balanceDue : totalAmount;
+const retryPaymentMutation = useMutation({
+  mutationFn: async (reservation) => {
+    // 🛡️ CRITICAL CHECK: Prevent payment if the database says it's cancelled
+    if (reservation.status === 'Cancelled') {
+      throw new Error('This reservation has been cancelled. Payment is not allowed.');
+    }
 
-      const res = await api.post(`/public/${reservation.property.propertyCode}/payments/initialize`, {
-        reservationId: reservation.reservationId,
-        email: reservation.platformGuest?.email || 'guest@stayfolio.com',
-        amount: amountToPay,
-      });
-      return res.data.data;
-    },
+    const totalAmount = Number(reservation.totalAmount || 0);
+    const amountPaid = Number(reservation.amountPaid || 0);
+    const balanceDue = Math.max(0, totalAmount - amountPaid);
+    const amountToPay = balanceDue > 0 ? balanceDue : totalAmount;
+
+    const res = await api.post(`/public/${reservation.property.propertyCode}/payments/initialize`, {
+       reservationId: reservation.reservationId,
+       email: reservation.platformGuest?.email || 'guest@stayfolio.com',
+       amount: amountToPay,
+     });
+     return res.data.data;
+   },
     onSuccess: (paystackData) => {
       if (paystackData.authorization_url) {
         window.location.href = paystackData.authorization_url;
