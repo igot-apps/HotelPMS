@@ -89,7 +89,7 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
               return (
                 <div key={rr.reservationRoomId} className="text-[11px] mb-1">
                   <div className="flex justify-between">
-                    <span>Room {rr.room?.roomNumber} ({rr.roomType?.typeName})</span>
+                    <span>Room {rr.room?.roomNumber || rr.roomNumberSnapshot || 'Removed'} ({rr.roomType?.typeName || rr.roomTypeNameSnapshot || 'Room type removed'})</span>
                   </div>
                   <div className="flex justify-between pl-2">
                     <span>{nights} nights x {formatCurrency(rate)}</span>

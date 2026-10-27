@@ -181,6 +181,7 @@ export const getCategoryBreakdowns = async (
     },
     select: {
       roomType: { select: { typeName: true } },
+      roomTypeNameSnapshot: true,
       agreedPricePerNight: true,
       checkInDate: true,
       checkOutDate: true,
@@ -194,7 +195,8 @@ export const getCategoryBreakdowns = async (
       rr.checkOutDate < endDate ? rr.checkOutDate : endDate
     );
     const rev = Number(rr.agreedPricePerNight) * nights;
-    roomTypeMap[rr.roomType.typeName] = (roomTypeMap[rr.roomType.typeName] || 0) + rev;
+    const roomTypeName = rr.roomType?.typeName || rr.roomTypeNameSnapshot || 'Deleted room type';
+    roomTypeMap[roomTypeName] = (roomTypeMap[roomTypeName] || 0) + rev;
   }
 
   return {

@@ -168,17 +168,12 @@ export const hardDeleteRoomType = async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ success: false, message: 'You do not have access to this room type' });
     }
 
-    // Safety check: Prevent deleting room types that have rooms assigned
-    if (roomType._count && roomType._count.rooms > 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Cannot permanently delete "${roomType.typeName}". It has ${roomType._count.rooms} room(s) assigned to it. Please delete the rooms first.` 
-      });
-    }
-
-    // Permanent deletion
-    await roomTypeService.hardDeleteRoomType(roomTypeId);
-    return res.status(200).json({ success: true, message: 'Room type permanently deleted' });
+    const deleted = await roomTypeService.hardDeleteRoomType(roomTypeId);
+    return res.status(200).json({
+      success: true,
+      data: deleted,
+      message: `Room type and ${deleted.roomCount} assigned room(s) permanently deleted. ${deleted.preservedReservationRoomCount} reservation room record(s) retained in history.`,
+    });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });
   }

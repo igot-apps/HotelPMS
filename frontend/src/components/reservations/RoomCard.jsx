@@ -77,8 +77,8 @@ export default function RoomCard({
       {/* Room Header */}
       <div className="flex justify-between items-start">
         <div>
-          <p className="text-lg font-bold text-text">Room {rr.room?.roomNumber}</p>
-          <p className="text-xs text-text-muted">{rr.room?.roomType?.typeName}</p>
+          <p className="text-lg font-bold text-text">Room {rr.room?.roomNumber || rr.roomNumberSnapshot || 'Removed'}</p>
+          <p className="text-xs text-text-muted">{rr.room?.roomType?.typeName || rr.roomTypeNameSnapshot || 'Room type removed'}</p>
         </div>
         <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
           roomStatus === 'CheckedIn' ? 'bg-success-50 text-success-700' :

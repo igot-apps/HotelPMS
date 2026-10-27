@@ -48,12 +48,19 @@ export const createReservationRoom = async (data: {
   checkOutDate: Date;
   agreedPricePerNight: number;
 }) => {
+  const room = await prisma.room.findUnique({
+    where: { roomId: data.roomId },
+    select: { roomNumber: true, roomType: { select: { typeName: true } } },
+  });
+
   return prisma.reservationRoom.create({
     data: {
       reservationId: data.reservationId,
       roomId: data.roomId,
       roomTypeId: data.roomTypeId,
       ratePlanId: data.ratePlanId,
+      roomNumberSnapshot: room?.roomNumber || null,
+      roomTypeNameSnapshot: room?.roomType.typeName || null,
       checkInDate: data.checkInDate,
       checkOutDate: data.checkOutDate,
       agreedPricePerNight: data.agreedPricePerNight,

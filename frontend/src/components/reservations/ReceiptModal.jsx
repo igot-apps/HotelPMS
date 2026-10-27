@@ -102,8 +102,8 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
                     return (
                       <tr key={rr.reservationRoomId} className="border-b border-gray-100">
                         <td className="py-2">
-                          <p className="font-semibold text-gray-900">Room {rr.room?.roomNumber}</p>
-                          <p className="text-xs text-gray-500">{rr.roomType?.typeName || rr.room?.roomType?.typeName}</p>
+                          <p className="font-semibold text-gray-900">Room {rr.room?.roomNumber || rr.roomNumberSnapshot || 'Removed'}</p>
+                          <p className="text-xs text-gray-500">{rr.roomType?.typeName || rr.room?.roomType?.typeName || rr.roomTypeNameSnapshot || 'Room type removed'}</p>
                         </td>
                         <td className="text-center py-2 text-gray-700">{nights}</td>
                         <td className="text-right py-2 text-gray-700">{formatCurrency(rate)}</td>

@@ -246,7 +246,7 @@ const retryPaymentMutation = useMutation({
             <div className="space-y-4">
               {reservations.map((res) => {
                 const roomCount = res.reservationRooms?.length || 1;
-                const roomTypeName = res.reservationRooms?.[0]?.roomType?.typeName || 'Standard Room';
+                const roomTypeName = res.reservationRooms?.[0]?.roomType?.typeName || res.reservationRooms?.[0]?.roomTypeNameSnapshot || 'Standard Room';
                 const displayRoomText = roomCount > 1 ? `${roomCount}x ${roomTypeName}` : roomTypeName;
                 
                 //  CALCULATE BALANCE LOCALLY
