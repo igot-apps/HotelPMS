@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react';
 import { X, Loader2, AlertCircle } from 'lucide-react';
 
+const toPhoneInputValue = (phone = '') => {
+  const digits = String(phone).replace(/\D/g, '');
+  return digits.length === 12 && digits.startsWith('233') ? `0${digits.slice(3)}` : digits;
+};
+
 // Added 'error' to the props
 export default function GuestModal({ isOpen, onClose, onSubmit, isLoading, initialData, error }) {
   const [formData, setFormData] = useState({
@@ -10,7 +15,7 @@ export default function GuestModal({ isOpen, onClose, onSubmit, isLoading, initi
   useEffect(() => {
     if (initialData) {
       setFormData({
-        fullName: initialData.fullName || '', phone: initialData.phone || '',
+        fullName: initialData.fullName || '', phone: toPhoneInputValue(initialData.phone),
         email: initialData.email || '', idNumber: initialData.idNumber || '',
         address: initialData.address || '', city: initialData.city || '',
         country: initialData.country || 'Ghana',
@@ -59,8 +64,9 @@ export default function GuestModal({ isOpen, onClose, onSubmit, isLoading, initi
                 placeholder="e.g. Kwame Asante" />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-text mb-1.5">Phone Number *</label>
-              <input type="tel" name="phone" value={formData.phone} onChange={handleChange} required
+              <label className="block text-sm font-semibold text-text mb-1.5">Phone Number <span className="font-normal text-text-muted">(Optional, 10 digits)</span></label>
+              <input type="tel" name="phone" inputMode="numeric" maxLength={10} value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
                 className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition"
                 placeholder="0244123456" />
             </div>

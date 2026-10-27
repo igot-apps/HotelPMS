@@ -174,13 +174,13 @@ export default function ReservationDetailsPage() {
             <div>
               <p className="text-xs text-text-muted uppercase font-semibold">Full Name</p>
               <Link to={`/guests`} className="text-sm font-bold text-primary-600 hover:underline">
-                {resData.platformGuest?.fullName || resData.propertyGuest?.fullName || 'N/A'}
+                {resData.guestNameSnapshot || resData.platformGuest?.fullName || resData.propertyGuest?.fullName || 'N/A'}
               </Link>
             </div>
             <div>
               <p className="text-xs text-text-muted uppercase font-semibold">Phone</p>
               <p className="text-sm text-text">
-                {resData.platformGuest?.phone || resData.propertyGuest?.phone || 'N/A'}
+                {resData.guestPhoneSnapshot || resData.platformGuest?.phone || resData.propertyGuest?.phone || 'N/A'}
               </p>
             </div>
             <div>

@@ -1,6 +1,7 @@
 import * as reservationRepository from './reservation.repository';
 import { findAvailableRooms, updateRoomStatus } from '../room/room.repository';
 import { updateGuestLastStay } from '../guest/guest.repository';
+import { prisma } from '../../shared/utils/prisma';
 
 // 🌟 HELPER: Generate a short, easy-to-read confirmation code (e.g., "RES-8X9K2P")
 const generateConfirmationCode = (): string => {
@@ -56,6 +57,26 @@ export const createReservation = async (data: any) => {
     totalAmount += roomData.agreedPricePerNight * nights;
   }
 
+  let guestNameSnapshot: string | null = null;
+  let guestPhoneSnapshot: string | null = null;
+  if (data.propertyGuestId) {
+    const guest = await prisma.propertyGuest.findFirst({
+      where: { guestId: Number(data.propertyGuestId), propertyId: Number(data.propertyId), isActive: true },
+      select: { fullName: true, phone: true },
+    });
+    if (!guest) throw new Error('Selected property guest was not found for this hotel.');
+    guestNameSnapshot = guest.fullName;
+    guestPhoneSnapshot = guest.phone;
+  } else if (data.platformGuestId) {
+    const guest = await prisma.platformGuest.findUnique({
+      where: { guestId: Number(data.platformGuestId) },
+      select: { fullName: true, phone: true },
+    });
+    if (!guest) throw new Error('Selected platform guest was not found.');
+    guestNameSnapshot = guest.fullName;
+    guestPhoneSnapshot = guest.phone;
+  }
+
   const reservation = await reservationRepository.createReservation({
     propertyId: data.propertyId,
     propertyGuestId: data.propertyGuestId || null,
@@ -68,7 +89,9 @@ export const createReservation = async (data: any) => {
     notes: data.notes,
     totalAmount,
     amountPaid: 0,
-    confirmationCode: generateConfirmationCode(), // 🌟 ADDED: Generates short code
+    confirmationCode: generateConfirmationCode(),
+    guestNameSnapshot,
+    guestPhoneSnapshot,
   });
 
   for (const roomData of data.rooms) {
@@ -117,13 +140,13 @@ export const getReservations = async (
   );
 };
 
-export const getReservationById = async (reservationId: string) => { // 🌟 CHANGED TO STRING
+export const getReservationById = async (reservationId: string) => {
   const reservation = await reservationRepository.findReservationById(reservationId);
   if (!reservation) throw new Error('Reservation not found');
   return reservation;
 };
 
-export const updateReservation = async (reservationId: string, data: any) => { // 🌟 CHANGED TO STRING
+export const updateReservation = async (reservationId: string, data: any) => {
   const reservation = await reservationRepository.findReservationById(reservationId);
   if (!reservation) throw new Error('Reservation not found');
   if (data.status === 'Cancelled' && reservation.status !== 'Cancelled') {
@@ -134,26 +157,54 @@ export const updateReservation = async (reservationId: string, data: any) => { /
   return reservationRepository.updateReservation(reservationId, data);
 };
 
-export const cancelReservation = async (reservationId: string) => { // 🌟 CHANGED TO STRING
-  const reservation = await reservationRepository.findReservationById(reservationId);
-  if (!reservation) throw new Error('Reservation not found');
-  if (reservation.status === 'InHouse') {
-    throw new Error('Cannot cancel a checked-in reservation');
-  }
-  if (reservation.status === 'Cancelled') {
-    throw new Error('This reservation is already cancelled');
-  }
-  for (const rr of reservation.reservationRooms) {
-    if (rr.roomId !== null) await updateRoomStatus(rr.roomId, 'Available');
-  }
-  const amountPaid = Number(reservation.amountPaid || 0);
-  const refundDue = amountPaid;
-  const refundStatus = refundDue > 0 ? 'Pending' : 'None';
-  return reservationRepository.cancelReservation(reservationId, {
-    refundDue,
-    refundStatus,
-    cancellationDate: new Date(),
+// 🌟 PERFECT: Auto-flags reservation for refund if money was paid
+export const cancelReservation = async (reservationId: string, _reason?: string) => {
+  // 1. Get the current reservation to check amountPaid
+  const reservation = await prisma.reservation.findUnique({
+    where: { reservationId },
+    select: { amountPaid: true, status: true }
   });
+  
+  if (!reservation) throw new Error('Reservation not found');
+  if (reservation.status === 'Cancelled') throw new Error('Reservation is already cancelled');
+  
+  // 2. Determine if a refund is needed
+  const amountPaid = Number(reservation.amountPaid || 0);
+  const needsRefund = amountPaid > 0;
+  
+  // 3. Update reservation with cancellation AND refund flag
+  const updated = await prisma.reservation.update({
+    where: { reservationId },
+    data: {
+      status: 'Cancelled',
+      cancellationDate: new Date(),
+      refundStatus: needsRefund ? 'Pending' : 'None', // 🌟 Auto-flag for refund
+      refundDue: needsRefund ? amountPaid : 0,         // 🌟 Set refund amount
+    }
+  });
+  
+  // 4. Release rooms back to Available
+  await prisma.reservationRoom.updateMany({
+    where: { reservationId },
+    data: { status: 'Cancelled' }
+  });
+  
+  // 5. Update room operational status
+  const reservationRooms = await prisma.reservationRoom.findMany({
+    where: { reservationId },
+    select: { roomId: true }
+  });
+  
+  for (const rr of reservationRooms) {
+    if (rr.roomId !== null) {
+      await prisma.room.update({
+        where: { roomId: rr.roomId },
+        data: { operationalStatus: 'Available' }
+      });
+    }
+  }
+  
+  return updated;
 };
 
 export const checkInGuest = async (reservationId: string) => {
@@ -164,7 +215,6 @@ export const checkInGuest = async (reservationId: string) => {
     throw new Error('Reservation must be confirmed to check in');
   }
 
-  // 🌟 CHANGED: 'CheckedIn' → 'InHouse' at reservation level
   await reservationRepository.updateReservationStatus(reservationId, 'InHouse');
 
   for (const rr of reservation.reservationRooms) {
@@ -186,7 +236,6 @@ export const checkOutGuest = async (reservationId: string) => {
     throw new Error('Reservation must be checked in to check out');
   }
 
-  // 🌟 CHANGED: 'CheckedOut' → 'Completed' at reservation level
   await reservationRepository.updateReservationStatus(reservationId, 'Completed');
 
   for (const rr of reservation.reservationRooms) {
@@ -209,14 +258,14 @@ export const getReservationsByDateRange = async (
   return reservationRepository.findReservationsByDateRange(propertyId, from, to);
 };
 
-export const getReservationStats = async (reservationId: string) => { // 🌟 CHANGED TO STRING
+export const getReservationStats = async (reservationId: string) => {
   const stats = await reservationRepository.getReservationStats(reservationId);
   if (!stats) throw new Error('Reservation not found');
   return stats;
 };
 
 export const updateReservationFinancials = async (
-  reservationId: string, // 🌟 CHANGED TO STRING
+  reservationId: string,
   amountPaid: number
 ) => {
   const reservation = await reservationRepository.findReservationById(reservationId);
@@ -253,14 +302,14 @@ export const updateReservationRoomStatus = async (
   if (occupantName !== undefined) updateData.occupantName = occupantName;
 
   if (status === 'CheckedIn') {
-    // 🚨 SAFETY: Prevent double check-in of the same physical room
     const conflict = await reservationRepository.findConflictingCheckIn(
       resRoom.roomId, 
       reservationRoomId
     );
     
     if (conflict) {
-      const otherGuest = conflict.reservation.platformGuest?.fullName 
+      const otherGuest = conflict.reservation.guestNameSnapshot
+        || conflict.reservation.platformGuest?.fullName 
         || conflict.reservation.propertyGuest?.fullName 
         || 'another guest';
       const conflictingRoomNumber = conflict.room?.roomNumber || resRoom.roomNumberSnapshot || 'the assigned room';
@@ -277,10 +326,7 @@ export const updateReservationRoomStatus = async (
     await updateRoomStatus(resRoom.roomId, 'Available', 'Dirty');
   }
 
-  // Update the room
   const updatedRoom = await reservationRepository.updateReservationRoomStatus(reservationRoomId, updateData);
-
-  // 🌟 PHASE 2: AUTO-DERIVE the parent reservation status
   const newReservationStatus = await reservationRepository.deriveReservationStatus(resRoom.reservationId);
   await reservationRepository.updateReservationStatus(resRoom.reservationId, newReservationStatus);
 
@@ -313,10 +359,8 @@ export const extendReservationRoom = async (
     throw new Error('New check-out date must be after current check-out date');
   }
 
-  // 🌟 Capture original date if this is the first extension
   const originalCheckOut = resRoom.originalCheckOutDate || currentCheckOut;
 
-  // 🚨 CHECK: Is this room available for the extended dates?
   const conflictingBooking = await reservationRepository.findConflictingReservationRoom(
     resRoom.roomId,
     reservationRoomId,
@@ -326,7 +370,8 @@ export const extendReservationRoom = async (
 
   if (conflictingBooking) {
     const conflictData = conflictingBooking as any;
-    const otherGuest = conflictData.reservation?.platformGuest?.fullName 
+    const otherGuest = conflictData.reservation?.guestNameSnapshot
+      || conflictData.reservation?.platformGuest?.fullName 
       || conflictData.reservation?.propertyGuest?.fullName 
       || 'another guest';
     throw new Error(
@@ -336,14 +381,12 @@ export const extendReservationRoom = async (
     );
   }
 
-  // ✅ 1. Update the specific room's check-out date
   await reservationRepository.updateReservationRoomCheckOutDate(
     reservationRoomId,
     newCheckOut,
     originalCheckOut
   );
 
-  // 🌟 2. CRITICAL: Recalculate the ENTIRE reservation's total amount (multi-room safe)
   const fullReservation = await reservationRepository.findReservationById(resRoom.reservationId);
   if (!fullReservation) throw new Error('Reservation not found after update');
   
@@ -355,14 +398,12 @@ export const extendReservationRoom = async (
     grandTotal += parseFloat(room.agreedPricePerNight.toString()) * roomNights;
   }
 
-  // 3. Update financials with the correct grand total
   await reservationRepository.updateReservationFinancials(
     resRoom.reservationId,
     grandTotal,
     Number(fullReservation.amountPaid || 0)
   );
 
-  // 4. Return the freshly updated room data
   return reservationRepository.findReservationRoomById(reservationRoomId);
 };
 
@@ -381,7 +422,6 @@ export const updateOccupantName = async (
   return reservationRepository.updateReservationRoomStatus(reservationRoomId, { occupantName });
 };
 
-// 🌟 PHASE 2: Mark reservation as No-Show
 export const markAsNoShow = async (reservationId: string, userPropertyId?: number) => {
   const reservation = await reservationRepository.findReservationById(reservationId);
   if (!reservation) throw new Error('Reservation not found');
@@ -394,11 +434,61 @@ export const markAsNoShow = async (reservationId: string, userPropertyId?: numbe
     throw new Error(`Cannot mark as no-show. Reservation is currently "${reservation.status}". Only "Confirmed" reservations can be marked as no-show.`);
   }
 
-  // Check if any room is already checked in
   const hasCheckedInRoom = reservation.reservationRooms.some(r => r.status === 'CheckedIn');
   if (hasCheckedInRoom) {
     throw new Error('Cannot mark as no-show. At least one room is already checked in.');
   }
 
   return reservationRepository.markReservationAsNoShow(reservationId);
+};
+
+// ============================================================
+// 🌟 NEW: REFUND A CANCELLED RESERVATION
+// ============================================================
+export const refundReservation = async (reservationId: string) => {
+  return prisma.$transaction(async (tx) => {
+    const reservation = await tx.reservation.findUnique({
+      where: { reservationId },
+      select: { status: true, refundStatus: true, refundDue: true },
+    });
+
+    if (!reservation) throw new Error('Reservation not found');
+    if (reservation.status !== 'Cancelled' || reservation.refundStatus !== 'Pending') {
+      throw new Error('This reservation has no pending refund.');
+    }
+
+    const payments = await tx.payment.findMany({
+      where: { reservationId, status: 'Completed' },
+      orderBy: { paymentDate: 'desc' },
+      select: { paymentId: true, amount: true },
+    });
+    const refundDue = Number(reservation.refundDue);
+    const completedPaymentTotal = payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+
+    if (refundDue <= 0) throw new Error('The pending refund amount must be greater than zero.');
+    if (payments.length === 0) throw new Error('No completed payments are available to refund.');
+    if (Math.abs(completedPaymentTotal - refundDue) > 0.01) {
+      throw new Error('The completed payment total does not match the refund due. Review the reservation payments before refunding.');
+    }
+
+    // Claim the pending refund before changing payments so duplicate requests cannot process it twice.
+    const claimed = await tx.reservation.updateMany({
+      where: { reservationId, status: 'Cancelled', refundStatus: 'Pending' },
+      data: { refundStatus: 'Processed', refundDue: 0, amountPaid: 0 },
+    });
+    if (claimed.count !== 1) throw new Error('This refund has already been processed.');
+
+    const updatedPayments = await tx.payment.updateMany({
+      where: { reservationId, status: 'Completed' },
+      data: { status: 'Refunded' },
+    });
+    if (updatedPayments.count !== payments.length) {
+      throw new Error('The payment records changed while processing the refund. Please try again.');
+    }
+
+    return tx.payment.findMany({
+      where: { paymentId: { in: payments.map((payment) => payment.paymentId) } },
+      orderBy: { paymentDate: 'desc' },
+    });
+  });
 };

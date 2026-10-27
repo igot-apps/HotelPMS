@@ -96,6 +96,7 @@ model Property {
   ratePlans              RatePlan[]
   reservations           Reservation[]
   amenities              Amenity[]
+  payments               Payment[] // 🌟 NEW: Opposite relation for Payment
 
   @@map("properties")
 }
@@ -184,6 +185,7 @@ model PropertyGuest {
   property       Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
   reservations   Reservation[]
 
+  @@unique([propertyId, phone])
   @@index([propertyId])
   @@index([phone])
   @@map("property_guests")
@@ -287,6 +289,8 @@ model Reservation {
   confirmationCode  String    @unique
   propertyGuestId   Int?
   platformGuestId   Int?
+  guestNameSnapshot String?   @db.VarChar(200)
+  guestPhoneSnapshot String?  @db.VarChar(50)
   
   staffId           Int?
   source            String    @default("Website") @db.VarChar(50)
@@ -354,7 +358,8 @@ model ReservationRoom {
 // ============================================================
 model Payment {
   paymentId         Int       @id @default(autoincrement())
-  reservationId     String    // 🌟 CHANGED TO STRING (Matches Reservation UUID)
+  reservationId     String    
+  propertyId        Int?      //  NEW: Optional so it works with existing rows
   amount            Decimal   @db.Decimal(10, 2)
   paymentMethod     String    @db.VarChar(50)
   paymentDate       DateTime  @default(now())
@@ -366,9 +371,11 @@ model Payment {
   updatedAt         DateTime  @updatedAt
 
   reservation       Reservation @relation(fields: [reservationId], references: [reservationId], onDelete: Cascade)
-  receiver          User?     @relation("receivedPayments", fields: [receivedBy], references: [userId])
+  property          Property?   @relation(fields: [propertyId], references: [propertyId]) // 🌟 ONLY ONE 'property' field
+  receiver          User?       @relation("receivedPayments", fields: [receivedBy], references: [userId])
 
   @@index([reservationId])
+  @@index([propertyId])
   @@index([paymentDate])
   @@map("payments")
 }

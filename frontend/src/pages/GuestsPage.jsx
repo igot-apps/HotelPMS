@@ -133,7 +133,7 @@ export default function GuestsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-sm text-text">{guest.phone}</p>
+                      <p className="text-sm text-text">{guest.phone || 'No phone provided'}</p>
                       <p className="text-xs text-text-muted">{guest.email || 'No email'}</p>
                     </td>
                     <td className="px-6 py-4 text-sm text-text-muted">

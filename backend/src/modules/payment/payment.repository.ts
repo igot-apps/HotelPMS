@@ -8,6 +8,7 @@ export const createPayment = async (data: {
   reservationId: string;
   amount: number;
   paymentMethod: string;
+  propertyId?: number | null; //  NEW
   gatewayReference?: string | null;
   receivedBy?: number | null;
   status?: any;
@@ -16,9 +17,10 @@ export const createPayment = async (data: {
   return prisma.payment.create({
     data: {
       reservationId: data.reservationId,
+      propertyId: data.propertyId ? Number(data.propertyId) : null, // 🌟 NEW
       amount: data.amount,
       paymentMethod: data.paymentMethod,
-      paymentDate: new Date(), // 🌟 Automatically sets current date/time
+      paymentDate: new Date(),
       gatewayReference: data.gatewayReference,
       receivedBy: data.receivedBy,
       status: data.status || 'Completed',
@@ -33,7 +35,6 @@ export const createPayment = async (data: {
           propertyGuestId: true,
           totalAmount: true,
           amountPaid: true,
-          // 🌟 REMOVED: balanceDue is no longer in the schema
         }
       }
     }
@@ -57,32 +58,40 @@ export const findPayments = async (
   limit: number = 10
 ) => {
   const skip = (page - 1) * limit;
+  
+  // 🌟 CRITICAL: Filter by propertyId THROUGH the reservation relation
   const where: any = {
-    reservation: { propertyId }
+    reservation: { 
+      propertyId: Number(propertyId) 
+    }
   };
-
+  
+  console.log(`🔍 [DB QUERY] Searching payments where reservation.propertyId = ${Number(propertyId)}`);
+  
   if (filters.search) {
     const searchStr = String(filters.search);
     where.OR = [
       { gatewayReference: { contains: searchStr, mode: 'insensitive' } },
       { reservation: { platformGuest: { fullName: { contains: searchStr, mode: 'insensitive' } } } },
       { reservation: { propertyGuest: { fullName: { contains: searchStr, mode: 'insensitive' } } } },
+      { reservation: { guestNameSnapshot: { contains: searchStr, mode: 'insensitive' } } },
       { reservation: { platformGuest: { phone: { contains: searchStr } } } },
       { reservation: { propertyGuest: { phone: { contains: searchStr } } } },
+      { reservation: { guestPhoneSnapshot: { contains: searchStr } } },
       { reservationId: searchStr },
     ];
   }
-
+  
   if (filters.reservationId) where.reservationId = filters.reservationId;
   if (filters.paymentMethod) where.paymentMethod = filters.paymentMethod;
   if (filters.status) where.status = filters.status;
-
+  
   if (filters.fromDate || filters.toDate) {
     where.paymentDate = {};
     if (filters.fromDate) where.paymentDate.gte = filters.fromDate;
     if (filters.toDate) where.paymentDate.lte = filters.toDate;
   }
-
+  
   const [payments, total] = await Promise.all([
     prisma.payment.findMany({
       where,
@@ -96,9 +105,10 @@ export const findPayments = async (
             propertyId: true,
             platformGuestId: true,
             propertyGuestId: true,
+            guestNameSnapshot: true,
+            guestPhoneSnapshot: true,
             totalAmount: true,
             amountPaid: true,
-            // 🌟 REMOVED: balanceDue is no longer in the schema
             platformGuest: { select: { fullName: true, email: true, phone: true } },
             propertyGuest: { select: { fullName: true, phone: true } },
           },
@@ -108,7 +118,7 @@ export const findPayments = async (
     }),
     prisma.payment.count({ where }),
   ]);
-
+  
   return { payments, total, page, limit };
 };
 
@@ -125,9 +135,10 @@ export const findPaymentById = async (paymentId: number) => {
           propertyId: true,
           platformGuestId: true,
           propertyGuestId: true,
+          guestNameSnapshot: true,
+          guestPhoneSnapshot: true,
           totalAmount: true,
           amountPaid: true,
-          // 🌟 REMOVED: balanceDue is no longer in the schema
           platformGuest: { select: { guestId: true, fullName: true, email: true, phone: true } },
           propertyGuest: { select: { guestId: true, fullName: true, phone: true } },
         },
@@ -175,7 +186,6 @@ export const updatePayment = async (
           propertyId: true,
           totalAmount: true,
           amountPaid: true,
-          // 🌟 REMOVED: balanceDue is no longer in the schema
         },
       },
     },
@@ -212,14 +222,17 @@ export const calculateAccumulatedPayment = async (reservationId: string): Promis
 export const getPayments = async (propertyId: number, page: number = 1, limit: number = 10) => {
   const skip = (page - 1) * limit;
   const take = limit;
-
+  
+  // 🌟 NEW: Filter by the direct propertyId column on the Payment table
+  const where = {
+    propertyId: Number(propertyId)
+  };
+  
+  console.log(`🔍 [GET PAYMENTS] Filtering by direct propertyId: ${Number(propertyId)}`);
+  
   const [payments, total] = await Promise.all([
     prisma.payment.findMany({
-      where: {
-        reservation: {
-          propertyId: Number(propertyId)
-        }
-      },
+      where,
       skip,
       take,
       orderBy: {
@@ -234,7 +247,6 @@ export const getPayments = async (propertyId: number, page: number = 1, limit: n
             propertyGuestId: true,
             totalAmount: true,
             amountPaid: true,
-            // 🌟 REMOVED: balanceDue is no longer in the schema
             platformGuest: {
               select: {
                 guestId: true,
@@ -261,15 +273,9 @@ export const getPayments = async (propertyId: number, page: number = 1, limit: n
         }
       }
     }),
-    prisma.payment.count({
-      where: {
-        reservation: {
-          propertyId: Number(propertyId)
-        }
-      }
-    })
+    prisma.payment.count({ where })
   ]);
-
+  
   return { payments, total };
 };
 
@@ -277,12 +283,13 @@ export const getPayments = async (propertyId: number, page: number = 1, limit: n
 // GET PAYMENT STATISTICS (For Dashboard/Reports)
 // ============================================================
 export const getPaymentStats = async (propertyId: number) => {
+  // 🌟 NEW: Filter by the direct propertyId column
+  const where = {
+    propertyId: Number(propertyId)
+  };
+  
   const stats = await prisma.payment.aggregate({
-    where: {
-      reservation: {
-        propertyId: Number(propertyId)
-      }
-    },
+    where,
     _sum: {
       amount: true
     },
@@ -290,13 +297,9 @@ export const getPaymentStats = async (propertyId: number) => {
       amount: true
     }
   });
-
+  
   const recentPayments = await prisma.payment.findMany({
-    where: {
-      reservation: {
-        propertyId: Number(propertyId)
-      }
-    },
+    where,
     orderBy: {
       paymentDate: 'desc'
     },
@@ -316,7 +319,7 @@ export const getPaymentStats = async (propertyId: number) => {
       }
     }
   });
-
+  
   return {
     totalRevenue: Number(stats._sum.amount) || 0,
     totalTransactions: stats._count.amount || 0,

@@ -241,7 +241,7 @@ export default function PaymentsPage() {
               ) : (
                 payments.map((p) => {
                   const date = new Date(p.paymentDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                  const guestName = p.reservation?.platformGuest?.fullName || p.reservation?.propertyGuest?.fullName || 'Unknown Guest';
+                  const guestName = p.reservation?.guestNameSnapshot || p.reservation?.platformGuest?.fullName || p.reservation?.propertyGuest?.fullName || 'Unknown Guest';
                   const amount = parseFloat(p.amount || 0).toFixed(2);
                   
                   let methodClass = 'bg-secondary-100 text-secondary-700';

@@ -14,6 +14,11 @@ const getParamId = (req: Request): number => {
   return parsedId;
 };
 
+const isPhoneConflict = (error: any) =>
+  error?.code === 'P2002'
+  || error?.message?.includes('already belongs')
+  || error?.message?.includes('phone number is already assigned');
+
 export const createGuest = async (req: AuthRequest, res: Response) => {
   try {
     // ✅ Inject propertyId from token if not provided
@@ -27,10 +32,23 @@ export const createGuest = async (req: AuthRequest, res: Response) => {
       data: guest,
     });
   } catch (error: any) {
-    return res.status(400).json({
+    const status = isPhoneConflict(error) ? 409 : 400;
+    return res.status(status).json({
       success: false,
       message: error.message,
     });
+  }
+};
+
+export const lookupGuestByPhone = async (req: AuthRequest, res: Response) => {
+  try {
+    const propertyId = req.user?.propertyId;
+    if (!propertyId) return res.status(400).json({ success: false, message: 'Property ID is required' });
+
+    const guest = await guestService.lookupGuestByPhone(propertyId, req.query.phone);
+    return res.status(200).json({ success: true, data: guest });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error.message });
   }
 };
 
@@ -145,7 +163,8 @@ export const updateGuest = async (req: AuthRequest, res: Response) => {
       data: updated,
     });
   } catch (error: any) {
-    return res.status(400).json({
+    const status = isPhoneConflict(error) ? 409 : 400;
+    return res.status(status).json({
       success: false,
       message: error.message,
     });

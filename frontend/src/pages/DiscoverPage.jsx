@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../lib/axios';
 import {
   Star, MapPin, Wifi, Coffee, Car, Utensils, Waves, Plane,
-  Dumbbell, Mountain, Loader2, Building2, Search, Calendar,
+  Dumbbell, Mountain, Loader2, Building2, Search,
   X, Navigation, Crosshair, Map, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -141,6 +141,7 @@ export default function DiscoverPage() {
   const [locationStatus, setLocationStatus] = useState('checking');
   const today = new Date().toISOString().split('T')[0];
   const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+  const hasInvalidDateRange = Boolean(checkIn && checkOut && checkOut <= checkIn);
 
   // 🌟 SILENT GPS CHECK ON PAGE LOAD
   useEffect(() => {
@@ -204,6 +205,10 @@ export default function DiscoverPage() {
 
   const handleSearch = (e) => {
     e.preventDefault();
+    if (hasInvalidDateRange) {
+      toast.error('Check-out must be after check-in.');
+      return;
+    }
     const params = new URLSearchParams();
     if (destination) params.set('search', destination);
     if (checkIn) params.set('checkIn', checkIn);
@@ -239,26 +244,26 @@ export default function DiscoverPage() {
           <div className="absolute bottom-0 right-0 w-96 h-96 bg-white rounded-full translate-x-1/2 translate-y-1/2 blur-3xl" />
         </div>
 
-        <div className="relative max-w-7xl mx-auto px-4 py-20 md:py-28 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full text-white text-xs font-semibold mb-6">
+        <div className="relative max-w-7xl mx-auto px-4 py-14 sm:py-16 md:py-20 text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full text-white text-xs font-semibold mb-5">
             <Building2 size={14} />
             STAYFOLIO · INDEPENDENT HOTELS, ONE PLATFORM
           </div>
-          <h1 className="text-4xl md:text-6xl font-black text-white tracking-tight mb-4">
+          <h1 className="text-4xl md:text-6xl font-black text-white tracking-tight mb-4 leading-[1.08]">
             Find your next stay,<br />
-            <span className="bg-gradient-to-r from-warning-300 to-warning-500 bg-clip-text text-transparent">
+            <span className="text-white">
               anywhere in Ghana.
             </span>
           </h1>
-          <p className="text-lg md:text-xl text-white/90 max-w-2xl mx-auto mb-10">
+          <p className="text-lg md:text-xl text-white/90 max-w-2xl mx-auto mb-8">
             From Osu to the Northern Region — search real, independently‑run hotels and book direct confirmation in minutes.
           </p>
 
           {/* 🌟 SEARCH FORM */}
-          <form onSubmit={handleSearch} className="max-w-5xl mx-auto">
-            <div className="bg-surface rounded-2xl shadow-2xl p-3 md:p-4 border border-border">
+          <form onSubmit={handleSearch} className="max-w-6xl mx-auto">
+            <div className="bg-surface rounded-2xl shadow-2xl p-3 sm:p-4 border border-border">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-3">
-                <div className="md:col-span-5 relative">
+                <div className="md:col-span-12 lg:col-span-5 relative">
                   <label className="block text-xs font-bold text-text-muted mb-1 px-1 text-left">Destination</label>
                   <div className="relative">
                     <MapPin size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
@@ -271,26 +276,29 @@ export default function DiscoverPage() {
                     />
                   </div>
                 </div>
-                <div className="md:col-span-3">
+                <div className="md:col-span-6 lg:col-span-3 min-w-0">
                   <label className="block text-xs font-bold text-text-muted mb-1 px-1 text-left">Check-in</label>
                   <div className="relative">
-                    <Calendar size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
-                    <input type="date" value={checkIn} min={today} onChange={(e) => setCheckIn(e.target.value)} className="w-full pl-10 pr-3 py-2.5 bg-background border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
+                    <input aria-label="Check-in date" type="date" value={checkIn} min={today} onChange={(e) => setCheckIn(e.target.value)} className="w-full min-w-0 px-3 py-3 bg-background border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
                   </div>
                 </div>
-                <div className="md:col-span-2">
+                <div className="md:col-span-6 lg:col-span-2 min-w-0">
                   <label className="block text-xs font-bold text-text-muted mb-1 px-1 text-left">Check-out</label>
                   <div className="relative">
-                    <Calendar size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
-                    <input type="date" value={checkOut} min={checkIn || tomorrow} onChange={(e) => setCheckOut(e.target.value)} className="w-full pl-10 pr-3 py-2.5 bg-background border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
+                    <input aria-label="Check-out date" type="date" value={checkOut} min={checkIn || tomorrow} onChange={(e) => setCheckOut(e.target.value)} aria-invalid={hasInvalidDateRange} aria-describedby={hasInvalidDateRange ? 'discover-date-error' : undefined} className={`w-full min-w-0 px-3 py-3 bg-background border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition ${hasInvalidDateRange ? 'border-danger-500' : 'border-border'}`} />
                   </div>
                 </div>
-                <div className="md:col-span-2 flex items-end">
-                  <button type="submit" className="w-full h-[42px] bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-lg transition flex items-center justify-center gap-2 shadow-lg shadow-primary-600/30">
-                    {isSearching ? <Loader2 className="animate-spin" size={18} /> : <><Search size={18} /><span className="hidden sm:inline">Search</span></>}
+                <div className="md:col-span-12 lg:col-span-2 flex items-end">
+                  <button type="submit" className="w-full min-h-[48px] bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-lg transition flex items-center justify-center gap-2 shadow-lg shadow-primary-600/30 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
+                    {isSearching ? <Loader2 className="animate-spin" size={18} /> : <><Search size={18} /><span>Search</span></>}
                   </button>
                 </div>
               </div>
+              {hasInvalidDateRange && (
+                <p id="discover-date-error" role="alert" className="mt-2 text-left text-sm font-medium text-danger-600">
+                  Check-out must be after check-in.
+                </p>
+              )}
             </div>
           </form>
         </div>

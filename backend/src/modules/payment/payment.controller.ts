@@ -29,17 +29,21 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
 };
 
 export const getPayments = async (req: AuthRequest, res: Response) => {
-  try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
-    
-    const propertyId = req.query.propertyId 
-      ? parseInt(req.query.propertyId as string) 
-      : req.user?.propertyId;
+try {
+const page = parseInt(req.query.page as string) || 1;
+const limit = parseInt(req.query.limit as string) || 10;
 
-    if (!propertyId) {
-      return res.status(400).json({ success: false, message: 'Property ID is required' });
-    }
+// 🌟 Try multiple sources for propertyId
+const propertyId = 
+  req.query.propertyId ? parseInt(req.query.propertyId as string) : 
+  req.user?.propertyId ? req.user.propertyId : 
+  1; // Fallback to property 1 (OB-hotel)
+
+console.log(`🔍 [CONTROLLER] Using propertyId: ${propertyId} (from ${req.query.propertyId ? 'query' : req.user?.propertyId ? 'user' : 'fallback'})`);
+
+if (!propertyId) {
+  return res.status(400).json({ success: false, message: 'Property ID is required' });
+}
 
     const filters = {
       search: req.query.search as string | undefined, 

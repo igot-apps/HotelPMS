@@ -7,6 +7,8 @@ export const createReservation = async (data: {
   propertyId: number;
   propertyGuestId?: number | null;
   platformGuestId?: number | null;
+  guestNameSnapshot?: string | null;
+  guestPhoneSnapshot?: string | null;
   staffId?: number | null;
   source: string;
   checkInDate: Date;
@@ -22,6 +24,8 @@ export const createReservation = async (data: {
       propertyId: data.propertyId,
       propertyGuestId: data.propertyGuestId,
       platformGuestId: data.platformGuestId,
+      guestNameSnapshot: data.guestNameSnapshot,
+      guestPhoneSnapshot: data.guestPhoneSnapshot,
       staffId: data.staffId,
       source: data.source,
       checkInDate: data.checkInDate,
@@ -98,6 +102,8 @@ export const findReservations = async (
       { platformGuest: { fullName: { contains: searchTerm, mode: 'insensitive' } } },
       { propertyGuest: { phone: { contains: searchTerm } } },
       { platformGuest: { phone: { contains: searchTerm } } },
+      { guestNameSnapshot: { contains: searchTerm, mode: 'insensitive' } },
+      { guestPhoneSnapshot: { contains: searchTerm } },
       // ✅ FIX: roomNumber is a String in the database, so we always use 'contains'
       { reservationRooms: { some: { room: { roomNumber: { contains: searchTerm, mode: 'insensitive' } } } } },
       { confirmationCode: { contains: searchTerm, mode: 'insensitive' } },
@@ -122,7 +128,11 @@ export const findReservations = async (
         propertyGuest: { select: { guestId: true, fullName: true, phone: true } },
         platformGuest: { select: { guestId: true, fullName: true, phone: true, email: true } },
         staff: { select: { userId: true, fullName: true } },
-        reservationRooms: { include: { room: { include: { roomType: true } }, ratePlan: true } },
+        // Preserve the room assignment order when room records are updated (for example, on check-in).
+        reservationRooms: {
+          orderBy: { reservationRoomId: 'asc' },
+          include: { room: { include: { roomType: true } }, ratePlan: true },
+        },
         payments: true,
       },
     }),
@@ -142,7 +152,10 @@ export const findReservationById = async (reservationId: string) => {
       propertyGuest: { select: { guestId: true, fullName: true, phone: true } },
       platformGuest: { select: { guestId: true, fullName: true, phone: true, email: true } },
       staff: { select: { userId: true, fullName: true } },
-      reservationRooms: { include: { room: { include: { roomType: true } }, ratePlan: true } },
+      reservationRooms: {
+        orderBy: { reservationRoomId: 'asc' },
+        include: { room: { include: { roomType: true } }, ratePlan: true },
+      },
       payments: true,
     },
   });
@@ -266,6 +279,7 @@ export const findConflictingReservationRoom = async (
       reservation: {
         select: {
           reservationId: true,
+          guestNameSnapshot: true,
           propertyGuest: { select: { fullName: true } },
           platformGuest: { select: { fullName: true } }
         }
@@ -314,6 +328,7 @@ export const findConflictingCheckIn = async (roomId: number, excludeReservationR
       reservation: { 
         select: { 
           reservationId: true,
+          guestNameSnapshot: true,
           propertyGuest: { select: { fullName: true } },
           platformGuest: { select: { fullName: true } }
         } 
@@ -360,6 +375,7 @@ export const markReservationAsNoShow = async (reservationId: string) => {
     },
     include: {
       reservationRooms: {
+        orderBy: { reservationRoomId: 'asc' },
         include: { room: true },
       },
     },

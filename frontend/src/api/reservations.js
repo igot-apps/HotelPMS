@@ -20,6 +20,10 @@ export const cancelReservation = (id) => {
   return api.delete(`/reservations/${id}`);
 };
 
+export const refundReservation = (id) => {
+  return api.post(`/reservations/${id}/refund`);
+};
+
 // Get full details of a single reservation
 export const getReservationById = (id) => {
   return api.get(`/reservations/${id}`);

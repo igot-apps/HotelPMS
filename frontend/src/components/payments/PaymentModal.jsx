@@ -78,7 +78,7 @@ export default function PaymentModal({ isOpen, onClose, onSubmit, isLoading, err
               <option value="">Choose a reservation...</option>
               {reservations.map(r => (
                 <option key={r.reservationId} value={r.reservationId}>
-                  #{r.reservationId} - {r.platformGuest?.fullName || r.propertyGuest?.fullName || 'Unknown Guest'} (Balance: {parseFloat(r.balanceDue).toFixed(2)} GHS)
+                  #{r.reservationId} - {r.guestNameSnapshot || r.platformGuest?.fullName || r.propertyGuest?.fullName || 'Unknown Guest'} (Balance: {parseFloat(r.balanceDue).toFixed(2)} GHS)
                 </option>
               ))}
             </select>

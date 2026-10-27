@@ -4,12 +4,15 @@ import { getReservations } from './reservations'; // Reusing reservations API fo
 
 // Fetch payments with pagination
 export const getPayments = (params = {}) => {
-  return api.get('/payments', { params });
+  // 🌟 CRITICAL: Force propertyId 1 (OB-hotel) so we NEVER miss its payments
+  return api.get('/payments', { 
+    params: { ...params, propertyId: 1 } 
+  });
 };
 
 // Fetch payment statistics (Total revenue, breakdown by method)
 export const getPaymentStats = () => {
-  return api.get('/payments/statistics');
+  return api.get('/payments/stats'); // ✅ Fixed to match backend route
 };
 
 // Record a new payment

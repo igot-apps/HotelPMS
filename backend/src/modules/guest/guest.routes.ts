@@ -10,6 +10,7 @@ router.use(authenticate);
 // Guest routes
 router.post('/', guestController.createGuest);
 router.get('/', guestController.getGuests);
+router.get('/lookup/phone', guestController.lookupGuestByPhone);
 router.get('/search', guestController.searchGuests);
 router.get('/:id', guestController.getGuestById);
 router.get('/:id/stats', guestController.getGuestStats);

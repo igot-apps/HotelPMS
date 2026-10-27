@@ -377,6 +377,12 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
       throw new Error('Guest information is required for online bookings.');
     }
 
+    const bookingGuest = await prisma.platformGuest.findUnique({
+      where: { guestId: Number(finalPlatformGuestId) },
+      select: { fullName: true, phone: true },
+    });
+    if (!bookingGuest) throw new Error('Guest information could not be found.');
+
       const reservation = await prisma.reservation.create({
     data: {
       propertyId: property.propertyId,
@@ -388,6 +394,8 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
       notes: notes || '',
       totalAmount: finalTotal,
       amountPaid: 0,
+      guestNameSnapshot: bookingGuest.fullName,
+      guestPhoneSnapshot: bookingGuest.phone,
       confirmationCode: generateConfirmationCode(), // 🌟 ADDED: Generates short code
       // 🌟 REMOVED: balanceDue is no longer in the schema
     },
@@ -500,9 +508,9 @@ router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Re
          select: { amountPaid: true, status: true, totalAmount: true }
        });
        
-       // 🌟 FIX: Removed the "=== 0" check to allow part-payments to be topped up
+       // 🌟 FIX: Removed the "=== 0" check so ALL valid payments are recorded
        if (reservation) {
-         // 🛡️ Safety: Check if this specific Paystack reference was already processed to prevent duplicates
+         // 🛡️ Safety: Prevent duplicate payment records for the same Paystack reference
          const existingPayment = await prisma.payment.findFirst({
            where: { gatewayReference: transactionData.reference }
          });
@@ -512,26 +520,26 @@ router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Re
              where: { reservationId },
              data: { 
                amountPaid: { increment: amountPaid }, 
-               // Only confirm if it wasn't cancelled by receptionist
                status: reservation.status !== 'Cancelled' ? 'Confirmed' : reservation.status 
              }
            });
            
-           await prisma.payment.create({
-             data: {
-               reservationId,
-               amount: amountPaid,
-               paymentMethod: 'Mobile Money',
-               paymentDate: new Date(),
-               gatewayReference: transactionData.reference,
-               status: 'Completed',
-               notes: `Online payment verified via frontend fallback`,
-               receivedBy: null,
-             }
-           });
-           console.log(`🔧 [VERIFY FALLBACK] Reservation #${reservationId} payment verified and recorded: GH ${amountPaid}`);
+                  await prisma.payment.create({
+         data: {
+           reservationId,
+           propertyId: property.propertyId, // 🌟 CRITICAL FIX: Save the property ID!
+           amount: amountPaid,
+           paymentMethod: 'Mobile Money',
+           paymentDate: new Date(),
+           gatewayReference: transactionData.reference,
+           status: 'Completed',
+           notes: `Online payment verified via frontend fallback`,
+           receivedBy: null,
+         }
+       });
+           console.log(`✅ [VERIFY SUCCESS] Reservation #${reservationId} payment verified and recorded: GH₵ ${amountPaid}`);
          } else {
-           console.log(`⚠️ [VERIFY FALLBACK] Payment for reference ${transactionData.reference} already processed.`);
+           console.log(`⚠️ [VERIFY SKIPPED] Payment for reference ${transactionData.reference} already processed.`);
          }
        }
      }

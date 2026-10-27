@@ -1,10 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Loader2, AlertCircle, Check, ChevronLeft, ChevronRight, CreditCard, UserPlus, Printer } from 'lucide-react';
 import { getAvailableRooms } from '../../api/rooms';
-import { getGuests, createGuest } from '../../api/guests';
+import { getGuests, lookupGuestByPhone, createGuest, updateGuest } from '../../api/guests';
 import { useAuthStore } from '../../store/authStore';
 import toast from 'react-hot-toast';
 import ThermalReceiptModal from './ThermalReceiptModal';
+
+const toPhoneInputValue = (phone = '') => {
+  const digits = String(phone).replace(/\D/g, '');
+  return digits.length === 12 && digits.startsWith('233') ? `0${digits.slice(3)}` : digits;
+};
 
 export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading, createdReservation, initialData }) {
   const user = useAuthStore((state) => state.user);
@@ -20,6 +25,16 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
   // Quick Add Guest States
   const [isAddGuestOpen, setIsAddGuestOpen] = useState(false);
   const [isSavingGuest, setIsSavingGuest] = useState(false);
+  const [phoneLookup, setPhoneLookup] = useState('');
+  const [phoneLookupResult, setPhoneLookupResult] = useState(null);
+  const [phoneLookupMessage, setPhoneLookupMessage] = useState('');
+  const [isPhoneLookupLoading, setIsPhoneLookupLoading] = useState(false);
+  const [isResolvingPhoneGuest, setIsResolvingPhoneGuest] = useState(false);
+  const [matchedGuestName, setMatchedGuestName] = useState('');
+  const [isEditingMatchedName, setIsEditingMatchedName] = useState(false);
+  const [showNameGuestSearch, setShowNameGuestSearch] = useState(false);
+  const phoneLookupRequestRef = useRef(0);
+  const lastAutoLookupRef = useRef('');
   const [newGuestData, setNewGuestData] = useState({
     fullName: '', phone: '', email: '', idNumber: ''
   });
@@ -61,6 +76,14 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
       });
       
       setCurrentStep(1);
+      setPhoneLookup('');
+      lastAutoLookupRef.current = '';
+      phoneLookupRequestRef.current += 1;
+      setPhoneLookupResult(null);
+      setPhoneLookupMessage('');
+      setMatchedGuestName('');
+      setIsEditingMatchedName(false);
+      setShowNameGuestSearch(false);
       // 🌟 Fetch Property Guests (walk-in guests)
       getGuests({ limit: 100 }).then(res => setGuests(res.data.data || [])).catch(err => console.error(err));
     }
@@ -110,8 +133,8 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
   // Quick Add Guest Handler
   const handleQuickAddGuest = async (e) => {
     e.preventDefault();
-    if (!newGuestData.fullName || !newGuestData.phone) {
-      toast.error('Full Name and Phone are required.');
+    if (!newGuestData.fullName.trim()) {
+      toast.error('Full Name is required.');
       return;
     }
     setIsSavingGuest(true);
@@ -121,13 +144,106 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
       setGuests(prev => [createdGuest, ...prev]);
       // 🌟 CHANGED: Set propertyGuestId
       setFormData(prev => ({ ...prev, propertyGuestId: String(createdGuest.guestId) }));
+      setPhoneLookup(toPhoneInputValue(createdGuest.phone));
+      lastAutoLookupRef.current = toPhoneInputValue(createdGuest.phone);
+      setPhoneLookupResult(null);
+      setMatchedGuestName('');
+      setIsEditingMatchedName(false);
+      setPhoneLookupMessage('Guest added and selected for this reservation.');
+      setShowNameGuestSearch(false);
       setIsAddGuestOpen(false);
       setNewGuestData({ fullName: '', phone: '', email: '', idNumber: '' });
       toast.success(`${createdGuest.fullName} added and selected!`);
     } catch (err) {
-      console.error('Failed to create guest:', err);
+      toast.error(err.response?.data?.message || 'Failed to create guest.');
     } finally {
       setIsSavingGuest(false);
+    }
+  };
+
+  const handlePhoneLookup = async (phone = phoneLookup) => {
+    if (!phone.trim()) {
+      setPhoneLookupMessage('Enter a phone number to look up, or add the guest without one.');
+      return;
+    }
+
+    const requestId = ++phoneLookupRequestRef.current;
+    setIsPhoneLookupLoading(true);
+    setPhoneLookupResult(null);
+    setMatchedGuestName('');
+    setPhoneLookupMessage('');
+    setFormData(prev => ({ ...prev, propertyGuestId: '' }));
+
+    try {
+      const response = await lookupGuestByPhone(phone);
+      if (requestId !== phoneLookupRequestRef.current) return;
+      const guest = response.data.data;
+      if (!guest) {
+        setPhoneLookupMessage(`No guest exists with ${phone}. Would you like to create a guest with this number?`);
+        return;
+      }
+
+      setPhoneLookupResult(guest);
+      setMatchedGuestName(guest.fullName);
+      setIsEditingMatchedName(false);
+      setGuests(prev => [guest, ...prev.filter(item => item.guestId !== guest.guestId)]);
+      if (guest.isActive) {
+        setFormData(prev => ({ ...prev, propertyGuestId: String(guest.guestId) }));
+        setPhoneLookupMessage('');
+      } else {
+        setPhoneLookupMessage('This guest profile is inactive.');
+      }
+    } catch (err) {
+      if (requestId !== phoneLookupRequestRef.current) return;
+      setPhoneLookupMessage(err.response?.data?.message || 'Could not look up this phone number.');
+    } finally {
+      if (requestId === phoneLookupRequestRef.current) setIsPhoneLookupLoading(false);
+    }
+  };
+
+  // Look up a complete phone number automatically after typing pauses.
+  useEffect(() => {
+    const digits = phoneLookup.replace(/\D/g, '');
+    if (!isOpen || currentStep !== 1 || digits.length !== 10 || lastAutoLookupRef.current === digits) return;
+
+    const value = phoneLookup;
+    const timer = setTimeout(() => {
+      lastAutoLookupRef.current = digits;
+      handlePhoneLookup(value);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [phoneLookup, isOpen, currentStep]);
+
+  const confirmPhoneGuest = async () => {
+    if (!phoneLookupResult || !matchedGuestName.trim()) {
+      toast.error('Guest name is required.');
+      return;
+    }
+
+    setIsResolvingPhoneGuest(true);
+    try {
+      let guest = phoneLookupResult;
+      const correctedName = matchedGuestName.trim();
+      if (guest.fullName !== correctedName || !guest.isActive) {
+        const response = await updateGuest(guest.guestId, {
+          fullName: correctedName,
+          isActive: true,
+        });
+        guest = response.data.data;
+      }
+
+      setGuests(prev => [guest, ...prev.filter(item => item.guestId !== guest.guestId)]);
+      setPhoneLookupResult(guest);
+      setMatchedGuestName(guest.fullName);
+      setIsEditingMatchedName(false);
+      setFormData(prev => ({ ...prev, propertyGuestId: String(guest.guestId) }));
+      setPhoneLookupMessage('Guest confirmed and selected for this reservation.');
+      toast.success(guest.fullName === phoneLookupResult.fullName ? 'Guest selected.' : 'Guest profile name updated and selected.');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not update this guest.');
+    } finally {
+      setIsResolvingPhoneGuest(false);
     }
   };
 
@@ -263,23 +379,142 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
           {currentStep === 1 && (
             <div className="space-y-5 max-w-2xl mx-auto">
               <div>
-                <label className="block text-sm font-semibold text-text mb-1.5">Guest *</label>
+                <label htmlFor="reservation-guest-phone" className="block text-sm font-semibold text-text mb-1.5">Guest phone number <span className="font-normal text-text-muted">(optional, 10 digits)</span></label>
                 <div className="flex gap-2">
-                  <SearchableGuestSelect 
-                    guests={guests} 
-                    // 🌟 CHANGED: propertyGuestId
-                    value={formData.propertyGuestId} 
-                    onChange={(id) => setFormData(prev => ({ ...prev, propertyGuestId: id }))} 
+                  <input
+                    id="reservation-guest-phone"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    value={phoneLookup}
+                    onChange={(e) => {
+                      phoneLookupRequestRef.current += 1;
+                      lastAutoLookupRef.current = '';
+                      setIsPhoneLookupLoading(false);
+                      setPhoneLookup(e.target.value.replace(/\D/g, '').slice(0, 10));
+                      setPhoneLookupResult(null);
+                      setMatchedGuestName('');
+                      setPhoneLookupMessage('');
+                      setFormData(prev => ({ ...prev, propertyGuestId: '' }));
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                    placeholder="Find user by phone number"
+                    className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text placeholder:text-text-muted focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition"
                   />
-                  <button 
-                    type="button" 
-                    onClick={() => setIsAddGuestOpen(true)} 
-                    className="px-4 py-2.5 bg-primary-50 text-primary-600 border border-primary-100 rounded-lg hover:bg-primary-100 transition flex items-center gap-2 font-semibold text-sm whitespace-nowrap"
-                    title="Add New Guest"
-                  >
-                    <UserPlus size={18} /> Add Guest
-                  </button>
+                  {!phoneLookupMessage.startsWith('No guest exists with') && (
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        setNewGuestData({ fullName: '', phone: phoneLookup, email: '', idNumber: '' });
+                        setIsAddGuestOpen(true);
+                      }} 
+                      className="px-4 py-2.5 bg-primary-50 text-primary-600 border border-primary-100 rounded-lg hover:bg-primary-100 transition flex items-center gap-2 font-semibold text-sm whitespace-nowrap"
+                      title="Add New Guest"
+                    >
+                      <UserPlus size={18} /> Add Guest
+                    </button>
+                  )}
                 </div>
+                {isPhoneLookupLoading && (
+                  <p className="mt-2 inline-flex items-center gap-2 text-xs text-text-muted">
+                    <Loader2 size={14} className="animate-spin" /> Checking for an existing guest…
+                  </p>
+                )}
+                {phoneLookupMessage && (
+                  <p className={`mt-2 text-xs ${phoneLookupResult?.isActive === false ? 'text-warning-700' : phoneLookupResult || formData.propertyGuestId ? 'text-success-700' : 'text-text-muted'}`}>
+                    {phoneLookupMessage.startsWith('No guest exists with') ? (
+                      <>No guest exists with <span className="select-all rounded bg-secondary-100 px-1 font-mono font-semibold text-text">{phoneLookup}</span>. Would you like to create a guest with this number?</>
+                    ) : phoneLookupMessage}
+                  </p>
+                )}
+                {phoneLookupMessage.startsWith('No guest exists with') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewGuestData({ fullName: '', phone: phoneLookup, email: '', idNumber: '' });
+                      setIsAddGuestOpen(true);
+                    }}
+                    className="mt-2 inline-flex items-center gap-2 rounded-lg bg-primary-600 px-3 py-2 text-xs font-semibold text-text-inverted hover:bg-primary-700"
+                  >
+                    <UserPlus size={15} /> Create guest with this number
+                  </button>
+                )}
+                {phoneLookupResult && (
+                  <div className="mt-2 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2">
+                      <div className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-text">{phoneLookupResult.fullName}</span>
+                        <span className="block text-xs text-text-muted">{phoneLookupResult.phone || 'No phone'}{phoneLookupResult.isActive === false ? ' · Inactive profile' : ''}</span>
+                      </div>
+                      {!isEditingMatchedName && (
+                        <div className="flex shrink-0 items-center gap-2">
+                          {phoneLookupResult.isActive === false && (
+                            <button
+                              type="button"
+                              onClick={confirmPhoneGuest}
+                              disabled={isResolvingPhoneGuest}
+                              className="rounded-md bg-primary-600 px-2.5 py-1.5 text-xs font-semibold text-text-inverted hover:bg-primary-700 disabled:opacity-50"
+                            >
+                              Reactivate
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setIsEditingMatchedName(true)}
+                            className="shrink-0 px-1 py-1.5 text-xs font-semibold text-primary-700 hover:underline"
+                          >
+                            Edit name
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {isEditingMatchedName && (
+                      <div className="flex w-full items-center gap-2">
+                      <input
+                        id="matched-guest-name"
+                        type="text"
+                        value={matchedGuestName}
+                        onChange={(e) => setMatchedGuestName(e.target.value)}
+                        autoFocus
+                        className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-text outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+                      />
+                      <button
+                        type="button"
+                        onClick={confirmPhoneGuest}
+                        disabled={isResolvingPhoneGuest || !matchedGuestName.trim()}
+                        className="rounded-md bg-primary-600 px-2.5 py-2 text-xs font-semibold text-text-inverted hover:bg-primary-700 disabled:opacity-50"
+                      >
+                        {isResolvingPhoneGuest && <Loader2 size={14} className="animate-spin" />}
+                        {phoneLookupResult.isActive === false ? 'Save & reactivate' : 'Save'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setMatchedGuestName(phoneLookupResult.fullName); setIsEditingMatchedName(false); }}
+                        className="px-1 py-2 text-xs font-semibold text-text-muted hover:text-text"
+                      >
+                        Cancel
+                      </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowNameGuestSearch(prev => !prev)}
+                  className="mt-3 text-xs font-semibold text-primary-700 hover:underline"
+                >
+                  {showNameGuestSearch ? 'Hide guest name search' : 'Search existing guests by name instead'}
+                </button>
+                {showNameGuestSearch && (
+                  <div className="mt-2">
+                    <label className="block text-xs font-semibold text-text-muted mb-1.5">Find guest by name or phone</label>
+                    <SearchableGuestSelect
+                      guests={guests}
+                      value={formData.propertyGuestId}
+                      onChange={(id) => setFormData(prev => ({ ...prev, propertyGuestId: id }))}
+                    />
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -520,8 +755,8 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-text-muted mb-1">Phone Number *</label>
-                  <input type="tel" value={newGuestData.phone} onChange={(e) => setNewGuestData({...newGuestData, phone: e.target.value})} required placeholder="0244123456"
+                  <label className="block text-xs font-semibold text-text-muted mb-1">Phone Number <span className="font-normal">(Optional, 10 digits)</span></label>
+                  <input type="tel" inputMode="numeric" maxLength={10} value={newGuestData.phone} onChange={(e) => setNewGuestData({...newGuestData, phone: e.target.value.replace(/\D/g, '').slice(0, 10)})} placeholder="0244123456"
                     className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
                 </div>
                 <div>
@@ -593,7 +828,7 @@ function SearchableGuestSelect({ guests, value, onChange }) {
     <div ref={wrapperRef} className="relative flex-1">
       <input
         type="text"
-        value={isOpen ? searchTerm : (selectedGuest ? `${selectedGuest.fullName} (${selectedGuest.phone})` : '')}
+        value={isOpen ? searchTerm : (selectedGuest ? `${selectedGuest.fullName} (${selectedGuest.phone || 'No phone provided'})` : '')}
         onChange={(e) => {
           setSearchTerm(e.target.value);
           if (!isOpen) setIsOpen(true);
@@ -614,7 +849,7 @@ function SearchableGuestSelect({ guests, value, onChange }) {
                 className={`w-full text-left px-4 py-2.5 text-sm transition flex justify-between items-center ${String(g.guestId) === String(value) ? 'bg-primary-50 text-primary-700 font-semibold' : 'text-text hover:bg-secondary-50'}`}
               >
                 <span>{g.fullName}</span>
-                <span className="text-xs text-text-muted">{g.phone}</span>
+                <span className="text-xs text-text-muted">{g.phone || 'No phone provided'}</span>
               </button>
             ))
           ) : (

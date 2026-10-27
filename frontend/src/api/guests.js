@@ -5,6 +5,10 @@ export const getGuests = (params = {}) => {
   return api.get('/guests', { params });
 };
 
+export const lookupGuestByPhone = (phone) => {
+  return api.get('/guests/lookup/phone', { params: { phone } });
+};
+
 // Create a new guest
 export const createGuest = (guestData) => {
   return api.post('/guests', guestData);

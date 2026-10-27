@@ -4,7 +4,7 @@ const prisma = new PrismaClient();
 export const createGuest = async (data: {
   propertyId: number;
   fullName: string;
-  phone?: string;
+  phone?: string | null;
   idNumber?: string;
   address?: string;
   city?: string;
@@ -92,7 +92,7 @@ export const findGuestById = async (guestId: number) => {
 
 export const findGuestByPhone = async (propertyId: number, phone: string) => {
   return prisma.propertyGuest.findFirst({
-    where: { propertyId, phone, isActive: true },
+    where: { propertyId, phone },
   });
 };
 
@@ -110,7 +110,7 @@ export const updateGuest = async (
   guestId: number,
   data: Partial<{
     fullName: string;
-    phone: string;
+    phone: string | null;
     idNumber: string;
     address: string;
     city: string;

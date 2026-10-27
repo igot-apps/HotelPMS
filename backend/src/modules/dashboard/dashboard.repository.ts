@@ -84,8 +84,8 @@ export const getOperationalOverview = async (propertyId: number) => {
       return {
         ...res,
         guest: {
-          fullName: res.platformGuest?.fullName || res.propertyGuest?.fullName || 'Unknown Guest',
-          phone: res.platformGuest?.phone || res.propertyGuest?.phone || ''
+          fullName: res.guestNameSnapshot || res.platformGuest?.fullName || res.propertyGuest?.fullName || 'Unknown Guest',
+          phone: res.guestPhoneSnapshot || res.platformGuest?.phone || res.propertyGuest?.phone || ''
         },
         // 🌟 CALCULATED ON-DEMAND
         balanceDue: Math.max(0, totalAmount - amountPaid)

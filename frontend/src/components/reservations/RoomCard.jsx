@@ -23,7 +23,7 @@ export default function RoomCard({
   // 🌟 Only show action buttons if room is NOT CheckedOut
   if (!isRoomComplete) {
     if (roomStatus === 'Reserved') {
-      const mainGuestName = res.platformGuest?.fullName || res.propertyGuest?.fullName || '';
+      const mainGuestName = res.guestNameSnapshot || res.platformGuest?.fullName || res.propertyGuest?.fullName || '';
       roomActionBtn = (
         <button
           disabled={isThisRoomBusy}

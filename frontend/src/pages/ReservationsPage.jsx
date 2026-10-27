@@ -5,6 +5,7 @@ import {
   getReservations,
   createReservation,
   cancelReservation,
+  refundReservation,
   updateReservationRoomStatus,
   extendReservationRoom,
   updateOccupantName,
@@ -17,7 +18,7 @@ import RoomCard from '../components/reservations/RoomCard'; // 🌟 NEW: Extract
 import {
   Search, Plus, CalendarDays, AlertCircle, LogIn, LogOut, XCircle,
   ChevronLeft, ChevronRight, Eye, X, Check,
-  ChevronDown, ChevronUp, BedDouble, Loader2, Clock
+  ChevronDown, ChevronUp, BedDouble, Loader2, Clock, Undo2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -77,6 +78,7 @@ function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', danger 
 
 export default function ReservationsPage() {
   const user = useAuthStore((state) => state.user);
+  const permissions = useAuthStore((state) => state.permissions);
   const propertyId = user?.propertyId;
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -241,12 +243,14 @@ export default function ReservationsPage() {
   const actionMutation = useMutation({
     mutationFn: ({ id, action }) => {
       if (action === 'cancel') return cancelReservation(id);
+      if (action === 'refund') return refundReservation(id);
     },
-    onSuccess: () => {
+    onSuccess: (_response, variables) => {
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['dashboardActive'] });
-      toast.success('Reservation cancelled');
+      toast.success(variables.action === 'refund' ? 'Reservation refund recorded' : 'Reservation cancelled');
       setPendingConfirm(null);
     },
     onError: (err) => {
@@ -463,6 +467,23 @@ export default function ReservationsPage() {
                     );
                   }
 
+                  if (res.status === 'Cancelled' && res.refundStatus === 'Pending' && permissions?.includes('CanCancelReservation')) {
+                    actions = (
+                      <button
+                        onClick={() => askReservationAction(
+                          res.reservationId,
+                          'refund',
+                          'Process reservation refund?',
+                          `This will mark ${parseFloat(res.refundDue || 0).toFixed(2)} GHS as refunded and update the payment records for reservation ${res.confirmationCode || res.reservationId}.`,
+                          { danger: true, confirmLabel: 'Process Refund' }
+                        )}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-danger-200 text-danger-600 hover:bg-danger-50 transition"
+                      >
+                        <Undo2 size={14} /> Refund {parseFloat(res.refundDue || 0).toFixed(2)} GHS
+                      </button>
+                    );
+                  }
+
                   if (res.status !== 'Completed' && res.status !== 'Cancelled' && res.status !== 'NoShow' && res.status !== 'Expired') {
                     actions = (
                       <div className="flex items-center justify-end gap-2">
@@ -487,6 +508,12 @@ export default function ReservationsPage() {
                   const amountPaid = parseFloat(res.amountPaid || 0);
                   const balanceDue = Math.max(0, totalAmount - amountPaid);
                   const hasBalance = balanceDue > 0.01;
+                  const refundedAmount = (res.payments || [])
+                    .filter((payment) => payment.status === 'Refunded')
+                    .reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
+                  const cancelledPaymentAmount = res.refundStatus === 'Pending'
+                    ? parseFloat(res.refundDue || 0)
+                    : res.refundStatus === 'Processed' ? refundedAmount : 0;
 
                   return (
                     <Fragment key={res.reservationId}>
@@ -510,11 +537,11 @@ export default function ReservationsPage() {
                        </p>
                        {/* 2. Guest Name */}
                        <p className="text-xs font-medium text-text mt-0.5">
-                         {res.platformGuest?.fullName || res.propertyGuest?.fullName || 'N/A'}
+                         {res.guestNameSnapshot || res.platformGuest?.fullName || res.propertyGuest?.fullName || 'N/A'}
                        </p>
                        {/* 3. Phone Number (New) */}
                        <p className="text-xs text-text-muted mt-0.5">
-                         {res.platformGuest?.phone || res.propertyGuest?.phone || 'N/A'}
+                         {res.guestPhoneSnapshot || res.platformGuest?.phone || res.propertyGuest?.phone || 'N/A'}
                        </p>
                      </td>
                         <td className="px-6 py-4 text-sm text-text font-medium">{rooms}</td>
@@ -522,17 +549,17 @@ export default function ReservationsPage() {
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1.5">
                             <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold ${statusClass}`}>{res.status}</span>
-                            {res.status === 'Cancelled' && res.refundStatus === 'Pending' && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-warning-50 text-warning-700 border border-warning-200"><AlertCircle size={12} /> Refund Due: {parseFloat(res.refundDue || 0).toFixed(2)} GHS</span>
-                            )}
-                            {res.status === 'Cancelled' && res.refundStatus === 'Processed' && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-success-50 text-success-700 border border-success-200"><Check size={12} /> Refunded</span>
-                            )}
                           </div>
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <p className="text-sm font-bold text-text">{parseFloat(res.totalAmount || 0).toFixed(2)} GHS</p>
-                          {hasBalance ? (
+                          <p className="text-sm font-bold text-text">{(res.status === 'Cancelled' ? cancelledPaymentAmount : totalAmount).toFixed(2)} GHS</p>
+                          {res.status === 'Cancelled' && res.refundStatus === 'Pending' ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-warning-700 bg-warning-50 border border-warning-200 px-2 py-0.5 rounded mt-1"><AlertCircle size={12} /> Refund due</span>
+                          ) : res.status === 'Cancelled' && res.refundStatus === 'Processed' ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-success-700 bg-success-50 border border-success-200 px-2 py-0.5 rounded mt-1"><Check size={12} /> Refunded</span>
+                          ) : res.status === 'Cancelled' ? (
+                            <span className="inline-block text-xs font-medium text-text-muted bg-secondary-50 px-2 py-0.5 rounded mt-1">No payment collected</span>
+                          ) : hasBalance ? (
                             <span className="inline-block text-xs font-bold text-danger-600 bg-danger-50 px-2 py-0.5 rounded mt-1">Due: {balanceDue.toFixed(2)} GHS</span>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-xs font-bold text-success-600 bg-success-50 px-2 py-0.5 rounded mt-1"><Check size={10} /> Paid</span>

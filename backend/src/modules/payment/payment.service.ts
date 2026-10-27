@@ -7,23 +7,21 @@ export const recordPayment = async (data: any) => {
   if (data.amount <= 0) throw new Error('Amount must be greater than 0');
   if (!data.paymentMethod) throw new Error('Payment method is required');
 
-  // 🌟 findReservationById now expects a string (UUID)
   const reservation = await findReservationById(data.reservationId);
   if (!reservation) throw new Error('Reservation not found');
-
   if (reservation.status === 'Cancelled') {
     throw new Error('Cannot record payment for cancelled reservation');
   }
 
   const amount = Number(data.amount);
   const accummulatedPayments = await paymentRepository.calculateAccumulatedPayment(data.reservationId);
-
   if (amount + accummulatedPayments > Number(reservation.totalAmount)) {
     throw new Error('Payment amount exceeds total reservation amount');
-  } 
+  }
 
   const payment = await paymentRepository.createPayment({
-    reservationId: data.reservationId, // 🌟 Already a string
+    reservationId: data.reservationId,
+    propertyId: reservation.propertyId, // 🌟 NEW: Pass the propertyId from the reservation
     amount: data.amount,
     paymentMethod: data.paymentMethod,
     gatewayReference: data.gatewayReference,

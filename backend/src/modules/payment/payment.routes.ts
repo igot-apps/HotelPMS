@@ -1,10 +1,7 @@
 import { Router, Response } from 'express';
 import * as paymentService from './payment.service';
-// import { requireAuth } from '../../shared/middleware/auth.middleware'; // Uncomment if you have this middleware
 
 const router = Router();
-
-// router.use(requireAuth); // Uncomment to protect these routes
 
 // ============================================================
 // RECORD A NEW PAYMENT
@@ -21,19 +18,31 @@ router.post('/', async (req: any, res: Response) => {
 // ============================================================
 // GET ALL PAYMENTS (Paginated)
 // ============================================================
+// ============================================================
+// GET ALL PAYMENTS (Paginated)
+// ============================================================
 router.get('/', async (req: any, res: Response) => {
   try {
     const { page, limit, ...filters } = req.query;
+    
+    // 🌟 CRITICAL: Get propertyId from query, user session, or fallback to 1
+    const propertyId = req.query.propertyId 
+      ? parseInt(req.query.propertyId as string) 
+      : (req.user?.propertyId || 1);
+
+    console.log(`🔍 [ROUTE] Fetching payments for propertyId: ${propertyId}`);
+
     const result = await paymentService.getPayments(
-      req.user?.propertyId || 1, // Fallback for testing if auth is disabled
+      propertyId,
       filters,
       parseInt(page as string) || 1,
       parseInt(limit as string) || 10
     );
-    res.json({ 
-      success: true, 
-      data: result.payments, 
-      pagination: { page: result.page, limit: result.limit, total: result.total } 
+
+    res.json({
+      success: true,
+      data: result.payments,
+      pagination: { page: result.page, limit: result.limit, total: result.total }
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../../shared/middleware/auth.middleware';
+import { authenticate, requirePermission } from '../../shared/middleware/auth.middleware';
 import * as reservationController from './reservation.controller';
 
 const router = Router();
@@ -15,6 +15,7 @@ router.get('/:id', reservationController.getReservationById);
 router.get('/:id/stats', reservationController.getReservationStats);
 router.put('/:id', reservationController.updateReservation);
 router.delete('/:id', reservationController.cancelReservation);
+router.post('/:id/refund', requirePermission('CanCancelReservation'), reservationController.refundReservation);
 router.post('/:id/check-in', reservationController.checkInGuest);
 router.post('/:id/check-out', reservationController.checkOutGuest);
 

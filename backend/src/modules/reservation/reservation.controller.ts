@@ -95,6 +95,25 @@ export const cancelReservation = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const refundReservation = async (req: AuthRequest, res: Response) => {
+  try {
+    const reservationId = getParamId(req);
+    const reservation = await reservationService.getReservationById(reservationId);
+    if (req.user && reservation.propertyId !== req.user.propertyId) {
+      return res.status(403).json({ success: false, message: 'You do not have access to this reservation' });
+    }
+
+    const payments = await reservationService.refundReservation(reservationId);
+    return res.status(200).json({
+      success: true,
+      data: payments,
+      message: 'Reservation refund recorded successfully',
+    });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+};
+
 export const checkInGuest = async (req: AuthRequest, res: Response) => {
   try {
     const reservationId = getParamId(req);
