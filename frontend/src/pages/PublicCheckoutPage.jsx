@@ -11,28 +11,31 @@ export default function PublicCheckoutPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   
-  const checkIn = searchParams.get('checkIn');
-  const checkOut = searchParams.get('checkOut');
+  // 🌟 1. Initialize dates from URL, but make them editable state
+  const initialCheckIn = searchParams.get('checkIn');
+  const initialCheckOut = searchParams.get('checkOut');
+  const [checkIn, setCheckIn] = useState(initialCheckIn);
+  const [checkOut, setCheckOut] = useState(initialCheckOut);
 
-  // 🌟 1. Check if user is already logged in (from localStorage)
+  // 🌟 2. Check if user is already logged in (from localStorage)
   const [guestInfo, setGuestInfo] = useState(() => {
     const str = localStorage.getItem('guestInfo');
     return str && str !== 'undefined' ? JSON.parse(str) : null;
   });
 
-  // 🌟 2. Form state for unauthenticated guests
+  // 🌟 3. Form state for unauthenticated guests
   const [guestForm, setGuestForm] = useState({
     fullName: '',
     phone: '',
     email: ''
   });
 
-  // ONLY redirect if dates are missing
+  // ONLY redirect if initial dates are missing
   useEffect(() => {
-    if (!checkIn || !checkOut) {
+    if (!initialCheckIn || !initialCheckOut) {
       navigate(`/public/${propertyCode}`);
     }
-  }, [checkIn, checkOut, navigate, propertyCode]);
+  }, [initialCheckIn, initialCheckOut, navigate, propertyCode]);
 
   // Fetch Property (for tax rate)
   const { data: property, isLoading: isLoadingProp } = useQuery({
@@ -48,7 +51,7 @@ export default function PublicCheckoutPage() {
 
   const selectedRoom = roomTypes?.find(r => r.roomTypeId === parseInt(roomTypeId));
 
-  // Calculate Pricing Safely
+  // 🌟 Calculate Pricing Safely (Recalculates when dates change)
   const nights = Math.max(1, Math.ceil((new Date(checkOut) - new Date(checkIn)) / (1000 * 60 * 60 * 24)));
   const basePrice = selectedRoom ? parseFloat(selectedRoom.basePrice) : 0;
   const subtotal = basePrice * nights;
@@ -59,7 +62,7 @@ export default function PublicCheckoutPage() {
   // Payment Initialization Mutation
   const initializePaymentMutation = useMutation({
     mutationFn: async (guestData) => {
-      // 1. Create the reservation
+      // 1. Create the reservation using the CURRENT state dates
       const resData = await api.post(`/public/${propertyCode}/reservations`, {
         checkInDate: checkIn,
         checkOutDate: checkOut,
@@ -67,7 +70,7 @@ export default function PublicCheckoutPage() {
         guestFullName: guestData.name,
         guestPhone: guestData.phone,
         guestEmail: guestData.email || undefined,
-        platformGuestId: guestData.platformGuestId, // Will be undefined if not logged in
+        platformGuestId: guestData.platformGuestId, 
         agreedPricePerNight: basePrice,
       });
 
@@ -100,13 +103,11 @@ export default function PublicCheckoutPage() {
     let name, phone, email, platformGuestId;
 
     if (guestInfo) {
-      // User is logged in, use their details
       name = guestInfo.fullName;
       phone = guestInfo.phone;
       email = guestInfo.email;
       platformGuestId = guestInfo.guestId;
     } else {
-      // User is NOT logged in, validate form
       if (!guestForm.fullName || !guestForm.phone) {
         toast.error('Please enter your full name and phone number.');
         return;
@@ -152,11 +153,10 @@ export default function PublicCheckoutPage() {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-text-muted">Total Amount:</span>
-              <span className="font-bold text-text">GH {confirmationData.totalAmount.toFixed(2)}</span>
+              <span className="font-bold text-text">GH₵ {confirmationData.totalAmount.toFixed(2)}</span>
             </div>
           </div>
 
-          {/* 🌟 SMS NOTIFICATION STATUS PLACEHOLDER */}
           <div className="bg-warning-50 border border-warning-200 p-4 rounded-lg text-left mb-6 flex items-start gap-3">
             <AlertCircle size={18} className="text-warning-700 mt-0.5 shrink-0" />
             <div>
@@ -192,28 +192,53 @@ export default function PublicCheckoutPage() {
           <ArrowLeft size={16} /> Back to Rooms
         </button>
         
-        {/* 🌟 Wrapped in a form to handle native validation */}
         <form onSubmit={handlePay} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
           {/* Left Column: Booking Summary & Guest Details */}
           <div className="lg:col-span-2 space-y-6">
             <h1 className="text-2xl font-bold text-text">Review & Pay</h1>
             
-            {/* Trip Details */}
+            {/* 🌟 UPDATED: Editable Trip Details */}
             <div className="bg-surface p-6 rounded-xl border border-border">
               <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
                 <Calendar size={20} className="text-primary-600"/> Your Trip
               </h2>
-              <div className="flex justify-between items-center p-4 bg-background rounded-lg border border-border">
-                <div>
-                  <p className="font-bold text-text">{selectedRoom?.typeName || 'Selected Room'}</p>
-                  <p className="text-sm text-text-muted">{property?.propertyName} • {property?.city}</p>
+              <div className="p-4 bg-background rounded-lg border border-border space-y-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-bold text-text">{selectedRoom?.typeName || 'Selected Room'}</p>
+                    <p className="text-sm text-text-muted">{property?.propertyName} • {property?.city}</p>
+                  </div>
+                  <p className="text-xs font-bold text-primary-600 bg-primary-50 px-2 py-1 rounded-md border border-primary-100">
+                    {nights} Night{nights > 1 ? 's' : ''}
+                  </p>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-text">{new Date(checkIn).toLocaleDateString()} - {new Date(checkOut).toLocaleDateString()}</p>
-                  <p className="text-xs text-text-muted">{nights} Night{nights > 1 ? 's' : ''}</p>
+                
+                {/* Editable Date Inputs */}
+                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border">
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">Check In</label>
+                    <input 
+                      type="date" 
+                      value={checkIn} 
+                      onChange={(e) => setCheckIn(e.target.value)} 
+                      min={new Date().toISOString().split('T')[0]}
+                      className="w-full px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">Check Out</label>
+                    <input 
+                      type="date" 
+                      value={checkOut} 
+                      onChange={(e) => setCheckOut(e.target.value)} 
+                      min={checkIn}
+                      className="w-full px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" 
+                    />
+                  </div>
                 </div>
               </div>
+
               {selectedRoom?.amenities?.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-4">
                   {selectedRoom.amenities.map((link) => (
@@ -225,21 +250,19 @@ export default function PublicCheckoutPage() {
               )}
             </div>
 
-            {/* 🌟 Smart Guest Details Section */}
+            {/* Smart Guest Details Section */}
             <div className="bg-surface p-6 rounded-xl border border-border">
               <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
                 <ShieldCheck size={20} className="text-primary-600"/> Guest Details
               </h2>
               
               {guestInfo ? (
-                // ✅ LOGGED IN: Show read-only details
                 <div className="p-4 bg-background rounded-lg border border-border space-y-1">
                   <p className="text-sm text-text-muted">Booking for:</p>
                   <p className="font-bold text-text">{guestInfo.fullName}</p>
                   <p className="text-sm text-text-muted">{guestInfo.phone} {guestInfo.email ? `• ${guestInfo.email}` : ''}</p>
                 </div>
               ) : (
-                // ✅ NOT LOGGED IN: Show input form
                 <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-semibold text-text-muted mb-1">Full Name *</label>
@@ -286,7 +309,7 @@ export default function PublicCheckoutPage() {
               <h2 className="text-lg font-bold text-text mb-4">Price Details</h2>
               <div className="space-y-3 text-sm mb-6">
                 <div className="flex justify-between text-text">
-                  <span>GH {basePrice.toFixed(2)} x {nights} night{nights > 1 ? 's' : ''}</span>
+                  <span>GH₵ {basePrice.toFixed(2)} x {nights} night{nights > 1 ? 's' : ''}</span>
                   <span>GH₵ {subtotal.toFixed(2)}</span>
                 </div>
                 {taxRate > 0 && (
@@ -301,10 +324,18 @@ export default function PublicCheckoutPage() {
                 </div>
               </div>
               
+              {/*  NEW: Safety Warning Message */}
+              <div className="bg-warning-50 border border-warning-200 p-3 rounded-lg mb-4 flex items-start gap-2">
+                <AlertCircle size={16} className="text-warning-700 mt-0.5 shrink-0" />
+                <p className="text-xs text-warning-800 font-medium">
+                  Please double-check your dates above. Once payment is processed, changes may require hotel approval.
+                </p>
+              </div>
+
               <button 
                 type="submit"
                 disabled={initializePaymentMutation.isPending}
-                className="w-full py-3 bg-primary-600 text-text-inverted font-bold rounded-lg hover:bg-primary-700 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full py-3 bg-primary-600 text-text-inverted font-bold rounded-lg hover:bg-primary-700 transition flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-primary-600/20"
               >
                 {initializePaymentMutation.isPending ? (
                   <><Loader2 className="animate-spin" size={18} /> Initializing...</>

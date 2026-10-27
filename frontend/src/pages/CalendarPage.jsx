@@ -115,7 +115,7 @@ export default function CalendarPage() {
                       to={`/reservations/${res.reservationId}`} 
                       key={idx} 
                       className={`block px-2 py-1 rounded text-[10px] font-semibold truncate hover:opacity-80 transition ${getStatusColor(res.status)}`}
-                      title={`${res.guest?.fullName} - Room ${res.reservationRooms?.[0]?.room?.roomNumber}`}
+                      title={`${res.guest?.fullName} - Room ${res.reservationRooms?.[0]?.room?.roomNumber || res.reservationRooms?.[0]?.roomNumberSnapshot || 'TBD'}`}
                     >
                       {res.guest?.fullName}
                     </Link>

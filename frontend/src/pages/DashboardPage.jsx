@@ -196,7 +196,7 @@ export default function DashboardPage() {
                         <div>
                           <p className="text-sm font-bold text-text">{res.guest?.fullName}</p>
                           <p className="text-xs text-text-muted">
-                            Room {res.reservationRooms[0]?.room?.roomNumber || 'TBD'} • Res #{res.reservationId}
+                            Room {res.reservationRooms[0]?.room?.roomNumber || res.reservationRooms[0]?.roomNumberSnapshot || 'TBD'} • Res #{res.reservationId}
                           </p>
                         </div>
                         <Link to={`/reservations/${res.reservationId}`} className="text-xs font-semibold text-primary-600 hover:text-primary-700 px-2 py-1 rounded hover:bg-primary-50 transition">
@@ -226,7 +226,7 @@ export default function DashboardPage() {
                         <div>
                           <p className="text-sm font-bold text-text">{res.guest?.fullName}</p>
                           <p className="text-xs text-text-muted">
-                            Room {res.reservationRooms[0]?.room?.roomNumber || 'TBD'} • Bal: {res.balanceDue} GHS
+                            Room {res.reservationRooms[0]?.room?.roomNumber || res.reservationRooms[0]?.roomNumberSnapshot || 'TBD'} • Bal: {res.balanceDue} GHS
                           </p>
                         </div>
                         <Link to={`/reservations/${res.reservationId}`} className="text-xs font-semibold text-warning-600 hover:text-warning-700 px-2 py-1 rounded hover:bg-warning-50 transition">

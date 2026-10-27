@@ -24,6 +24,8 @@ export default function RoomManagementPage() {
   const [isAmenityModalOpen, setIsAmenityModalOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState(null);
   const [editingType, setEditingType] = useState(null);
+  const [roomTypeToDelete, setRoomTypeToDelete] = useState(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
 
   // Queries
   const { data: roomsData, isLoading: isLoadingRooms } = useQuery({
@@ -65,9 +67,12 @@ export default function RoomManagementPage() {
 
   const hardDeleteRoomTypeMutation = useMutation({
     mutationFn: (id) => hardDeleteRoomType(id),
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['roomTypes'] });
-      toast.success('Room type permanently deleted.');
+      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+      toast.success(response.data.message || 'Room type and assigned rooms permanently deleted.');
+      setRoomTypeToDelete(null);
+      setDeleteConfirmation('');
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Failed to delete room type.'),
   });
@@ -95,14 +100,15 @@ export default function RoomManagementPage() {
     }
   };
 
-  const handleDeleteType = (id, name, roomCount) => {
-    if (roomCount > 0) {
-      toast.error(`Cannot delete "${name}". ${roomCount} room(s) are using this type. Please delete the rooms first.`);
-      return;
-    }
-    if (window.confirm(`⚠️ PERMANENTLY DELETE "${name}"? This cannot be undone.`)) {
-      hardDeleteRoomTypeMutation.mutate(id);
-    }
+  const handleDeleteType = (type) => {
+    setDeleteConfirmation('');
+    setRoomTypeToDelete(type);
+  };
+
+  const confirmDeleteType = (e) => {
+    e.preventDefault();
+    if (deleteConfirmation.trim().toLowerCase() !== 'delete' || !roomTypeToDelete) return;
+    hardDeleteRoomTypeMutation.mutate(roomTypeToDelete.roomTypeId);
   };
 
   return (
@@ -147,7 +153,7 @@ export default function RoomManagementPage() {
           isLoading={isLoadingTypes}
           onAdd={() => { setEditingType(null); setIsTypeModalOpen(true); }}
           onEdit={(type) => { setEditingType(type); setIsTypeModalOpen(true); }}
-          onDelete={(id, name, count) => handleDeleteType(id, name, count)} 
+          onDelete={handleDeleteType}
           onManageAmenities={() => setIsAmenityModalOpen(true)} 
         />
       )}
@@ -183,6 +189,33 @@ export default function RoomManagementPage() {
             queryClient.invalidateQueries({ queryKey: ['roomTypes'] }); 
           }} 
         />
+      )}
+
+      {roomTypeToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" role="presentation">
+          <form onSubmit={confirmDeleteType} role="dialog" aria-modal="true" aria-labelledby="delete-room-type-title" className="bg-surface w-full max-w-lg rounded-2xl shadow-xl border border-border overflow-hidden">
+            <div className="p-6 border-b border-border flex items-start gap-4">
+              <div className="p-3 rounded-full bg-danger-50 text-danger-600"><AlertCircle size={22} /></div>
+              <div className="flex-1">
+                <h2 id="delete-room-type-title" className="text-lg font-bold text-text">Delete room type?</h2>
+                <p className="mt-1 text-sm text-text-muted">This permanently deletes <span className="font-semibold text-text">{roomTypeToDelete.typeName}</span>, its {roomTypeToDelete._count?.rooms || 0} assigned room(s), and {roomTypeToDelete._count?.ratePlans || 0} rate plan(s). This cannot be undone.</p>
+              </div>
+              <button type="button" onClick={() => { setRoomTypeToDelete(null); setDeleteConfirmation(''); }} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted" aria-label="Close confirmation"><X size={20} /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-text-muted">Reservation records and their room names stay in history. Deletion is blocked while pending, confirmed, or in-house stays use this type.</p>
+              <label htmlFor="confirm-room-type-delete" className="block text-sm font-semibold text-text">Type <span className="font-mono text-danger-600">delete</span> to confirm</label>
+              <input id="confirm-room-type-delete" autoFocus value={deleteConfirmation} onChange={(e) => setDeleteConfirmation(e.target.value)} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-danger-500/20 focus:border-danger-500" />
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" disabled={hardDeleteRoomTypeMutation.isPending} onClick={() => { setRoomTypeToDelete(null); setDeleteConfirmation(''); }} className="px-4 py-2.5 text-sm font-semibold text-text bg-surface border border-border rounded-lg hover:bg-secondary-50 disabled:opacity-50">Cancel</button>
+                <button type="submit" disabled={deleteConfirmation.trim().toLowerCase() !== 'delete' || hardDeleteRoomTypeMutation.isPending} className="px-4 py-2.5 text-sm font-semibold text-white bg-danger-600 rounded-lg hover:bg-danger-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                  {hardDeleteRoomTypeMutation.isPending && <Loader2 className="animate-spin" size={16} />}
+                  Delete room type
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
       )}
     </div>
   );
@@ -333,7 +366,7 @@ function TypesTab({ types, isLoading, onAdd, onEdit, onDelete, onManageAmenities
                       </RequirePermission>
                       <RequirePermission permission="CanDeleteRoomType">
                         <button 
-                          onClick={() => onDelete(type.roomTypeId, type.typeName, type._count?.rooms || 0)} 
+                          onClick={() => onDelete(type)}
                           className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition" 
                           title="Delete Type"
                         > 

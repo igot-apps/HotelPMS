@@ -409,7 +409,7 @@ export default function ReservationsPage() {
                 </tr>
               ) : (
                 reservations.map((res) => {
-                  const rooms = res.reservationRooms?.map(r => r.room?.roomNumber).join(', ') || 'N/A';
+                  const rooms = res.reservationRooms?.map(r => r.room?.roomNumber || r.roomNumberSnapshot || 'Removed').join(', ') || 'N/A';
                   const checkIn = new Date(res.checkInDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                   const checkOut = new Date(res.checkOutDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 

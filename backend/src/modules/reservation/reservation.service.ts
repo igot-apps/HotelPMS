@@ -128,7 +128,7 @@ export const updateReservation = async (reservationId: string, data: any) => { /
   if (!reservation) throw new Error('Reservation not found');
   if (data.status === 'Cancelled' && reservation.status !== 'Cancelled') {
     for (const rr of reservation.reservationRooms) {
-      await updateRoomStatus(rr.roomId, 'Available');
+      if (rr.roomId !== null) await updateRoomStatus(rr.roomId, 'Available');
     }
   }
   return reservationRepository.updateReservation(reservationId, data);
@@ -144,7 +144,7 @@ export const cancelReservation = async (reservationId: string) => { // 🌟 CHAN
     throw new Error('This reservation is already cancelled');
   }
   for (const rr of reservation.reservationRooms) {
-    await updateRoomStatus(rr.roomId, 'Available');
+    if (rr.roomId !== null) await updateRoomStatus(rr.roomId, 'Available');
   }
   const amountPaid = Number(reservation.amountPaid || 0);
   const refundDue = amountPaid;
@@ -168,7 +168,7 @@ export const checkInGuest = async (reservationId: string) => {
   await reservationRepository.updateReservationStatus(reservationId, 'InHouse');
 
   for (const rr of reservation.reservationRooms) {
-    await updateRoomStatus(rr.roomId, 'Occupied');
+    if (rr.roomId !== null) await updateRoomStatus(rr.roomId, 'Occupied');
   }
 
   if (reservation.propertyGuestId) {
@@ -190,7 +190,7 @@ export const checkOutGuest = async (reservationId: string) => {
   await reservationRepository.updateReservationStatus(reservationId, 'Completed');
 
   for (const rr of reservation.reservationRooms) {
-    await updateRoomStatus(rr.roomId, 'Available', 'Dirty');
+    if (rr.roomId !== null) await updateRoomStatus(rr.roomId, 'Available', 'Dirty');
   }
 
   return reservationRepository.findReservationById(reservationId);
@@ -245,6 +245,9 @@ export const updateReservationRoomStatus = async (
   if (userPropertyId && resRoom.reservation.propertyId !== userPropertyId) {
     throw new Error('You do not have access to this reservation room');
   }
+  if (resRoom.roomId === null) {
+    throw new Error('This reservation room is archived and has no active room inventory.');
+  }
 
   const updateData: any = { status };
   if (occupantName !== undefined) updateData.occupantName = occupantName;
@@ -260,8 +263,9 @@ export const updateReservationRoomStatus = async (
       const otherGuest = conflict.reservation.platformGuest?.fullName 
         || conflict.reservation.propertyGuest?.fullName 
         || 'another guest';
+      const conflictingRoomNumber = conflict.room?.roomNumber || resRoom.roomNumberSnapshot || 'the assigned room';
       throw new Error(
-        `Room ${conflict.room.roomNumber} is already occupied by ${otherGuest} (Reservation #${conflict.reservation.reservationId}). ` +
+        `Room ${conflictingRoomNumber} is already occupied by ${otherGuest} (Reservation #${conflict.reservation.reservationId}). ` +
         `Please check out the current guest before checking in a new one.`
       );
     }
@@ -293,6 +297,9 @@ export const extendReservationRoom = async (
   
   if (userPropertyId && resRoom.reservation.propertyId !== userPropertyId) {
     throw new Error('You do not have access to this reservation room');
+  }
+  if (resRoom.roomId === null) {
+    throw new Error('This reservation room is archived and cannot be extended.');
   }
 
   if (resRoom.status !== 'CheckedIn') {

@@ -203,8 +203,8 @@ export default function ReservationDetailsPage() {
             {resData.reservationRooms?.map((rr) => (
               <div key={rr.reservationRoomId} className="flex items-center justify-between p-4 bg-secondary-50 rounded-lg border border-border">
                 <div>
-                  <p className="text-sm font-bold text-text">Room {rr.room?.roomNumber}</p>
-                  <p className="text-xs text-text-muted">{rr.room?.roomType?.typeName}</p>
+                  <p className="text-sm font-bold text-text">Room {rr.room?.roomNumber || rr.roomNumberSnapshot || 'Removed'}</p>
+                  <p className="text-xs text-text-muted">{rr.roomType?.typeName || rr.room?.roomType?.typeName || rr.roomTypeNameSnapshot || 'Room type removed'}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-bold text-primary-600">{fmt(rr.agreedPricePerNight)} GHS</p>

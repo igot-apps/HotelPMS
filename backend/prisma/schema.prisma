@@ -320,9 +320,11 @@ model Reservation {
 model ReservationRoom {
   reservationRoomId   Int       @id @default(autoincrement())
   reservationId       String    // 🌟 CHANGED TO STRING (Matches Reservation UUID)
-  roomId              Int
-  roomTypeId          Int
+  roomId              Int?
+  roomTypeId          Int?
   ratePlanId          Int?
+  roomNumberSnapshot  String?   @db.VarChar(20)
+  roomTypeNameSnapshot String?  @db.VarChar(100)
   checkInDate         DateTime
   checkOutDate        DateTime
   originalCheckOutDate DateTime?
@@ -336,9 +338,9 @@ model ReservationRoom {
   actualCheckOut      DateTime?
 
   reservation         Reservation @relation(fields: [reservationId], references: [reservationId], onDelete: Cascade)
-  room                Room      @relation(fields: [roomId], references: [roomId])
-  roomType            RoomType  @relation(fields: [roomTypeId], references: [roomTypeId])
-  ratePlan            RatePlan? @relation(fields: [ratePlanId], references: [ratePlanId])
+  room                Room?     @relation(fields: [roomId], references: [roomId], onDelete: SetNull)
+  roomType            RoomType? @relation(fields: [roomTypeId], references: [roomTypeId], onDelete: SetNull)
+  ratePlan            RatePlan? @relation(fields: [ratePlanId], references: [ratePlanId], onDelete: SetNull)
 
   @@unique([reservationId, roomId])
   @@index([reservationId])

@@ -158,7 +158,57 @@ export const getRoomTypeStats = async (roomTypeId: number) => {
 
 // 🌟 NEW: Hard Delete Room Type (Permanent deletion)
 export const hardDeleteRoomType = async (roomTypeId: number) => {
-  return prisma.roomType.delete({
-    where: { roomTypeId },
-  });
+  return prisma.$transaction(async (tx) => {
+    const roomType = await tx.roomType.findUnique({
+      where: { roomTypeId },
+      select: { roomTypeId: true, typeName: true },
+    });
+
+    if (!roomType) throw new Error('Room type not found');
+
+    // ReservationRoom records are historical booking records. Keep them intact;
+    // their foreign keys intentionally prevent deleting the room inventory they reference.
+    const activeReservationRoomCount = await tx.reservationRoom.count({
+      where: {
+        roomTypeId,
+        reservation: { status: { in: ['Pending', 'Confirmed', 'InHouse'] } },
+      },
+    });
+    if (activeReservationRoomCount > 0) {
+      throw new Error(
+        `Cannot delete "${roomType.typeName}" because ${activeReservationRoomCount} pending, confirmed, or in-house reservation room record(s) still use it.`
+      );
+    }
+
+    const reservationRoomRows = await tx.reservationRoom.findMany({
+      where: { roomTypeId },
+      select: {
+        reservationRoomId: true,
+        roomNumberSnapshot: true,
+        roomTypeNameSnapshot: true,
+        room: { select: { roomNumber: true } },
+      },
+    });
+
+    for (const row of reservationRoomRows) {
+      await tx.reservationRoom.update({
+        where: { reservationRoomId: row.reservationRoomId },
+        data: {
+          roomNumberSnapshot: row.roomNumberSnapshot || row.room?.roomNumber || null,
+          roomTypeNameSnapshot: row.roomTypeNameSnapshot || roomType.typeName,
+        },
+      });
+    }
+
+    const roomCount = await tx.room.count({ where: { roomTypeId } });
+    const ratePlanCount = await tx.ratePlan.count({ where: { roomTypeId } });
+
+    // Optional reservation links are detached by their SET NULL foreign keys;
+    // dates, prices, occupants, and the room identity snapshots stay intact.
+    await tx.ratePlan.deleteMany({ where: { roomTypeId } });
+    await tx.room.deleteMany({ where: { roomTypeId } });
+    await tx.roomType.delete({ where: { roomTypeId } });
+
+    return { roomCount, ratePlanCount, preservedReservationRoomCount: reservationRoomRows.length };
+  }, { isolationLevel: 'Serializable' });
 };
