@@ -28,14 +28,13 @@ export default function PublicHotelPage() {
   const { propertyCode } = useParams();
   const navigate = useNavigate();
 
-  // 🌟 Smart Date Initialization (Default to Today and Tomorrow)
-  const today = new Date();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  const [checkIn, setCheckIn] = useState(today.toISOString().split('T')[0]);
-  const [checkOut, setCheckOut] = useState(tomorrow.toISOString().split('T')[0]);
-  const [currentPage, setCurrentPage] = useState(1);
+// 🌟 Smart Date Initialization (Prevent past dates)
+const today = new Date();
+const tomorrow = new Date(today);
+tomorrow.setDate(tomorrow.getDate() + 1);
+const [checkIn, setCheckIn] = useState(today.toISOString().split('T')[0]); // ✅ Default to today
+const [checkOut, setCheckOut] = useState(tomorrow.toISOString().split('T')[0]); // ✅ Default to tomorrow
+const [currentPage, setCurrentPage] = useState(1);
 
   // Reset to page 1 whenever dates change
   useEffect(() => {
