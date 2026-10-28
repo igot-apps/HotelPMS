@@ -5,6 +5,59 @@ import * as authRepository from './auth.repository';
 import { PrismaClient } from '../../../src/generated/prisma';
 const prisma = new PrismaClient();
 
+// Keep the registration-created Manager role aligned with the canonical seed.
+// Render production databases may not have had the development seed script run.
+const defaultManagerPermissions = [
+  { code: 'CanCreateReservation', name: 'Create Reservation', category: 'Reservations' },
+  { code: 'CanCancelReservation', name: 'Cancel Reservation', category: 'Reservations' },
+  { code: 'CanCheckInGuest', name: 'Check In Guest', category: 'Reservations' },
+  { code: 'CanCheckOutGuest', name: 'Check Out Guest', category: 'Reservations' },
+  { code: 'CanViewRooms', name: 'View Rooms', category: 'Inventory' },
+  { code: 'CanCreateRoom', name: 'Create Room', category: 'Inventory' },
+  { code: 'CanUpdateRoom', name: 'Update Room', category: 'Inventory' },
+  { code: 'CanDeleteRoom', name: 'Delete Room', category: 'Inventory' },
+  { code: 'CanCreateRoomType', name: 'Create Room Type', category: 'Inventory' },
+  { code: 'CanUpdateRoomType', name: 'Update Room Type', category: 'Inventory' },
+  { code: 'CanDeleteRoomType', name: 'Delete Room Type', category: 'Inventory' },
+  { code: 'CanUpdateRoomStatus', name: 'Update Room Status', category: 'Inventory' },
+  { code: 'CanManageRates', name: 'Manage Rates', category: 'Inventory' },
+  { code: 'CanProcessPayments', name: 'Process Payments', category: 'Billing' },
+  { code: 'CanIssueRefunds', name: 'Issue Refunds', category: 'Billing' },
+  { code: 'CanViewFinancialReports', name: 'View Financial Reports', category: 'Reports' },
+  { code: 'CanManageBilling', name: 'Manage Billing', category: 'Billing' },
+  { code: 'CanManageHousekeeping', name: 'Manage Housekeeping', category: 'Operations' },
+  { code: 'CanManageMaintenance', name: 'Manage Maintenance', category: 'Operations' },
+];
+
+async function ensureManagerPermissions(tx: any) {
+  for (const permission of defaultManagerPermissions) {
+    await tx.permission.upsert({
+      where: { code: permission.code },
+      update: {},
+      create: permission,
+    });
+  }
+
+  const managerRole = await tx.role.upsert({
+    where: { roleName: 'Manager' },
+    update: {},
+    create: { roleName: 'Manager', description: 'Property management access', isSystem: true },
+  });
+  const permissions = await tx.permission.findMany({
+    where: { code: { in: defaultManagerPermissions.map(({ code }) => code) } },
+  });
+
+  await tx.rolePermission.createMany({
+    data: permissions.map((permission: { permissionId: number }) => ({
+      roleId: managerRole.roleId,
+      permissionId: permission.permissionId,
+    })),
+    skipDuplicates: true,
+  });
+
+  return managerRole;
+}
+
 export interface LoginResponse {
   success: boolean;
   accessToken?: string;
@@ -49,6 +102,12 @@ export const loginUser = async (
     return { success: false, message: 'Invalid username or password' };
   }
 
+  // Repair accounts registered before the production permission catalog was
+  // initialized, so their next login restores the standard manager navigation.
+  if (user.role.roleName === 'Manager' && user.propertyId) {
+    await prisma.$transaction((tx: any) => ensureManagerPermissions(tx));
+  }
+
   await authRepository.updateLastLogin(user.userId);
 
   // 🚨 JWT PAYLOAD: propertyId is now the root scope. Fallback to 0 if null.
@@ -65,6 +124,11 @@ export const loginUser = async (
   const permissions = user.role.rolePermissions.map(
     (rp) => rp.permission.code
   );
+  if (user.role.roleName === 'Manager' && user.propertyId) {
+    for (const permission of defaultManagerPermissions) {
+      if (!permissions.includes(permission.code)) permissions.push(permission.code);
+    }
+  }
 
   return {
     success: true,
@@ -181,21 +245,11 @@ export const registerNewHotel = async (data: {
       },
     });
 
-    // ✅ B. Find or Create the "Manager" Role (Changed from Hotel Owner)
-    let managerRole = await tx.role.findFirst({ where: { roleName: 'Manager' } });
-    if (!managerRole) {
-      managerRole = await tx.role.create({ 
-        data: { roleName: 'Manager', description: 'Default full-access role for the hotel manager', isSystem: true } 
-      });
-      
-      // Assign all permissions to the Manager role automatically
-      const allPermissions = await tx.permission.findMany();
-      for (const perm of allPermissions) {
-        await tx.rolePermission.create({
-          data: { roleId: managerRole.roleId, permissionId: perm.permissionId },
-        });
-      }
-    }
+    // B. Ensure the default property-manager role and its permissions exist.
+    // Do this on every registration: migrations create tables, but do not run
+    // the development seed script on Render. The manager deliberately does
+    // not receive CanManageStaffAndRoles (the seed uses the same policy).
+    const managerRole = await ensureManagerPermissions(tx);
 
     // C. Create the Manager User Account
     const passwordHash = await hashPassword(data.password);
