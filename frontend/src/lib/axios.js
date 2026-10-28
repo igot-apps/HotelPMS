@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore'; // Adjust path if your store is elsewhere
 
 const api = axios.create({
-  baseURL: 'http://localhost:3000/api', // Ensure this matches your backend URL
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000/api',
   headers: {
     'Content-Type': 'application/json',
   },
