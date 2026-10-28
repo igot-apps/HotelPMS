@@ -110,7 +110,6 @@ export default function PaymentModal({ isOpen, onClose, onSubmit, isLoading, err
                 <option value="Cash">Cash</option>
                 <option value="Card">Credit/Debit Card</option>
                 <option value="MobileMoney">Mobile Money</option>
-                <option value="Online">Online Transfer</option>
               </select>
             </div>
           </div>

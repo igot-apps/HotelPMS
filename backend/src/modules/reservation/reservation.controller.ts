@@ -174,6 +174,17 @@ export const updateReservationRoomStatus = async (req: AuthRequest, res: Respons
     const reservationRoomId = req.params.reservationRoomId as string;
     const status = req.body.status as string;
     const occupantName = req.body.occupantName as string | undefined;
+    const occupantPhone = req.body.occupantPhone as string | undefined;
+
+    if (occupantPhone !== undefined && typeof occupantPhone !== 'string') {
+      return res.status(400).json({ success: false, message: 'Occupant phone number must be text.' });
+    }
+    if (occupantPhone?.trim() && !/^\d{10}$/.test(occupantPhone.trim())) {
+      return res.status(400).json({ success: false, message: 'Occupant phone number must be exactly 10 digits.' });
+    }
+    if (status === 'CheckedIn' && (!occupantName || !occupantName.trim())) {
+      return res.status(400).json({ success: false, message: 'Occupant name is required to check in a room.' });
+    }
 
     if (!['Reserved', 'CheckedIn', 'CheckedOut', 'Cancelled'].includes(status)) {
       return res.status(400).json({ success: false, message: 'Invalid status. Must be Reserved, CheckedIn, CheckedOut, or Cancelled.' });
@@ -188,6 +199,7 @@ export const updateReservationRoomStatus = async (req: AuthRequest, res: Respons
       parsedRoomId,
       status,
       occupantName,
+      occupantPhone,
       req.user?.propertyId
     );
 
@@ -236,7 +248,7 @@ export const updateOccupantName = async (req: AuthRequest, res: Response) => {
   try {
     const reservationRoomIdStr = req.params.reservationRoomId as string;
     const reservationRoomId = parseInt(reservationRoomIdStr);
-    const { occupantName } = req.body;
+    const { occupantName, occupantPhone } = req.body;
 
     if (isNaN(reservationRoomId)) {
       return res.status(400).json({ success: false, message: 'Invalid reservation room ID' });
@@ -245,18 +257,52 @@ export const updateOccupantName = async (req: AuthRequest, res: Response) => {
     if (!occupantName || occupantName.trim() === '') {
       return res.status(400).json({ success: false, message: 'Occupant name is required' });
     }
+    if (occupantPhone !== undefined && typeof occupantPhone !== 'string') {
+      return res.status(400).json({ success: false, message: 'Occupant phone number must be text.' });
+    }
+    if (occupantPhone?.trim() && !/^\d{10}$/.test(occupantPhone.trim())) {
+      return res.status(400).json({ success: false, message: 'Occupant phone number must be exactly 10 digits.' });
+    }
 
     const updatedRoom = await reservationService.updateOccupantName(
       reservationRoomId,
       occupantName.trim(),
+      typeof occupantPhone === 'string' ? occupantPhone : undefined,
       req.user?.propertyId
     );
 
     return res.status(200).json({
       success: true,
       data: updatedRoom,
-      message: 'Occupant name updated successfully',
+      message: 'Occupant details updated successfully',
     });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+export const updateGuestPresence = async (req: AuthRequest, res: Response) => {
+  try {
+    const reservationRoomId = parseInt(req.params.reservationRoomId as string);
+    const { action, expectedReturnAt } = req.body;
+    if (Number.isNaN(reservationRoomId)) {
+      return res.status(400).json({ success: false, message: 'Invalid reservation room ID' });
+    }
+    if (action !== 'out' && action !== 'returned') {
+      return res.status(400).json({ success: false, message: 'Action must be "out" or "returned".' });
+    }
+    if (expectedReturnAt !== undefined && typeof expectedReturnAt !== 'string') {
+      return res.status(400).json({ success: false, message: 'Expected return time must be a date and time.' });
+    }
+
+    const updatedRoom = await reservationService.updateGuestPresence(
+      reservationRoomId,
+      action,
+      req.user!.userId,
+      req.user!.propertyId,
+      expectedReturnAt
+    );
+    return res.status(200).json({ success: true, data: updatedRoom, message: 'Guest presence updated.' });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });
   }

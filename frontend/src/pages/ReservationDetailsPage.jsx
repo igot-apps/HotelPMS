@@ -6,10 +6,11 @@ import { recordPayment } from '../api/payments';
 import { useAuthStore } from '../store/authStore';
 import {
   ArrowLeft, User, BedDouble, CreditCard, FileText, Edit2, X, Loader2,
-  CalendarDays, DollarSign, Clock, CheckCircle2, AlertCircle, Plus, Printer, ChevronDown
+  CalendarDays, DollarSign, Clock, CheckCircle2, AlertCircle, Plus, Printer, ChevronDown, Smartphone
 } from 'lucide-react';
 import ReceiptModal from '../components/reservations/ReceiptModal';
 import ThermalReceiptModal from '../components/reservations/ThermalReceiptModal';
+import { formatPaymentMethod } from '../utils/payment';
 
 export default function ReservationDetailsPage() {
   const { id } = useParams();
@@ -106,7 +107,7 @@ export default function ReservationDetailsPage() {
             <ArrowLeft size={20} />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-text">Reservation #{resData.reservationId}</h1>
+            <h1 className="text-2xl font-bold text-text">Reservation {resData.confirmationCode || `#${resData.reservationId.slice(0, 8).toUpperCase()}`}</h1>
             <p className="text-sm text-text-muted flex items-center gap-2 mt-1">
               <CalendarDays size={14} />
               {new Date(resData.checkInDate).toLocaleDateString()} → {new Date(resData.checkOutDate).toLocaleDateString()}
@@ -245,7 +246,12 @@ export default function ReservationDetailsPage() {
                 {resData.payments.map(p => (
                   <tr key={p.paymentId} className="border-b border-border last:border-0 hover:bg-secondary-50/30 transition">
                     <td className="px-4 py-3 text-sm text-text">{new Date(p.paymentDate).toLocaleDateString()}</td>
-                    <td className="px-4 py-3 text-sm text-text-muted">{p.paymentMethod}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${p.paymentMethod === 'Card' ? 'bg-primary-50 text-primary-700' : p.paymentMethod === 'MobileMoney' || p.paymentMethod === 'Mobile Money' ? 'bg-warning-50 text-warning-700' : 'bg-secondary-100 text-secondary-700'}`}>
+                        {p.paymentMethod === 'MobileMoney' || p.paymentMethod === 'Mobile Money' ? <Smartphone size={13} /> : <CreditCard size={13} />}
+                        {formatPaymentMethod(p.paymentMethod)}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-sm text-text-muted font-mono text-xs">{p.gatewayReference || '-'}</td>
                     <td className="px-4 py-3"><span className="px-2 py-1 rounded-md text-xs font-semibold bg-success-50 text-success-700">{p.status}</span></td>
                     <td className="px-4 py-3 text-sm font-bold text-text text-right">{fmt(p.amount)} GHS</td>
@@ -270,7 +276,7 @@ export default function ReservationDetailsPage() {
             <div className="flex items-center justify-between p-6 border-b border-border">
               <div>
                 <h2 className="text-xl font-bold text-text">Record Payment</h2>
-                <p className="text-xs text-text-muted mt-1">Reservation #{resData.reservationId} • Balance: {fmt(balanceDue)} GHS</p>
+                <p className="text-xs text-text-muted mt-1">Reservation {resData.confirmationCode || `#${resData.reservationId.slice(0, 8).toUpperCase()}`} • Balance: {fmt(balanceDue)} GHS</p>
               </div>
               <button onClick={() => setIsPaymentModalOpen(false)} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted"><X size={20} /></button>
             </div>
@@ -291,7 +297,6 @@ export default function ReservationDetailsPage() {
                   <option value="Cash">Cash</option>
                   <option value="Card">Credit/Debit Card</option>
                   <option value="MobileMoney">Mobile Money</option>
-                  <option value="Online">Online Transfer</option>
                 </select>
               </div>
               <div>

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { getPayments, getPaymentStats, recordPayment, refundPayment } from '../api/payments';
 import PaymentModal from '../components/payments/PaymentModal';
+import { formatPaymentMethod } from '../utils/payment';
 import {
   Search, Plus, CreditCard, TrendingUp, Banknote, Smartphone, Undo2,
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight, X
@@ -266,7 +267,7 @@ export default function PaymentsPage() {
                       <td className="px-6 py-4 text-sm font-bold text-text">{amount} GHS</td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold ${methodClass}`}>
-                          {p.paymentMethod}
+                          {formatPaymentMethod(p.paymentMethod)}
                         </span>
                       </td>
                       <td className="px-6 py-4">

@@ -51,13 +51,9 @@ router.get('/discover', async (req: any, res: Response) => {
                 reservation: {
                   // 🌟 CHANGED: 'CheckedIn' → 'InHouse'
                   status: { in: ['Confirmed', 'InHouse'] },
-                  OR: [
-                    { 
-                      checkInDate: { lte: new Date(checkOut as string) }, 
-                      checkOutDate: { gte: new Date(checkIn as string) } 
-                    }
-                  ]
-                }
+                },
+                checkInDate: { lt: new Date(checkOut as string) },
+                checkOutDate: { gt: new Date(checkIn as string) },
               }
             }
           } : {})
@@ -283,11 +279,12 @@ router.get('/:propertyCode/room-types', async (req: any, res: Response) => {
           const bookedRooms = await prisma.reservationRoom.count({
             where: {
               roomTypeId: rt.roomTypeId,
+              checkInDate: { lt: checkOutDate },
+              checkOutDate: { gt: checkInDate },
               reservation: {
                 propertyId: property.propertyId,
                 // 🌟 CHANGED: 'CheckedIn' → 'InHouse'
                 status: { in: ['Confirmed', 'InHouse'] },
-                OR: [{ checkInDate: { lte: checkOutDate }, checkOutDate: { gte: checkInDate } }]
               }
             }
           });
@@ -456,7 +453,7 @@ router.post('/:propertyCode/payments/initialize', async (req: any, res: Response
         amount: Math.round(amount * 100),
         reference: `RES-${reservationId}-${Date.now()}`,
         currency: property.currency || 'GHS',
-        channels: ['mobile_money'],
+        channels: ['mobile_money', 'card'],
         callback_url: callbackUrl,
         metadata: { propertyCode, reservationId: String(reservationId) }
       },
@@ -498,6 +495,7 @@ router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Re
     );
 
     const transactionData = response.data.data;
+    let confirmationCode: string | null = null;
     if (transactionData.status === 'success') {
       const reservationId = String(transactionData.metadata?.reservationId);
       const amountPaid = transactionData.amount / 100;
@@ -505,11 +503,12 @@ router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Re
      if (reservationId && reservationId !== 'undefined') {
        const reservation = await prisma.reservation.findUnique({
          where: { reservationId },
-         select: { amountPaid: true, status: true, totalAmount: true }
+         select: { amountPaid: true, status: true, totalAmount: true, confirmationCode: true }
        });
        
        // 🌟 FIX: Removed the "=== 0" check so ALL valid payments are recorded
        if (reservation) {
+         confirmationCode = reservation.confirmationCode;
          // 🛡️ Safety: Prevent duplicate payment records for the same Paystack reference
          const existingPayment = await prisma.payment.findFirst({
            where: { gatewayReference: transactionData.reference }
@@ -524,16 +523,22 @@ router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Re
              }
            });
            
-                  await prisma.payment.create({
+           const paymentMethod = transactionData.channel === 'card'
+             ? 'Card'
+             : transactionData.channel === 'mobile_money'
+               ? 'MobileMoney'
+               : String(transactionData.channel || 'Online');
+
+           await prisma.payment.create({
          data: {
            reservationId,
            propertyId: property.propertyId, // 🌟 CRITICAL FIX: Save the property ID!
            amount: amountPaid,
-           paymentMethod: 'Mobile Money',
+           paymentMethod,
            paymentDate: new Date(),
            gatewayReference: transactionData.reference,
            status: 'Completed',
-           notes: `Online payment verified via frontend fallback`,
+           notes: `Online payment verified via ${paymentMethod === 'MobileMoney' ? 'Mobile Money' : paymentMethod}`,
            receivedBy: null,
          }
        });
@@ -545,7 +550,11 @@ router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Re
      }
     }
 
-    return res.json({ success: true, data: transactionData, status: transactionData.status });
+    return res.json({
+      success: true,
+      data: { ...transactionData, confirmationCode },
+      status: transactionData.status,
+    });
   } catch (error: any) {
     console.error('Paystack Verify Error:', error.response?.data?.message || error.message);
     return res.status(500).json({ success: false, message: error.response?.data?.message || error.message });

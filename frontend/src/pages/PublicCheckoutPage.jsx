@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Calendar, Tag, Loader2, CheckCircle2, ArrowLeft, Smartphone, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Calendar, Tag, Loader2, CheckCircle2, ArrowLeft, CreditCard, ShieldCheck, AlertCircle } from 'lucide-react';
 import api from '../lib/axios';
 import toast from 'react-hot-toast';
 import PublicNavbar from '../components/public/PublicNavbar';
@@ -340,12 +340,12 @@ export default function PublicCheckoutPage() {
                 {initializePaymentMutation.isPending ? (
                   <><Loader2 className="animate-spin" size={18} /> Initializing...</>
                 ) : (
-                  <><Smartphone size={18} /> Pay with Mobile Money</>
+                  <><CreditCard size={18} /> Continue to secure payment</>
                 )}
               </button>
               
               <p className="text-[10px] text-text-muted text-center mt-3">
-                Secure payment via MTN MoMo, Vodafone Cash, or AirtelTigo Money
+                Choose Mobile Money or card (Visa/Mastercard) on Paystack's secure checkout.
               </p>
             </div>
           </div>

@@ -27,6 +27,10 @@ export default function PublicBookingSuccessPage() {
         return;
       }
 
+      // The gateway reference is only needed for verification. Keep the long
+      // transaction token out of the address bar after reading it.
+      window.history.replaceState({}, document.title, window.location.pathname);
+
       try {
         const res = await api.get(`/public/${propertyCode}/payments/verify/${reference}`);
         
@@ -68,8 +72,8 @@ export default function PublicBookingSuccessPage() {
           
           <div className="bg-background p-4 rounded-lg border border-border text-left space-y-3 mb-6">
             <div className="flex justify-between text-sm">
-              <span className="text-text-muted">Reference:</span>
-              <span className="font-bold text-primary-600 uppercase tracking-wider">{transactionData?.reference}</span>
+              <span className="text-text-muted">Reservation code:</span>
+              <span className="font-bold text-primary-600 uppercase tracking-[0.16em]">{transactionData?.confirmationCode || '—'}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-text-muted">Amount Paid:</span>
@@ -77,12 +81,18 @@ export default function PublicBookingSuccessPage() {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-text-muted">Payment Method:</span>
-              <span className="font-semibold text-text">{transactionData?.channel || 'Mobile Money'}</span>
+              <span className="font-semibold text-text">
+                {transactionData?.channel === 'mobile_money'
+                  ? 'Mobile Money'
+                  : transactionData?.channel === 'card'
+                    ? 'Card'
+                    : transactionData?.channel || 'Online payment'}
+              </span>
             </div>
           </div>
 
           <p className="text-xs text-text-muted mb-6">
-            A confirmation has been sent to your phone. Please save this reference for check-in.
+            Please save this reservation code for check-in.
           </p>
           
           <button 

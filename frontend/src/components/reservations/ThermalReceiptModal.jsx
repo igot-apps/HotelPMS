@@ -1,4 +1,5 @@
 import { X, Printer } from 'lucide-react';
+import { formatPaymentMethod } from '../../utils/payment';
 
 export default function ThermalReceiptModal({ isOpen, onClose, reservation, stats }) {
   if (!isOpen || !reservation) return null;
@@ -10,7 +11,17 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
   const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const formatTime = (dateStr) => new Date(dateStr).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const formatCurrency = (val) => parseFloat(val || 0).toFixed(2);
-  const nights = Math.ceil((new Date(reservation.checkOutDate) - new Date(reservation.checkInDate)) / (1000 * 60 * 60 * 24));
+  const receiptReference = reservation.confirmationCode || `#${reservation.reservationId?.slice(0, 8).toUpperCase()}`;
+  const getRoomNights = (room) => Math.max(0, Math.ceil(
+    (new Date(room.checkOutDate || reservation.checkOutDate) - new Date(room.checkInDate || reservation.checkInDate))
+      / (1000 * 60 * 60 * 24)
+  ));
+  const latestCheckOutDate = reservation.reservationRooms?.reduce((latest, room) => {
+    const roomCheckOut = new Date(room.checkOutDate || reservation.checkOutDate);
+    return roomCheckOut > latest ? roomCheckOut : latest;
+  }, new Date(reservation.checkOutDate)) || new Date(reservation.checkOutDate);
+  const nights = reservation.reservationRooms?.reduce((maximum, room) => Math.max(maximum, getRoomNights(room)), 0)
+    || Math.max(0, Math.ceil((latestCheckOutDate - new Date(reservation.checkInDate)) / (1000 * 60 * 60 * 24)));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm thermal-modal-wrapper">
@@ -55,13 +66,16 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
             <div className="border-t border-dashed border-black my-2"></div>
 
             {/* Receipt Meta */}
-            <div className="flex justify-between text-[11px] mb-1">
-              <span>Receipt #: {reservation.reservationId}</span>
-              <span>{formatDate(new Date())}</span>
+            <div className="mb-2 border-2 border-black px-2 py-1.5 text-center">
+              <p className="text-[9px] font-bold uppercase tracking-widest">Reservation Reference</p>
+              <p className="text-[16px] font-bold tracking-wider">{receiptReference}</p>
             </div>
-            <div className="flex justify-between text-[11px] mb-1">
-              <span>Time: {formatTime(new Date())}</span>
-              <span>Cashier: {reservation.staff?.fullName || 'System'}</span>
+            <div className="text-[10px] mb-1">
+              <div className="flex justify-between gap-2">
+                <span>Date: {formatDate(new Date())}</span>
+                <span>Time: {formatTime(new Date())}</span>
+              </div>
+              <p className="mt-0.5">Cashier: {reservation.staff?.fullName || 'System'}</p>
             </div>
 
             <div className="border-t border-dashed border-black my-2"></div>
@@ -73,7 +87,7 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
             </div>
             <div className="flex justify-between text-[11px] mb-1">
               <span>Check-in: {formatDate(reservation.checkInDate)}</span>
-              <span>Check-out: {formatDate(reservation.checkOutDate)}</span>
+              <span>Check-out: {formatDate(latestCheckOutDate)}</span>
             </div>
             <div className="text-[11px] font-bold mb-1">
               TOTAL NIGHTS: {nights}
@@ -85,14 +99,15 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
             <p className="text-[11px] font-bold mb-1">ACCOMMODATION CHARGES:</p>
             {reservation.reservationRooms?.map((rr) => {
               const rate = parseFloat(rr.agreedPricePerNight || 0);
-              const subtotal = rate * nights;
+              const roomNights = getRoomNights(rr);
+              const subtotal = rate * roomNights;
               return (
                 <div key={rr.reservationRoomId} className="text-[11px] mb-1">
                   <div className="flex justify-between">
                     <span>Room {rr.room?.roomNumber || rr.roomNumberSnapshot || 'Removed'} ({rr.roomType?.typeName || rr.roomTypeNameSnapshot || 'Room type removed'})</span>
                   </div>
                   <div className="flex justify-between pl-2">
-                    <span>{nights} nights x {formatCurrency(rate)}</span>
+                    <span>{roomNights} nights x {formatCurrency(rate)}</span>
                     <span>{formatCurrency(subtotal)}</span>
                   </div>
                 </div>
@@ -125,7 +140,7 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
                 {reservation.payments.map(p => (
                   <div key={p.paymentId} className="text-[11px] mb-1">
                     <div className="flex justify-between">
-                      <span>{formatDate(p.paymentDate)} ({p.paymentMethod})</span>
+                      <span>{formatDate(p.paymentDate)} ({formatPaymentMethod(p.paymentMethod)})</span>
                       <span>{formatCurrency(p.amount)}</span>
                     </div>
                     {p.gatewayReference && <p className="pl-2 text-[9px]">Ref: {p.gatewayReference}</p>}

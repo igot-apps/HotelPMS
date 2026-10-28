@@ -36,11 +36,21 @@ export const authenticate = async (
   // 1. User is verified, attach to request
   req.user = decoded;
 
+  const isPlatformRoute = req.originalUrl.startsWith('/api/platform/');
+  const isAuthRoute = req.originalUrl.startsWith('/api/auth/');
+  if ((!req.user.propertyId || req.user.propertyId === 0) && !isPlatformRoute && !isAuthRoute) {
+    res.status(403).json({ success: false, message: 'This account cannot access hotel-property features.' });
+    return;
+  }
+
   // 🚨 2. THE SOFT LOCK: Check subscription immediately!
   const propertyId = req.user.propertyId;
   
+  // Let expired properties start a renewal payment; other writes remain locked.
+  const isSubscriptionPaymentInitialization = req.originalUrl === '/api/paystack/initialize';
   // Only block WRITE requests (POST, PUT, DELETE, PATCH). Allow GET (reading) so they can see the billing page.
-  if (req.method !== 'GET' && propertyId && propertyId !== 0) {
+  const isPlatformAdminRoute = req.originalUrl.startsWith('/api/platform/');
+  if (req.method !== 'GET' && !isSubscriptionPaymentInitialization && !isPlatformAdminRoute && propertyId && propertyId !== 0) {
     try {
       const property = await prisma.property.findUnique({
         where: { propertyId },
@@ -71,6 +81,32 @@ export const authenticate = async (
 
   // 3. If all good, proceed to the route
   next();
+};
+
+export const requirePlatformAdmin = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  if (!req.user) {
+    res.status(401).json({ success: false, message: 'Authentication required' });
+    return;
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { userId: req.user.userId },
+      select: { isPlatformAdmin: true, isActive: true, propertyId: true },
+    });
+    if (!user?.isActive || !user.isPlatformAdmin || user.propertyId !== null) {
+      res.status(403).json({ success: false, message: 'Platform administrator access required.' });
+      return;
+    }
+    next();
+  } catch (error) {
+    console.error('Platform administrator authorization error:', error);
+    res.status(500).json({ success: false, message: 'Could not verify platform administrator access.' });
+  }
 };
 
 // ==========================================

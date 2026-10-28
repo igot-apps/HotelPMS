@@ -1,4 +1,5 @@
 import { X, Printer } from 'lucide-react';
+import { formatPaymentMethod } from '../../utils/payment';
 
 export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
   if (!isOpen || !reservation) return null;
@@ -12,8 +13,17 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
 
   const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const formatCurrency = (val) => parseFloat(val || 0).toFixed(2);
-
-  const nights = Math.ceil((new Date(reservation.checkOutDate) - new Date(reservation.checkInDate)) / (1000 * 60 * 60 * 24));
+  const receiptReference = reservation.confirmationCode || `#${reservation.reservationId?.slice(0, 8).toUpperCase()}`;
+  const getRoomNights = (room) => Math.max(0, Math.ceil(
+    (new Date(room.checkOutDate || reservation.checkOutDate) - new Date(room.checkInDate || reservation.checkInDate))
+      / (1000 * 60 * 60 * 24)
+  ));
+  const latestCheckOutDate = reservation.reservationRooms?.reduce((latest, room) => {
+    const roomCheckOut = new Date(room.checkOutDate || reservation.checkOutDate);
+    return roomCheckOut > latest ? roomCheckOut : latest;
+  }, new Date(reservation.checkOutDate)) || new Date(reservation.checkOutDate);
+  const nights = reservation.reservationRooms?.reduce((maximum, room) => Math.max(maximum, getRoomNights(room)), 0)
+    || Math.max(0, Math.ceil((latestCheckOutDate - new Date(reservation.checkInDate)) / (1000 * 60 * 60 * 24)));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm print-modal-wrapper">
@@ -52,9 +62,13 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
                 <p className="text-gray-600">Date: {formatDate(new Date())}</p>
               </div>
               <div className="text-right">
-                <p className="text-gray-600">Res. No: <span className="font-bold text-gray-900">#{reservation.reservationId}</span></p>
                 <p className="text-gray-600">Status: <span className="font-bold text-gray-900">{reservation.status}</span></p>
               </div>
+            </div>
+
+            <div className="mb-6 rounded-lg border-2 border-gray-800 px-4 py-2 text-center">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-600">Reservation Reference</p>
+              <p className="text-xl font-bold tracking-wider text-gray-900">{receiptReference}</p>
             </div>
 
             {/* Guest Info */}
@@ -75,7 +89,7 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
                 </div>
                 <div>
                   <p className="text-gray-600 text-xs">Check-out</p>
-                  <p className="font-semibold">{formatDate(reservation.checkOutDate)}</p>
+                  <p className="font-semibold">{formatDate(latestCheckOutDate)}</p>
                 </div>
                 <div>
                   <p className="text-gray-600 text-xs">Nights</p>
@@ -98,14 +112,15 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
                 <tbody>
                   {reservation.reservationRooms?.map((rr) => {
                     const rate = parseFloat(rr.agreedPricePerNight || 0);
-                    const subtotal = rate * nights;
+                    const roomNights = getRoomNights(rr);
+                    const subtotal = rate * roomNights;
                     return (
                       <tr key={rr.reservationRoomId} className="border-b border-gray-100">
                         <td className="py-2">
                           <p className="font-semibold text-gray-900">Room {rr.room?.roomNumber || rr.roomNumberSnapshot || 'Removed'}</p>
                           <p className="text-xs text-gray-500">{rr.roomType?.typeName || rr.room?.roomType?.typeName || rr.roomTypeNameSnapshot || 'Room type removed'}</p>
                         </td>
-                        <td className="text-center py-2 text-gray-700">{nights}</td>
+                        <td className="text-center py-2 text-gray-700">{roomNights}</td>
                         <td className="text-right py-2 text-gray-700">{formatCurrency(rate)}</td>
                         <td className="text-right py-2 font-semibold text-gray-900">{formatCurrency(subtotal)}</td>
                       </tr>
@@ -148,7 +163,7 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
                     {reservation.payments.map(p => (
                       <tr key={p.paymentId} className="border-b border-gray-100">
                         <td className="py-1">{formatDate(p.paymentDate)}</td>
-                        <td className="py-1">{p.paymentMethod}</td>
+                        <td className="py-1">{formatPaymentMethod(p.paymentMethod)}</td>
                         <td className="py-1 text-gray-500">{p.gatewayReference || '-'}</td>
                         <td className="text-right py-1 font-semibold">{formatCurrency(p.amount)}</td>
                       </tr>

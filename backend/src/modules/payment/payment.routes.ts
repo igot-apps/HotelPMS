@@ -1,7 +1,88 @@
 import { Router, Response } from 'express';
+import { createHmac, timingSafeEqual } from 'crypto';
 import * as paymentService from './payment.service';
+import * as subscriptionService from './subscription.service';
+import { authenticate, AuthRequest } from '../../shared/middleware/auth.middleware';
 
 const router = Router();
+
+// Paystack mobile money can finish after the browser callback. Accept signed
+// success webhooks as a second path to verification; the service re-verifies
+// the transaction with Paystack and is idempotent for duplicate deliveries.
+router.post('/webhooks/platform', async (req: any, res: Response) => {
+  const secret = process.env.PAYSTACK_SECRET_KEY;
+  const signature = req.header('x-paystack-signature');
+  if (!secret || !signature || !Buffer.isBuffer(req.body)) {
+    return res.status(401).json({ success: false, message: 'Invalid Paystack webhook.' });
+  }
+
+  const expected = createHmac('sha512', secret).update(req.body).digest();
+  let provided: Buffer;
+  try {
+    provided = Buffer.from(signature, 'hex');
+  } catch {
+    return res.status(401).json({ success: false, message: 'Invalid Paystack webhook signature.' });
+  }
+  if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
+    return res.status(401).json({ success: false, message: 'Invalid Paystack webhook signature.' });
+  }
+
+  let event: any;
+  try {
+    event = JSON.parse(req.body.toString('utf8'));
+  } catch {
+    return res.status(400).json({ success: false, message: 'Invalid webhook payload.' });
+  }
+  if (event.event !== 'charge.success' || !event.data?.reference) return res.sendStatus(200);
+
+  try {
+    await subscriptionService.processSubscriptionWebhook(String(event.data.reference));
+    return res.sendStatus(200);
+  } catch (error: any) {
+    // A non-subscription reference is irrelevant here; transient verification
+    // errors should return 500 so Paystack retries the webhook.
+    if (error.statusCode === 404) return res.sendStatus(200);
+    return res.status(500).json({ success: false, message: 'Could not process subscription payment webhook.' });
+  }
+});
+
+// Subscription billing routes are authenticated and always use the property
+// attached to the signed-in user, never a propertyId supplied by the browser.
+router.get('/subscription-status', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const propertyId = req.user?.propertyId;
+    if (!propertyId) return res.status(401).json({ success: false, message: 'Sign in to view subscription status.' });
+    const data = await subscriptionService.getSubscriptionStatus(propertyId);
+    return res.json({ success: true, data });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.post('/initialize', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    const propertyId = req.user?.propertyId;
+    if (!userId || !propertyId) return res.status(401).json({ success: false, message: 'Sign in to start a subscription payment.' });
+    const durationMonths = Number(req.body.durationMonths);
+    const data = await subscriptionService.initializeSubscriptionPayment(userId, propertyId, durationMonths);
+    return res.json({ success: true, data });
+  } catch (error: any) {
+    return res.status(error.statusCode || 400).json({ success: false, message: error.message });
+  }
+});
+
+router.get('/verify/:reference', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const propertyId = req.user?.propertyId;
+    if (!propertyId) return res.status(401).json({ success: false, message: 'Sign in to verify subscription payment.' });
+    const reference = req.params.reference as string;
+    const data = await subscriptionService.verifySubscriptionPayment(reference, propertyId);
+    return res.json({ success: true, data });
+  } catch (error: any) {
+    return res.status(error.statusCode || 400).json({ success: false, message: error.message });
+  }
+});
 
 // ============================================================
 // RECORD A NEW PAYMENT

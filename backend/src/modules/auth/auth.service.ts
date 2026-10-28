@@ -15,6 +15,7 @@ export interface LoginResponse {
     username: string;
     email: string | null;
     role: string;
+    isPlatformAdmin: boolean;
     propertyId: number | null; 
     propertyName: string | null; 
     permissions: string[];
@@ -38,6 +39,9 @@ export const loginUser = async (
   }
   if (!user.isActive) {
     return { success: false, message: 'Account is deactivated' };
+  }
+  if (!user.propertyId && !user.isPlatformAdmin) {
+    return { success: false, message: 'This account is not assigned to a property.' };
   }
   
   const isPasswordValid = await comparePassword(password, user.passwordHash);
@@ -72,12 +76,13 @@ export const loginUser = async (
       username: user.username,
       email: user.email || null,
       role: user.role.roleName,
+      isPlatformAdmin: user.isPlatformAdmin,
       propertyId: user.propertyId || null,
       propertyName: (user as any).property?.propertyName || null, // ✅ Safe navigation
-      subscriptionPlan: user.property.subscriptionPlan,
-      subscriptionStatus: user.property.subscriptionStatus,
-      trialEndsAt: user.property.trialEndsAt,
-      subscriptionEndsAt: user.property.subscriptionEndsAt, // 
+      subscriptionPlan: user.property?.subscriptionPlan || 'Platform',
+      subscriptionStatus: user.property?.subscriptionStatus || 'Active',
+      trialEndsAt: user.property?.trialEndsAt || null,
+      subscriptionEndsAt: user.property?.subscriptionEndsAt || null,
       permissions,
     },
   };
@@ -118,6 +123,7 @@ export const getUserById = async (userId: number) => {
     username: user.username,
     email: user.email,
     role: user.role.roleName,
+    isPlatformAdmin: user.isPlatformAdmin,
     propertyId: user.propertyId || null,
     propertyName: (user as any).property?.propertyName || null, // ✅ Safe navigation
     isActive: user.isActive,

@@ -10,10 +10,14 @@ export const createProperty = async (data: any) => {
 
 export const getProperties = async (
   page: number = 1,
-  limit: number = 10
+  limit: number = 10,
+  propertyId?: number
 ) => {
-  // ✅ Removed tenantId parameter
-  return propertyRepository.findProperties(page, limit);
+  return propertyRepository.findProperties(page, limit, propertyId);
+};
+
+export const getPlatformProperties = async (page: number, limit: number, search: string) => {
+  return propertyRepository.findPlatformProperties(page, limit, search);
 };
 
 export const getPropertyById = async (propertyId: number) => {
@@ -23,8 +27,8 @@ export const getPropertyById = async (propertyId: number) => {
 };
 
 // ✅ Renamed from getPropertiesByTenant
-export const getAllActiveProperties = async () => {
-  return propertyRepository.findAllActiveProperties();
+export const getAllActiveProperties = async (propertyId?: number) => {
+  return propertyRepository.findAllActiveProperties(propertyId);
 };
 
 export const getPropertyStats = async (propertyId: number) => {

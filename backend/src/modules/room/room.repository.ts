@@ -76,6 +76,27 @@ export const findRooms = async (
             },
           },
         },
+        reservationRooms: {
+          where: {
+            status: 'CheckedIn',
+            reservation: { status: 'InHouse' },
+          },
+          orderBy: { actualCheckIn: 'desc' },
+          take: 1,
+          include: {
+            presenceUpdatedByUser: { select: { fullName: true } },
+            reservation: {
+              select: {
+                reservationId: true,
+                confirmationCode: true,
+                guestNameSnapshot: true,
+                guestPhoneSnapshot: true,
+                propertyGuest: { select: { fullName: true, phone: true } },
+                platformGuest: { select: { fullName: true, phone: true } },
+              },
+            },
+          },
+        },
       },
     }),
     prisma.room.count({ where }),
@@ -114,6 +135,26 @@ export const findRoomById = async (roomId: number) => {
               checkOutDate: true,
             },
           },
+        },
+      },
+    },
+  });
+};
+
+export const findActiveCheckedInReservationRoom = async (roomId: number) => {
+  return prisma.reservationRoom.findFirst({
+    where: {
+      roomId,
+      status: 'CheckedIn',
+      reservation: { status: 'InHouse' },
+    },
+    select: {
+      occupantName: true,
+      reservation: {
+        select: {
+          guestNameSnapshot: true,
+          propertyGuest: { select: { fullName: true } },
+          platformGuest: { select: { fullName: true } },
         },
       },
     },

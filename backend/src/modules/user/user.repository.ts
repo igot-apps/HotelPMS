@@ -42,11 +42,11 @@ export const findUserById = async (userId: number) => {
 export const findUserByUsernameOrEmail = async (
   username: string,
   email: string | null,
-  propertyId: number // ✅ Scoped to property instead of tenant
+  propertyId?: number // Scoped to a property when the account is property-linked.
 ) => {
   return prisma.user.findFirst({
     where: {
-      propertyId, // ✅ Removed tenantId
+      ...(propertyId === undefined ? {} : { propertyId }),
       OR: [
         { username: username },
         email ? { email: email } : {},

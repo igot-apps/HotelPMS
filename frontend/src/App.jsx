@@ -22,9 +22,7 @@ import DashboardPage from './pages/DashboardPage';
 import RoomsPage from './pages/RoomsPage';
 import GuestsPage from './pages/GuestsPage';
 import ReservationsPage from './pages/ReservationsPage';
-import PaymentsPage from './pages/PaymentsPage';
 import ReportsPage from './pages/ReportsPage';
-import RatePlansPage from './pages/RatePlansPage';
 import PropertiesPage from './pages/PropertiesPage';
 import ReservationDetailsPage from './pages/ReservationDetailsPage';
 import CalendarPage from './pages/CalendarPage';
@@ -32,6 +30,7 @@ import AvailabilityPage from './pages/AvailabilityPage';
 import RoomManagementPage from './pages/RoomManagementPage';
 import UsersPage from './pages/UsersPage';
 import BillingPage from './pages/BillingPage';
+import SuperAdminPage from './pages/SuperAdminPage';
 
 function App() {
   return (
@@ -78,6 +77,8 @@ function App() {
         {/* ========================================== */}
         <Route path="/" element={<DiscoverPage />} /> {/* 🌟 NEW: Main Public Homepage */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/superadmin" element={<SuperAdminPage />} />
+        <Route path="/platform/properties" element={<Navigate to="/superadmin" replace />} />
         <Route path="/register-your-hotel" element={<HotelRegistrationWizard />} />
         <Route path="/public/reservations" element={<PublicReservationsPage />} />
         
@@ -97,12 +98,12 @@ function App() {
           <Route path="/guests" element={<GuestsPage />} />
           <Route path="/reservations" element={<ReservationsPage />} />
           <Route path="/reservations/:id" element={<ReservationDetailsPage />} />
-          <Route path="/payments" element={<PaymentsPage />} />
+          <Route path="/payments" element={<Navigate to="/reservations" replace />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/availability" element={<AvailabilityPage />} />
           <Route path="/room-management" element={<RoomManagementPage />} />
-          <Route path="/rate-plans" element={<RatePlansPage />} />
+          <Route path="/rate-plans" element={<Navigate to="/room-management" replace />} />
           <Route path="/properties" element={<PropertiesPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/billing" element={<BillingPage />} />

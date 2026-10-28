@@ -22,10 +22,15 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+const toLocalPhoneNumber = (value) => {
+  const digits = String(value || '').replace(/\D/g, '');
+  return digits.startsWith('233') && digits.length === 12 ? `0${digits.slice(3)}` : digits;
+};
+
 // ─────────────────────────────────────────────────────────────
 // Lightweight confirmation modal with optional input field
 // ─────────────────────────────────────────────────────────────
-function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', danger = false, isLoading = false, onConfirm, onCancel, inputLabel, inputValue, onInputChange }) {
+function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', danger = false, isLoading = false, onConfirm, onCancel, inputLabel, inputValue, onInputChange, secondaryInputLabel, secondaryInputValue, onSecondaryInputChange }) {
   if (!open) return null;
   return (
     <div
@@ -49,6 +54,23 @@ function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', danger 
               className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
               autoFocus
             />
+          </div>
+        )}
+
+        {secondaryInputLabel && (
+          <div className="mb-4">
+            <label className="block text-xs font-semibold text-text-muted mb-1.5">{secondaryInputLabel}</label>
+            <input
+              type="tel"
+              inputMode="numeric"
+              maxLength={10}
+              value={secondaryInputValue || ''}
+              onChange={(e) => onSecondaryInputChange && onSecondaryInputChange(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
+            />
+            {secondaryInputValue && !/^\d{10}$/.test(secondaryInputValue) && (
+              <p className="mt-1 text-xs text-danger-600">Enter exactly 10 digits.</p>
+            )}
           </div>
         )}
         
@@ -143,9 +165,10 @@ export default function ReservationsPage() {
 
   // 🌟 Room action mutation
   const roomActionMutation = useMutation({
-    mutationFn: ({ id, status, occupantName }) => {
+    mutationFn: ({ id, status, occupantName, occupantPhone }) => {
       const data = { status };
       if (occupantName !== undefined) data.occupantName = occupantName;
+      if (occupantPhone !== undefined) data.occupantPhone = occupantPhone;
       return updateReservationRoomStatus(id, data);
     },
     onSuccess: () => {
@@ -167,6 +190,10 @@ export default function ReservationsPage() {
     mutationFn: ({ id, newCheckOutDate }) => extendReservationRoom(id, newCheckOutDate),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
+      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+      queryClient.invalidateQueries({ queryKey: ['availability'] });
+      queryClient.invalidateQueries({ queryKey: ['calendarReservations'] });
+      queryClient.invalidateQueries({ queryKey: ['operationalOverview'] });
       toast.success('Stay extended successfully!');
       setPendingConfirm(null);
     },
@@ -178,10 +205,10 @@ export default function ReservationsPage() {
 
   // 🌟 Update occupant name mutation
   const updateOccupantMutation = useMutation({
-    mutationFn: ({ id, occupantName }) => updateOccupantName(id, occupantName),
+    mutationFn: ({ id, occupantName, occupantPhone }) => updateOccupantName(id, occupantName, occupantPhone),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
-      toast.success('Occupant name updated');
+      toast.success('Occupant details updated');
     },
     onError: (err) => {
       toast.error(err.response?.data?.message || 'Failed to update occupant name');
@@ -282,8 +309,17 @@ export default function ReservationsPage() {
         status: pendingConfirm.status 
       };
       
-      if (pendingConfirm.status === 'CheckedIn' && pendingConfirm.inputValue) {
-        payload.occupantName = pendingConfirm.inputValue;
+      if (pendingConfirm.status === 'CheckedIn') {
+        payload.occupantName = pendingConfirm.inputValue?.trim() || '';
+        payload.occupantPhone = pendingConfirm.secondaryInputValue?.trim() || '';
+        if (!payload.occupantName) {
+          toast.error('Enter the occupant name before checking in.');
+          return;
+        }
+        if (payload.occupantPhone && !/^\d{10}$/.test(payload.occupantPhone)) {
+          toast.error('Occupant phone number must be exactly 10 digits.');
+          return;
+        }
       }
       
       if (pendingConfirm.status === 'extend' && pendingConfirm.newCheckOutDate) {
@@ -345,7 +381,6 @@ export default function ReservationsPage() {
             <option value="InHouse">In-House</option>
             <option value="Completed">Completed</option>
             <option value="Cancelled">Cancelled</option>
-            <option value="Expired">Expired</option>
             <option value="NoShow">No Show</option>
           </select>
         </div>
@@ -590,15 +625,17 @@ export default function ReservationsPage() {
                                   res={res}
                                   isThisRoomBusy={activeRoomActionId === rr.reservationRoomId}
                                   isUpdatingOccupant={updatingOccupantId === rr.reservationRoomId}
-                                  onCheckIn={(room, mainGuestName) => {
+                                  onCheckIn={(room, mainGuestName, mainGuestPhone) => {
                                     askRoomAction(
                                       room.reservationRoomId,
                                       'CheckedIn',
                                       'Check in room?',
-                                      `You are about to check in Room ${room.room?.roomNumber}.\n\nPlease confirm or update the occupant name below.`,
+                                      `You are about to check in Room ${room.room?.roomNumber}. Confirm or enter the actual occupant details.`,
                                       {
                                         inputLabel: 'Occupant Name',
                                         inputValue: room.occupantName || mainGuestName,
+                                        secondaryInputLabel: 'Occupant Phone Number (optional)',
+                                        secondaryInputValue: toLocalPhoneNumber(room.occupantPhone || mainGuestPhone),
                                       }
                                     );
                                   }}
@@ -629,8 +666,8 @@ export default function ReservationsPage() {
                                       toast.error('New date must be after current check-out date.');
                                     }
                                   }}
-                                  onUpdateOccupant={(reservationRoomId, occupantName) => {
-                                    updateOccupantMutation.mutate({ id: reservationRoomId, occupantName });
+                                  onUpdateOccupant={(reservationRoomId, occupantName, occupantPhone) => {
+                                    updateOccupantMutation.mutate({ id: reservationRoomId, occupantName, occupantPhone });
                                   }}
                                 />
                               ))}
@@ -690,6 +727,9 @@ export default function ReservationsPage() {
         inputLabel={pendingConfirm?.inputLabel}
         inputValue={pendingConfirm?.inputValue}
         onInputChange={(value) => setPendingConfirm(prev => prev ? { ...prev, inputValue: value } : null)}
+        secondaryInputLabel={pendingConfirm?.secondaryInputLabel}
+        secondaryInputValue={pendingConfirm?.secondaryInputValue}
+        onSecondaryInputChange={(value) => setPendingConfirm(prev => prev ? { ...prev, secondaryInputValue: value } : null)}
       />
     </div>
   );

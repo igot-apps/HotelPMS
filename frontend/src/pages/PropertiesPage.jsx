@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getProperties, createProperty, updateProperty, deleteProperty } from '../api/properties';
-// ✅ REMOVED: useAuthStore is no longer needed since we don't need to inject tenantId
+import { getProperties, updateProperty } from '../api/properties';
 import PropertyModal from '../components/catalog/PropertyModal';
-import { Search, Plus, Edit2, Trash2, Building2, AlertCircle, MapPin, Clock } from 'lucide-react';
+import { Search, Edit2, Building2, AlertCircle, MapPin, Clock } from 'lucide-react';
 
 export default function PropertiesPage() {
   // ✅ REMOVED: const user = useAuthStore((state) => state.user);
@@ -26,9 +25,7 @@ export default function PropertiesPage() {
     mutationFn: (payload) => {
       // ✅ FIXED: Backend no longer requires tenantId. Property is the root entity.
       // We just send the payload directly!
-      return editingProperty 
-        ? updateProperty(editingProperty.propertyId, payload) 
-        : createProperty(payload); 
+      return updateProperty(editingProperty.propertyId, payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['properties'] });
@@ -36,15 +33,9 @@ export default function PropertiesPage() {
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id) => deleteProperty(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['properties'] }),
-  });
-
   const saveError = saveMutation.error?.response?.data?.message || (saveMutation.isError ? 'Failed to save property.' : null);
 
   // 3. Handlers
-  const openAddModal = () => { setEditingProperty(null); setIsModalOpen(true); };
   const openEditModal = (prop) => { setEditingProperty(prop); setIsModalOpen(true); };
   
   const closeModal = () => {
@@ -54,16 +45,6 @@ export default function PropertiesPage() {
   };
 
   const handleSave = (formData) => saveMutation.mutate(formData);
-
-  const handleDelete = (prop) => {
-    if (prop._count?.rooms > 0 || prop._count?.reservations > 0) {
-      alert(`Cannot delete "${prop.propertyName}" because it has active rooms or reservations.`);
-      return;
-    }
-    if (window.confirm(`Are you sure you want to deactivate "${prop.propertyName}"?`)) {
-      deleteMutation.mutate(prop.propertyId);
-    }
-  };
 
   // Client-side search
   const filteredProperties = properties.filter(prop =>
@@ -77,12 +58,9 @@ export default function PropertiesPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-text tracking-tight">Properties</h1>
-          <p className="text-text-muted text-sm mt-1">Manage your hotel locations and branch settings.</p>
+          <h1 className="text-2xl font-bold text-text tracking-tight">Property settings</h1>
+          <p className="text-text-muted text-sm mt-1">Manage the details and settings for your property.</p>
         </div>
-        <button onClick={openAddModal} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm">
-          <Plus size={16} /> Add Property
-        </button>
       </div>
 
       {/* Toolbar */}
@@ -166,9 +144,6 @@ export default function PropertiesPage() {
                       <div className="flex items-center justify-end gap-2">
                         <button onClick={() => openEditModal(prop)} className="p-2 rounded-lg hover:bg-primary-50 text-primary-600 transition" title="Edit">
                           <Edit2 size={16} />
-                        </button>
-                        <button onClick={() => handleDelete(prop)} className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition" title="Deactivate">
-                          <Trash2 size={16} />
                         </button>
                       </div>
                     </td>

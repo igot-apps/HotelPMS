@@ -4,6 +4,8 @@ import { getRooms, updateRoomStatus } from '../api/rooms';
 import { useAuthStore } from '../store/authStore';
 import RoomCard from '../components/rooms/RoomCard';
 import { BedDouble, AlertCircle, CheckCircle2, Wrench, Sparkles, LayoutGrid } from 'lucide-react';
+import { updateGuestPresence } from '../api/reservations';
+import toast from 'react-hot-toast';
 
 export default function RoomsPage() {
   const user = useAuthStore((state) => state.user);
@@ -27,6 +29,17 @@ export default function RoomsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rooms', propertyId] });
     },
+  });
+
+  const guestPresenceMutation = useMutation({
+    mutationFn: ({ reservationRoomId, action, expectedReturnAt }) =>
+      updateGuestPresence(reservationRoomId, action, expectedReturnAt),
+    onSuccess: (_result, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['rooms', propertyId] });
+      queryClient.invalidateQueries({ queryKey: ['reservations'] });
+      toast.success(variables.action === 'out' ? 'Guest marked as out.' : 'Guest marked as returned.');
+    },
+    onError: (error) => toast.error(error.response?.data?.message || 'Could not update guest presence.'),
   });
 
   // 3. Handlers
@@ -148,6 +161,10 @@ export default function RoomsPage() {
               onToggleHousekeeping={handleToggleHousekeeping}
               onToggleOperational={handleToggleOperational}
               isUpdating={statusMutation.isLoading}
+              isPresenceUpdating={guestPresenceMutation.isPending && guestPresenceMutation.variables?.reservationRoomId === room.reservationRooms?.[0]?.reservationRoomId}
+              onSetGuestPresence={(reservationRoomId, action, expectedReturnAt) =>
+                guestPresenceMutation.mutate({ reservationRoomId, action, expectedReturnAt })
+              }
             />
           ))}
         </div>

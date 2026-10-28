@@ -6,7 +6,7 @@ import { getProperties } from '../api/properties';
 import { useAuthStore } from '../store/authStore';
 import {
   UserPlus, UserMinus, BedDouble, Sparkles, AlertTriangle,
-  Calendar, Search, CreditCard, RefreshCw, LayoutGrid, ArrowRight,
+  Calendar, Search, RefreshCw, LayoutGrid, ArrowRight,
   Loader2, Building2, CheckCircle2
 } from 'lucide-react';
 
@@ -192,16 +192,21 @@ export default function DashboardPage() {
                 ) : (
                   <ul className="space-y-2">
                     {arrivals.map(res => (
-                      <li key={res.reservationId} className="flex items-center justify-between p-3 bg-background rounded-lg border border-border hover:border-primary-300 transition">
-                        <div>
+                      <li key={res.reservationId} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-background rounded-xl border border-border hover:border-primary-300 hover:shadow-sm transition">
+                        <div className="min-w-0">
                           <p className="text-sm font-bold text-text">{res.guest?.fullName}</p>
-                          <p className="text-xs text-text-muted">
-                            Room {res.reservationRooms[0]?.room?.roomNumber || res.reservationRooms[0]?.roomNumberSnapshot || 'TBD'} • Res #{res.reservationId}
+                          <p className="text-xs text-text-muted mt-1">
+                            Room {res.reservationRooms[0]?.room?.roomNumber || res.reservationRooms[0]?.roomNumberSnapshot || 'TBD'}
                           </p>
                         </div>
-                        <Link to={`/reservations/${res.reservationId}`} className="text-xs font-semibold text-primary-600 hover:text-primary-700 px-2 py-1 rounded hover:bg-primary-50 transition">
-                          View
-                        </Link>
+                        <div className="flex items-center justify-between sm:justify-end gap-3">
+                          <span className="inline-flex items-center rounded-full bg-primary-50 border border-primary-100 px-2.5 py-1 text-[11px] font-bold tracking-wide text-primary-700">
+                            {res.confirmationCode || `#${res.reservationId.slice(0, 8).toUpperCase()}`}
+                          </span>
+                          <Link to={`/reservations/${res.reservationId}`} className="text-xs font-semibold text-primary-700 px-3 py-2 rounded-lg hover:bg-primary-50 transition">
+                            View reservation <ArrowRight size={13} className="inline ml-1" />
+                          </Link>
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -222,16 +227,21 @@ export default function DashboardPage() {
                 ) : (
                   <ul className="space-y-2">
                     {departures.map(res => (
-                      <li key={res.reservationId} className="flex items-center justify-between p-3 bg-background rounded-lg border border-border hover:border-warning-300 transition">
-                        <div>
+                      <li key={res.reservationId} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-background rounded-xl border border-border hover:border-warning-300 hover:shadow-sm transition">
+                        <div className="min-w-0">
                           <p className="text-sm font-bold text-text">{res.guest?.fullName}</p>
-                          <p className="text-xs text-text-muted">
-                            Room {res.reservationRooms[0]?.room?.roomNumber || res.reservationRooms[0]?.roomNumberSnapshot || 'TBD'} • Bal: {res.balanceDue} GHS
+                          <p className="text-xs text-text-muted mt-1">
+                            Room {res.reservationRooms[0]?.room?.roomNumber || res.reservationRooms[0]?.roomNumberSnapshot || 'TBD'} · Balance {Number(res.balanceDue || 0).toFixed(2)} GHS
                           </p>
                         </div>
-                        <Link to={`/reservations/${res.reservationId}`} className="text-xs font-semibold text-warning-600 hover:text-warning-700 px-2 py-1 rounded hover:bg-warning-50 transition">
-                          Check Out
-                        </Link>
+                        <div className="flex items-center justify-between sm:justify-end gap-3">
+                          <span className="inline-flex items-center rounded-full bg-warning-50 border border-warning-100 px-2.5 py-1 text-[11px] font-bold tracking-wide text-warning-700">
+                            {res.confirmationCode || `#${res.reservationId.slice(0, 8).toUpperCase()}`}
+                          </span>
+                          <Link to={`/reservations/${res.reservationId}`} className="text-xs font-semibold text-warning-700 px-3 py-2 rounded-lg hover:bg-warning-50 transition">
+                            Check out <ArrowRight size={13} className="inline ml-1" />
+                          </Link>
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -285,9 +295,8 @@ export default function DashboardPage() {
               </h3>
               <div className="space-y-3 flex-1">
                 <QuickLink to="/availability" icon={Search} label="Check Availability" color="primary" />
-                <QuickLink to="/payments" icon={CreditCard} label="Record Payment" color="success" />
+                <QuickLink to="/reservations" icon={Calendar} label="Reservations & Payments" color="success" />
                 <QuickLink to="/rooms" icon={BedDouble} label="Manage Rooms" color="warning" />
-                <QuickLink to="/reservations" icon={Calendar} label="All Reservations" color="secondary" />
               </div>
             </div>
           </div>

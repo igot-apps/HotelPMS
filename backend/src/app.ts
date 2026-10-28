@@ -9,6 +9,7 @@ console.log(`Using TypeScript version: ${require('typescript').version}\n`);
 // Import modules
 import authRoutes from './modules/auth/auth.routes';
 import propertyRoutes from './modules/property/property.routes';
+import platformPropertyRoutes from './modules/property/platformProperty.routes';
 import roomRoutes from './modules/room/room.routes';
 import guestRoutes from './modules/guest/guest.routes';
 import reservationRoutes from './modules/reservation/reservation.routes';
@@ -77,6 +78,7 @@ app.get('/', (_req: Request, res: Response) => {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/properties', propertyRoutes);
+app.use('/api/platform/properties', platformPropertyRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/guests', guestRoutes);
 app.use('/api/reservations', reservationRoutes);

@@ -185,12 +185,18 @@ export const cancelReservation = async (reservationId: string, data: any) => {
 // ============================================================
 // UPDATE RESERVATION FINANCIALS
 // ============================================================
-export const updateReservationFinancials = async (reservationId: string, totalAmount: number, amountPaid: number) => {
+export const updateReservationFinancials = async (
+  reservationId: string,
+  totalAmount: number,
+  amountPaid: number,
+  checkOutDate?: Date
+) => {
   return prisma.reservation.update({
     where: { reservationId },
     data: { 
       totalAmount, 
-      amountPaid 
+      amountPaid,
+      ...(checkOutDate && { checkOutDate }),
       // 🌟 REMOVED: balanceDue is now calculated on-demand
     },
   });
@@ -251,6 +257,79 @@ export const updateReservationRoomStatus = async (reservationRoomId: number, dat
   });
 };
 
+export const updateGuestPresence = async (
+  reservationRoomId: number,
+  action: 'out' | 'returned',
+  userId: number,
+  propertyId: number,
+  expectedReturnAt?: Date
+) => {
+  return prisma.$transaction(async (tx) => {
+    const roomStay = await tx.reservationRoom.findUnique({
+      where: { reservationRoomId },
+      include: {
+        reservation: { select: { propertyId: true, status: true } },
+        room: { select: { roomNumber: true } },
+      },
+    });
+
+    if (!roomStay) throw new Error('Reservation room not found');
+    if (roomStay.reservation.propertyId !== propertyId) throw new Error('You do not have access to this reservation room');
+    if (roomStay.status !== 'CheckedIn' || roomStay.reservation.status !== 'InHouse') {
+      throw new Error('Guest presence can only be changed for a room with a checked-in guest.');
+    }
+
+    const expectedPresence = action === 'out' ? 'InRoom' : 'Out';
+    const nextPresence = action === 'out' ? 'Out' : 'InRoom';
+    if (roomStay.guestPresenceStatus !== expectedPresence) {
+      throw new Error(action === 'out' ? 'This guest is already marked out.' : 'This guest is not currently marked out.');
+    }
+
+    const now = new Date();
+    const updateResult = await tx.reservationRoom.updateMany({
+      where: {
+        reservationRoomId,
+        status: 'CheckedIn',
+        guestPresenceStatus: expectedPresence,
+      },
+      data: {
+        guestPresenceStatus: nextPresence,
+        guestOutAt: action === 'out' ? now : null,
+        expectedReturnAt: action === 'out' ? expectedReturnAt || null : null,
+        guestReturnedAt: action === 'returned' ? now : roomStay.guestReturnedAt,
+        presenceUpdatedBy: userId,
+      },
+    });
+    if (updateResult.count !== 1) throw new Error('Guest presence changed. Refresh the room and try again.');
+
+    await tx.auditLog.create({
+      data: {
+        userId,
+        action: action === 'out' ? 'GuestMarkedOut' : 'GuestMarkedReturned',
+        entityType: 'ReservationRoom',
+        entityId: reservationRoomId,
+        oldData: {
+          guestPresenceStatus: roomStay.guestPresenceStatus,
+          guestOutAt: roomStay.guestOutAt?.toISOString() || null,
+          expectedReturnAt: roomStay.expectedReturnAt?.toISOString() || null,
+        },
+        newData: {
+          guestPresenceStatus: nextPresence,
+          guestOutAt: action === 'out' ? now.toISOString() : null,
+          expectedReturnAt: action === 'out' ? expectedReturnAt?.toISOString() || null : null,
+          guestReturnedAt: action === 'returned' ? now.toISOString() : roomStay.guestReturnedAt?.toISOString() || null,
+          roomNumber: roomStay.room?.roomNumber || null,
+        },
+      },
+    });
+
+    return tx.reservationRoom.findUnique({
+      where: { reservationRoomId },
+      include: { presenceUpdatedByUser: { select: { fullName: true } } },
+    });
+  });
+};
+
 // ============================================================
 // 🌟 NEW: Check if room is already booked during the extended dates
 // ============================================================
@@ -264,14 +343,10 @@ export const findConflictingReservationRoom = async (
     where: {
       roomId,
       reservationRoomId: { not: excludeReservationRoomId },
+      checkInDate: { lt: newCheckOutDate },
+      checkOutDate: { gt: currentCheckOutDate },
       reservation: {
         status: { in: ['Confirmed', 'InHouse'] }, // 🌟 UPDATED to InHouse
-        OR: [
-          {
-            checkInDate: { lte: newCheckOutDate },
-            checkOutDate: { gte: currentCheckOutDate }
-          }
-        ]
       }
     },
     include: {

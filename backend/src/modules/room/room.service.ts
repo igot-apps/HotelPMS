@@ -72,6 +72,18 @@ export const updateRoomStatus = async (
 ) => {
   const room = await roomRepository.findRoomById(roomId);
   if (!room) throw new Error('Room not found');
+
+  if (operationalStatus === 'Maintenance') {
+    const checkedInStay = await roomRepository.findActiveCheckedInReservationRoom(roomId);
+    if (checkedInStay) {
+      const occupant = checkedInStay.occupantName
+        || checkedInStay.reservation.guestNameSnapshot
+        || checkedInStay.reservation.propertyGuest?.fullName
+        || checkedInStay.reservation.platformGuest?.fullName
+        || 'the current guest';
+      throw new Error(`Room ${room.roomNumber} is occupied by ${occupant}. Check the guest out before setting the room to maintenance.`);
+    }
+  }
   
   return roomRepository.updateRoomStatus(roomId, operationalStatus, housekeepingStatus);
 };

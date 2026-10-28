@@ -57,7 +57,7 @@ export default function BillingPage() {
         const toastId = toast.loading('Verifying your payment...');
         try {
           const res = await verifyPayment(reference);
-          if (res.data.data.status === 'success') {
+          if (res.data.data?.status === 'success') {
             toast.success('🎉 Payment successful! Updating dashboard...', { id: toastId });
             
             // Fetch the fresh data immediately after payment
@@ -70,8 +70,7 @@ export default function BillingPage() {
             toast.error('Payment was not completed.', { id: toastId });
           }
         } catch (error) {
-          // If Paystack says "resource not found", we just ignore it and load the page normally
-          toast.error('Payment verification skipped.', { id: toastId });
+          toast.error(error.response?.data?.message || 'Could not verify your subscription payment.', { id: toastId });
         }
       };
       activateSubscription();
@@ -141,20 +140,16 @@ export default function BillingPage() {
     setIsPaying(true);
     try {
       const response = await initializeSubscriptionPayment({
-        email: user.email || 'manager@hotel.com',
-        phone: '0240000000', 
-        callbackUrl: window.location.origin + '/billing',
-        propertyId: user.propertyId,
-        planName: 'Pro',
         durationMonths: selectedDuration,
       });
 
-      if (response.data.success) {
-        toast.success(`Redirecting to Paystack...`);
-        window.location.href = response.data.data.authorization_url;
+      if (!response.data.success || !response.data.data?.authorization_url) {
+        throw new Error(response.data.message || 'Could not start the subscription payment.');
       }
+      toast.success('Redirecting to Paystack...');
+      window.location.href = response.data.data.authorization_url;
     } catch (error) {
-      toast.error(error.response?.data?.message || 'An error occurred.');
+      toast.error(error.response?.data?.message || error.message || 'An error occurred.');
     } finally {
       setIsPaying(false);
     }
@@ -254,9 +249,9 @@ export default function BillingPage() {
             <div className="bg-secondary-50 border border-secondary-200 rounded-xl p-4 flex items-start gap-3">
               <ShieldCheck size={20} className="text-secondary-600 mt-0.5 flex-shrink-0" />
               <div>
-                <p className="text-sm font-semibold text-text">Secure Mobile Money Checkout</p>
+                <p className="text-sm font-semibold text-text">Pay with Mobile Money or Visa</p>
                 <p className="text-xs text-text-muted mt-1">
-                  You will be redirected to Paystack to complete your payment securely.
+                  Choose Mobile Money or a card on Paystack's secure checkout.
                 </p>
               </div>
             </div>
@@ -269,7 +264,7 @@ export default function BillingPage() {
               {isPaying ? (
                 <><Loader2 className="animate-spin" size={18} /> Initializing...</>
               ) : (
-                <><Smartphone size={18} /> Pay {currentTier.price} GHS for {currentTier.months} Month{currentTier.months > 1 ? 's' : ''}</>
+                <><CreditCard size={18} /> Pay {currentTier.price} GHS for {currentTier.months} Month{currentTier.months > 1 ? 's' : ''}</>
               )}
             </button>
           </form>

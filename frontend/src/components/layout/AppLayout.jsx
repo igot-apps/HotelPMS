@@ -1,10 +1,24 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
+import api from '../../lib/axios';
+import { useAuthStore } from '../../store/authStore';
 
 export default function AppLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const accessToken = useAuthStore((state) => state.accessToken);
+
+  useEffect(() => {
+    let isCurrent = true;
+    if (!accessToken) return undefined;
+    api.get('/auth/me').then((response) => {
+      if (isCurrent && response.data?.success && response.data?.data) {
+        useAuthStore.setState((state) => ({ user: { ...state.user, ...response.data.data } }));
+      }
+    }).catch(() => {});
+    return () => { isCurrent = false; };
+  }, [accessToken]);
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
   const closeSidebar = () => setIsSidebarOpen(false);

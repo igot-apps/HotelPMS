@@ -97,6 +97,7 @@ model Property {
   reservations           Reservation[]
   amenities              Amenity[]
   payments               Payment[] // 🌟 NEW: Opposite relation for Payment
+  subscriptionPayments   SubscriptionPayment[]
 
   @@map("properties")
 }
@@ -106,22 +107,26 @@ model Property {
 // ============================================================
 model User {
   userId            Int       @id @default(autoincrement())
-  propertyId        Int
+  propertyId        Int?
   fullName          String    @db.VarChar(200)
   username          String    @unique
   email             String?   @unique @db.VarChar(200)
+  phone             String?   @unique @db.VarChar(20)
   passwordHash      String    @db.Text
   roleId            Int
+  isPlatformAdmin   Boolean   @default(false)
   isActive          Boolean   @default(true)
   lastLoginAt       DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  property          Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
+  property          Property? @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
   role              Role      @relation(fields: [roleId], references: [roleId])
   reservations      Reservation[] @relation("staffReservations")
   payments          Payment[] @relation("receivedPayments")
   auditLogs         AuditLog[]
+  presenceUpdates   ReservationRoom[] @relation("presenceUpdatedBy")
+  initiatedSubscriptionPayments SubscriptionPayment[] @relation("initiatedSubscriptionPayments")
 
   @@map("users")
 }
@@ -338,6 +343,12 @@ model ReservationRoom {
 
   status              String    @default("Reserved")
   occupantName        String?
+  occupantPhone       String?   @db.VarChar(30)
+  guestPresenceStatus String    @default("InRoom") @db.VarChar(20)
+  guestOutAt          DateTime?
+  expectedReturnAt    DateTime?
+  guestReturnedAt     DateTime?
+  presenceUpdatedBy   Int?
   actualCheckIn       DateTime?
   actualCheckOut      DateTime?
 
@@ -345,6 +356,7 @@ model ReservationRoom {
   room                Room?     @relation(fields: [roomId], references: [roomId], onDelete: SetNull)
   roomType            RoomType? @relation(fields: [roomTypeId], references: [roomTypeId], onDelete: SetNull)
   ratePlan            RatePlan? @relation(fields: [ratePlanId], references: [ratePlanId], onDelete: SetNull)
+  presenceUpdatedByUser User?   @relation("presenceUpdatedBy", fields: [presenceUpdatedBy], references: [userId], onDelete: SetNull)
 
   @@unique([reservationId, roomId])
   @@index([reservationId])
@@ -378,6 +390,27 @@ model Payment {
   @@index([propertyId])
   @@index([paymentDate])
   @@map("payments")
+}
+
+model SubscriptionPayment {
+  subscriptionPaymentId Int       @id @default(autoincrement())
+  propertyId             Int
+  initiatedBy            Int?
+  reference              String    @unique @db.VarChar(100)
+  amount                 Decimal   @db.Decimal(10, 2)
+  currency               String    @default("GHS") @db.VarChar(10)
+  durationMonths         Int
+  planName               String    @default("Pro") @db.VarChar(50)
+  status                 String    @default("Pending") @db.VarChar(20)
+  createdAt              DateTime  @default(now())
+  paidAt                 DateTime?
+
+  property               Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
+  initiator              User?     @relation("initiatedSubscriptionPayments", fields: [initiatedBy], references: [userId], onDelete: SetNull)
+
+  @@index([propertyId, status])
+  @@index([createdAt])
+  @@map("subscription_payments")
 }
 
 

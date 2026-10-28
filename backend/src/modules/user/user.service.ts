@@ -59,7 +59,7 @@ export const updateUser = async (userId: number, data: any) => {
     const existing = await userRepository.findUserByUsernameOrEmail(
       data.username || user.username,
       data.email || user.email,
-      user.propertyId // ✅ Use user's current propertyId for duplicate check
+      user.propertyId ?? undefined // Standalone platform accounts have no tenant scope.
     );
     if (existing && existing.userId !== userId) {
       throw new Error('Username or email already exists.');

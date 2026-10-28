@@ -319,7 +319,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
             </div>
             <h2 className="text-xl font-bold text-text">Reservation Created!</h2>
             <p className="text-text-muted mt-2">
-              Reservation <span className="font-bold text-text">#{createdReservation.reservationId}</span> has been successfully saved.
+              Reservation <span className="font-bold text-text">{createdReservation.confirmationCode || `#${createdReservation.reservationId?.slice(0, 8).toUpperCase()}`}</span> has been successfully saved.
             </p>
             <div className="flex gap-3 justify-center mt-6">
               <button

@@ -14,6 +14,7 @@ export default function RoomCard({
   const roomStatus = rr.status || 'Reserved';
   const [isEditingOccupant, setIsEditingOccupant] = useState(false);
   const [occupantInput, setOccupantInput] = useState(rr.occupantName || '');
+  const [occupantPhoneInput, setOccupantPhoneInput] = useState(rr.occupantPhone || '');
   
   // 🌟 Check if room lifecycle is complete (CheckedOut)
   const isRoomComplete = roomStatus === 'CheckedOut';
@@ -24,10 +25,11 @@ export default function RoomCard({
   if (!isRoomComplete) {
     if (roomStatus === 'Reserved') {
       const mainGuestName = res.guestNameSnapshot || res.platformGuest?.fullName || res.propertyGuest?.fullName || '';
+      const mainGuestPhone = res.guestPhoneSnapshot || res.platformGuest?.phone || res.propertyGuest?.phone || '';
       roomActionBtn = (
         <button
           disabled={isThisRoomBusy}
-          onClick={() => onCheckIn(rr, mainGuestName)}
+          onClick={() => onCheckIn(rr, mainGuestName, mainGuestPhone)}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isThisRoomBusy ? <Loader2 size={14} className="animate-spin" /> : <LogIn size={14} />} Check In Room
@@ -59,14 +61,17 @@ export default function RoomCard({
   const handleSaveOccupant = () => {
     const trimmed = occupantInput.trim();
     if (!trimmed) return;
-    if (trimmed !== (rr.occupantName || '')) {
-      onUpdateOccupant(rr.reservationRoomId, trimmed);
+    const trimmedPhone = occupantPhoneInput.trim();
+    if (trimmedPhone && !/^\d{10}$/.test(trimmedPhone)) return;
+    if (trimmed !== (rr.occupantName || '') || trimmedPhone !== (rr.occupantPhone || '')) {
+      onUpdateOccupant(rr.reservationRoomId, trimmed, trimmedPhone);
     }
     setIsEditingOccupant(false);
   };
 
   const handleCancelEdit = () => {
     setOccupantInput(rr.occupantName || '');
+    setOccupantPhoneInput(rr.occupantPhone || '');
     setIsEditingOccupant(false);
   };
 
@@ -174,6 +179,7 @@ export default function RoomCard({
             <button
               onClick={() => {
                 setOccupantInput(rr.occupantName || '');
+                setOccupantPhoneInput(rr.occupantPhone || '');
                 setIsEditingOccupant(true);
               }}
               className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary-600 hover:text-primary-700 transition"
@@ -185,7 +191,7 @@ export default function RoomCard({
         </div>
         
         {isEditingOccupant ? (
-          <div className="flex items-center gap-1.5">
+          <div className="space-y-2">
             <input
               type="text"
               value={occupantInput}
@@ -196,32 +202,54 @@ export default function RoomCard({
               }}
               disabled={isUpdatingOccupant}
               autoFocus
-              className="flex-1 px-2 py-1 text-sm bg-background border border-primary-300 rounded-md text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition disabled:opacity-50"
-              placeholder="Enter occupant name"
+              className="w-full px-2 py-1.5 text-sm bg-background border border-primary-300 rounded-md text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition disabled:opacity-50"
+              placeholder="Occupant full name"
             />
-            <button
-              onClick={handleSaveOccupant}
-              disabled={isUpdatingOccupant || !occupantInput.trim()}
-              className="p-1.5 rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Save"
-            >
-              {isUpdatingOccupant ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-            </button>
-            <button
-              onClick={handleCancelEdit}
+            <input
+              type="tel"
+              inputMode="numeric"
+              maxLength={10}
+              value={occupantPhoneInput}
+              onChange={(e) => setOccupantPhoneInput(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveOccupant();
+                if (e.key === 'Escape') handleCancelEdit();
+              }}
               disabled={isUpdatingOccupant}
-              className="p-1.5 rounded-md bg-secondary-100 text-text hover:bg-secondary-200 transition disabled:opacity-50"
-              title="Cancel"
-            >
-              <X size={12} />
-            </button>
+              className="w-full px-2 py-1.5 text-sm bg-background border border-border rounded-md text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition disabled:opacity-50"
+              placeholder="Occupant phone number (optional)"
+            />
+            {occupantPhoneInput && !/^\d{10}$/.test(occupantPhoneInput) && (
+              <p className="text-xs text-danger-600">Enter exactly 10 digits.</p>
+            )}
+            <div className="flex justify-end gap-1.5">
+              <button
+                onClick={handleSaveOccupant}
+                disabled={isUpdatingOccupant || !occupantInput.trim() || (!!occupantPhoneInput && !/^\d{10}$/.test(occupantPhoneInput))}
+                className="p-1.5 rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Save occupant details"
+              >
+                {isUpdatingOccupant ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+              </button>
+              <button
+                onClick={handleCancelEdit}
+                disabled={isUpdatingOccupant}
+                className="p-1.5 rounded-md bg-secondary-100 text-text hover:bg-secondary-200 transition disabled:opacity-50"
+                title="Cancel"
+              >
+                <X size={12} />
+              </button>
+            </div>
           </div>
         ) : (
-          <p className="text-sm font-semibold text-text">
-            {rr.occupantName || (
-              <span className="text-text-muted font-normal italic">Not assigned{!isRoomComplete && ' — click Edit to set'}</span>
-            )}
-          </p>
+          <div className="space-y-0.5">
+            <p className="text-sm font-semibold text-text">
+              {rr.occupantName || (
+                <span className="text-text-muted font-normal italic">Not assigned{!isRoomComplete && ' — click Edit to set'}</span>
+              )}
+            </p>
+            {rr.occupantPhone && <p className="text-xs text-text-muted">{rr.occupantPhone}</p>}
+          </div>
         )}
       </div>
 

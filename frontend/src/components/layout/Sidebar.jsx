@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, Search, BedDouble, Users, CalendarDays, CreditCard, BarChart3,
-  LogOut, Settings, Layers, Tags, Building2, X, Shield, Crown // 🌟 Added Crown icon
+  LayoutDashboard, Search, BedDouble, Users, CalendarDays, BarChart3,
+  LogOut, Settings, Layers, Building2, X, Shield, Crown
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
@@ -13,14 +13,12 @@ const operationItems = [
   { to: '/reservations', icon: CalendarDays, label: 'Reservations', permission: 'CanCreateReservation' },
   { to: '/rooms', icon: BedDouble, label: 'Rooms & Inventory' },
   { to: '/guests', icon: Users, label: 'Guests' },
-  { to: '/payments', icon: CreditCard, label: 'Payments', permission: 'CanProcessPayments' },
   { to: '/reports', icon: BarChart3, label: 'Reports', permission: 'CanViewFinancialReports' },
 ];
 
 const configItems = [
   { to: '/room-management', icon: Settings, label: 'Room Management', permission: 'CanCreateRoom' },
   { to: '/users', icon: Shield, label: 'Staff Management', permission: 'CanManageStaffAndRoles' },
-  { to: '/rate-plans', icon: Tags, label: 'Rate Plans', permission: 'CanManageRates' },
   { to: '/properties', icon: Building2, label: 'Properties' },
 ];
 
@@ -121,6 +119,7 @@ export default function Sidebar({ isOpen, onClose }) {
         <ul className="space-y-1">
           {renderLinks(accountItems)}
         </ul>
+
       </nav>
 
       <div className="p-4 border-t border-secondary-700">

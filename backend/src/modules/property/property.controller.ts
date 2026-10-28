@@ -10,14 +10,11 @@ const getParamId = (req: Request): number => {
   return parsedId;
 };
 
-export const createProperty = async (req: AuthRequest, res: Response) => {
-  try {
-    // ✅ Removed tenantId injection. Property is the root entity.
-    const property = await propertyService.createProperty(req.body);
-    return res.status(201).json({ success: true, data: property });
-  } catch (error: any) {
-    return res.status(400).json({ success: false, message: error.message });
-  }
+export const createProperty = async (_req: AuthRequest, res: Response) => {
+  return res.status(403).json({
+    success: false,
+    message: 'Only platform administrators can create properties. Use the platform administration page.',
+  });
 };
 
 export const getProperties = async (req: AuthRequest, res: Response) => {
@@ -25,8 +22,9 @@ export const getProperties = async (req: AuthRequest, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     
-    // ✅ Removed tenantId extraction
-    const result = await propertyService.getProperties(page, limit);
+    const propertyId = req.user?.propertyId;
+    if (!propertyId) return res.status(403).json({ success: false, message: 'Your account is not assigned to a property.' });
+    const result = await propertyService.getProperties(page, limit, propertyId);
     
     return res.status(200).json({
       success: true,
@@ -60,9 +58,11 @@ export const getPropertyById = async (req: AuthRequest, res: Response) => {
 };
 
 // ✅ Renamed from getPropertiesByTenant
-export const getAllActiveProperties = async (_req: Request, res: Response) => {
+export const getAllActiveProperties = async (req: AuthRequest, res: Response) => {
   try {
-    const properties = await propertyService.getAllActiveProperties();
+    const propertyId = req.user?.propertyId;
+    if (!propertyId) return res.status(403).json({ success: false, message: 'Your account is not assigned to a property.' });
+    const properties = await propertyService.getAllActiveProperties(propertyId);
     return res.status(200).json({ success: true, data: properties });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });
@@ -103,19 +103,9 @@ export const updateProperty = async (req: AuthRequest, res: Response) => {
   }
 };
 
-export const deleteProperty = async (req: AuthRequest, res: Response) => {
-  try {
-    const propertyId = getParamId(req);
-    const property = await propertyService.getPropertyById(propertyId);
-
-    // ✅ Security check updated to use propertyId
-    if (req.user && property.propertyId !== req.user.propertyId) {
-      return res.status(403).json({ success: false, message: 'You do not have access to this property' });
-    }
-
-    await propertyService.deleteProperty(propertyId);
-    return res.status(200).json({ success: true, message: 'Property deactivated successfully' });
-  } catch (error: any) {
-    return res.status(400).json({ success: false, message: error.message });
-  }
+export const deleteProperty = async (_req: AuthRequest, res: Response) => {
+  return res.status(403).json({
+    success: false,
+    message: 'Only platform administrators can deactivate properties. Use the platform administration page.',
+  });
 };

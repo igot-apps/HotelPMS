@@ -286,6 +286,7 @@ export const updateReservationRoomStatus = async (
   reservationRoomId: number,
   status: string,
   occupantName?: string,
+  occupantPhone?: string,
   userPropertyId?: number
 ) => {
   const resRoom = await reservationRepository.findReservationRoomById(reservationRoomId);
@@ -300,6 +301,7 @@ export const updateReservationRoomStatus = async (
 
   const updateData: any = { status };
   if (occupantName !== undefined) updateData.occupantName = occupantName;
+  if (occupantPhone !== undefined) updateData.occupantPhone = occupantPhone.trim() || null;
 
   if (status === 'CheckedIn') {
     const conflict = await reservationRepository.findConflictingCheckIn(
@@ -391,8 +393,10 @@ export const extendReservationRoom = async (
   if (!fullReservation) throw new Error('Reservation not found after update');
   
   let grandTotal = 0;
+  let reservationCheckOutDate = new Date(fullReservation.reservationRooms[0]?.checkOutDate || fullReservation.checkOutDate);
   for (const room of fullReservation.reservationRooms) {
-    const roomCheckOut = room.reservationRoomId === reservationRoomId ? newCheckOut : new Date(room.checkOutDate);
+    const roomCheckOut = new Date(room.checkOutDate);
+    if (roomCheckOut > reservationCheckOutDate) reservationCheckOutDate = roomCheckOut;
     const roomCheckIn = new Date(room.checkInDate);
     const roomNights = Math.ceil((roomCheckOut.getTime() - roomCheckIn.getTime()) / (1000 * 60 * 60 * 24));
     grandTotal += parseFloat(room.agreedPricePerNight.toString()) * roomNights;
@@ -401,7 +405,8 @@ export const extendReservationRoom = async (
   await reservationRepository.updateReservationFinancials(
     resRoom.reservationId,
     grandTotal,
-    Number(fullReservation.amountPaid || 0)
+    Number(fullReservation.amountPaid || 0),
+    reservationCheckOutDate
   );
 
   return reservationRepository.findReservationRoomById(reservationRoomId);
@@ -410,6 +415,7 @@ export const extendReservationRoom = async (
 export const updateOccupantName = async (
   reservationRoomId: number,
   occupantName: string,
+  occupantPhone?: string,
   userPropertyId?: number
 ) => {
   const resRoom = await reservationRepository.findReservationRoomById(reservationRoomId);
@@ -419,7 +425,39 @@ export const updateOccupantName = async (
     throw new Error('You do not have access to this reservation room');
   }
 
-  return reservationRepository.updateReservationRoomStatus(reservationRoomId, { occupantName });
+  return reservationRepository.updateReservationRoomStatus(reservationRoomId, {
+    occupantName,
+    ...(occupantPhone !== undefined && { occupantPhone: occupantPhone.trim() || null }),
+  });
+};
+
+export const updateGuestPresence = async (
+  reservationRoomId: number,
+  action: 'out' | 'returned',
+  userId: number,
+  propertyId: number,
+  expectedReturnAt?: string
+) => {
+  if (action !== 'out' && action !== 'returned') throw new Error('Invalid guest presence action.');
+
+  let expectedReturn: Date | undefined;
+  if (expectedReturnAt) {
+    expectedReturn = new Date(expectedReturnAt);
+    if (Number.isNaN(expectedReturn.getTime()) || expectedReturn <= new Date()) {
+      throw new Error('Expected return time must be in the future.');
+    }
+  }
+  if (action === 'returned' && expectedReturnAt) {
+    throw new Error('An expected return time can only be set when marking a guest out.');
+  }
+
+  return reservationRepository.updateGuestPresence(
+    reservationRoomId,
+    action,
+    userId,
+    propertyId,
+    expectedReturn
+  );
 };
 
 export const markAsNoShow = async (reservationId: string, userPropertyId?: number) => {

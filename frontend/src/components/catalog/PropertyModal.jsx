@@ -126,11 +126,11 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
               <input type="number" name="taxPercentage" step="0.01" value={formData.taxPercentage} onChange={handleChange} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
             </div>
 
-            {/* 🌟 NEW: Paystack Mobile Money Integration */}
+            {/* Paystack credentials for online booking payments */}
             <div className="mb-4">
               <label className="block text-sm font-semibold text-text mb-1.5 flex items-center gap-2">
                 <Smartphone size={16} className="text-primary-600" />
-                Paystack Secret Key (Mobile Money)
+                Paystack Secret Key (Online Payments)
               </label>
               <input 
                 type="password" 
@@ -141,7 +141,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
                 className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 font-mono text-sm" 
               />
               <p className="text-xs text-text-muted mt-1">
-                Your hotel's Paystack secret key for Mobile Money payments (MTN MoMo, Vodafone Cash, AirtelTigo). 
+                Your hotel's Paystack secret key for public booking payments by Mobile Money or card.
                 <a href="https://dashboard.paystack.com/#/settings/developer" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline ml-1">Get your key here →</a>
               </p>
               {initialData?.paystackSecretKey && (

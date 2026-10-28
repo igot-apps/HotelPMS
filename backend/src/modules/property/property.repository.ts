@@ -27,10 +27,11 @@ export const createProperty = async (data: any) => {
 
 export const findProperties = async (
   page: number = 1,
-  limit: number = 10
+  limit: number = 10,
+  propertyId?: number
 ) => {
   const skip = (page - 1) * limit;
-  const where = {}; // ✅ No tenantId filter anymore! Property is the root.
+  const where = propertyId === undefined ? {} : { propertyId };
 
   const [properties, total] = await Promise.all([
     prisma.property.findMany({
@@ -52,6 +53,34 @@ export const findProperties = async (
   ]);
 
   return { properties, total, page, limit };
+};
+
+export const findPlatformProperties = async (page = 1, limit = 50, search = '') => {
+  const skip = (page - 1) * limit;
+  const term = search.trim();
+  const where = term ? {
+    OR: [
+      { propertyName: { contains: term, mode: 'insensitive' as const } },
+      { propertyCode: { contains: term, mode: 'insensitive' as const } },
+      { city: { contains: term, mode: 'insensitive' as const } },
+      { country: { contains: term, mode: 'insensitive' as const } },
+    ],
+  } : {};
+
+  const [properties, total, active, trials] = await Promise.all([
+    prisma.property.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: { _count: { select: { rooms: true, users: true } } },
+    }),
+    prisma.property.count({ where }),
+    prisma.property.count({ where: { status: 'Active', isActive: true } }),
+    prisma.property.count({ where: { subscriptionStatus: 'Trial' } }),
+  ]);
+
+  return { properties, total, active, trials, page, limit };
 };
 
 export const findPropertyById = async (propertyId: number) => {
@@ -82,9 +111,9 @@ export const findPropertyById = async (propertyId: number) => {
   });
 };
 
-export const findAllActiveProperties = async () => {
+export const findAllActiveProperties = async (propertyId?: number) => {
   return prisma.property.findMany({
-    where: { status: 'Active' },
+    where: { status: 'Active', ...(propertyId === undefined ? {} : { propertyId }) },
     orderBy: { propertyName: 'asc' },
   });
 };

@@ -6,6 +6,7 @@ export const findUserByUsernameOrEmail = async (identifier: string) => {
       OR: [
         { username: identifier }, // ✅ Checks if it matches the username
         { email: identifier },    // ✅ Checks if it matches the email
+        { phone: identifier },
       ],
     },
     // ⚠️ IMPORTANT: Keep your existing `include` block exactly as it was!
