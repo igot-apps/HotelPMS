@@ -30,5 +30,11 @@
     "emitDecoratorMetadata": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tests",
+    "src/prisma-playground.ts",
+    "src/shared/middleware/to-be-deleted-tenant.middleware.ts"
+  ]
 }
