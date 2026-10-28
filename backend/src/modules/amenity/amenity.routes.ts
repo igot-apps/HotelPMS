@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { PrismaClient } from '../../generated/prisma';
+import { PrismaClient } from '../../../src/generated/prisma';
 import { authenticate, AuthRequest } from '../../shared/middleware/auth.middleware';
 
 const router = Router();

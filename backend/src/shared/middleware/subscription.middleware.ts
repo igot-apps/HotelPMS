@@ -1,6 +1,6 @@
 // subscription.middleware.ts
 import { Response, NextFunction } from 'express';
-import { PrismaClient } from '../../generated/prisma';
+import { PrismaClient } from '../../../src/generated/prisma';
 import { AuthRequest } from './auth.middleware';
 
 const prisma = new PrismaClient();

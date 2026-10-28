@@ -2,7 +2,7 @@ import { comparePassword ,hashPassword } from '../../shared/utils/password';
 import { generateAccessToken, generateRefreshToken } from '../../shared/utils/jwt';
 import * as authRepository from './auth.repository';
 
-import { PrismaClient } from '../../generated/prisma';
+import { PrismaClient } from '../../../src/generated/prisma';
 const prisma = new PrismaClient();
 
 export interface LoginResponse {
