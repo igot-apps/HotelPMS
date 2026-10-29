@@ -7,7 +7,7 @@ import PublicNavbar from '../components/public/PublicNavbar';
 import {
   Calendar, MapPin, Loader2, Search, ArrowLeft, Clock,
   CheckCircle2, XCircle, CreditCard, ChevronLeft, ChevronRight,
-  BedDouble, Copy, Building2
+  BedDouble
 } from 'lucide-react';
 
 //  REUSABLE PAGINATION COMPONENT
@@ -106,11 +106,11 @@ export default function PublicReservationsPage() {
 
   // 🌟 FIX: Sort reservations so the newest (unpaid) ones appear at the top
   const reservations = (data?.reservations || []).sort((a, b) => {
-    // Sort by creation date descending (newest first). 
+    // Sort by creation date descending (newest first).
     // Fallback to checkInDate just in case createdAt is missing.
     const dateA = new Date(a.createdAt || a.checkInDate);
     const dateB = new Date(b.createdAt || b.checkInDate);
-    return dateB - dateA; 
+    return dateB - dateA;
   });
   const pagination = data?.pagination || { total: 0, totalPages: 1, page: 1 };
   const totalPages = pagination.totalPages;
@@ -119,15 +119,6 @@ export default function PublicReservationsPage() {
     if (page >= 1 && page <= totalPages && page !== currentPage) {
       setCurrentPage(page);
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  };
-
-  const copyConfirmationCode = async (code) => {
-    try {
-      await navigator.clipboard.writeText(code);
-      toast.success('Confirmation code copied');
-    } catch {
-      toast.error('Could not copy the confirmation code');
     }
   };
 
@@ -205,7 +196,7 @@ const retryPaymentMutation = useMutation({
     return (
       <div className="min-h-screen bg-background">
         <PublicNavbar />
-        <div className="max-w-5xl mx-auto px-4 py-12 space-y-6 animate-pulse">
+        <div className="w-full max-w-[1024px] mx-auto px-4 py-12 space-y-6 animate-pulse">
           <div className="h-8 w-48 bg-secondary-100 rounded-lg" />
           <div className="h-4 w-64 bg-secondary-100 rounded-lg" />
           {[1, 2, 3].map((i) => (
@@ -219,23 +210,15 @@ const retryPaymentMutation = useMutation({
   return (
     <div className="min-h-screen bg-background">
       <PublicNavbar />
-      <div className="max-w-6xl mx-auto px-4 py-8 sm:py-12">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-5 mb-8">
-          <div className="flex items-start gap-3 sm:gap-4">
-            <button onClick={() => navigate(-1)} aria-label="Go back" className="mt-1 p-2.5 rounded-xl border border-border bg-surface hover:bg-secondary-50 text-text-muted transition">
+      <div className="w-full max-w-[1024px] mx-auto px-4 py-12">
+        <div className="flex items-center gap-4 mb-8">
+          <button onClick={() => navigate(-1)} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition">
             <ArrowLeft size={20} />
-            </button>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-600 mb-1">Your account</p>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-text">My Reservations</h1>
-              <p className="text-sm sm:text-base text-text-muted mt-1">Your stays, booking details, and payment status in one place.</p>
-            </div>
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-text">My Reservations</h1>
+            <p className="text-sm text-text-muted">View and manage your upcoming and past stays.</p>
           </div>
-          {!isError && reservations.length > 0 && (
-            <Link to="/discover" className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-surface text-sm font-semibold text-text hover:border-primary-200 hover:text-primary-700 transition">
-              <Building2 size={17} /> Browse hotels
-            </Link>
-          )}
         </div>
 
         {isError && (
@@ -260,116 +243,97 @@ const retryPaymentMutation = useMutation({
 
         {!isError && reservations.length > 0 && (
           <>
-            <div className="flex items-center justify-between mb-4 px-1">
-              <p className="text-sm text-text-muted"><span className="font-bold text-text">{pagination.total}</span> {pagination.total === 1 ? 'reservation' : 'reservations'}</p>
-              <p className="text-xs text-text-muted">Newest bookings first</p>
-            </div>
-            <div className="space-y-5">
+            <div className="space-y-4">
               {reservations.map((res) => {
                 const roomCount = res.reservationRooms?.length || 1;
                 const roomTypeName = res.reservationRooms?.[0]?.roomType?.typeName || res.reservationRooms?.[0]?.roomTypeNameSnapshot || 'Standard Room';
                 const displayRoomText = roomCount > 1 ? `${roomCount}x ${roomTypeName}` : roomTypeName;
-                
+
                 //  CALCULATE BALANCE LOCALLY
                 const totalAmount = Number(res.totalAmount || 0);
                 const amountPaid = Number(res.amountPaid || 0);
                 const balanceDue = Math.max(0, totalAmount - amountPaid);
                 const isFullyPaid = balanceDue < 0.01;
-                const paidPercent = totalAmount > 0 ? Math.min(100, Math.round((amountPaid / totalAmount) * 100)) : 0;
 
                 return (
-                  <article key={res.reservationId} className="overflow-hidden bg-surface border border-border rounded-2xl shadow-sm hover:shadow-md hover:border-primary-200 transition-all duration-200">
-                    <div className="p-5 sm:p-6">
-                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <div className="flex items-center flex-wrap gap-2.5 mb-2">
-                            <h2 className="text-lg sm:text-xl font-bold text-text">{res.property?.propertyName || 'Hotel reservation'}</h2>
-                            {getStatusBadge(res.status, isFullyPaid)}
-                          </div>
-                          <p className="text-sm text-text-muted flex items-center gap-1.5">
-                            <MapPin size={15} className="text-primary-600 flex-shrink-0" />
-                            {[res.property?.city, res.property?.country || 'Ghana'].filter(Boolean).join(', ')}
-                          </p>
+                  <div key={res.reservationId} className="group bg-surface border border-border rounded-xl p-6 hover:shadow-lg hover:border-primary-200 transition-all duration-300">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2 flex-wrap">
+                          <h3 className="text-lg font-bold text-text group-hover:text-primary-600 transition-colors">
+                            {res.property?.propertyName}
+                          </h3>
+                          {/* 🌟 Pass isFullyPaid to badge */}
+                          {getStatusBadge(res.status, isFullyPaid)}
                         </div>
-                        <div className="sm:text-right">
-                          <p className="text-[11px] font-bold text-text-muted uppercase tracking-[0.14em] mb-1.5">Confirmation code</p>
-                          <button
-                            type="button"
-                            onClick={() => copyConfirmationCode(res.confirmationCode)}
-                            title="Copy confirmation code"
-                            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-primary-100 bg-primary-50 text-primary-700 hover:bg-primary-100 transition"
-                          >
-                            <span className="text-sm font-black tracking-[0.12em]">{res.confirmationCode}</span>
-                            <Copy size={14} />
-                          </button>
+                        <p className="text-sm text-text-muted flex items-center gap-1.5 mb-3">
+                          <MapPin size={14} className="flex-shrink-0" /> {res.property?.city}, {res.property?.country || 'Ghana'}
+                        </p>
+                        <div className="flex flex-wrap gap-4 text-sm">
+                          <div className="flex items-center gap-2 text-text-muted">
+                            <Calendar size={14} className="text-primary-600" />
+                            <span className="font-medium text-text">{formatDate(res.checkInDate)} – {formatDate(res.checkOutDate)}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-text-muted">
+                            <BedDouble size={14} className="text-primary-600" />
+                            <span className="font-medium text-text">{displayRoomText}</span>
+                          </div>
                         </div>
                       </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-5 mt-5 p-4 sm:p-5 rounded-xl bg-secondary-50/80 border border-border">
-                        <div>
-                          <p className="text-[11px] font-bold uppercase tracking-wider text-text-muted mb-1">Check-in</p>
-                          <div className="flex items-center gap-2 text-text font-semibold">
-                            <Calendar size={16} className="text-primary-600" /> {formatDate(res.checkInDate)}
-                          </div>
-                        </div>
-                        <div className="hidden sm:block h-px w-12 bg-border" />
-                        <div className="sm:text-right">
-                          <p className="text-[11px] font-bold uppercase tracking-wider text-text-muted mb-1">Check-out</p>
-                          <div className="flex sm:justify-end items-center gap-2 text-text font-semibold">
-                            <Calendar size={16} className="text-primary-600" /> {formatDate(res.checkOutDate)}
-                          </div>
-                        </div>
-                        <div className="sm:col-span-3 pt-3 sm:pt-0 sm:mt-0 sm:border-t-0 border-t border-border flex items-center gap-2 text-sm text-text-muted">
-                          <BedDouble size={16} className="text-primary-600" />
-                          <span className="font-semibold text-text">{displayRoomText}</span>
-                        </div>
+                      <div className="text-right md:text-right flex-shrink-0">
+                        <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-1">Confirmation Code</p>
+                        <p className="text-sm font-black text-primary-600 tracking-widest bg-primary-50 px-3 py-1.5 rounded-lg border border-primary-100 inline-block">
+                          {res.confirmationCode}
+                        </p>
                       </div>
+                    </div>
 
-                      <div className="mt-5 grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-5 items-center">
-                        <div>
-                          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-2">
-                            <CreditCard size={16} className="text-text-muted" />
-                            <span className="text-sm font-bold text-text">GH₵ {amountPaid.toFixed(2)}</span>
-                            <span className="text-sm text-text-muted">paid of GH₵ {totalAmount.toFixed(2)}</span>
-                            {!isFullyPaid && (
-                              <span className="text-xs font-bold text-danger-700 bg-danger-50 px-2 py-1 rounded-lg border border-danger-100">
-                                GH₵ {balanceDue.toFixed(2)} remaining
-                              </span>
-                            )}
-                            {isFullyPaid && amountPaid > 0 && (
-                              <span className={`text-xs font-bold px-2 py-1 rounded-lg border ${res.status === 'Cancelled' ? 'text-warning-700 bg-warning-50 border-warning-200' : 'text-success-700 bg-success-50 border-success-100'}`}>
-                                {res.status === 'Cancelled' ? 'Refund due' : 'Paid in full'}
-                              </span>
-                            )}
-                          </div>
-                          <div className="h-2 w-full max-w-lg overflow-hidden rounded-full bg-secondary-100" aria-label={`${paidPercent}% paid`}>
-                            <div className={`h-full rounded-full transition-all ${isFullyPaid ? 'bg-success-500' : 'bg-primary-500'}`} style={{ width: `${paidPercent}%` }} />
-                          </div>
-                        </div>
-
-                        <div className="w-full lg:w-auto">
-                          {res.status === 'Cancelled' ? (
-                            <span className="flex w-full lg:min-w-52 justify-center items-center gap-2 text-sm font-semibold text-danger-700 bg-danger-50 px-4 py-3 rounded-xl border border-danger-100">
-                              <XCircle size={16} /> Reservation cancelled
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-4 border-t border-border gap-4">
+                      <div className="flex items-center gap-2">
+                        <CreditCard size={16} className="text-text-muted" />
+                        <div className="text-sm">
+                          <span className="font-bold text-text">GH₵ {amountPaid.toFixed(2)}</span>
+                          <span className="text-text-muted"> paid</span>
+                          {!isFullyPaid && (
+                            <span className="text-xs font-bold text-danger-600 bg-danger-50 px-2 py-0.5 rounded ml-2 border border-danger-100">
+                              Balance: GH {balanceDue.toFixed(2)}
                             </span>
-                          ) : !isFullyPaid ? (
-                            <button
-                              onClick={() => retryPaymentMutation.mutate(res)}
-                              disabled={retryPaymentMutation.isPending}
-                              className="w-full lg:min-w-64 inline-flex items-center justify-center gap-2 px-5 py-3 text-sm font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition shadow-sm shadow-primary-600/20 disabled:opacity-50"
-                            >
-                              {retryPaymentMutation.isPending ? <Loader2 size={17} className="animate-spin" /> : <CreditCard size={17} />}
-                              {retryPaymentMutation.isPending ? 'Starting secure checkout…' : `Pay remaining GH₵ ${balanceDue.toFixed(2)}`}
-                            </button>
-                          ) : (
-                            <span className="flex w-full lg:min-w-52 justify-center items-center gap-2 text-sm font-semibold text-success-700 bg-success-50 px-4 py-3 rounded-xl border border-success-100">
-                              <CheckCircle2 size={17} /> Payment complete
+                          )}
+                          {isFullyPaid && amountPaid > 0 && (
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded ml-2 border inline-flex items-center gap-1 ${
+                              res.status === 'Cancelled'
+                                ? 'text-warning-700 bg-warning-50 border-warning-200'
+                                : 'text-success-600 bg-success-50 border-success-100'
+                            }`}>
+                              {res.status === 'Cancelled' ? 'Refund Due' : 'Fully Paid'}
                             </span>
                           )}
                         </div>
                       </div>
+
+                      {/* 🌟 FIXED ACTION BUTTONS: Blocks payment if receptionist cancelled it */}
+                      <div className="w-full sm:w-auto">
+                        {res.status === 'Cancelled' ? (
+                          <span className="block w-full text-center text-sm font-semibold text-danger-600 bg-danger-50 px-4 py-2.5 rounded-lg border border-danger-200">
+                            <XCircle size={14} className="inline mr-1" /> Reservation Cancelled
+                          </span>
+                        ) : !isFullyPaid ? (
+                          <button
+                            onClick={() => retryPaymentMutation.mutate(res)}
+                            disabled={retryPaymentMutation.isPending}
+                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition shadow-md shadow-primary-600/20 disabled:opacity-50"
+                          >
+                            <CreditCard size={18} />
+                            {retryPaymentMutation.isPending ? 'Processing...' : `Pay Balance (GH₵ ${balanceDue.toFixed(2)})`}
+                          </button>
+                        ) : (
+                          <span className="block w-full text-center text-sm font-semibold text-success-600 bg-success-50 px-4 py-2.5 rounded-lg border border-success-100">
+                            <CheckCircle2 size={14} className="inline mr-1" /> Payment Complete
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </article>
+                  </div>
                 );
               })}
             </div>
