@@ -2,11 +2,13 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import AppLayout from './components/layout/AppLayout';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import GuestProtectedRoute from './components/auth/GuestProtectedRoute';
 
 // Property Registration and PMS Public Pages
 import LoginPage from './pages/LoginPage';
 import HotelRegistrationWizard from './pages/HotelRegistrationWizard';
 import DiscoverPage from './pages/DiscoverPage'; // 🌟 NEW: Main Public Homepage
+import ForHotelsPage from './pages/ForHotelsPage';
 
 // 🌟 Public Website Pages (Guest Booking Flow)
 import PublicHotelPage from './pages/PublicHotelPage';
@@ -77,10 +79,12 @@ function App() {
         {/* ========================================== */}
         <Route path="/" element={<DiscoverPage />} /> {/* 🌟 NEW: Main Public Homepage */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/hotel/login" element={<LoginPage />} />
+        <Route path="/for-hotels" element={<ForHotelsPage />} />
         <Route path="/superadmin" element={<SuperAdminPage />} />
         <Route path="/platform/properties" element={<Navigate to="/superadmin" replace />} />
         <Route path="/register-your-hotel" element={<HotelRegistrationWizard />} />
-        <Route path="/public/reservations" element={<PublicReservationsPage />} />
+        <Route path="/public/reservations" element={<GuestProtectedRoute><PublicReservationsPage /></GuestProtectedRoute>} />
         
         {/* 🌟 Guest Booking Flow */}
         <Route path="/public/:propertyCode" element={<PublicHotelPage />} />

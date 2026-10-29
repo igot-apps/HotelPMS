@@ -14,8 +14,21 @@ export default function PublicNavbar() {
   const [guestInfo, setGuestInfo] = useState(null);
 
   useEffect(() => {
-    const str = localStorage.getItem('guestInfo');
-    setGuestInfo(str && str !== 'undefined' ? JSON.parse(str) : null);
+    const syncGuest = () => {
+      const str = localStorage.getItem('guestInfo');
+      try {
+        setGuestInfo(str && str !== 'undefined' ? JSON.parse(str) : null);
+      } catch {
+        setGuestInfo(null);
+      }
+    };
+    syncGuest();
+    window.addEventListener('storage', syncGuest);
+    window.addEventListener('guest-session-changed', syncGuest);
+    return () => {
+      window.removeEventListener('storage', syncGuest);
+      window.removeEventListener('guest-session-changed', syncGuest);
+    };
   }, []);
 
   const isAuthenticated = !!guestInfo;
@@ -25,6 +38,7 @@ export default function PublicNavbar() {
     localStorage.removeItem('guestInfo');
     localStorage.removeItem('guestToken');
     setGuestInfo(null);
+    window.dispatchEvent(new Event('guest-session-changed'));
     navigate('/discover');
     setIsOpen(false);
   };
@@ -41,6 +55,7 @@ export default function PublicNavbar() {
 
             <div className="hidden md:flex items-center gap-8">
               <Link to="/discover" className="text-sm font-semibold text-text-muted hover:text-primary-600 transition">Discover Hotels</Link>
+              <Link to="/for-hotels" className="text-sm font-semibold text-text-muted hover:text-primary-600 transition">For Hotels</Link>
               
               {isAuthenticated ? (
                 <>
@@ -75,6 +90,7 @@ export default function PublicNavbar() {
           <div className="md:hidden border-t border-border bg-surface shadow-lg">
             <div className="px-4 py-4 space-y-3">
               <Link to="/discover" onClick={() => setIsOpen(false)} className="block px-3 py-2.5 text-base font-medium text-text hover:bg-secondary-50 rounded-lg transition">Discover Hotels</Link>
+              <Link to="/for-hotels" onClick={() => setIsOpen(false)} className="block px-3 py-2.5 text-base font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition">For Hotels · Manage your property</Link>
               
               {isAuthenticated ? (
                 <>

@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import api from '../lib/axios';
 import { Building2, Mail, Phone, User, Lock, Loader2, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { startGuestSession } from '../lib/guestSession';
 
 export default function PublicAuthPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -45,12 +46,7 @@ export default function PublicAuthPage() {
         const token = data.data.token;
         
         if (guestData && token) {
-          // 🛡️ DESTROY PMS SESSION completely
-          localStorage.removeItem('hotel-pms-auth');
-          
-          // 🛡️ SAVE PUBLIC SESSION
-          localStorage.setItem('guestInfo', JSON.stringify(guestData));
-          localStorage.setItem('guestToken', token);
+          startGuestSession(guestData, token);
           
           toast.success(isLogin ? 'Welcome back!' : 'Account created successfully!');
           navigate(from, { replace: true });

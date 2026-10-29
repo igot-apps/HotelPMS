@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Loader2, Lock, Phone, User, Mail, ArrowLeft } from 'lucide-react';
 import api from '../lib/axios';
 import toast from 'react-hot-toast';
+import { startGuestSession } from '../lib/guestSession';
 
 export default function GuestAuthPage() {
   const { propertyCode } = useParams();
@@ -25,9 +26,13 @@ export default function GuestAuthPage() {
       return res.data;
     },
     onSuccess: (response) => {
-      // 🌟 CORRECTLY save the guest data (response.data contains the guest info and token)
-      localStorage.setItem('guestToken', response.data.token);
-      localStorage.setItem('guestInfo', JSON.stringify(response.data));
+      const payload = response.data.data || response.data;
+      const guest = payload.guest || payload;
+      if (!payload.token || !guest) {
+        toast.error('Sign in succeeded, but the guest session could not be created. Please try again.');
+        return;
+      }
+      startGuestSession(guest, payload.token);
       
       toast.success(isLogin ? 'Welcome back!' : 'Account created successfully!');
       

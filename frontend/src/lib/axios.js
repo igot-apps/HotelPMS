@@ -14,10 +14,14 @@ const api = axios.create({
 // ==========================================
 api.interceptors.request.use(
   (config) => {
-    // Get token from Zustand store (or localStorage)
-    const token = useAuthStore.getState().accessToken;
+    // Public guest endpoints use their own token; never attach the hotel staff token there.
+    const requestPath = new URL(config.url || '', config.baseURL || window.location.origin).pathname;
+    const isPublicRequest = requestPath.startsWith('/public/');
+    const token = isPublicRequest ? null : useAuthStore.getState().accessToken;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    } else if (isPublicRequest) {
+      delete config.headers.Authorization;
     }
     return config;
   },
