@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { prisma } from '../../shared/utils/prisma';
 import axios from 'axios';
 import jwt from 'jsonwebtoken'; // Ensure this is imported at the top of the file
+import { getFrontendBaseUrl } from '../../shared/utils/frontend-url';
 
 
 const router = Router();
@@ -444,7 +445,7 @@ router.post('/:propertyCode/payments/initialize', async (req: any, res: Response
       return res.status(400).json({ success: false, message: 'This hotel has not configured Mobile Money payments yet.' });
     }
 
-    const callbackUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/public/${propertyCode}/booking-success`;
+    const callbackUrl = `${getFrontendBaseUrl()}/public/${propertyCode}/booking-success`;
     
     const response = await axios.post(
       'https://api.paystack.co/transaction/initialize',

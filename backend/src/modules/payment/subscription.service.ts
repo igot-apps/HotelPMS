@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { randomUUID } from 'crypto';
 import { prisma } from '../../shared/utils/prisma';
+import { getFrontendBaseUrl } from '../../shared/utils/frontend-url';
 
 const PLAN_PRICES: Record<number, number> = {
   1: 200,
@@ -74,7 +75,7 @@ export const initializeSubscriptionPayment = async (
     },
   });
 
-  const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/+$/, '');
+  const frontendUrl = getFrontendBaseUrl();
   try {
     const response = await axios.post(
       'https://api.paystack.co/transaction/initialize',
