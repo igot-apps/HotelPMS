@@ -196,7 +196,7 @@ const retryPaymentMutation = useMutation({
     return (
       <div className="min-h-screen bg-background">
         <PublicNavbar />
-        <div className="w-full max-w-[1024px] mx-auto px-4 py-12 space-y-6 animate-pulse">
+        <div className="w-full max-w-[900px] mx-auto px-4 py-12 space-y-6 animate-pulse">
           <div className="h-8 w-48 bg-secondary-100 rounded-lg" />
           <div className="h-4 w-64 bg-secondary-100 rounded-lg" />
           {[1, 2, 3].map((i) => (
@@ -210,7 +210,7 @@ const retryPaymentMutation = useMutation({
   return (
     <div className="min-h-screen bg-background">
       <PublicNavbar />
-      <div className="w-full max-w-[1024px] mx-auto px-4 py-12">
+      <div className="w-full max-w-[900px] mx-auto px-4 py-12">
         <div className="flex items-center gap-4 mb-8">
           <button onClick={() => navigate(-1)} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition">
             <ArrowLeft size={20} />
