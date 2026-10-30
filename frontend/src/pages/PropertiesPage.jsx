@@ -29,6 +29,7 @@ export default function PropertiesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['properties'] });
+      queryClient.invalidateQueries({ queryKey: ['publicDiscover'] });
       closeModal();
     },
   });

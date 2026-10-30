@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../lib/axios';
 import {
   Star, MapPin, Wifi, Coffee, Car, Utensils, Waves, Plane,
-  Dumbbell, Mountain, Loader2, Building2, Search,
+  Dumbbell, Mountain, Loader2, Building2, Search, CheckCircle2,
   X, Navigation, Crosshair, Map, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -128,8 +128,11 @@ export default function DiscoverPage() {
   
   // Search states
   const [destination, setDestination] = useState(searchParams.get('search') || '');
+  const [debouncedDestination, setDebouncedDestination] = useState(searchParams.get('search') || '');
   const [checkIn, setCheckIn] = useState(searchParams.get('checkIn') || '');
   const [checkOut, setCheckOut] = useState(searchParams.get('checkOut') || '');
+  const [maxPrice, setMaxPrice] = useState('');
+  const [selectedAmenity, setSelectedAmenity] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   
   // 🌟 NEW: Pagination state
@@ -142,6 +145,14 @@ export default function DiscoverPage() {
   const today = new Date().toISOString().split('T')[0];
   const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
   const hasInvalidDateRange = Boolean(checkIn && checkOut && checkOut <= checkIn);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedDestination(destination.trim());
+      setCurrentPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [destination]);
 
   // 🌟 SILENT GPS CHECK ON PAGE LOAD
   useEffect(() => {
@@ -175,15 +186,20 @@ export default function DiscoverPage() {
 
   // 🌟 Fetch hotels WITH pagination
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['publicDiscover', destination, checkIn, checkOut, userLocation, currentPage],
+    queryKey: ['publicDiscover', debouncedDestination, checkIn, checkOut, maxPrice, selectedAmenity, userLocation, currentPage],
+    enabled: !hasInvalidDateRange,
     queryFn: async () => {
       const params = {
         page: currentPage,
         limit: ITEMS_PER_PAGE,
       };
-      if (destination) params.search = destination;
-      if (checkIn) params.checkIn = checkIn;
-      if (checkOut) params.checkOut = checkOut;
+      if (debouncedDestination) params.search = debouncedDestination;
+      if (checkIn && checkOut) {
+        params.checkIn = checkIn;
+        params.checkOut = checkOut;
+      }
+      if (maxPrice) params.maxPrice = maxPrice;
+      if (selectedAmenity) params.amenity = selectedAmenity;
       if (userLocation) {
         params.userLat = userLocation.lat;
         params.userLng = userLocation.lng;
@@ -191,7 +207,7 @@ export default function DiscoverPage() {
       const res = await api.get('/public/discover', { params });
       // 🌟 Support both paginated response { data, total } AND legacy array response
       if (Array.isArray(res.data.data)) {
-        return { hotels: res.data.data, total: res.data.data.length };
+        return { hotels: res.data.data, total: res.data.data.length, amenities: [] };
       }
       return res.data.data || { hotels: [], total: 0 };
     },
@@ -199,9 +215,10 @@ export default function DiscoverPage() {
 
   const hotels = data?.hotels || [];
   const totalHotels = data?.total || 0;
+  const amenityOptions = data?.amenities || [];
   const totalPages = Math.ceil(totalHotels / ITEMS_PER_PAGE);
 
-  const hasActiveFilters = destination || checkIn || checkOut;
+  const hasActiveFilters = destination || checkIn || checkOut || maxPrice || selectedAmenity;
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -224,6 +241,8 @@ export default function DiscoverPage() {
     setDestination('');
     setCheckIn('');
     setCheckOut('');
+    setMaxPrice('');
+    setSelectedAmenity('');
     setSearchParams({}, { replace: true });
     setCurrentPage(1);
   };
@@ -256,7 +275,7 @@ export default function DiscoverPage() {
             </span>
           </h1>
           <p className="text-lg md:text-xl text-white/90 max-w-2xl mx-auto mb-8">
-            From Osu to the Northern Region — search real, independently‑run hotels and book direct confirmation in minutes.
+            Check which hotels have rooms for your dates before you travel. Compare local stays across Ghana and book directly.
           </p>
 
           {/* 🌟 SEARCH FORM */}
@@ -294,6 +313,26 @@ export default function DiscoverPage() {
                   </button>
                 </div>
               </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 pt-3 border-t border-border text-left">
+                <div>
+                  <label htmlFor="discover-budget" className="block text-xs font-bold text-text-muted mb-1 px-1">Maximum price per night</label>
+                  <select id="discover-budget" value={maxPrice} onChange={(e) => { setMaxPrice(e.target.value); setCurrentPage(1); }} className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20">
+                    <option value="">Any nightly price</option>
+                    <option value="200">Up to GHS 200</option>
+                    <option value="500">Up to GHS 500</option>
+                    <option value="1000">Up to GHS 1,000</option>
+                    <option value="2000">Up to GHS 2,000</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="discover-amenity" className="block text-xs font-bold text-text-muted mb-1 px-1">Hotel feature</label>
+                  <select id="discover-amenity" value={selectedAmenity} onChange={(e) => { setSelectedAmenity(e.target.value); setCurrentPage(1); }} className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20">
+                    <option value="">Any feature</option>
+                    {amenityOptions.map((amenity) => <option key={amenity} value={amenity}>{amenity}</option>)}
+                  </select>
+                </div>
+              </div>
+              <p className="mt-3 text-left text-xs text-text-muted">Availability updates as you choose your dates. Room availability can change until your booking is confirmed.</p>
               {hasInvalidDateRange && (
                 <p id="discover-date-error" role="alert" className="mt-2 text-left text-sm font-medium text-danger-600">
                   Check-out must be after check-in.
@@ -349,12 +388,13 @@ export default function DiscoverPage() {
           <div>
             <h2 className="text-2xl font-bold text-text flex items-center gap-2">
               <MapPin className="text-primary-600" />
-              {locationStatus === 'granted' ? 'Hotels Nearest to You' : 'Hotels Near You'}
+              {checkIn && checkOut ? 'Hotels available for your dates' : locationStatus === 'granted' ? 'Hotels Nearest to You' : 'Explore hotels in Ghana'}
             </h2>
             {!isLoading && (
               <p className="text-sm text-text-muted mt-1">
                 {totalHotels} {totalHotels === 1 ? 'property' : 'properties'} found
-                {destination && <> in "<span className="font-semibold text-text">{destination}</span>"</>}
+                {debouncedDestination && <> in "<span className="font-semibold text-text">{debouncedDestination}</span>"</>}
+                {checkIn && checkOut && <> for {new Date(`${checkIn}T00:00:00`).toLocaleDateString()} – {new Date(`${checkOut}T00:00:00`).toLocaleDateString()}</>}
                 {totalPages > 1 && <span className="ml-2 text-primary-600 font-semibold">· Page {currentPage} of {totalPages}</span>}
               </p>
             )}
@@ -364,6 +404,21 @@ export default function DiscoverPage() {
               <X size={16} /> Clear Filters
             </button>
           )}
+        </div>
+
+        <div className="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="rounded-xl border border-primary-100 bg-primary-50/70 p-4">
+            <p className="text-sm font-bold text-text">Search before you travel</p>
+            <p className="mt-1 text-xs leading-5 text-text-muted">See participating hotels with rooms for your selected stay, so you can compare options before making the trip.</p>
+          </div>
+          <div className="rounded-xl border border-border bg-surface p-4">
+            <p className="text-sm font-bold text-text">Local details at a glance</p>
+            <p className="mt-1 text-xs leading-5 text-text-muted">Check the area, city, region, GhanaPost GPS address, nightly price, and listed features.</p>
+          </div>
+          <div className="rounded-xl border border-border bg-surface p-4">
+            <p className="text-sm font-bold text-text">Book directly</p>
+            <p className="mt-1 text-xs leading-5 text-text-muted">Review room options and confirm your booking with the hotel through the platform.</p>
+          </div>
         </div>
 
         {/* Loading / Error / Empty States */}
@@ -377,53 +432,67 @@ export default function DiscoverPage() {
         {!isLoading && !isError && hotels.length === 0 && (
           <div className="text-center py-16 bg-surface border border-border rounded-2xl">
             <Search size={48} className="mx-auto text-text-muted mb-4 opacity-50" />
-            <h3 className="text-xl font-bold text-text mb-2">No hotels match your search</h3>
-            <p className="text-text-muted mb-6">Try adjusting your filters or search a different destination.</p>
+            <h3 className="text-xl font-bold text-text mb-2">{checkIn && checkOut ? 'No rooms found for these dates' : 'No hotels match your search'}</h3>
+            <p className="text-text-muted mb-6">{checkIn && checkOut ? 'Try different dates or widen your destination and budget filters.' : 'Try adjusting your filters or search a different destination.'}</p>
+            {checkIn && checkOut && <button onClick={() => { setCheckIn(''); setCheckOut(''); setSearchParams((current) => { const params = new URLSearchParams(current); params.delete('checkIn'); params.delete('checkOut'); return params; }, { replace: true }); setCurrentPage(1); }} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-semibold rounded-lg hover:bg-primary-700 transition">Clear dates</button>}
+          </div>
+        )}
+
+        {!isLoading && isError && (
+          <div role="alert" className="text-center py-12 bg-surface border border-danger-200 rounded-2xl">
+            <Search size={40} className="mx-auto text-danger-500 mb-3" />
+            <h3 className="text-lg font-bold text-text mb-2">We couldn’t load hotel availability</h3>
+            <p className="text-sm text-text-muted">Please try again in a moment.</p>
           </div>
         )}
 
         {/* Hotel Grid */}
         {!isLoading && !isError && hotels.length > 0 && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 lg:gap-7">
               {hotels.map((hotel, index) => (
-                <Link
+                <article
                   key={hotel.propertyCode || index}
-                  to={`/public/${hotel.propertyCode}${checkIn && checkOut ? `?checkIn=${checkIn}&checkOut=${checkOut}` : ''}`}
                   className="group bg-surface border border-border rounded-2xl overflow-hidden hover:shadow-xl hover:border-primary-200 transition-all duration-300 flex flex-col"
                 >
-                  <div className="relative h-56 overflow-hidden bg-secondary-100">
-                    <img
-                      src={hotel.coverImage || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80'}
-                      alt={hotel.propertyName || 'Hotel Property'}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80'; }}
-                    />
-                    {hotel.rating && (
-                      <div className="absolute top-3 right-3 bg-background/90 backdrop-blur-sm px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-sm border border-border">
-                        <Star size={14} className="text-warning-500 fill-warning-500" />
-                        <span className="text-sm font-bold text-text">{hotel.rating}</span>
+                  {(() => {
+                    const photos = [...new Set([hotel.coverImage, ...(Array.isArray(hotel.galleryImages) ? hotel.galleryImages : [])].filter(Boolean))].slice(0, 3);
+                    const fallback = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80';
+                    return (
+                  <Link to={`/public/${hotel.propertyCode}${checkIn && checkOut ? `?checkIn=${checkIn}&checkOut=${checkOut}` : ''}`} aria-label={`View ${hotel.propertyName || 'hotel'} photos and details`} className="relative grid h-56 grid-cols-3 gap-1 overflow-hidden bg-secondary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
+                    <img src={photos[0] || fallback} alt={`${hotel.propertyName || 'Hotel'} — main photo`} className={`${photos.length > 1 ? 'col-span-2 row-span-2' : 'col-span-3'} h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]`} onError={(e) => { e.currentTarget.src = fallback; }} />
+                    {photos.slice(1).map((photo, photoIndex) => (
+                      <img key={`${hotel.propertyCode}-photo-${photoIndex}`} src={photo} alt={`${hotel.propertyName || 'Hotel'} — photo ${photoIndex + 2}`} className="h-full min-h-0 w-full object-cover" onError={(e) => { e.currentTarget.src = fallback; }} />
+                    ))}
+                    {photos.length > 1 && <span className="absolute bottom-3 left-3 rounded-lg bg-black/65 px-2.5 py-1.5 text-xs font-semibold text-white backdrop-blur-sm">{photos.length} photos · View gallery</span>}
+                    {checkIn && checkOut && (
+                      <div className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-lg border border-success-100 bg-success-50/95 px-2.5 py-1.5 text-xs font-bold text-success-700 shadow-sm">
+                        <CheckCircle2 size={14} />
+                        {hotel.availableRooms} {hotel.availableRooms === 1 ? 'room' : 'rooms'} available
                       </div>
                     )}
-                  </div>
+                  </Link>
+                    );
+                  })()}
                   <div className="p-5 flex flex-col flex-1">
                     <div className="mb-3">
-                      <h3 className="text-lg font-bold text-text group-hover:text-primary-600 transition-colors">
+                      <Link to={`/public/${hotel.propertyCode}${checkIn && checkOut ? `?checkIn=${checkIn}&checkOut=${checkOut}` : ''}`} className="text-lg font-bold text-text transition-colors hover:text-primary-600">
                         {hotel.propertyName || 'Unnamed Property'}
-                      </h3>
+                      </Link>
                       {(hotel.area || hotel.city || hotel.region || hotel.ghanaPostAddress) && (
-                        <p className="text-sm text-text-muted flex items-center gap-1 mt-1">
+                        <p className="text-sm text-text-muted flex min-w-0 items-center gap-1 mt-1">
                           <MapPin size={14} className="shrink-0" />
-                          <span>{[hotel.area, hotel.city, hotel.region].filter(Boolean).join(', ')}{hotel.country ? ` · ${hotel.country}` : ''}</span>
+                          <span className="min-w-0 truncate" title={[hotel.area, hotel.city, hotel.region, hotel.country].filter(Boolean).join(', ')}>
+                            {[hotel.area, hotel.city, hotel.region].filter(Boolean).join(', ')}{hotel.country ? ` · ${hotel.country}` : ''}
+                          </span>
                         </p>
                       )}
                       {hotel.ghanaPostAddress && (
-                        <p className="text-xs text-text-muted mt-1 ml-5">GhanaPost GPS: {hotel.ghanaPostAddress}</p>
+                        <p className="text-xs text-text-muted mt-1 ml-5 truncate" title={`GhanaPost GPS: ${hotel.ghanaPostAddress}`}>
+                          GhanaPost GPS: {hotel.ghanaPostAddress}
+                        </p>
                       )}
                     </div>
-                    {hotel.description && (
-                      <p className="text-sm text-text-muted mb-4 line-clamp-2 flex-1">{hotel.description}</p>
-                    )}
                     {hotel.amenities && hotel.amenities.length > 0 && (
                       <div className="flex flex-wrap gap-2 mb-4">
                         {hotel.amenities.slice(0, 3).map((amenity, idx) => (
@@ -441,7 +510,7 @@ export default function DiscoverPage() {
                         </p>
                       </div>
                       {/* 🌟 FIXED: Added the missing closing quote here! */}
-                      {hotel.distance && hotel.distance !== 'Nearby' && (
+                      {hotel.distance && (
                         <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg border ${
                           locationStatus === 'granted' ? 'bg-primary-50 text-primary-700 border-primary-100' : 'bg-background text-text-muted border-border'
                         }`}>
@@ -449,8 +518,9 @@ export default function DiscoverPage() {
                         </span>
                       )}
                     </div>
+                    {!(checkIn && checkOut) && <p className="mt-3 text-xs text-primary-700 font-medium">Choose your dates to check room availability <span aria-hidden="true">→</span></p>}
                   </div>
-                </Link>
+                </article>
               ))}
             </div>
 

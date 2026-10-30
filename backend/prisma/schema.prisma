@@ -65,6 +65,7 @@ model Property {
   logo                   String?   @db.Text
   primaryEmail           String?   @db.VarChar(200)
   primaryPhone           String?   @db.VarChar(50)
+  primaryPhoneWhatsappOnly Boolean  @default(false)
   isActive               Boolean   @default(true)
 
   propertyType           String    @db.VarChar(50)

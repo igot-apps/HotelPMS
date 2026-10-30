@@ -18,7 +18,7 @@ import RoomCard from '../components/reservations/RoomCard'; // 🌟 NEW: Extract
 import {
   Search, Plus, CalendarDays, AlertCircle, LogIn, LogOut, XCircle,
   ChevronLeft, ChevronRight, Eye, X, Check,
-  ChevronDown, ChevronUp, BedDouble, Loader2, Clock, Undo2
+  ChevronDown, ChevronUp, BedDouble, Loader2, Clock, Undo2, SlidersHorizontal
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -110,6 +110,7 @@ export default function ReservationsPage() {
   const [createdReservation, setCreatedReservation] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [pendingConfirm, setPendingConfirm] = useState(null);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '10');
@@ -343,38 +344,113 @@ export default function ReservationsPage() {
 
   const activeRoomActionId = roomActionMutation.isPending ? roomActionMutation.variables?.id : null;
 
+  const renderRoomAssignments = (res, compact = false) => (
+    <section className={compact ? 'mt-4 border-t border-border pt-4' : ''}>
+      <div className="flex items-center gap-2 mb-4">
+        <BedDouble size={18} className="text-primary-600" />
+        <h4 className="text-sm font-bold text-text uppercase tracking-wider">Individual Room Assignments</h4>
+        <span className="text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full font-semibold">{res.reservationRooms?.length || 0} Rooms</span>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {(res.reservationRooms || []).map((rr) => (
+          <RoomCard
+            key={rr.reservationRoomId}
+            rr={rr}
+            res={res}
+            isThisRoomBusy={activeRoomActionId === rr.reservationRoomId}
+            isUpdatingOccupant={updatingOccupantId === rr.reservationRoomId}
+            onCheckIn={(room, mainGuestName, mainGuestPhone) => {
+              askRoomAction(
+                room.reservationRoomId,
+                'CheckedIn',
+                'Check in room?',
+                `You are about to check in Room ${room.room?.roomNumber}. Confirm or enter the actual occupant details.`,
+                {
+                  inputLabel: 'Occupant Name',
+                  inputValue: room.occupantName || mainGuestName,
+                  secondaryInputLabel: 'Occupant Phone Number (optional)',
+                  secondaryInputValue: toLocalPhoneNumber(room.occupantPhone || mainGuestPhone),
+                }
+              );
+            }}
+            onCheckOut={(room) => {
+              const occupant = room.occupantName || 'Not assigned';
+              askRoomAction(
+                room.reservationRoomId,
+                'CheckedOut',
+                'Confirm Check-out',
+                `You are about to check out Room ${room.room?.roomNumber}.\n\nOccupant: ${occupant}\n\nPlease verify this is the correct guest before proceeding.`,
+              );
+            }}
+            onExtend={(room) => {
+              const currentCheckOut = new Date(room.checkOutDate).toISOString().split('T')[0];
+              const newDate = prompt(
+                `Extend stay for Room ${room.room?.roomNumber}\n\nCurrent check-out: ${currentCheckOut}\n\nEnter new check-out date (YYYY-MM-DD):`,
+                currentCheckOut
+              );
+              if (newDate && newDate > currentCheckOut) {
+                askRoomAction(
+                  room.reservationRoomId,
+                  'extend',
+                  'Extend Stay?',
+                  `Extend Room ${room.room?.roomNumber} from ${currentCheckOut} to ${newDate}?`,
+                  { newCheckOutDate: newDate }
+                );
+              } else if (newDate && newDate <= currentCheckOut) {
+                toast.error('New date must be after current check-out date.');
+              }
+            }}
+            onUpdateOccupant={(reservationRoomId, occupantName, occupantPhone) => {
+              updateOccupantMutation.mutate({ id: reservationRoomId, occupantName, occupantPhone });
+            }}
+          />
+        ))}
+      </div>
+    </section>
+  );
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-text tracking-tight">Reservations</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-text tracking-tight">Reservations</h1>
           <p className="text-text-muted text-sm mt-1">Total matching: <span className="font-bold text-text">{pagination.total}</span></p>
         </div>
-        <button onClick={() => setIsModalOpen(true)} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm">
+        <button onClick={() => setIsModalOpen(true)} className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm">
           <Plus size={16} /> New Booking
         </button>
       </div>
 
       {/* Filters UI */}
-      <div className="bg-surface border border-border rounded-xl p-4 space-y-4">
-        <div className="flex flex-col sm:flex-row gap-3">
+      <div className="bg-surface border border-border rounded-xl p-3 sm:p-4 space-y-3 sm:space-y-4">
+        <div className="flex gap-2 sm:gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
             <input
-           type="text"
-           placeholder="Search by name, phone, room, or confirmation code..."
-           value={localSearch}
-           onChange={(e) => setLocalSearch(e.target.value)}
-           className="w-full pl-9 pr-9 py-2 bg-background border border-border rounded-lg text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
-         />
+              type="text"
+              placeholder="Search guest, phone, room, or reference"
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
+              className="w-full pl-9 pr-9 py-2.5 sm:py-2 bg-background border border-border rounded-lg text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
+            />
             {isSearchPending && (
               <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted animate-spin" size={16} aria-label="Searching" />
             )}
           </div>
-          <select 
-            value={status} 
-            onChange={(e) => handleFilterChange('status', e.target.value)} 
-            className="px-3 py-2 bg-background border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+          <button
+            type="button"
+            onClick={() => setShowMobileFilters((value) => !value)}
+            aria-expanded={showMobileFilters}
+            className="inline-flex md:hidden items-center justify-center gap-2 px-3 rounded-lg border border-border bg-background text-sm font-semibold text-text"
+          >
+            <SlidersHorizontal size={16} />
+            <span>Filters</span>
+            {hasActiveFilters && <span className="w-2 h-2 rounded-full bg-primary-600" aria-label="Filters active" />}
+          </button>
+          <select
+            value={status}
+            onChange={(e) => handleFilterChange('status', e.target.value)}
+            className="hidden md:block px-3 py-2 bg-background border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20"
           >
             <option value="all">All Statuses</option>
             <option value="Confirmed">Confirmed</option>
@@ -384,14 +460,25 @@ export default function ReservationsPage() {
             <option value="NoShow">No Show</option>
           </select>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-border">
+        <div className={`${showMobileFilters ? 'grid' : 'hidden'} md:grid grid-cols-1 md:grid-cols-3 gap-3 pt-3 border-t border-border`}>
+          <div className="md:hidden">
+            <label className="block text-xs font-semibold text-text-muted mb-1">Status</label>
+            <select value={status} onChange={(e) => handleFilterChange('status', e.target.value)} className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20">
+              <option value="all">All Statuses</option>
+              <option value="Confirmed">Confirmed</option>
+              <option value="InHouse">In-House</option>
+              <option value="Completed">Completed</option>
+              <option value="Cancelled">Cancelled</option>
+              <option value="NoShow">No Show</option>
+            </select>
+          </div>
           <div>
             <label className="block text-xs font-semibold text-text-muted mb-1">Check-in From</label>
-            <input type="date" value={fromDate} onChange={(e) => handleFilterChange('fromDate', e.target.value)} className="w-full px-3 py-1.5 bg-background border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
+            <input type="date" value={fromDate} onChange={(e) => handleFilterChange('fromDate', e.target.value)} className="w-full min-w-0 px-3 py-2.5 md:py-1.5 bg-background border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-text-muted mb-1">Check-out To</label>
-            <input type="date" value={toDate} onChange={(e) => handleFilterChange('toDate', e.target.value)} className="w-full px-3 py-1.5 bg-background border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
+            <input type="date" value={toDate} onChange={(e) => handleFilterChange('toDate', e.target.value)} className="w-full min-w-0 px-3 py-2.5 md:py-1.5 bg-background border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
           </div>
         </div>
         {hasActiveFilters && (
@@ -401,8 +488,145 @@ export default function ReservationsPage() {
         )}
       </div>
 
-      {/* TABLE */}
-      <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
+      {/* Mobile reservation cards */}
+      <div className={`md:hidden space-y-3 ${isPlaceholderData ? 'opacity-60 pointer-events-none' : ''}`}>
+        {isLoading ? (
+          [0, 1, 2].map((item) => <div key={item} className="h-48 rounded-xl border border-border bg-surface animate-pulse" />)
+        ) : isError ? (
+          <div className="rounded-xl border border-border bg-surface p-8 text-center">
+            <AlertCircle size={28} className="mx-auto mb-2 text-danger-600" />
+            <p className="font-semibold text-text">Couldn't load reservations</p>
+            <p className="mt-1 text-sm text-text-muted">{error?.response?.data?.message || error?.message || 'Something went wrong'}</p>
+            <button onClick={() => refetch()} className="mt-4 px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-semibold">Try again</button>
+          </div>
+        ) : reservations.length === 0 ? (
+          <div className="rounded-xl border border-border bg-surface p-8 text-center text-text-muted">
+            <CalendarDays size={28} className="mx-auto mb-2" />
+            <p className="font-semibold text-text">No reservations found</p>
+            {hasActiveFilters ? <button onClick={clearFilters} className="mt-2 text-sm font-semibold text-primary-600">Clear filters and try again</button> : <p className="mt-1 text-sm">New bookings will show up here</p>}
+          </div>
+        ) : reservations.map((res) => {
+          const id = res.reservationId;
+          const isExpanded = expandedId === id;
+          const guestName = res.guestNameSnapshot || res.platformGuest?.fullName || res.propertyGuest?.fullName || 'Guest name unavailable';
+          const phone = res.guestPhoneSnapshot || res.platformGuest?.phone || res.propertyGuest?.phone;
+          const rooms = res.reservationRooms?.map((room) => room.room?.roomNumber || room.roomNumberSnapshot || 'Removed').join(', ') || 'Not assigned';
+          const totalAmount = parseFloat(res.totalAmount || 0);
+          const amountPaid = parseFloat(res.amountPaid || 0);
+          const balanceDue = Math.max(0, totalAmount - amountPaid);
+          const refundedAmount = (res.payments || []).filter((payment) => payment.status === 'Refunded').reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
+          const cancelledAmount = res.refundStatus === 'Pending' ? parseFloat(res.refundDue || 0) : res.refundStatus === 'Processed' ? refundedAmount : 0;
+          const isPastCheckIn = new Date(res.checkInDate) < new Date();
+          const cardStatusClass = res.status === 'Confirmed' ? 'bg-primary-50 text-primary-700 ring-1 ring-primary-600/20' : res.status === 'InHouse' ? 'bg-success-50 text-success-700 ring-1 ring-success-600/20' : res.status === 'Cancelled' ? 'bg-danger-50 text-danger-700 ring-1 ring-danger-600/20' : res.status === 'NoShow' ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-600/20' : res.status === 'Expired' ? 'bg-warning-50 text-warning-700 ring-1 ring-warning-600/20' : 'bg-secondary-100 text-secondary-700';
+          const cardStatusLabel = res.status === 'InHouse' ? 'In-House' : res.status === 'NoShow' ? 'No Show' : res.status;
+
+          return (
+            <article key={id} className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+              <div className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{res.confirmationCode || `#${id.slice(0, 8)}`}</p>
+                    <h2 className="mt-1 break-words text-base font-bold leading-snug text-text">{guestName}</h2>
+                    {phone && <p className="mt-0.5 text-sm text-text-muted">{phone}</p>}
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${cardStatusClass}`}>{cardStatusLabel}</span>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg bg-secondary-50/70 p-3 text-sm">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-text-muted">Stay dates</p>
+                    <p className="mt-1 font-semibold text-text">{new Date(res.checkInDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {new Date(res.checkOutDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-text-muted">Room{res.reservationRooms?.length === 1 ? '' : 's'}</p>
+                    <p className="mt-1 break-words font-semibold text-text">{rooms}</p>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs text-text-muted">{res.status === 'Cancelled' ? 'Refund amount' : 'Total'}</p>
+                    <p className="font-bold text-text">{(res.status === 'Cancelled' ? cancelledAmount : totalAmount).toFixed(2)} GHS</p>
+                  </div>
+                  {res.status === 'Cancelled' && res.refundStatus === 'Pending' ? (
+                    <span className="text-right text-xs font-semibold text-warning-700">Refund due</span>
+                  ) : res.status === 'Cancelled' && res.refundStatus === 'Processed' ? (
+                    <span className="text-right text-xs font-semibold text-success-700">Refunded</span>
+                  ) : res.status === 'Cancelled' ? (
+                    <span className="text-right text-xs text-text-muted">No payment collected</span>
+                  ) : balanceDue > 0.01 ? (
+                    <span className="rounded-md bg-danger-50 px-2 py-1 text-right text-xs font-bold text-danger-700">Due {balanceDue.toFixed(2)} GHS</span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-success-700"><Check size={14} /> Paid</span>
+                  )}
+                </div>
+
+                <div className="mt-4 flex gap-2">
+                  {res.status === 'Confirmed' && (
+                    <button onClick={() => setExpandedId(isExpanded ? null : id)} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-success-600 px-3 text-sm font-bold text-white hover:bg-success-700">
+                      <LogIn size={16} /> Check In
+                    </button>
+                  )}
+                  {res.status === 'InHouse' && (
+                    <button onClick={() => setExpandedId(isExpanded ? null : id)} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-primary-600 px-3 text-sm font-bold text-white hover:bg-primary-700">
+                      <LogOut size={16} /> Check Out
+                    </button>
+                  )}
+                  {res.status === 'Cancelled' && res.refundStatus === 'Pending' && permissions?.includes('CanCancelReservation') && (
+                    <button onClick={() => askReservationAction(id, 'refund', 'Process reservation refund?', `This will mark ${parseFloat(res.refundDue || 0).toFixed(2)} GHS as refunded and update the payment records for reservation ${res.confirmationCode || id}.`, { danger: true, confirmLabel: 'Process Refund' })} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-danger-200 bg-danger-50 px-3 text-sm font-semibold text-danger-700">
+                      <Undo2 size={16} /> Refund {parseFloat(res.refundDue || 0).toFixed(2)} GHS
+                    </button>
+                  )}
+                  <Link to={`/reservations/${id}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50">
+                    <Eye size={16} />Details
+                  </Link>
+                  {res.reservationRooms?.length > 0 && res.status !== 'Confirmed' && res.status !== 'InHouse' && (
+                    <button onClick={() => setExpandedId(isExpanded ? null : id)} className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-3 text-text-muted" aria-label={isExpanded ? 'Hide room details' : 'Show room details'}>
+                      {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                    </button>
+                  )}
+                </div>
+
+                {(res.status === 'Confirmed' || (res.status !== 'Completed' && res.status !== 'Cancelled' && res.status !== 'NoShow' && res.status !== 'Expired')) && (
+                  <details className="mt-3 border-t border-border pt-3">
+                    <summary className="cursor-pointer select-none text-sm font-semibold text-text-muted">More actions</summary>
+                    <div className="mt-3 grid grid-cols-1 gap-2">
+                      {res.status === 'Confirmed' && isPastCheckIn && (
+                        <button onClick={() => askReservationAction(id, 'noShow', 'Mark as No Show?', `This will mark reservation ${res.confirmationCode || `#${id.slice(0, 8)}`} as a No Show and release the rooms back to inventory. This cannot be undone.`, { danger: true, confirmLabel: 'Mark as No Show' })} className="min-h-11 rounded-lg border border-orange-200 px-3 text-left text-sm font-semibold text-orange-700 hover:bg-orange-50">Mark as No Show</button>
+                      )}
+                      {res.status !== 'Completed' && res.status !== 'Cancelled' && res.status !== 'NoShow' && res.status !== 'Expired' && (
+                        <button onClick={() => askReservationAction(id, 'cancel', 'Cancel reservation?', `This will cancel reservation ${res.confirmationCode || `#${id.slice(0, 8)}`}. This can't be undone from here.`, { danger: true, confirmLabel: 'Cancel Reservation' })} className="min-h-11 rounded-lg border border-danger-200 px-3 text-left text-sm font-semibold text-danger-700 hover:bg-danger-50">Cancel reservation</button>
+                      )}
+                    </div>
+                  </details>
+                )}
+
+                {isExpanded && res.reservationRooms?.length > 0 && renderRoomAssignments(res, true)}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+
+      <div className="md:hidden flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-3">
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-text-muted">Showing {startItem}–{endItem} of {pagination.total}</p>
+          <select value={limit} onChange={(e) => updateParams({ limit: e.target.value, page: 1 })} className="mt-1 bg-transparent text-xs font-semibold text-text outline-none">
+            <option value="10">10 per page</option>
+            <option value="25">25 per page</option>
+            <option value="50">50 per page</option>
+            <option value="100">100 per page</option>
+          </select>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button onClick={() => updateParams({ page: page - 1 })} disabled={page === 1 || isPlaceholderData} className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-border px-3 text-sm font-semibold text-text disabled:opacity-40"><ChevronLeft size={16} /> Prev</button>
+          <span className="text-xs font-semibold text-text-muted">{page}/{totalPages || 1}</span>
+          <button onClick={() => updateParams({ page: page + 1 })} disabled={page === totalPages || !pagination.total || isPlaceholderData} className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-border px-3 text-sm font-semibold text-text disabled:opacity-40">Next <ChevronRight size={16} /></button>
+        </div>
+      </div>
+
+      {/* Desktop reservation table */}
+      <div className="hidden md:block bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-secondary-50/50 border-b border-border">
@@ -611,67 +835,7 @@ export default function ReservationsPage() {
                       {isExpanded && (
                         <tr className="bg-secondary-50/30">
                           <td colSpan="7" className="p-6 border-b border-border">
-                            <div className="flex items-center gap-2 mb-4">
-                              <BedDouble size={18} className="text-primary-600" />
-                              <h4 className="text-sm font-bold text-text uppercase tracking-wider">Individual Room Assignments</h4>
-                              <span className="text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full font-semibold">{res.reservationRooms.length} Rooms</span>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              {res.reservationRooms.map((rr) => (
-                                <RoomCard
-                                  key={rr.reservationRoomId}
-                                  rr={rr}
-                                  res={res}
-                                  isThisRoomBusy={activeRoomActionId === rr.reservationRoomId}
-                                  isUpdatingOccupant={updatingOccupantId === rr.reservationRoomId}
-                                  onCheckIn={(room, mainGuestName, mainGuestPhone) => {
-                                    askRoomAction(
-                                      room.reservationRoomId,
-                                      'CheckedIn',
-                                      'Check in room?',
-                                      `You are about to check in Room ${room.room?.roomNumber}. Confirm or enter the actual occupant details.`,
-                                      {
-                                        inputLabel: 'Occupant Name',
-                                        inputValue: room.occupantName || mainGuestName,
-                                        secondaryInputLabel: 'Occupant Phone Number (optional)',
-                                        secondaryInputValue: toLocalPhoneNumber(room.occupantPhone || mainGuestPhone),
-                                      }
-                                    );
-                                  }}
-                                  onCheckOut={(room) => {
-                                    const occupant = room.occupantName || 'Not assigned';
-                                    askRoomAction(
-                                      room.reservationRoomId,
-                                      'CheckedOut',
-                                      'Confirm Check-out',
-                                      `You are about to check out Room ${room.room?.roomNumber}.\n\nOccupant: ${occupant}\n\nPlease verify this is the correct guest before proceeding.`,
-                                    );
-                                  }}
-                                  onExtend={(room) => {
-                                    const currentCheckOut = new Date(room.checkOutDate).toISOString().split('T')[0];
-                                    const newDate = prompt(
-                                      `Extend stay for Room ${room.room?.roomNumber}\n\nCurrent check-out: ${currentCheckOut}\n\nEnter new check-out date (YYYY-MM-DD):`,
-                                      currentCheckOut
-                                    );
-                                    if (newDate && newDate > currentCheckOut) {
-                                      askRoomAction(
-                                        room.reservationRoomId,
-                                        'extend',
-                                        'Extend Stay?',
-                                        `Extend Room ${room.room?.roomNumber} from ${currentCheckOut} to ${newDate}?`,
-                                        { newCheckOutDate: newDate }
-                                      );
-                                    } else if (newDate && newDate <= currentCheckOut) {
-                                      toast.error('New date must be after current check-out date.');
-                                    }
-                                  }}
-                                  onUpdateOccupant={(reservationRoomId, occupantName, occupantPhone) => {
-                                    updateOccupantMutation.mutate({ id: reservationRoomId, occupantName, occupantPhone });
-                                  }}
-                                />
-                              ))}
-                            </div>
+                            {renderRoomAssignments(res)}
                           </td>
                         </tr>
                       )}

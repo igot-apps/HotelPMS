@@ -36,31 +36,53 @@ const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): 
 // ============================================================
 router.get('/discover', async (req: any, res: Response) => {
   try {
-    const { search, userLat, userLng, checkIn, checkOut, page = '1', limit = '9' } = req.query;
+    const { search, userLat, userLng, checkIn, checkOut, maxPrice, amenity, page = '1', limit = '9' } = req.query;
     const pageNum = Math.max(1, parseInt(page as string, 10));
     const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10)));
     const skip = (pageNum - 1) * limitNum;
 
-    const where: any = { 
+    if (Boolean(checkIn) !== Boolean(checkOut)) {
+      return res.status(400).json({ success: false, message: 'Provide both check-in and check-out dates to search availability.' });
+    }
+    const checkInDate = checkIn ? new Date(`${String(checkIn)}T00:00:00.000Z`) : null;
+    const checkOutDate = checkOut ? new Date(`${String(checkOut)}T00:00:00.000Z`) : null;
+    if (checkInDate && checkOutDate && (
+      Number.isNaN(checkInDate.getTime()) || Number.isNaN(checkOutDate.getTime()) || checkOutDate <= checkInDate
+    )) {
+      return res.status(400).json({ success: false, message: 'Check-out must be after check-in.' });
+    }
+
+    const where: any = {
       isOnlineBookingEnabled: true,
+    };
+
+    const parsedMaxPrice = Number(maxPrice);
+    const roomTypeFilter: any = {
+      isActive: true,
       rooms: {
         some: {
           operationalStatus: 'Available',
-          ...(checkIn && checkOut ? {
+          ...(checkInDate && checkOutDate ? {
             reservationRooms: {
               none: {
-                reservation: {
-                  // 🌟 CHANGED: 'CheckedIn' → 'InHouse'
-                  status: { in: ['Confirmed', 'InHouse'] },
-                },
-                checkInDate: { lt: new Date(checkOut as string) },
-                checkOutDate: { gt: new Date(checkIn as string) },
+                reservation: { status: { in: ['Confirmed', 'InHouse'] } },
+                checkInDate: { lt: checkOutDate },
+                checkOutDate: { gt: checkInDate },
               }
             }
           } : {})
         }
       }
     };
+    if (Number.isFinite(parsedMaxPrice) && parsedMaxPrice > 0) {
+      roomTypeFilter.basePrice = { lte: parsedMaxPrice };
+    }
+    if (amenity && String(amenity).trim()) {
+      roomTypeFilter.amenities = {
+        some: { amenity: { name: { equals: String(amenity).trim(), mode: 'insensitive' } } }
+      };
+    }
+    where.roomTypes = { some: roomTypeFilter };
 
     if (search && String(search).trim() !== '') {
       const searchTerm = String(search).trim();
@@ -80,6 +102,7 @@ router.get('/discover', async (req: any, res: Response) => {
       skip,
       take: limitNum,
       select: {
+        propertyId: true,
         propertyCode: true,
         propertyName: true,
         address: true,
@@ -90,9 +113,13 @@ router.get('/discover', async (req: any, res: Response) => {
         country: true,
         publicDescription: true,
         coverImage: true,
+        galleryImages: true,
+        primaryPhone: true,
+        primaryPhoneWhatsappOnly: true,
         latitude: true,
         longitude: true,
         roomTypes: {
+          where: roomTypeFilter,
           select: { basePrice: true },
           orderBy: { basePrice: 'asc' },
           take: 1
@@ -103,7 +130,7 @@ router.get('/discover', async (req: any, res: Response) => {
       }
     });
 
-    let formatted = properties.map(p => {
+    let formatted = await Promise.all(properties.map(async p => {
       let distanceText: string | null = null;
       let distanceKm = Number.POSITIVE_INFINITY;
 
@@ -118,6 +145,23 @@ router.get('/discover', async (req: any, res: Response) => {
         distanceText = km < 1 ? `${Math.round(km * 1000)} m away` : `${km.toFixed(1)} km away`;
       }
 
+      let availableRooms: number | null = null;
+      if (checkInDate && checkOutDate) {
+        availableRooms = await prisma.room.count({
+          where: {
+            propertyId: p.propertyId,
+            operationalStatus: 'Available',
+            reservationRooms: {
+              none: {
+                reservation: { status: { in: ['Confirmed', 'InHouse'] } },
+                checkInDate: { lt: checkOutDate },
+                checkOutDate: { gt: checkInDate },
+              }
+            }
+          }
+        });
+      }
+
       return {
         propertyCode: p.propertyCode,
         propertyName: p.propertyName,
@@ -129,17 +173,29 @@ router.get('/discover', async (req: any, res: Response) => {
         country: p.country,
         description: p.publicDescription,
         coverImage: p.coverImage,
+        galleryImages: Array.isArray(p.galleryImages) ? p.galleryImages : [],
+        primaryPhone: p.primaryPhone,
+        primaryPhoneWhatsappOnly: p.primaryPhoneWhatsappOnly,
         minPrice: p.roomTypes.length > 0 ? Number(p.roomTypes[0].basePrice) : 0,
-        rating: 4.5, 
+        availableRooms,
+        rating: null,
         distance: distanceText,
         distanceKm: distanceKm,
         amenities: p.amenities.map((a: any) => a.name)
       };
-    });
+    }));
 
     if (userLat && userLng) {
       formatted.sort((a, b) => a.distanceKm - b.distanceKm);
     }
+
+    const amenityOptions = await prisma.amenity.findMany({
+      where: { property: { isOnlineBookingEnabled: true } },
+      select: { name: true },
+      distinct: ['name'],
+      orderBy: { name: 'asc' },
+      take: 30,
+    });
 
     return res.json({ 
       success: true, 
@@ -148,7 +204,8 @@ router.get('/discover', async (req: any, res: Response) => {
         total,
         page: pageNum,
         limit: limitNum,
-        totalPages: Math.ceil(total / limitNum)
+        totalPages: Math.ceil(total / limitNum),
+        amenities: amenityOptions.map(item => item.name),
       } 
     });
   } catch (error: any) {
@@ -246,7 +303,7 @@ router.get('/:propertyCode', async (req: any, res: Response) => {
         propertyId: true, propertyCode: true, propertyName: true, businessName: true,
         coverImage: true, galleryImages: true, publicDescription: true, cancellationPolicy: true,
         houseRules: true, taxPercentage: true, checkInTime: true, checkOutTime: true,
-        address: true, city: true, country: true, primaryPhone: true, primaryEmail: true,
+        address: true, city: true, country: true, primaryPhone: true, primaryPhoneWhatsappOnly: true, primaryEmail: true,
       }
     });
     return res.json({ success: true, data: property });
@@ -450,8 +507,9 @@ router.post('/:propertyCode/payments/initialize', async (req: any, res: Response
       where: { propertyCode },
       select: { propertyId: true, paystackSecretKey: true, currency: true }
     });
+    const paystackSecretKey = property?.paystackSecretKey || process.env.PAYSTACK_SECRET_KEY;
 
-    if (!property?.paystackSecretKey) {
+    if (!property || !paystackSecretKey) {
       return res.status(400).json({ success: false, message: 'This hotel has not configured Mobile Money payments yet.' });
     }
 
@@ -470,7 +528,7 @@ router.post('/:propertyCode/payments/initialize', async (req: any, res: Response
       },
       {
         headers: {
-          Authorization: `Bearer ${property.paystackSecretKey}`,
+          Authorization: `Bearer ${paystackSecretKey}`,
           'Content-Type': 'application/json',
         },
       }
@@ -493,15 +551,16 @@ router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Re
       where: { propertyCode },
       select: { propertyId: true, paystackSecretKey: true }
     });
+    const paystackSecretKey = property?.paystackSecretKey || process.env.PAYSTACK_SECRET_KEY;
 
-    if (!property?.paystackSecretKey) {
+    if (!property || !paystackSecretKey) {
       return res.status(400).json({ success: false, message: 'Property Paystack configuration not found' });
     }
 
     const response = await axios.get(
       `https://api.paystack.co/transaction/verify/${reference}`,
       {
-        headers: { Authorization: `Bearer ${property.paystackSecretKey}` }
+        headers: { Authorization: `Bearer ${paystackSecretKey}` }
       }
     );
 

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Calendar, MapPin, Phone, Mail, Tag, Loader2, ChevronRight, ChevronLeft,
-  Wifi, Coffee, Car, Utensils, ShieldCheck, Sparkles, Users
+  Wifi, Coffee, Car, Utensils, ShieldCheck, Sparkles, Users, MessageCircle
 } from 'lucide-react';
 import api from '../lib/axios';
 import PublicNavbar from '../components/public/PublicNavbar';
@@ -24,6 +24,12 @@ const fetchRooms = async ({ propertyCode, checkIn, checkOut, page }) => {
   return res.data;
 };
 
+const toWhatsAppNumber = (phone) => {
+  const digits = String(phone ?? '').replace(/\D/g, '');
+  if (!digits) return '';
+  return digits.startsWith('0') ? `233${digits.slice(1)}` : digits.startsWith('233') ? digits : `233${digits}`;
+};
+
 export default function PublicHotelPage() {
   const { propertyCode } = useParams();
   const navigate = useNavigate();
@@ -35,6 +41,7 @@ tomorrow.setDate(tomorrow.getDate() + 1);
 const [checkIn, setCheckIn] = useState(today.toISOString().split('T')[0]); // ✅ Default to today
 const [checkOut, setCheckOut] = useState(tomorrow.toISOString().split('T')[0]); // ✅ Default to tomorrow
 const [currentPage, setCurrentPage] = useState(1);
+const [activePhoto, setActivePhoto] = useState(0);
 
   // Reset to page 1 whenever dates change
   useEffect(() => {
@@ -105,27 +112,56 @@ const [currentPage, setCurrentPage] = useState(1);
 
   // Format today's date for the min attribute on date inputs
   const minDate = today.toISOString().split('T')[0];
+  const propertyPhotos = [...new Set([property.coverImage, ...(Array.isArray(property.galleryImages) ? property.galleryImages : [])].filter(Boolean))].slice(0, 3);
+  const selectedPhoto = propertyPhotos[activePhoto] || propertyPhotos[0];
+  const whatsappNumber = toWhatsAppNumber(property.primaryPhone);
+  const contactHref = property.primaryPhone
+    ? property.primaryPhoneWhatsappOnly
+      ? (whatsappNumber ? `https://wa.me/${whatsappNumber}` : null)
+      : `tel:${property.primaryPhone}`
+    : property.primaryEmail
+      ? `mailto:${property.primaryEmail}`
+      : null;
+  const contactLabel = property.primaryPhoneWhatsappOnly && property.primaryPhone
+    ? 'WhatsApp hotel'
+    : property.primaryPhone
+      ? 'Call hotel'
+      : 'Email hotel';
 
   return (
     <div className="min-h-screen bg-background">
       <PublicNavbar />
 
       {/* 1. Hero Section with Gradient Overlay */}
-      <div className="relative h-[400px] w-full bg-secondary-900">
-        {property.coverImage ? (
-          <img src={property.coverImage} alt={property.propertyName} className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-primary-600 to-secondary-900" />
-        )}
-        {/* Gradient Overlay for text readability */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 text-text-inverted">
-          <h1 className="text-4xl md:text-5xl font-bold mb-3 drop-shadow-lg">{property.propertyName}</h1>
-          <div className="flex items-center gap-2 text-lg opacity-90 drop-shadow-md">
-            <MapPin size={20} /> {property.city}, {property.country}
+      <section className="bg-secondary-900 p-3 sm:p-5">
+        <div className={`mx-auto grid max-w-7xl gap-2 overflow-hidden rounded-2xl ${propertyPhotos.length > 1 ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1'}`}>
+          <div className={`relative h-[300px] bg-gradient-to-br from-primary-700 to-secondary-900 sm:h-[420px] ${propertyPhotos.length > 1 ? 'md:col-span-2' : ''}`}>
+            {selectedPhoto && <img src={selectedPhoto} alt={`${property.propertyName} — photo ${activePhoto + 1}`} className="h-full w-full object-cover" />}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+            <div className="absolute inset-x-0 bottom-0 p-5 text-white sm:p-8">
+              <h1 className="mb-2 text-3xl font-bold drop-shadow-lg sm:text-5xl">{property.propertyName}</h1>
+              <div className="flex items-center gap-2 text-base opacity-95 drop-shadow-md sm:text-lg"><MapPin size={19} /> {[property.area, property.city, property.region].filter(Boolean).join(', ') || property.country}</div>
+              {contactHref && (
+                <a href={contactHref} target={property.primaryPhoneWhatsappOnly && property.primaryPhone ? '_blank' : undefined} rel={property.primaryPhoneWhatsappOnly && property.primaryPhone ? 'noopener noreferrer' : undefined} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 shadow-lg transition hover:bg-primary-50">
+                  {property.primaryPhoneWhatsappOnly && property.primaryPhone ? <MessageCircle size={17} /> : property.primaryPhone ? <Phone size={17} /> : <Mail size={17} />}
+                  {contactLabel}
+                </a>
+              )}
+            </div>
+            {propertyPhotos.length > 1 && <span className="absolute right-3 top-3 rounded-full bg-black/55 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm">{activePhoto + 1} / {propertyPhotos.length}</span>}
           </div>
+          {propertyPhotos.length > 1 && (
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-1 md:grid-rows-2">
+              {propertyPhotos.map((photo, index) => index !== activePhoto && (
+                <button key={photo} type="button" onClick={() => setActivePhoto(index)} aria-label={`View property photo ${index + 1}`} className="group relative h-36 overflow-hidden bg-secondary-800 sm:h-[208px]">
+                  <img src={photo} alt={`${property.propertyName} — photo ${index + 1}`} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
+                  <span className="absolute inset-0 bg-black/10 transition group-hover:bg-black/0" />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-      </div>
+      </section>
 
       {/* 2. Floating Search Bar */}
       <div className="max-w-5xl mx-auto px-4 -mt-8 relative z-10">
@@ -176,10 +212,17 @@ const [currentPage, setCurrentPage] = useState(1);
             </h3>
             <div className="space-y-3 text-sm text-text-muted">
               {property.primaryPhone && (
-                <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-secondary-50 transition">
-                  <Phone size={16} className="text-primary-600 flex-shrink-0" /> 
-                  <span className="font-medium text-text">{property.primaryPhone}</span>
-                </div>
+                property.primaryPhoneWhatsappOnly ? (
+                  <a href={`https://wa.me/${whatsappNumber}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 rounded-lg bg-green-50 p-3 text-green-800 transition hover:bg-green-100">
+                    <MessageCircle size={18} className="flex-shrink-0" />
+                    <span><span className="block font-semibold">WhatsApp only</span><span className="text-xs">{property.primaryPhone}</span></span>
+                  </a>
+                ) : (
+                  <a href={`tel:${property.primaryPhone}`} className="flex items-center gap-3 rounded-lg p-2 transition hover:bg-secondary-50">
+                    <Phone size={16} className="flex-shrink-0 text-primary-600" />
+                    <span className="font-medium text-text">{property.primaryPhone}</span>
+                  </a>
+                )
               )}
               {property.primaryEmail && (
                 <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-secondary-50 transition">
@@ -276,11 +319,7 @@ const [currentPage, setCurrentPage] = useState(1);
                     </span>
                     <span className="w-1 h-1 rounded-full bg-border hidden sm:block" />
                     {/* Professional Availability Badge */}
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold border ${
-                      room.availableRooms > 0 
-                        ? 'bg-success-50 text-success-700 border-success-200' 
-                        : 'bg-danger-50 text-danger-700 border-danger-200'
-                    }`}>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold border bg-rose-50 text-rose-700 border-rose-200">
                       <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
                       {room.availableRooms} {room.availableRooms === 1 ? 'room' : 'rooms'} available
                     </span>

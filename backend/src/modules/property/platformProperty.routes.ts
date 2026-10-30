@@ -11,6 +11,17 @@ const parsePropertyId = (value: string | string[]) => {
   return propertyId;
 };
 
+const toClientProperty = (property: any) => {
+  if (!property) return property;
+  const { paystackSecretKey, ...safeProperty } = property;
+  return {
+    ...safeProperty,
+    hasPaystackSecretKey: Boolean(paystackSecretKey),
+    usesPlatformPaystackKey: !paystackSecretKey && Boolean(process.env.PAYSTACK_SECRET_KEY),
+    paystackMode: (paystackSecretKey || process.env.PAYSTACK_SECRET_KEY)?.startsWith('sk_test_') ? 'test' : (paystackSecretKey || process.env.PAYSTACK_SECRET_KEY) ? 'live' : null,
+  };
+};
+
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const page = Math.max(1, Number.parseInt(String(req.query.page || '1'), 10) || 1);
@@ -19,7 +30,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const result = await propertyService.getPlatformProperties(page, limit, search);
     return res.json({
       success: true,
-      data: result.properties,
+      data: result.properties.map(toClientProperty),
       pagination: { page: result.page, limit: result.limit, total: result.total, totalPages: Math.ceil(result.total / result.limit) },
       stats: { total: result.total, active: result.active, trials: result.trials },
     });
@@ -31,7 +42,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const property = await propertyService.createProperty(req.body);
-    return res.status(201).json({ success: true, data: property });
+    return res.status(201).json({ success: true, data: toClientProperty(property) });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });
   }
@@ -40,7 +51,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const property = await propertyService.updateProperty(parsePropertyId(req.params.id), req.body);
-    return res.json({ success: true, data: property });
+    return res.json({ success: true, data: toClientProperty(property) });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });
   }

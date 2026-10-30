@@ -11,6 +11,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
+    "prisma:seed-demo": "ts-node --transpile-only prisma/seed-demo-hotels.ts",
     "prisma:bootstrap-platform-admin": "ts-node --transpile-only scripts/bootstrapPlatformAdmin.ts",
     "prisma:reset": "prisma migrate reset --force",
     "prisma:seed": "ts-node --transpile-only prisma/seed.ts",

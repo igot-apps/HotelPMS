@@ -32,6 +32,7 @@ export default function PlatformPropertiesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['platformProperties'] });
       queryClient.invalidateQueries({ queryKey: ['properties'] });
+      queryClient.invalidateQueries({ queryKey: ['publicDiscover'] });
       toast.success(editingProperty ? 'Property updated.' : 'Property created.');
       closeModal();
     },

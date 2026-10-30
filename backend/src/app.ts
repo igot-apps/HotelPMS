@@ -40,7 +40,7 @@ app.use('/api/paystack/webhooks/platform', express.raw({ type: 'application/json
 app.use('/api/paystack/webhooks/guest-bookings', express.raw({ type: 'application/json' }));
 
 // Standard JSON parsing for everything else
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Logging
