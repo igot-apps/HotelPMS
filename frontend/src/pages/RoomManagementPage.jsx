@@ -392,7 +392,6 @@ function RoomModal({ room, roomTypes, propertyId, onClose, onSave, isLoading }) 
     floor: room?.floor || 1,
     operationalStatus: room?.operationalStatus || 'Available',
     housekeepingStatus: room?.housekeepingStatus || 'Clean',
-    notes: room?.notes || '',
   });
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -447,10 +446,6 @@ function RoomModal({ room, roomTypes, propertyId, onClose, onSave, isLoading }) 
                 <option value="Dirty">Dirty</option>
               </select>
             </div>
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-text mb-1.5">Notes</label>
-            <textarea name="notes" value={formData.notes} onChange={handleChange} rows="2" className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 resize-none" />
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t border-border">
             <button type="button" onClick={onClose} className="px-5 py-2.5 text-sm font-semibold text-text bg-surface border border-border rounded-lg hover:bg-secondary-50">Cancel</button>

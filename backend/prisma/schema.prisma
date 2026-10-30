@@ -69,7 +69,10 @@ model Property {
 
   propertyType           String    @db.VarChar(50)
   address                String?   @db.Text
+  area                   String?   @db.VarChar(150)
   city                   String?   @db.VarChar(100)
+  region                 String?   @db.VarChar(100)
+  ghanaPostAddress       String?   @db.VarChar(20)
   country                String    @db.VarChar(100) 
   latitude               Float?
   longitude              Float?

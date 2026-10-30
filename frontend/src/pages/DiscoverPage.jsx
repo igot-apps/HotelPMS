@@ -411,10 +411,14 @@ export default function DiscoverPage() {
                       <h3 className="text-lg font-bold text-text group-hover:text-primary-600 transition-colors">
                         {hotel.propertyName || 'Unnamed Property'}
                       </h3>
-                      {hotel.city && (
+                      {(hotel.area || hotel.city || hotel.region || hotel.ghanaPostAddress) && (
                         <p className="text-sm text-text-muted flex items-center gap-1 mt-1">
-                          <MapPin size={14} /> {hotel.city}{hotel.country ? `, ${hotel.country}` : ''}
+                          <MapPin size={14} className="shrink-0" />
+                          <span>{[hotel.area, hotel.city, hotel.region].filter(Boolean).join(', ')}{hotel.country ? ` · ${hotel.country}` : ''}</span>
                         </p>
+                      )}
+                      {hotel.ghanaPostAddress && (
+                        <p className="text-xs text-text-muted mt-1 ml-5">GhanaPost GPS: {hotel.ghanaPostAddress}</p>
                       )}
                     </div>
                     {hotel.description && (

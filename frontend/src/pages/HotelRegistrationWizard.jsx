@@ -4,7 +4,13 @@ import { useNavigate, Link } from 'react-router-dom';
 import { registerHotel } from '../api/auth';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
-import { Building2, User, ArrowRight, ArrowLeft, Loader2, CheckCircle2, Sparkles } from 'lucide-react';
+import { Building2, User, ArrowRight, ArrowLeft, Loader2, CheckCircle2, Sparkles, MapPin, LocateFixed } from 'lucide-react';
+
+const GHANA_REGIONS = [
+  'Ahafo', 'Ashanti', 'Bono', 'Bono East', 'Central', 'Eastern', 'Greater Accra',
+  'North East', 'Northern', 'Oti', 'Savannah', 'Upper East', 'Upper West',
+  'Volta', 'Western', 'Western North',
+];
 
 export default function HotelRegistrationWizard() {
   const navigate = useNavigate();
@@ -17,11 +23,18 @@ export default function HotelRegistrationWizard() {
     slug: '',
     email: '',
     phone: '',
+    area: '',
+    city: '',
+    region: '',
+    ghanaPostAddress: '',
+    latitude: null,
+    longitude: null,
     // Step 2: Owner Details
     ownerName: '',
     ownerEmail: '',
     password: '',
   });
+  const [locationState, setLocationState] = useState('idle');
 
   const mutation = useMutation({
     mutationFn: registerHotel,
@@ -59,6 +72,24 @@ export default function HotelRegistrationWizard() {
   };
 
   const prevStep = () => setStep(1);
+
+  const captureHotelLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationState('unsupported');
+      return;
+    }
+    setLocationState('loading');
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setFormData((prev) => ({ ...prev, latitude: coords.latitude, longitude: coords.longitude }));
+        setLocationState('captured');
+      },
+      (error) => {
+        setLocationState(error.code === error.PERMISSION_DENIED ? 'denied' : 'failed');
+      },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+    );
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -125,6 +156,51 @@ export default function HotelRegistrationWizard() {
                     <input type="tel" name="phone" value={formData.phone} onChange={handleChange} required
                       className="w-full px-4 py-3 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20" 
                     />
+                  </div>
+                </div>
+
+                <div className="border-t border-border pt-5 space-y-4">
+                  <div>
+                    <h2 className="text-sm font-bold text-text flex items-center gap-2"><MapPin size={16} className="text-primary-600" /> Hotel location</h2>
+                    <p className="text-xs text-text-muted mt-1">Add the Ghana location guests will recognize. GPS is optional and can be captured while you are at the hotel.</p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-text mb-1.5">Region *</label>
+                      <select name="region" value={formData.region} onChange={handleChange} required className="w-full px-4 py-3 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500">
+                        <option value="">Select region</option>
+                        {GHANA_REGIONS.map((region) => <option key={region} value={region}>{region}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-text mb-1.5">City / Town *</label>
+                      <input type="text" name="city" value={formData.city} onChange={handleChange} required placeholder="e.g. Accra" className="w-full px-4 py-3 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-text mb-1.5">Area / Neighbourhood *</label>
+                      <input type="text" name="area" value={formData.area} onChange={handleChange} required placeholder="e.g. Osu" className="w-full px-4 py-3 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-text mb-1.5">GhanaPost GPS address <span className="font-normal text-text-muted">(optional)</span></label>
+                    <input type="text" name="ghanaPostAddress" value={formData.ghanaPostAddress} onChange={handleChange} placeholder="e.g. GA-123-4567" maxLength={20} className="w-full px-4 py-3 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500" />
+                    <p className="text-xs text-text-muted mt-1">Saved as a guest-facing address. We do not send it to a third-party geocoding service.</p>
+                  </div>
+                  <div className="rounded-xl border border-border bg-secondary-50/50 p-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-text">Pin the hotel using this device</p>
+                        <p className="text-xs text-text-muted mt-1">For the best result, allow location access while you are at the hotel.</p>
+                      </div>
+                      <button type="button" onClick={captureHotelLocation} disabled={locationState === 'loading'} className="inline-flex shrink-0 items-center justify-center gap-2 px-4 py-2.5 bg-surface border border-border text-text font-semibold rounded-lg hover:bg-secondary-50 disabled:opacity-60">
+                        {locationState === 'loading' ? <Loader2 className="animate-spin" size={16} /> : <LocateFixed size={16} />}
+                        {locationState === 'loading' ? 'Getting location…' : locationState === 'captured' ? 'Update GPS pin' : 'Use my current location'}
+                      </button>
+                    </div>
+                    {locationState === 'captured' && <p role="status" className="mt-3 text-sm font-medium text-primary-700">Hotel location saved from this device.</p>}
+                    {locationState === 'denied' && <p role="alert" className="mt-3 text-sm text-warning-700">Location access was blocked. Enable it in your browser settings, or continue with the address details above.</p>}
+                    {locationState === 'unsupported' && <p role="alert" className="mt-3 text-sm text-warning-700">This browser cannot provide GPS. You can continue with the address details above.</p>}
+                    {locationState === 'failed' && <p role="alert" className="mt-3 text-sm text-warning-700">Could not get a GPS fix. Check device location settings or try again at the hotel.</p>}
                   </div>
                 </div>
 

@@ -87,10 +87,15 @@ export default function Sidebar({ isOpen, onClose }) {
   return (
     <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-secondary-900 text-secondary-300 flex flex-col transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
       <div className="p-6 border-b border-secondary-700 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-text-inverted">🏨 Hotel PMS</h1>
+        <NavLink
+          to="/dashboard"
+          onClick={onClose}
+          aria-label="Hotel PMS dashboard"
+          className="group rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
+        >
+          <h1 className="text-xl font-bold text-text-inverted transition-colors group-hover:text-primary-300">🏨 Hotel PMS</h1>
           <p className="text-xs text-secondary-400 mt-1">Management System</p>
-        </div>
+        </NavLink>
         <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary-800 text-secondary-400 transition md:hidden">
           <X size={20} />
         </button>

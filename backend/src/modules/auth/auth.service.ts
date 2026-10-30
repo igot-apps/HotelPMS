@@ -205,6 +205,12 @@ export const registerNewHotel = async (data: {
   slug: string;
   email: string;
   phone: string;
+  area: string;
+  city: string;
+  region: string;
+  ghanaPostAddress?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   ownerName: string;
   ownerEmail: string;
   password: string;
@@ -233,6 +239,12 @@ export const registerNewHotel = async (data: {
         propertyType: 'Hotel',
         primaryEmail: data.email,
         primaryPhone: data.phone,
+        area: data.area,
+        city: data.city,
+        region: data.region,
+        ghanaPostAddress: data.ghanaPostAddress || null,
+        latitude: data.latitude ?? null,
+        longitude: data.longitude ?? null,
         country: 'Ghana', 
         currency: 'GHS',
         timezone: 'Africa/Accra',

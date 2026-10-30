@@ -58,10 +58,8 @@ export const getGuests = async (req: AuthRequest, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 10;
     const searchTerm = req.query.search as string | undefined;
     
-    // ✅ Use propertyId from user token (or query if manager overriding)
-    const propertyId = req.query.propertyId 
-      ? parseInt(req.query.propertyId as string) 
-      : req.user?.propertyId;
+    // Keep the directory scoped to the authenticated staff member's property.
+    const propertyId = req.user?.propertyId;
 
     if (!propertyId) {
       return res.status(400).json({ success: false, message: 'Property ID is required' });
@@ -203,10 +201,8 @@ export const searchGuests = async (req: AuthRequest, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     
-    // ✅ Use propertyId from user token
-    const propertyId = req.query.propertyId 
-      ? parseInt(req.query.propertyId as string) 
-      : req.user?.propertyId;
+    // Keep guest searches scoped to the authenticated staff member's property.
+    const propertyId = req.user?.propertyId;
 
     if (!propertyId) {
       return res.status(400).json({ success: false, message: 'Property ID is required' });

@@ -33,7 +33,14 @@ export const findGuests = async (
   limit: number = 10
 ) => {
   const skip = (page - 1) * limit;
+  const take = skip + limit;
   const where: any = { propertyId, isActive: true };
+  const onlineGuestWhere: any = {
+    isActive: true,
+    reservations: {
+      some: { propertyId },
+    },
+  };
 
   if (searchTerm) {
     where.OR = [
@@ -41,31 +48,91 @@ export const findGuests = async (
       { phone: { contains: searchTerm, mode: 'insensitive' } },
       { idNumber: { contains: searchTerm, mode: 'insensitive' } },
     ];
+    onlineGuestWhere.OR = [
+      { fullName: { contains: searchTerm, mode: 'insensitive' } },
+      { phone: { contains: searchTerm, mode: 'insensitive' } },
+      { email: { contains: searchTerm, mode: 'insensitive' } },
+    ];
   }
 
-  const [guests, total] = await Promise.all([
+  const bookingHistory = { propertyId };
+  const [propertyGuests, onlineGuests, propertyGuestTotal, onlineGuestTotal] = await Promise.all([
     prisma.propertyGuest.findMany({
       where,
-      skip,
-      take: limit,
       orderBy: { fullName: 'asc' },
+      take,
       include: {
         _count: {
           select: {
             reservations: {
-              where: {
-                // 🌟 CHANGED: Updated to new enum values
-                status: { in: ['Confirmed', 'InHouse', 'Completed'] },
-              },
+              where: bookingHistory,
             },
           },
+        },
+        reservations: {
+          where: bookingHistory,
+          orderBy: { checkInDate: 'desc' },
+          take: 1,
+          select: { checkInDate: true },
+        },
+      },
+    }),
+    prisma.platformGuest.findMany({
+      where: onlineGuestWhere,
+      orderBy: { fullName: 'asc' },
+      take,
+      select: {
+        guestId: true,
+        fullName: true,
+        phone: true,
+        email: true,
+        createdAt: true,
+        _count: {
+          select: {
+            reservations: {
+              where: bookingHistory,
+            },
+          },
+        },
+        reservations: {
+          where: bookingHistory,
+          orderBy: { checkInDate: 'desc' },
+          take: 1,
+          select: { checkInDate: true },
         },
       },
     }),
     prisma.propertyGuest.count({ where }),
-  ]);
+    prisma.platformGuest.count({ where: onlineGuestWhere }),
+  ]) as [any[], any[], number, number];
 
-  return { guests, total, page, limit };
+  const guests = [
+    ...propertyGuests.map((guest) => ({
+      ...guest,
+      guestType: 'property',
+      dateRegistered: guest.createdAt,
+      totalBookings: guest._count.reservations,
+      lastStayDate: guest.reservations[0]?.checkInDate ?? null,
+    })),
+    ...onlineGuests.map((guest) => ({
+      ...guest,
+      guestType: 'online',
+      dateRegistered: guest.createdAt,
+      idNumber: null,
+      city: null,
+      country: null,
+      totalBookings: guest._count.reservations,
+      lastStayDate: guest.reservations[0]?.checkInDate ?? null,
+    })),
+  ].sort((a, b) => a.fullName.localeCompare(b.fullName, undefined, { sensitivity: 'base' })
+    || a.guestType.localeCompare(b.guestType));
+
+  return {
+    guests: guests.slice(skip, skip + limit),
+    total: propertyGuestTotal + onlineGuestTotal,
+    page,
+    limit,
+  };
 };
 
 export const findGuestById = async (guestId: number) => {

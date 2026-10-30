@@ -66,7 +66,9 @@ router.get('/discover', async (req: any, res: Response) => {
       const searchTerm = String(search).trim();
       where.OR = [
         { propertyName: { contains: searchTerm, mode: 'insensitive' } },
+        { area: { contains: searchTerm, mode: 'insensitive' } },
         { city: { contains: searchTerm, mode: 'insensitive' } },
+        { region: { contains: searchTerm, mode: 'insensitive' } },
         { country: { contains: searchTerm, mode: 'insensitive' } },
       ];
     }
@@ -80,7 +82,11 @@ router.get('/discover', async (req: any, res: Response) => {
       select: {
         propertyCode: true,
         propertyName: true,
+        address: true,
+        area: true,
         city: true,
+        region: true,
+        ghanaPostAddress: true,
         country: true,
         publicDescription: true,
         coverImage: true,
@@ -98,10 +104,10 @@ router.get('/discover', async (req: any, res: Response) => {
     });
 
     let formatted = properties.map(p => {
-      let distanceText = 'Distance unknown';
-      let distanceKm = 99999;
+      let distanceText: string | null = null;
+      let distanceKm = Number.POSITIVE_INFINITY;
 
-      if (userLat && userLng && p.latitude && p.longitude) {
+      if (userLat && userLng && p.latitude !== null && p.longitude !== null) {
         const km = getDistanceKm(
           parseFloat(userLat as string), 
           parseFloat(userLng as string), 
@@ -115,7 +121,11 @@ router.get('/discover', async (req: any, res: Response) => {
       return {
         propertyCode: p.propertyCode,
         propertyName: p.propertyName,
+        address: p.address,
+        area: p.area,
         city: p.city,
+        region: p.region,
+        ghanaPostAddress: p.ghanaPostAddress,
         country: p.country,
         description: p.publicDescription,
         coverImage: p.coverImage,

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getGuests, createGuest, updateGuest, deleteGuest } from '../api/guests';
 import GuestModal from '../components/guests/GuestModal';
-import { Search, Plus, Edit2, Trash2, Users, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Users, AlertCircle, ChevronLeft, ChevronRight, Building2, Globe2 } from 'lucide-react';
 
 export default function GuestsPage() {
   const queryClient = useQueryClient();
@@ -66,13 +66,19 @@ export default function GuestsPage() {
     }
   };
 
+  const formatDate = (value) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString();
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-text tracking-tight">Guest Directory</h1>
-          <p className="text-text-muted text-sm mt-1">Manage your hotel guests and their profiles.</p>
+          <p className="text-text-muted text-sm mt-1">Hotel profiles and guests with online reservations at your property.</p>
         </div>
         <button onClick={openAddModal} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm">
           <Plus size={16} /> Add New Guest
@@ -114,13 +120,15 @@ export default function GuestsPage() {
                   <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Guest</th>
                   <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Contact</th>
                   <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">ID / Location</th>
-                  <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Stay History</th>
+                  <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Booking History</th>
                   <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {guests.map((guest) => (
-                  <tr key={guest.guestId} className="border-b border-border last:border-0 hover:bg-secondary-50/50 transition-colors">
+                {guests.map((guest) => {
+                  const isOnlineGuest = guest.guestType === 'online';
+                  return (
+                  <tr key={`${guest.guestType || 'property'}-${guest.guestId}`} className="border-b border-border last:border-0 hover:bg-secondary-50/50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-sm">
@@ -128,7 +136,11 @@ export default function GuestsPage() {
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-text">{guest.fullName}</p>
-                          <p className="text-xs text-text-muted">Joined {new Date(guest.dateRegistered).toLocaleDateString()}</p>
+                          <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${isOnlineGuest ? 'bg-blue-50 text-blue-700' : 'bg-secondary-100 text-secondary-700'}`}>
+                            {isOnlineGuest ? <Globe2 size={12} /> : <Building2 size={12} />}
+                            {isOnlineGuest ? 'Online booking' : 'Hotel profile'}
+                          </span>
+                          <p className="mt-1 text-xs text-text-muted">Added {formatDate(guest.dateRegistered || guest.createdAt)}</p>
                         </div>
                       </div>
                     </td>
@@ -137,25 +149,31 @@ export default function GuestsPage() {
                       <p className="text-xs text-text-muted">{guest.email || 'No email'}</p>
                     </td>
                     <td className="px-6 py-4 text-sm text-text-muted">
-                      <p>{guest.idNumber || '-'}</p>
-                      <p className="text-xs">{guest.city || '-'}, {guest.country || '-'}</p>
+                      <p>{guest.idNumber || '—'}</p>
+                      <p className="text-xs">{guest.city || '—'}{guest.country ? `, ${guest.country}` : ''}</p>
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-sm font-semibold text-text">{guest.totalStays || 0} Stays</p>
-                      <p className="text-xs text-text-muted">Last: {guest.lastStayDate ? new Date(guest.lastStayDate).toLocaleDateString() : 'Never'}</p>
+                      <p className="text-sm font-semibold text-text">{guest.totalBookings || 0} {guest.totalBookings === 1 ? 'booking' : 'bookings'}</p>
+                      <p className="text-xs text-text-muted">Latest check-in: {formatDate(guest.lastStayDate) === '—' ? 'None' : formatDate(guest.lastStayDate)}</p>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => openEditModal(guest)} className="p-2 rounded-lg hover:bg-primary-50 text-primary-600 transition" title="Edit">
-                          <Edit2 size={16} />
-                        </button>
-                        <button onClick={() => handleDelete(guest)} className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition" title="Deactivate">
-                          <Trash2 size={16} />
-                        </button>
+                        {isOnlineGuest ? (
+                          <span className="text-xs text-text-muted">Guest-managed profile</span>
+                        ) : (
+                          <>
+                            <button onClick={() => openEditModal(guest)} className="p-2 rounded-lg hover:bg-primary-50 text-primary-600 transition" title="Edit">
+                              <Edit2 size={16} />
+                            </button>
+                            <button onClick={() => handleDelete(guest)} className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition" title="Deactivate">
+                              <Trash2 size={16} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
-                ))}
+                );})}
               </tbody>
             </table>
           </div>

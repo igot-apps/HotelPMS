@@ -122,14 +122,30 @@ export const logout = async (_req: AuthRequest, res: Response) => {
 
 export const registerHotel = async (req: Request, res: Response) => {
   try {
-    const { hotelName, slug, email, phone, ownerName, ownerEmail, password } = req.body;
+    const {
+      hotelName, slug, email, phone, area, city, region, ghanaPostAddress,
+      latitude, longitude, ownerName, ownerEmail, password,
+    } = req.body;
 
     // Basic validation
-    if (!hotelName || !slug || !ownerEmail || !password) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Hotel name, slug, owner email, and password are required.' 
+    if (!hotelName || !slug || !ownerEmail || !password || !area || !city || !region) {
+      return res.status(400).json({
+        success: false,
+        message: 'Hotel name, URL, location area, city, region, owner email, and password are required.'
       });
+    }
+
+    const hasLatitude = latitude !== undefined && latitude !== null && latitude !== '';
+    const hasLongitude = longitude !== undefined && longitude !== null && longitude !== '';
+    if (hasLatitude !== hasLongitude) {
+      return res.status(400).json({ success: false, message: 'Both GPS coordinates must be provided together.' });
+    }
+    const parsedLatitude = hasLatitude ? Number(latitude) : null;
+    const parsedLongitude = hasLongitude ? Number(longitude) : null;
+    if (hasLatitude && (parsedLatitude === null || parsedLongitude === null
+      || !Number.isFinite(parsedLatitude) || parsedLatitude < -90 || parsedLatitude > 90
+      || !Number.isFinite(parsedLongitude) || parsedLongitude < -180 || parsedLongitude > 180)) {
+      return res.status(400).json({ success: false, message: 'The captured GPS location is invalid. Please capture it again.' });
     }
 
     const result = await authService.registerNewHotel({
@@ -137,6 +153,12 @@ export const registerHotel = async (req: Request, res: Response) => {
       slug,
       email,
       phone,
+      area: String(area).trim(),
+      city: String(city).trim(),
+      region: String(region).trim(),
+      ghanaPostAddress: ghanaPostAddress ? String(ghanaPostAddress).trim() : undefined,
+      latitude: parsedLatitude,
+      longitude: parsedLongitude,
       ownerName,
       ownerEmail,
       password,
