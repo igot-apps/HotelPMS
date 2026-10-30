@@ -17,7 +17,10 @@ api.interceptors.request.use(
     // Public guest endpoints use their own token; never attach the hotel staff token there.
     const requestPath = new URL(config.url || '', config.baseURL || window.location.origin).pathname;
     const isPublicRequest = requestPath.startsWith('/public/');
-    const token = isPublicRequest ? null : useAuthStore.getState().accessToken;
+    const isGuestAuthRequest = requestPath.startsWith('/public/auth/');
+    const token = isPublicRequest
+      ? (isGuestAuthRequest ? null : localStorage.getItem('guestToken'))
+      : useAuthStore.getState().accessToken;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     } else if (isPublicRequest) {
@@ -46,7 +49,19 @@ api.interceptors.response.use(
       let toastMessage = backendMessage;
 
       if (status === 401) {
-        toastMessage = 'Your session has expired. Please log in again.';
+        const requestPath = new URL(error.config?.url || '', error.config?.baseURL || window.location.origin).pathname;
+        const isPublicRequest = requestPath.startsWith('/public/');
+        const guestToken = localStorage.getItem('guestToken');
+
+        if (isPublicRequest && guestToken) {
+          // The page handling the guest request will redirect to guest sign-in and show one message.
+          localStorage.removeItem('guestInfo');
+          localStorage.removeItem('guestToken');
+          window.dispatchEvent(new Event('guest-session-changed'));
+          error.guestSessionExpired = true;
+        } else if (!isPublicRequest) {
+          toastMessage = 'Your session has expired. Please log in again.';
+        }
         // Optional: trigger logout here
         // useAuthStore.getState().logout();
         // window.location.href = '/login';
@@ -72,8 +87,10 @@ api.interceptors.response.use(
         toastMessage = 'A server error occurred. Please try again later.';
       }
 
-      // Show the error toast
-      toast.error(toastMessage);
+      // Public pages present their own auth errors and expired-session state.
+      if (!(status === 401 && error.config && new URL(error.config.url || '', error.config.baseURL || window.location.origin).pathname.startsWith('/public/'))) {
+        toast.error(toastMessage);
+      }
       
     } else if (error.request) {
       // The request was made but no response was received (Network Error / Offline)

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '../lib/axios';
 import toast from 'react-hot-toast';
@@ -76,6 +76,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
 
 export default function PublicReservationsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [token, setToken] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 5;
@@ -89,7 +90,7 @@ export default function PublicReservationsPage() {
     }
   }, [navigate]);
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['guestReservations', currentPage],
     queryFn: async () => {
       const res = await api.get('/public/reservations', {
@@ -102,7 +103,20 @@ export default function PublicReservationsPage() {
       };
     },
     enabled: !!token,
+    retry: false,
   });
+
+  useEffect(() => {
+    if (error?.response?.status !== 401) return;
+
+    // The API interceptor clears an expired guest session. Return the guest to sign-in
+    // instead of leaving them on a broken reservations screen.
+    toast.error('Your guest session expired. Please sign in again.', { id: 'guest-session-expired' });
+    navigate('/public/auth', {
+      replace: true,
+      state: { from: `${location.pathname}${location.search}` },
+    });
+  }, [error, location.pathname, location.search, navigate]);
 
   // 🌟 FIX: Sort reservations so the newest (unpaid) ones appear at the top
   const reservations = (data?.reservations || []).sort((a, b) => {
