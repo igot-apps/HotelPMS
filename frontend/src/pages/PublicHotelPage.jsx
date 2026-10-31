@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useLayoutEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -53,6 +53,11 @@ const [activePhoto, setActivePhoto] = useState(0);
     queryKey: ['publicProperty', propertyCode],
     queryFn: () => fetchProperty(propertyCode),
   });
+
+  // Start each hotel visit at its gallery, including after the loading screen.
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [propertyCode, isLoadingProp]);
 
   const { data: roomsResponse, isLoading: isLoadingRooms } = useQuery({
     queryKey: ['publicRooms', propertyCode, checkIn, checkOut, currentPage],

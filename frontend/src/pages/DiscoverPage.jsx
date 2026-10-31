@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../lib/axios';
 import {
   Star, MapPin, Wifi, Coffee, Car, Utensils, Waves, Plane,
   Dumbbell, Mountain, Loader2, Building2, Search, CheckCircle2,
-  X, Navigation, Crosshair, Map, ChevronLeft, ChevronRight
+  X, Navigation, Crosshair, Map, ChevronLeft, ChevronRight, ArrowUp
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PublicNavbar from '../components/public/PublicNavbar';
@@ -125,6 +125,22 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
 
 export default function DiscoverPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const resultsRef = useRef(null);
+  const searchRef = useRef(null);
+  const [showBackToSearch, setShowBackToSearch] = useState(false);
+
+  useEffect(() => {
+    const updateVisibility = () => {
+      setShowBackToSearch(Boolean(searchRef.current && searchRef.current.getBoundingClientRect().bottom < 80));
+    };
+    updateVisibility();
+    window.addEventListener('scroll', updateVisibility, { passive: true });
+    window.addEventListener('resize', updateVisibility);
+    return () => {
+      window.removeEventListener('scroll', updateVisibility);
+      window.removeEventListener('resize', updateVisibility);
+    };
+  }, []);
   
   // Search states
   const [destination, setDestination] = useState(searchParams.get('search') || '');
@@ -234,6 +250,10 @@ export default function DiscoverPage() {
     // 🌟 Reset to page 1 when searching
     setCurrentPage(1);
     setIsSearching(true);
+    resultsRef.current?.scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+      block: 'start',
+    });
     setTimeout(() => setIsSearching(false), 500);
   };
 
@@ -279,7 +299,7 @@ export default function DiscoverPage() {
           </p>
 
           {/* 🌟 SEARCH FORM */}
-          <form onSubmit={handleSearch} className="max-w-6xl mx-auto">
+          <form ref={searchRef} onSubmit={handleSearch} className="max-w-6xl mx-auto scroll-mt-24">
             <div className="bg-surface rounded-2xl shadow-2xl p-3 sm:p-4 border border-border">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-3">
                 <div className="md:col-span-12 lg:col-span-5 relative">
@@ -344,7 +364,7 @@ export default function DiscoverPage() {
       </div>
 
       {/* 🌟 RESULTS SECTION */}
-      <div className="max-w-7xl mx-auto px-4 py-12">
+      <div ref={resultsRef} className="max-w-7xl mx-auto scroll-mt-20 px-4 py-12">
         {/* 🌟 SMOOTH GPS STATUS BANNERS */}
         {locationStatus === 'checking' && (
           <div className="mb-6 flex items-center gap-2 text-text-muted bg-surface border border-border rounded-xl p-3 w-fit">
@@ -533,6 +553,19 @@ export default function DiscoverPage() {
           </>
         )}
       </div>
+      <button
+        type="button"
+        aria-label="Back to search"
+        aria-hidden={!showBackToSearch}
+        tabIndex={showBackToSearch ? 0 : -1}
+        onClick={() => searchRef.current?.scrollIntoView({
+          behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+          block: 'start',
+        })}
+        className={`fixed bottom-6 right-5 z-40 inline-flex items-center gap-2 rounded-full border border-white/20 bg-primary-600 px-4 py-3 text-sm font-semibold text-white shadow-xl transition-all duration-300 hover:-translate-y-1 hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-300 motion-reduce:transition-none sm:right-8 ${showBackToSearch ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-4 opacity-0'}`}
+      >
+        <ArrowUp size={19} /> Back to search
+      </button>
     </div>
   );
 }
