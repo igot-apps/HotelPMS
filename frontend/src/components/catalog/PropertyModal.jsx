@@ -300,7 +300,12 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
             <div className="flex items-center justify-between p-4 bg-primary-50 border border-primary-100 rounded-lg mb-6">
               <div className="flex-1">
                 <label className="text-sm font-bold text-text">Accept Online Bookings</label>
-                <p className="text-xs text-text-muted mt-0.5">When enabled, your hotel will be visible and bookable on the public website.</p>
+                <p className="text-xs text-text-muted mt-0.5">Allow guests to discover your hotel and book available rooms on the public website.</p>
+                {formData.isOnlineBookingEnabled && (
+                  <p role="status" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                    If you have zero bookable rooms, your hotel will not appear on the public discovery page, even with online bookings enabled.
+                  </p>
+                )}
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" name="isOnlineBookingEnabled" checked={formData.isOnlineBookingEnabled} onChange={handleChange} className="sr-only peer" />

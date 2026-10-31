@@ -112,3 +112,6 @@ export const deleteProperty = async (propertyId: number) => {
   if (!property) throw new Error('Property not found');
   return propertyRepository.deleteProperty(propertyId);
 };
+
+export const permanentlyDeleteProperty = (propertyId: number, confirmationCode: string) =>
+  propertyRepository.permanentlyDeleteProperty(propertyId, confirmationCode);

@@ -2,6 +2,11 @@ import { Request, Response } from 'express';
 import * as userService from './user.service';
 import { AuthRequest } from '../../shared/middleware/auth.middleware';
 
+const safeUser = (user: any) => {
+  const { passwordHash, invitationTokenHash, ...safe } = user;
+  return safe;
+};
+
 const getParamId = (req: Request): number => {
   const id = req.params.id;
   if (typeof id !== 'string') throw new Error('Invalid ID parameter');
@@ -16,15 +21,14 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 10;
 
     // ✅ Use propertyId from user token (or query if overriding)
-    const propertyId = req.query.propertyId
-      ? parseInt(req.query.propertyId as string)
-      : req.user?.propertyId;
+    const propertyId = req.user?.propertyId;
+    if (!propertyId) return res.status(403).json({ success: false, message: 'Hotel account required.' });
 
     const result = await userService.getUsers(propertyId, page, limit);
 
     return res.status(200).json({
       success: true,
-      data: result.users,
+      data: result.users.map(safeUser),
       pagination: {
         page: result.page,
         limit: result.limit,
@@ -47,7 +51,7 @@ export const getUserById = async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ success: false, message: 'You do not have access to this user' });
     }
 
-    return res.status(200).json({ success: true, data: user });
+    return res.status(200).json({ success: true, data: safeUser(user) });
   } catch (error: any) {
     return res.status(404).json({ success: false, message: error.message });
   }
@@ -62,15 +66,9 @@ export const getRoles = async (_req: AuthRequest, res: Response) => {
   }
 };
 
-export const createUser = async (req: AuthRequest, res: Response) => {
+export const createUser = async (_req: AuthRequest, res: Response) => {
   try {
-    // ✅ Inject propertyId from token if not provided
-    if (req.user && !req.body.propertyId) {
-      req.body.propertyId = req.user.propertyId;
-    }
-
-    const newUser = await userService.createUser(req.body);
-    return res.status(201).json({ success: true, data: newUser });
+    return res.status(400).json({ success: false, message: 'Use staff invitations to add a receptionist.' });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });
   }
@@ -86,8 +84,14 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ success: false, message: 'You do not have access to this user' });
     }
 
-    const updatedUser = await userService.updateUser(userId, req.body);
-    return res.status(200).json({ success: true, data: updatedUser });
+    if (user.userId === req.user?.userId || user.role.roleName !== 'Receptionist') {
+      return res.status(403).json({ success: false, message: 'Only receptionist accounts can be managed here.' });
+    }
+    const updatedUser = await userService.updateUser(userId, {
+      fullName: req.body.fullName, username: req.body.username, email: req.body.email,
+      isActive: user.invitationPending ? false : req.body.isActive,
+    });
+    return res.status(200).json({ success: true, data: safeUser(updatedUser) });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });
   }
@@ -103,6 +107,9 @@ export const deactivateUser = async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ success: false, message: 'You do not have access to this user' });
     }
 
+    if (user.userId === req.user?.userId || user.role.roleName !== 'Receptionist') {
+      return res.status(403).json({ success: false, message: 'Only receptionist accounts can be managed here.' });
+    }
     await userService.deactivateUser(userId);
     return res.status(200).json({ success: true, message: 'User deactivated successfully' });
   } catch (error: any) {

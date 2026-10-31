@@ -7,6 +7,29 @@ import { getFrontendBaseUrl } from '../../shared/utils/frontend-url';
 
 const router = Router();
 
+const requireBookingGuest = async (req: any, res: Response, next: import('express').NextFunction) => {
+  try {
+    const header = req.headers.authorization;
+    if (!header?.startsWith('Bearer ')) throw new Error();
+    let payload: any;
+    try {
+      payload = jwt.verify(header.slice(7), process.env.JWT_SECRET || 'your-secret-key');
+    } catch (error) {
+      if (process.env.JWT_SECRET) throw error;
+      payload = jwt.verify(header.slice(7), 'your-super-secret-key');
+    }
+    const guestId = payload.type === 'platform_guest' ? payload.guestId
+      : payload.type === 'guest' ? payload.platformGuestId : null;
+    if (!Number.isSafeInteger(guestId)) throw new Error();
+    const guest = await prisma.platformGuest.findUnique({ where: { guestId } });
+    if (!guest?.isActive) throw new Error();
+    req.bookingGuest = guest;
+    next();
+  } catch {
+    res.status(401).json({ success: false, message: 'Please sign in as a guest to book and pay.' });
+  }
+};
+
 // 🌟 HELPER: Generate a short, easy-to-read confirmation code (e.g., "RES-8X9K2P")
 const generateConfirmationCode = (): string => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Omitted 0, O, 1, I to avoid confusion
@@ -383,10 +406,10 @@ router.get('/:propertyCode/room-types', async (req: any, res: Response) => {
 // ============================================================
 // 3. CREATE A PUBLIC WEB RESERVATION
 // ============================================================
-router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
+router.post('/:propertyCode/reservations', requireBookingGuest, async (req: any, res: Response) => {
   try {
     const { propertyCode } = req.params;
-    const { checkInDate, checkOutDate, roomTypeId, guestFullName, guestPhone, guestEmail, platformGuestId, agreedPricePerNight, notes } = req.body;
+    const { checkInDate, checkOutDate, roomTypeId, agreedPricePerNight, notes } = req.body;
     const property = await checkOnlineBookingEnabled(propertyCode);
 
     const cIn = new Date(checkInDate);
@@ -419,34 +442,8 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
       return res.status(400).json({ success: false, message: 'Sorry, this room type is no longer available for the selected dates.' });
     }
 
-    // ✅ NEW (Seamless guest checkout without password)
-    let finalPlatformGuestId = platformGuestId;
-    if (!finalPlatformGuestId && guestFullName && guestPhone) {
-      const guest = await prisma.platformGuest.upsert({
-        where: { phone: guestPhone.trim() },
-        update: { fullName: guestFullName.trim(), email: guestEmail?.trim() || undefined },
-        create: { 
-          fullName: guestFullName.trim(), 
-          phone: guestPhone.trim(), 
-          email: guestEmail?.trim() || undefined, // 🌟 Use undefined instead of '' to avoid unique constraint errors
-          // 🌟 REMOVED: passwordHash is omitted since it's now optional for guest checkout
-          isPhoneVerified: false,
-          isEmailVerified: false,
-          isActive: true
-        }
-      });
-      finalPlatformGuestId = guest.guestId;
-    }
-
-    if (!finalPlatformGuestId) {
-      throw new Error('Guest information is required for online bookings.');
-    }
-
-    const bookingGuest = await prisma.platformGuest.findUnique({
-      where: { guestId: Number(finalPlatformGuestId) },
-      select: { fullName: true, phone: true },
-    });
-    if (!bookingGuest) throw new Error('Guest information could not be found.');
+    const bookingGuest = req.bookingGuest;
+    const finalPlatformGuestId = bookingGuest.guestId;
 
       const reservation = await prisma.reservation.create({
     data: {
@@ -499,10 +496,10 @@ router.post('/:propertyCode/reservations', async (req: any, res: Response) => {
 // ============================================================
 // 4. INITIALIZE GUEST PAYMENT
 // ============================================================
-router.post('/:propertyCode/payments/initialize', async (req: any, res: Response) => {
+router.post('/:propertyCode/payments/initialize', requireBookingGuest, async (req: any, res: Response) => {
   try {
     const { propertyCode } = req.params;
-    const { reservationId, email, amount } = req.body;
+    const { reservationId } = req.body;
     const property = await prisma.property.findUnique({ 
       where: { propertyCode },
       select: { propertyId: true, paystackSecretKey: true, currency: true }
@@ -512,6 +509,15 @@ router.post('/:propertyCode/payments/initialize', async (req: any, res: Response
     if (!property || !paystackSecretKey) {
       return res.status(400).json({ success: false, message: 'This hotel has not configured Mobile Money payments yet.' });
     }
+
+    const reservation = await prisma.reservation.findFirst({ where: {
+      reservationId, propertyId: property.propertyId, platformGuestId: req.bookingGuest.guestId,
+      status: { in: ['Pending', 'Confirmed'] },
+    } });
+    if (!reservation) return res.status(404).json({ success: false, message: 'Booking not found.' });
+    const amount = Number(reservation.totalAmount || 0) - Number(reservation.amountPaid || 0);
+    if (amount <= 0) return res.status(400).json({ success: false, message: 'No payment is due.' });
+    const email = req.bookingGuest.email || 'guest@stayfolio.com';
 
     const callbackUrl = `${getFrontendBaseUrl()}/public/${propertyCode}/booking-success`;
     

@@ -135,6 +135,24 @@ export const deleteProperty = async (propertyId: number) => {
   });
 };
 
+export const permanentlyDeleteProperty = async (propertyId: number, confirmationCode: string) => {
+  return prisma.$transaction(async (tx) => {
+    const property = await tx.property.findUnique({ where: { propertyId } });
+    if (!property) throw new Error('Property not found.');
+    if (confirmationCode !== property.propertyCode) {
+      throw new Error('Enter the exact property code to confirm permanent deletion.');
+    }
+
+    // Remove restrictive references before cascading through hotel-owned records.
+    await tx.payment.deleteMany({
+      where: { OR: [{ propertyId }, { reservation: { propertyId } }] },
+    });
+    await tx.reservation.deleteMany({ where: { propertyId } });
+    await tx.auditLog.deleteMany({ where: { user: { propertyId } } });
+    return tx.property.delete({ where: { propertyId } });
+  });
+};
+
 export const getPropertyStats = async (propertyId: number) => {
   const stats = await prisma.property.findUnique({
     where: { propertyId },

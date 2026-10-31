@@ -117,6 +117,9 @@ model User {
   email             String?   @unique @db.VarChar(200)
   phone             String?   @unique @db.VarChar(20)
   passwordHash      String    @db.Text
+  invitationTokenHash String? @unique
+  invitationExpiresAt DateTime?
+  invitationPending Boolean @default(false)
   roleId            Int
   isPlatformAdmin   Boolean   @default(false)
   isActive          Boolean   @default(true)

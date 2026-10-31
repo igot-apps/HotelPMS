@@ -97,7 +97,7 @@ async function main() {
   const permissionRows = await Promise.all(permissions.map((permission) =>
     prisma.permission.upsert({ where: { code: permission.code }, update: {}, create: permission }),
   ));
-  const managerPermissionRows = permissionRows.filter(({ code }) => code !== 'CanManageStaffAndRoles');
+  const managerPermissionRows = permissionRows;
   const receptionistCodes = new Set([
     'CanCreateReservation', 'CanCancelReservation', 'CanCheckInGuest',
     'CanCheckOutGuest', 'CanViewRooms', 'CanUpdateRoomStatus', 'CanProcessPayments',
@@ -124,7 +124,7 @@ async function main() {
     const propertyName = `Demo Hotel ${suffix}`;
     const managerEmail = `manager.hotel${suffix}@demo.stayfolio.test`;
     const receptionistEmail = `receptionist.hotel${suffix}@demo.stayfolio.test`;
-    const galleryImages = await Promise.all([1, 2, 3].map((slot) => imageDataUri(index, slot)));
+    const galleryImages = await Promise.all([1, 2, 3, 4].map((slot) => imageDataUri(index, slot)));
     // Intentionally invalid demo-only contact: shows the WhatsApp-only UI without
     // directing guests to a real person's phone number. Replace before launch.
     const demoWhatsAppPhone = `00000000${String(index).padStart(2, '0')}`;

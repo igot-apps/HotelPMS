@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Calendar, Tag, Loader2, CheckCircle2, ArrowLeft, CreditCard, ShieldCheck, AlertCircle } from 'lucide-react';
 import api from '../lib/axios';
@@ -10,6 +10,7 @@ export default function PublicCheckoutPage() {
   const { propertyCode, roomTypeId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   
   // 🌟 1. Initialize dates from URL, but make them editable state
   const initialCheckIn = searchParams.get('checkIn');
@@ -20,15 +21,30 @@ export default function PublicCheckoutPage() {
   // 🌟 2. Check if user is already logged in (from localStorage)
   const [guestInfo, setGuestInfo] = useState(() => {
     const str = localStorage.getItem('guestInfo');
-    return str && str !== 'undefined' ? JSON.parse(str) : null;
+    try { return str && str !== 'undefined' ? JSON.parse(str) : null; } catch { return null; }
   });
-
-  // 🌟 3. Form state for unauthenticated guests
-  const [guestForm, setGuestForm] = useState({
-    fullName: '',
-    phone: '',
-    email: ''
-  });
+  useEffect(() => {
+    const syncGuestSession = () => {
+      try {
+        const info = JSON.parse(localStorage.getItem('guestInfo') || 'null');
+        setGuestInfo(localStorage.getItem('guestToken') ? info : null);
+      } catch { setGuestInfo(null); }
+    };
+    syncGuestSession();
+    window.addEventListener('guest-session-changed', syncGuestSession);
+    window.addEventListener('storage', syncGuestSession);
+    return () => {
+      window.removeEventListener('guest-session-changed', syncGuestSession);
+      window.removeEventListener('storage', syncGuestSession);
+    };
+  }, []);
+  const hasGuestSession = Boolean(guestInfo && localStorage.getItem('guestToken'));
+  const signIn = () => {
+    const query = new URLSearchParams(searchParams);
+    if (checkIn) query.set('checkIn', checkIn);
+    if (checkOut) query.set('checkOut', checkOut);
+    navigate('/public/auth', { state: { from: { pathname: location.pathname, search: `?${query}` } } });
+  };
 
   // ONLY redirect if initial dates are missing
   useEffect(() => {
@@ -102,20 +118,14 @@ export default function PublicCheckoutPage() {
     
     let name, phone, email, platformGuestId;
 
-    if (guestInfo) {
+    if (hasGuestSession) {
       name = guestInfo.fullName;
       phone = guestInfo.phone;
       email = guestInfo.email;
       platformGuestId = guestInfo.guestId;
     } else {
-      if (!guestForm.fullName || !guestForm.phone) {
-        toast.error('Please enter your full name and phone number.');
-        return;
-      }
-      name = guestForm.fullName;
-      phone = guestForm.phone;
-      email = guestForm.email;
-      platformGuestId = undefined;
+      signIn();
+      return;
     }
 
     initializePaymentMutation.mutate({ name, phone, email, platformGuestId });
@@ -256,48 +266,17 @@ export default function PublicCheckoutPage() {
                 <ShieldCheck size={20} className="text-primary-600"/> Guest Details
               </h2>
               
-              {guestInfo ? (
+              {hasGuestSession ? (
                 <div className="p-4 bg-background rounded-lg border border-border space-y-1">
                   <p className="text-sm text-text-muted">Booking for:</p>
                   <p className="font-bold text-text">{guestInfo.fullName}</p>
                   <p className="text-sm text-text-muted">{guestInfo.phone} {guestInfo.email ? `• ${guestInfo.email}` : ''}</p>
                 </div>
+
               ) : (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-text-muted mb-1">Full Name *</label>
-                    <input
-                      type="text"
-                      value={guestForm.fullName}
-                      onChange={(e) => setGuestForm({...guestForm, fullName: e.target.value})}
-                      required
-                      className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 outline-none transition"
-                      placeholder="e.g. Kwame Mensah"
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-text-muted mb-1">Phone Number *</label>
-                      <input
-                        type="tel"
-                        value={guestForm.phone}
-                        onChange={(e) => setGuestForm({...guestForm, phone: e.target.value})}
-                        required
-                        className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 outline-none transition"
-                        placeholder="e.g. 0244123456"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-text-muted mb-1">Email (Optional)</label>
-                      <input
-                        type="email"
-                        value={guestForm.email}
-                        onChange={(e) => setGuestForm({...guestForm, email: e.target.value})}
-                        className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 outline-none transition"
-                        placeholder="e.g. kwame@example.com"
-                      />
-                    </div>
-                  </div>
+                <div className="space-y-3">
+                  <p className="text-sm text-text-muted">Sign in or create an account to continue. Your guest details will come from your account.</p>
+                  <button type="button" onClick={signIn} className="font-semibold text-primary-600 hover:underline">Sign in / Create account</button>
                 </div>
               )}
             </div>
@@ -340,7 +319,7 @@ export default function PublicCheckoutPage() {
                 {initializePaymentMutation.isPending ? (
                   <><Loader2 className="animate-spin" size={18} /> Initializing...</>
                 ) : (
-                  <><CreditCard size={18} /> Continue to secure payment</>
+                  <><CreditCard size={18} /> {hasGuestSession ? 'Continue to secure payment' : 'Sign in to continue'}</>
                 )}
               </button>
               

@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Building2, CreditCard, Edit2, MapPin, Plus, Power, Search, ShieldCheck, Users } from 'lucide-react';
+import { Building2, CreditCard, Edit2, MapPin, Plus, Power, Search, ShieldCheck, Trash2, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PropertyModal from '../components/catalog/PropertyModal';
 import {
   createPlatformProperty,
   deactivatePlatformProperty,
+  permanentlyDeletePlatformProperty,
   getPlatformProperties,
   updatePlatformProperty,
 } from '../api/platformProperties';
@@ -16,6 +17,8 @@ export default function PlatformPropertiesPage() {
   const [page, setPage] = useState(1);
   const [editingProperty, setEditingProperty] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [deletingProperty, setDeletingProperty] = useState(null);
+  const [confirmationCode, setConfirmationCode] = useState('');
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['platformProperties', page, search],
@@ -46,6 +49,20 @@ export default function PlatformPropertiesPage() {
       toast.success('Property deactivated. Its records have been retained.');
     },
     onError: (error) => toast.error(error.response?.data?.message || 'Could not deactivate property.'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: permanentlyDeletePlatformProperty,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['platformProperties'] });
+      queryClient.invalidateQueries({ queryKey: ['properties'] });
+      queryClient.invalidateQueries({ queryKey: ['publicDiscover'] });
+      if (properties.length === 1 && page > 1) setPage(page - 1);
+      setDeletingProperty(null);
+      setConfirmationCode('');
+      toast.success('Property permanently deleted.');
+    },
+    onError: (error) => toast.error(error.response?.data?.message || 'Could not delete property.'),
   });
 
   const closeModal = () => {
@@ -164,6 +181,7 @@ export default function PlatformPropertiesPage() {
                           {isActive && (
                             <button onClick={() => handleDeactivate(property)} disabled={deactivateMutation.isPending} title="Deactivate property" className="rounded-lg p-2 text-danger-600 transition hover:bg-danger-50 disabled:opacity-50"><Power size={16} /></button>
                           )}
+                          <button onClick={() => { setDeletingProperty(property); setConfirmationCode(''); }} disabled={deleteMutation.isPending} title="Permanently delete property" aria-label={`Permanently delete ${property.propertyName}`} className="rounded-lg p-2 text-danger-600 transition hover:bg-danger-50 disabled:opacity-50"><Trash2 size={16} /></button>
                         </div>
                       </td>
                     </tr>
@@ -184,6 +202,28 @@ export default function PlatformPropertiesPage() {
           </div>
         )}
       </section>
+
+      {deletingProperty && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <form role="dialog" aria-modal="true" aria-labelledby="delete-property-title" onSubmit={(event) => {
+            event.preventDefault();
+            if (!deleteMutation.isPending && confirmationCode === deletingProperty.propertyCode) {
+              deleteMutation.mutate({ id: deletingProperty.propertyId, confirmationCode });
+            }
+          }} className="w-full max-w-lg space-y-4 rounded-xl bg-surface p-6 shadow-xl">
+            <h2 id="delete-property-title" className="text-xl font-bold text-text">Permanently delete {deletingProperty.propertyName}?</h2>
+            <p className="text-sm text-text-muted">This permanently removes the hotel, staff accounts, hotel guest records, rooms, reservations, payments, subscription records, and staff audit logs. This cannot be undone. Shared online guest accounts are retained.</p>
+            <label className="block text-sm text-text">
+              Type <strong className="font-mono">{deletingProperty.propertyCode}</strong> to confirm.
+              <input autoFocus autoComplete="off" value={confirmationCode} onChange={(event) => setConfirmationCode(event.target.value)} disabled={deleteMutation.isPending} className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-text" />
+            </label>
+            <div className="flex justify-end gap-3">
+              <button type="button" disabled={deleteMutation.isPending} onClick={() => setDeletingProperty(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-text disabled:opacity-50">Cancel</button>
+              <button type="submit" disabled={deleteMutation.isPending || confirmationCode !== deletingProperty.propertyCode} className="rounded-lg bg-danger-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{deleteMutation.isPending ? 'Deleting…' : 'Permanently delete'}</button>
+            </div>
+          </form>
+        </div>
+      )}
 
       <PropertyModal
         isOpen={isModalOpen}

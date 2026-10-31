@@ -1,0 +1,70 @@
+import 'dotenv/config';
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { prisma } from '../src/shared/utils/prisma';
+import { inviteStaff, resendInvitation, acceptInvitation } from '../src/modules/user/invitation.service';
+import { comparePassword } from '../src/shared/utils/password';
+import { permanentlyDeleteProperty } from '../src/modules/property/property.repository';
+import express from 'express';
+import request from 'supertest';
+import userRoutes from '../src/modules/user/user.routes';
+import { generateAccessToken } from '../src/shared/utils/jwt';
+import { loginUser } from '../src/modules/auth/auth.service';
+import { hashPassword } from '../src/shared/utils/password';
+
+async function main() {
+  assert(['localhost', '127.0.0.1'].includes(new URL(process.env.DATABASE_URL!).hostname));
+  const code = `invite-check-${randomUUID().slice(0, 8)}`;
+  const hotel = await prisma.property.create({ data: { propertyCode: code, propertyName: 'Invitation test fixture', businessName: 'Test', propertyType: 'Hotel', country: 'Ghana' } });
+  const role = await prisma.role.findUniqueOrThrow({ where: { roleName: 'Receptionist' } });
+  try {
+    const managerRole = await prisma.role.findUniqueOrThrow({ where: { roleName: 'Manager' } });
+    const manager = await prisma.user.create({ data: { propertyId: hotel.propertyId, fullName: 'Test manager', username: `${code}-manager`, passwordHash: await hashPassword('123456789'), roleId: managerRole.roleId } });
+    const login = await loginUser(manager.username, '123456789');
+    assert(login.success && login.user?.permissions.includes('CanManageStaffAndRoles'));
+    const app = express(); app.use(express.json()); app.use('/api/users', userRoutes);
+    const auth = `Bearer ${login.accessToken}`;
+    assert.equal((await request(app).post('/api/users/invitations').send({})).status, 401);
+    const invited = await inviteStaff(hotel.propertyId, { fullName: 'Test receptionist', username: code, email: `${code}@example.test`, roleId: role.roleId, propertyId: -1, password: 'manager-password' });
+    const token = new URL(invited.preview.setupUrl).hash.slice(1);
+    let staff = await prisma.user.findUniqueOrThrow({ where: { userId: invited.user.userId } });
+    assert.equal(staff.propertyId, hotel.propertyId);
+    assert.equal(staff.isActive, false);
+    assert.notEqual(staff.invitationTokenHash, token);
+    assert.equal(await comparePassword('manager-password', staff.passwordHash), false);
+    const list = await request(app).get('/api/users?propertyId=999999').set('Authorization', auth);
+    assert.equal(list.status, 200);
+    assert(list.body.data.every((row: any) => row.propertyId === hotel.propertyId && !('passwordHash' in row) && !('invitationTokenHash' in row)));
+    const pendingToken = generateAccessToken({ userId: staff.userId, propertyId: hotel.propertyId, roleId: role.roleId, username: code });
+    assert.equal((await request(app).get('/api/users').set('Authorization', `Bearer ${pendingToken}`)).status, 401);
+    await assert.rejects(resendInvitation(-1, staff.userId), /not found/);
+    const resent = await resendInvitation(hotel.propertyId, staff.userId);
+    const nextToken = new URL(resent.preview.setupUrl).hash.slice(1);
+    await assert.rejects(acceptInvitation(token, '123456789'), /Invalid or expired/);
+    await prisma.user.update({ where: { userId: staff.userId }, data: { invitationExpiresAt: new Date(0) } });
+    await assert.rejects(acceptInvitation(nextToken, '123456789'), /Invalid or expired/);
+    const fresh = await resendInvitation(hotel.propertyId, staff.userId);
+    const freshToken = new URL(fresh.preview.setupUrl).hash.slice(1);
+    await assert.rejects(acceptInvitation(freshToken, 'short'), /at least 8/);
+    const outcomes = await Promise.allSettled([acceptInvitation(freshToken, '123456789'), acceptInvitation(freshToken, '123456789')]);
+    assert.equal(outcomes.filter(result => result.status === 'fulfilled').length, 1);
+    staff = await prisma.user.findUniqueOrThrow({ where: { userId: staff.userId } });
+    assert.equal(staff.isActive, true);
+    assert.equal(staff.invitationPending, false);
+    assert.equal(staff.invitationTokenHash, null);
+    assert(await comparePassword('123456789', staff.passwordHash));
+    const edit = await request(app).put(`/api/users/${staff.userId}`).set('Authorization', auth).send({ fullName: 'Updated staff', username: code, email: staff.email, password: 'manager-overwrite', propertyId: 999999, roleId: managerRole.roleId });
+    assert.equal(edit.status, 200);
+    const unchanged = await prisma.user.findUniqueOrThrow({ where: { userId: staff.userId } });
+    assert.equal(unchanged.propertyId, hotel.propertyId);
+    assert.equal(unchanged.roleId, role.roleId);
+    assert(await comparePassword('123456789', unchanged.passwordHash));
+    assert.equal((await request(app).delete(`/api/users/${staff.userId}`).set('Authorization', auth)).status, 200);
+    assert.equal((await request(app).get('/api/users').set('Authorization', `Bearer ${pendingToken}`)).status, 401);
+    await assert.rejects(acceptInvitation(freshToken, '123456789'), /Invalid or expired/);
+    console.log('Passed: hotel scope, pending status, hashed token, expiry, resend invalidation, password validation, activation, and concurrent single use.');
+  } finally {
+    await permanentlyDeleteProperty(hotel.propertyId, code);
+  }
+}
+main().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => prisma.$disconnect());

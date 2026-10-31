@@ -1,7 +1,7 @@
 // frontend/src/pages/UsersPage.jsx
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getUsers, createUser, updateUser, deactivateUser } from '../api/users';
+import { getUsers, inviteStaff, resendStaffInvitation, updateUser, deactivateUser } from '../api/users';
 import { useAuthStore } from '../store/authStore'; // ✅ ADDED: To get the current user's propertyId
 import UserModal from '../components/users/UserModal';
 import RequirePermission from '../components/RequirePermission';
@@ -15,10 +15,11 @@ export default function UsersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [emailPreview, setEmailPreview] = useState(null);
 
   const { data: usersData, isLoading } = useQuery({
     queryKey: ['users'],
-    queryFn: () => getUsers().then(res => res.data.data),
+    queryFn: () => getUsers({ limit: 100 }).then(res => res.data.data),
   });
 
   const users = usersData || [];
@@ -30,10 +31,11 @@ export default function UsersPage() {
   );
 
   const mutation = useMutation({
-    mutationFn: ({ id, data }) => id ? updateUser(id, data) : createUser(data),
-    onSuccess: () => {
+    mutationFn: ({ id, data }) => id ? updateUser(id, data) : inviteStaff(data),
+    onSuccess: (response) => {
+      if (response.data.data?.preview) setEmailPreview(response.data.data.preview);
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      toast.success(editingUser ? 'User updated!' : 'User created!');
+      toast.success(editingUser ? 'User updated!' : 'Invitation prepared!');
       setIsModalOpen(false);
       setEditingUser(null);
     },
@@ -46,6 +48,12 @@ export default function UsersPage() {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       toast.success('User deactivated.');
     },
+  });
+
+  const resendMutation = useMutation({
+    mutationFn: resendStaffInvitation,
+    onSuccess: (response) => { setEmailPreview(response.data.data.preview); toast.success('New invitation prepared. Previous link is invalid.'); },
+    onError: (error) => toast.error(error.response?.data?.message || 'Could not resend invitation.'),
   });
 
   const handleSave = (data) => {
@@ -75,10 +83,23 @@ export default function UsersPage() {
         </div>
         <RequirePermission permission="CanManageStaffAndRoles">
           <button onClick={() => { setEditingUser(null); setIsModalOpen(true); }} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm">
-            <Plus size={16} /> Add Staff Member
+            <Plus size={16} /> Invite Receptionist
           </button>
         </RequirePermission>
       </div>
+
+      {emailPreview && (
+        <section className="space-y-3 rounded-xl border border-primary-200 bg-primary-50 p-5">
+          <h2 className="font-bold text-text">Simulated email — no email was sent</h2>
+          <p className="text-sm text-text-muted">To: {emailPreview.to}<br />{emailPreview.subject}</p>
+          <p className="text-sm text-text">Share this link with the receptionist. It expires in 24 hours and works once. They choose their own password.</p>
+          <input aria-label="Receptionist setup link" readOnly value={emailPreview.setupUrl} onFocus={(event) => event.target.select()} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text" />
+          <div className="flex gap-3">
+            <button onClick={async () => { try { await navigator.clipboard.writeText(emailPreview.setupUrl); toast.success('Link copied.'); } catch { toast.error('Select and copy the link above.'); } }} className="rounded-lg bg-primary-600 px-4 py-2 text-sm text-white">Copy setup link</button>
+            <button onClick={() => setEmailPreview(null)} className="px-4 py-2 text-sm text-text">Dismiss</button>
+          </div>
+        </section>
+      )}
 
       <div className="bg-surface border border-border rounded-xl shadow-sm overflow-hidden">
         <div className="p-4 border-b border-border">
@@ -120,18 +141,19 @@ export default function UsersPage() {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`px-2.5 py-1 rounded-md text-xs font-bold ${user.isActive ? 'bg-success-50 text-success-700' : 'bg-danger-50 text-danger-700'}`}>
-                        {user.isActive ? 'Active' : 'Inactive'}
+                        {user.invitationPending ? 'Pending invitation' : user.isActive ? 'Active' : 'Disabled'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {user.invitationPending && <button disabled={resendMutation.isPending} onClick={() => resendMutation.mutate(user.userId)} className="text-xs font-semibold text-primary-600 disabled:opacity-50">Resend invite</button>}
                         <RequirePermission permission="CanManageStaffAndRoles">
-                          <button onClick={() => { setEditingUser(user); setIsModalOpen(true); }} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" title="Edit User">
+                          <button disabled={user.role?.roleName !== 'Receptionist'} onClick={() => { setEditingUser(user); setIsModalOpen(true); }} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition disabled:opacity-30" title="Edit User">
                             <Edit2 size={16} />
                           </button>
                         </RequirePermission>
                         <RequirePermission permission="CanManageStaffAndRoles">
-                          <button onClick={() => handleDeactivate(user.userId, user.fullName)} className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition" title="Deactivate User" disabled={!user.isActive}>
+                          <button onClick={() => handleDeactivate(user.userId, user.fullName)} className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition" title="Disable account and cancel invitation" disabled={user.role?.roleName !== 'Receptionist' || (!user.isActive && !user.invitationPending)}>
                             <Trash2 size={16} />
                           </button>
                         </RequirePermission>

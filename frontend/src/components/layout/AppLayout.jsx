@@ -14,7 +14,10 @@ export default function AppLayout() {
     if (!accessToken) return undefined;
     api.get('/auth/me').then((response) => {
       if (isCurrent && response.data?.success && response.data?.data) {
-        useAuthStore.setState((state) => ({ user: { ...state.user, ...response.data.data } }));
+        useAuthStore.setState((state) => ({
+          user: { ...state.user, ...response.data.data },
+          permissions: response.data.data.permissions || [],
+        }));
       }
     }).catch(() => {});
     return () => { isCurrent = false; };

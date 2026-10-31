@@ -8,6 +8,7 @@ const prisma = new PrismaClient();
 // Keep the registration-created Manager role aligned with the canonical seed.
 // Render production databases may not have had the development seed script run.
 const defaultManagerPermissions = [
+  { code: 'CanManageStaffAndRoles', name: 'Manage Staff & Roles', category: 'Admin' },
   { code: 'CanCreateReservation', name: 'Create Reservation', category: 'Reservations' },
   { code: 'CanCancelReservation', name: 'Cancel Reservation', category: 'Reservations' },
   { code: 'CanCheckInGuest', name: 'Check In Guest', category: 'Reservations' },
@@ -180,6 +181,13 @@ export const refreshAccessToken = async (refreshToken: string) => {
 export const getUserById = async (userId: number) => {
   const user = await authRepository.findUserById(userId);
   if (!user) return null;
+  if (user.role.roleName === 'Manager' && user.propertyId) {
+    await prisma.$transaction((tx: any) => ensureManagerPermissions(tx));
+  }
+  const role = await prisma.role.findUnique({
+    where: { roleId: user.roleId },
+    include: { rolePermissions: { include: { permission: true } } },
+  });
   
   return {
     userId: user.userId,
@@ -187,6 +195,7 @@ export const getUserById = async (userId: number) => {
     username: user.username,
     email: user.email,
     role: user.role.roleName,
+    permissions: role?.rolePermissions.map(({ permission }) => permission.code) || [],
     isPlatformAdmin: user.isPlatformAdmin,
     propertyId: user.propertyId || null,
     propertyName: (user as any).property?.propertyName || null, // ✅ Safe navigation
@@ -259,8 +268,7 @@ export const registerNewHotel = async (data: {
 
     // B. Ensure the default property-manager role and its permissions exist.
     // Do this on every registration: migrations create tables, but do not run
-    // the development seed script on Render. The manager deliberately does
-    // not receive CanManageStaffAndRoles (the seed uses the same policy).
+    // the development seed script on Render. Managers can onboard receptionists.
     const managerRole = await ensureManagerPermissions(tx);
 
     // C. Create the Manager User Account

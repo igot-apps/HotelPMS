@@ -36,6 +36,17 @@ export const authenticate = async (
   // 1. User is verified, attach to request
   req.user = decoded;
 
+  try {
+    const account = await prisma.user.findUnique({ where: { userId: decoded.userId }, select: { isActive: true, propertyId: true } });
+    if (!account?.isActive || (account.propertyId || 0) !== (decoded.propertyId || 0)) {
+      res.status(401).json({ success: false, message: 'Account is disabled or no longer available.' });
+      return;
+    }
+  } catch {
+    res.status(503).json({ success: false, message: 'Could not verify account access.' });
+    return;
+  }
+
   const isPlatformRoute = req.originalUrl.startsWith('/api/platform/');
   const isAuthRoute = req.originalUrl.startsWith('/api/auth/');
   if ((!req.user.propertyId || req.user.propertyId === 0) && !isPlatformRoute && !isAuthRoute) {

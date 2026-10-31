@@ -6,8 +6,8 @@ const router = Router();
 router.use(authenticate, requirePlatformAdmin);
 
 const parsePropertyId = (value: string | string[]) => {
-  const propertyId = Number.parseInt(Array.isArray(value) ? value[0] : value, 10);
-  if (!Number.isInteger(propertyId) || propertyId < 1) throw new Error('Invalid property ID.');
+  const propertyId = Number(Array.isArray(value) ? value[0] : value);
+  if (!Number.isSafeInteger(propertyId) || propertyId < 1) throw new Error('Invalid property ID.');
   return propertyId;
 };
 
@@ -54,6 +54,18 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     return res.json({ success: true, data: toClientProperty(property) });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+router.delete('/:id/permanent', async (req: AuthRequest, res: Response) => {
+  try {
+    await propertyService.permanentlyDeleteProperty(
+      parsePropertyId(req.params.id),
+      typeof req.body?.confirmationCode === 'string' ? req.body.confirmationCode : '',
+    );
+    return res.json({ success: true, message: 'Property permanently deleted.' });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error.message || 'Could not delete property.' });
   }
 });
 

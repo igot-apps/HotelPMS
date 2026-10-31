@@ -6,6 +6,7 @@ import GuestProtectedRoute from './components/auth/GuestProtectedRoute';
 
 // Property Registration and PMS Public Pages
 import LoginPage from './pages/LoginPage';
+import StaffSetupPage from './pages/StaffSetupPage';
 import HotelRegistrationWizard from './pages/HotelRegistrationWizard';
 import DiscoverPage from './pages/DiscoverPage'; // 🌟 NEW: Main Public Homepage
 import ForHotelsPage from './pages/ForHotelsPage';
@@ -79,6 +80,7 @@ function App() {
         {/* ========================================== */}
         <Route path="/" element={<DiscoverPage />} /> {/* 🌟 NEW: Main Public Homepage */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/staff/setup" element={<StaffSetupPage />} />
         <Route path="/hotel/login" element={<LoginPage />} />
         <Route path="/for-hotels" element={<ForHotelsPage />} />
         <Route path="/superadmin" element={<SuperAdminPage />} />

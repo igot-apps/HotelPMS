@@ -106,7 +106,7 @@ export const updateUser = async (
 export const deactivateUser = async (userId: number) => {
   return prisma.user.update({
     where: { userId },
-    data: { isActive: false },
+    data: { isActive: false, invitationPending: false, invitationTokenHash: null, invitationExpiresAt: null },
   });
 };
 
