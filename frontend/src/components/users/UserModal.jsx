@@ -1,24 +1,12 @@
 // frontend/src/components/users/UserModal.jsx
 import { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { getRoles } from '../../api/users';
 
 
 export default function UserModal({ isOpen, onClose, onSubmit, isLoading, editingUser }) {
   const [formData, setFormData] = useState({
     fullName: '', username: '', email: '', isActive: false,
   });
-
-  // Invitations use the receptionist role and the signed-in manager's hotel.
-  const { data: rolesData } = useQuery({ 
-    queryKey: ['roles'], 
-    queryFn: getRoles,
-    select: (res) => res.data.data,
-    enabled: isOpen,
-  });
-  
-  const roles = (rolesData || []).filter(role => role.roleName === 'Receptionist');
 
   useEffect(() => {
     if (isOpen) {
@@ -42,8 +30,7 @@ export default function UserModal({ isOpen, onClose, onSubmit, isLoading, editin
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const payload = { ...formData, roleId: roles[0]?.roleId };
-    onSubmit(payload);
+    onSubmit(formData);
   };
 
   if (!isOpen) return null;
@@ -73,10 +60,10 @@ export default function UserModal({ isOpen, onClose, onSubmit, isLoading, editin
 
             <p className="text-sm text-text-muted">Role: Receptionist. The receptionist sets their own password using an invitation link.</p>
 
-            <div className="md:col-span-2 flex items-center gap-3 p-3 bg-secondary-50 rounded-lg border border-border">
+            {editingUser ? <div className="md:col-span-2 flex items-center gap-3 p-3 bg-secondary-50 rounded-lg border border-border">
               <input type="checkbox" name="isActive" id="isActive" disabled={editingUser?.invitationPending || !editingUser} checked={formData.isActive} onChange={handleChange} className="w-4 h-4 rounded border-border text-primary-600 focus:ring-primary-500" />
               <label htmlFor="isActive" className="text-sm font-semibold text-text cursor-pointer">Active Account</label>
-            </div>
+            </div> : <p className="md:col-span-2 rounded-lg border border-border bg-secondary-50 p-3 text-sm text-text-muted">The account becomes active after the receptionist sets their password.</p>}
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-border">

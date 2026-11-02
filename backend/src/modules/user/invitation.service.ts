@@ -14,8 +14,9 @@ export async function inviteStaff(propertyId: number, data: any) {
   if (!data.fullName?.trim() || !data.username?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email || '')) {
     throw new Error('Name, username, and a valid email are required.');
   }
-  const role = await prisma.role.findUnique({ where: { roleId: Number(data.roleId) } });
-  if (role?.roleName !== 'Receptionist') throw new Error('Invitations currently support the Receptionist role.');
+  // Invitations have a fixed role; never depend on a client-side roles request or database IDs.
+  const role = await prisma.role.findUnique({ where: { roleName: 'Receptionist' } });
+  if (!role) throw new Error('The Receptionist role is not configured. Ask the platform administrator to run the role setup.');
   const { token, ...fields } = tokenData();
   const email = data.email.trim().toLowerCase();
   const preview = await deliverStaffInvitation(email, token);
