@@ -175,6 +175,14 @@ async function main() {
     assert.equal((await request(app).get('/api/reports/daily').set('Authorization', `Bearer ${receptionistToken}`)).status, 403); checks++;
     assert.equal((await request(app).get('/api/reports/daily')).status, 401); checks++;
     assert.equal((await request(app).get('/api/reports/daily?date=2026-02-30').set('Authorization', `Bearer ${managerToken}`)).status, 400); checks++;
+    const overviewResponse = await request(app).get('/api/dashboard/overview').set('Authorization', `Bearer ${managerToken}`);
+    assert.equal(overviewResponse.status, 200);
+    const overview = overviewResponse.body.data;
+    assert.equal(overview.timeZone, 'Africa/Accra');
+    assert(overview.arrivals.some((r: any) => r.reservationId === accidental.reservationId));
+    assert(overview.arrivals.every((r: any) => r.reservationRooms.every((s: any) => s.status === 'Reserved')));
+    assert(overview.departures.every((r: any) => r.reservationRooms.every((s: any) => s.status === 'CheckedIn')));
+    assert.equal(overview.totalRooms, await prisma.room.count({ where: { propertyId: property.propertyId } })); checks++;
     console.log(`Passed ${checks} recovery scenarios against real local PostgreSQL, including undo check-in preview, permissions, preserved finances, room readiness and audit history.`);
   } finally {
     (prisma as any).$transaction = originalTransaction;

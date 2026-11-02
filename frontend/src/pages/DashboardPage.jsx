@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import RequirePermission from '../components/RequirePermission';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getOperationalOverview } from '../api/dashboard';
@@ -46,7 +47,7 @@ const SetupChecklist = () => {
         </div>
         <div>
           <h2 className="text-lg font-bold text-text">Welcome to Hotel PMS! Let's get you set up. 🚀</h2>
-          <p className="text-sm text-text-muted">Complete these 4 steps to start managing your property.</p>
+          <p className="text-sm text-text-muted">Complete these 3 steps to start managing your property.</p>
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -74,281 +75,84 @@ const SetupChecklist = () => {
 };
 
 export default function DashboardPage() {
-  const user = useAuthStore((state) => state.user);
-  const userPropertyId = user?.propertyId;
-  const isPropertySpecific = !!userPropertyId;
-
-  const [propertyId, setPropertyId] = useState(userPropertyId || '');
-
-  const { data: propsData } = useQuery({
-    queryKey: ['properties'],
-    queryFn: () => getProperties().then(res => res.data.data || res.data || []),
-    enabled: !isPropertySpecific,
+  const user = useAuthStore(state => state.user);
+  const [propertyId, setPropertyId] = useState(user?.propertyId || '');
+  const { data: properties = [] } = useQuery({ queryKey: ['properties'], enabled: !user?.propertyId,
+    queryFn: async () => (await getProperties()).data.data || [],
   });
-
-  const properties = propsData || [];
-  const currentPropertyName = user?.propertyName || 'All Properties';
-
-  const { data, isLoading, isError, refetch, isFetching } = useQuery({
-    queryKey: ['operationalOverview', propertyId],
-    queryFn: () => {
-      const params = {};
-      if (propertyId) params.propertyId = propertyId;
-      return getOperationalOverview(params).then(res => res.data.data);
-    },
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
+    queryKey: ['operationalOverview', propertyId], enabled: Boolean(propertyId),
+    queryFn: async () => (await getOperationalOverview({ propertyId })).data.data,
     refetchInterval: 60000,
   });
-
-  const arrivals = data?.arrivals || [];
-  const departures = data?.departures || [];
-  const roomStats = data?.roomStats || {};
-  const alerts = data?.alerts || [];
-  const totalRooms = data?.totalRooms || 0;
-
-  // 🌟 DETECT FRESH ACCOUNT: If total rooms is 0, show the checklist
-  const isFreshAccount = data && totalRooms === 0;
-
-  const currentHour = new Date().getHours();
-  const greeting = currentHour < 12 ? 'Good morning' : currentHour < 18 ? 'Good afternoon' : 'Good evening';
-  const todayStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-
-  return (
-    <div className="space-y-6">
-      {/* ========================================== */}
-      {/* HEADER                                     */}
-      {/* ========================================== */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-text tracking-tight flex items-center gap-2 flex-wrap">
-            {greeting}, {user?.fullName?.split(' ')[0] || 'Team'}! 👋
-            {isPropertySpecific && (
-              <span className="text-lg font-semibold text-primary-600 bg-primary-50 px-3 py-1 rounded-lg border border-primary-100">
-                <Building2 size={16} className="inline mr-1 -mt-1" />
-                {currentPropertyName}
-              </span>
-            )}
-          </h1>
-          <p className="text-text-muted text-sm mt-1">{todayStr} • Here is your shift overview.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={() => refetch()} 
-            className="inline-flex items-center gap-2 px-3 py-2 bg-surface border border-border text-text text-sm font-semibold rounded-lg hover:bg-secondary-50 transition shadow-sm"
-          >
-            <RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} /> Refresh
-          </button>
-          {!isPropertySpecific && (
-            <select 
-              value={propertyId} 
-              onChange={e => setPropertyId(e.target.value)} 
-              className="px-3 py-2.5 bg-surface border border-border rounded-xl text-sm text-text focus:ring-2 focus:ring-primary-500/20 outline-none min-w-[160px] shadow-sm"
-            >
-              <option value="">All Properties</option>
-              {properties.map(p => <option key={p.propertyId} value={p.propertyId}>{p.propertyName}</option>)}
-            </select>
-          )}
-        </div>
+  const timeZone = data?.timeZone || 'Africa/Accra';
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', hourCycle: 'h23' }).format(new Date()));
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const today = new Date().toLocaleDateString('en-GH', { timeZone, weekday: 'long', month: 'long', day: 'numeric' });
+  const tasks = data?.taskCounts || {};
+  const stats = data?.roomStats || {};
+  const propertyName = user?.propertyName || properties.find(p => p.propertyId === Number(propertyId))?.propertyName;
+  return <div className="space-y-6">
+    <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0"><p className="mb-1 text-sm font-semibold text-primary-700">{propertyName || 'Hotel dashboard'}</p><h1 className="text-2xl font-bold text-text">{greeting}, {user?.fullName?.split(' ')[0] || 'Team'}</h1><p className="mt-2 text-sm text-text-muted">{today} · {timeZone} · Your front desk at a glance</p></div>
+      <div className="flex flex-wrap gap-2">
+        {!user?.propertyId && <select aria-label="Select hotel" className="min-w-0 rounded-lg border border-border bg-surface p-2 text-text" value={propertyId} onChange={e => setPropertyId(e.target.value)}><option value="">Select a hotel</option>{properties.map(p => <option key={p.propertyId} value={p.propertyId}>{p.propertyName}</option>)}</select>}
+        <button disabled={isFetching || !propertyId} onClick={() => refetch()} className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-text disabled:opacity-50"><RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />Refresh</button>
       </div>
+    </header>
 
-      {/* ========================================== */}
-      {/* LOADING STATE                              */}
-      {/* ========================================== */}
-      {isLoading && !data && (
-        <div className="bg-surface border border-border rounded-xl p-16 flex flex-col items-center justify-center gap-3 text-text-muted">
-          <Loader2 className="animate-spin text-primary-500" size={40} />
-          <p className="font-semibold text-lg">Loading shift overview...</p>
-        </div>
-      )}
+    <section aria-labelledby="quick-actions-title" className="rounded-xl border border-border bg-surface p-4 shadow-sm">
+      <h2 id="quick-actions-title" className="mb-3 flex items-center gap-2 text-sm font-bold text-text"><LayoutGrid size={17} className="text-primary-600" /> Quick Actions</h2>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <QuickLink to="/availability" icon={Search} label="Check availability / Walk-in" color="primary" />
+        <RequirePermission permission="CanCreateReservation"><QuickLink to="/reservations" icon={Calendar} label="Reservations & payments" color="success" /></RequirePermission>
+        <QuickLink to="/rooms" icon={BedDouble} label="Rooms & housekeeping" color="warning" />
+        {user?.role === 'Manager' && <QuickLink to="/reports" icon={LayoutGrid} label="Daily overview & collections" color="secondary" />}
+      </div>
+    </section>
 
-      {data && (
-        <>
-          {/* 🌟 ONBOARDING CHECKLIST (Only shows for fresh accounts) */}
-          {isFreshAccount && <SetupChecklist />}
-
-          {/* ========================================== */}
-          {/*  OPERATIONAL KPI CARDS                   */}
-          {/* ========================================== */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <OpCard icon={UserPlus} label="Arrivals Today" value={arrivals.length} subtext="Confirmed Check-ins" color="primary" />
-            <OpCard icon={UserMinus} label="Departures Today" value={departures.length} subtext="Checked-in Guests" color="warning" />
-            <OpCard icon={BedDouble} label="Available Rooms" value={roomStats['Available'] || 0} subtext={`Out of ${totalRooms} Total`} color="success" />
-            <OpCard icon={Sparkles} label="Dirty / Alerts" value={alerts.length} subtext="Needs Attention" color="danger" />
-          </div>
-
-          {/* ========================================== */}
-          {/*  MAIN ACTION LISTS                       */}
-          {/* ========================================== */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Today's Arrivals */}
-            <div className="bg-surface border border-border rounded-xl shadow-sm flex flex-col overflow-hidden">
-              <div className="p-4 border-b border-border bg-primary-50/50 flex items-center justify-between">
-                <h3 className="text-sm font-bold text-text flex items-center gap-2">
-                  <UserPlus size={16} className="text-primary-600" /> Today's Arrivals ({arrivals.length})
-                </h3>
-              </div>
-              <div className="flex-1 overflow-y-auto max-h-80 p-2">
-                {arrivals.length === 0 ? (
-                  <p className="text-text-muted text-sm text-center py-8">No arrivals scheduled for today.</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {arrivals.map(res => (
-                      <li key={res.reservationId} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-background rounded-xl border border-border hover:border-primary-300 hover:shadow-sm transition">
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold text-text">{res.guest?.fullName}</p>
-                          <p className="text-xs text-text-muted mt-1">
-                            Room {res.reservationRooms[0]?.room?.roomNumber || res.reservationRooms[0]?.roomNumberSnapshot || 'TBD'}
-                          </p>
-                        </div>
-                        <div className="flex items-center justify-between sm:justify-end gap-3">
-                          <span className="inline-flex items-center rounded-full bg-primary-50 border border-primary-100 px-2.5 py-1 text-[11px] font-bold tracking-wide text-primary-700">
-                            {res.confirmationCode || `#${res.reservationId.slice(0, 8).toUpperCase()}`}
-                          </span>
-                          <Link to={`/reservations/${res.reservationId}`} className="text-xs font-semibold text-primary-700 px-3 py-2 rounded-lg hover:bg-primary-50 transition">
-                            View reservation <ArrowRight size={13} className="inline ml-1" />
-                          </Link>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-
-            {/* Today's Departures */}
-            <div className="bg-surface border border-border rounded-xl shadow-sm flex flex-col overflow-hidden">
-              <div className="p-4 border-b border-border bg-warning-50/50 flex items-center justify-between">
-                <h3 className="text-sm font-bold text-text flex items-center gap-2">
-                  <UserMinus size={16} className="text-warning-600" /> Today's Departures ({departures.length})
-                </h3>
-              </div>
-              <div className="flex-1 overflow-y-auto max-h-80 p-2">
-                {departures.length === 0 ? (
-                  <p className="text-text-muted text-sm text-center py-8">No departures scheduled for today.</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {departures.map(res => (
-                      <li key={res.reservationId} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-background rounded-xl border border-border hover:border-warning-300 hover:shadow-sm transition">
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold text-text">{res.guest?.fullName}</p>
-                          <p className="text-xs text-text-muted mt-1">
-                            Room {res.reservationRooms[0]?.room?.roomNumber || res.reservationRooms[0]?.roomNumberSnapshot || 'TBD'} · Balance {Number(res.balanceDue || 0).toFixed(2)} GHS
-                          </p>
-                        </div>
-                        <div className="flex items-center justify-between sm:justify-end gap-3">
-                          <span className="inline-flex items-center rounded-full bg-warning-50 border border-warning-100 px-2.5 py-1 text-[11px] font-bold tracking-wide text-warning-700">
-                            {res.confirmationCode || `#${res.reservationId.slice(0, 8).toUpperCase()}`}
-                          </span>
-                          <Link to={`/reservations/${res.reservationId}`} className="text-xs font-semibold text-warning-700 px-3 py-2 rounded-lg hover:bg-warning-50 transition">
-                            Check out <ArrowRight size={13} className="inline ml-1" />
-                          </Link>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* ========================================== */}
-          {/*  BOTTOM ROW: ALERTS & QUICK ACTIONS      */}
-          {/* ========================================== */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Housekeeping / Maintenance Alerts */}
-            <div className="lg:col-span-2 bg-surface border border-border rounded-xl p-6 shadow-sm">
-              <h3 className="text-sm font-bold text-text mb-4 flex items-center gap-2">
-                <AlertTriangle size={16} className="text-danger-500" /> Housekeeping & Maintenance Alerts
-              </h3>
-              {alerts.length === 0 ? (
-                <div className="text-center py-8 text-success-600 font-semibold text-sm">
-                  ✨ All rooms are clean and operational!
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {alerts.map(room => {
-                    const isDirty = room.housekeepingStatus === 'Dirty';
-                    const isMaint = room.operationalStatus === 'Maintenance' || room.housekeepingStatus === 'OutOfService';
-                    return (
-                      <div key={room.roomId} className={`flex items-center justify-between p-3 rounded-lg border ${isMaint ? 'bg-danger-50 border-danger-200' : 'bg-warning-50 border-warning-200'}`}>
-                        <div className="flex items-center gap-3">
-                          <span className={`text-lg font-bold ${isMaint ? 'text-danger-700' : 'text-warning-700'}`}>
-                            {room.roomNumber}
-                          </span>
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded ${isMaint ? 'bg-danger-100 text-danger-700' : 'bg-warning-100 text-warning-700'}`}>
-                            {isMaint ? 'Out of Order' : 'Needs Cleaning'}
-                          </span>
-                        </div>
-                        <Link to="/rooms" className="text-xs font-semibold text-text-muted hover:text-text transition">
-                          Manage
-                        </Link>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Quick Actions Panel */}
-            <div className="bg-surface border border-border rounded-xl p-6 shadow-sm flex flex-col">
-              <h3 className="text-sm font-bold text-text mb-4 flex items-center gap-2">
-                <LayoutGrid size={16} className="text-primary-500" /> Quick Actions
-              </h3>
-              <div className="space-y-3 flex-1">
-                <QuickLink to="/availability" icon={Search} label="Check Availability" color="primary" />
-                <QuickLink to="/reservations" icon={Calendar} label="Reservations & Payments" color="success" />
-                <QuickLink to="/rooms" icon={BedDouble} label="Manage Rooms" color="warning" />
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
+    {error && <div role="alert" className="rounded-xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-700">Could not refresh the dashboard. {data ? 'The figures below are from the last successful update.' : 'Use Refresh to try again.'}</div>}
+    {!propertyId && <p className="rounded-xl border border-border bg-surface p-6 text-text-muted">Select a hotel to view its operations.</p>}
+    {isLoading && <p role="status" className="flex items-center justify-center gap-3 rounded-xl border border-border bg-surface p-10 text-text-muted"><Loader2 className="animate-spin" size={24} /> Loading front desk overview…</p>}
+    {data && <>
+      {data.totalRooms === 0 && <SetupChecklist />}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <OpCard icon={UserPlus} label="Awaiting check-in" value={tasks.arrivals || 0} subtext={`Rooms due today or earlier · ${tasks.overdueArrivals || 0} overdue`} color="primary" />
+        <OpCard icon={UserMinus} label="Awaiting checkout" value={tasks.departures || 0} subtext={`In-house rooms due today or earlier · ${tasks.overdueDepartures || 0} overdue`} color="warning" />
+        <OpCard icon={BedDouble} label="Ready rooms now" value={stats.Available || 0} subtext={`${stats.Occupied || 0} occupied · ${data.totalRooms} total rooms`} color="success" />
+        <OpCard icon={Sparkles} label="Rooms needing attention" value={data.alerts.length} subtext={`${stats.Dirty || 0} dirty · ${stats.Maintenance || 0} under maintenance`} color="danger" />
+      </div>
+      <p className="text-xs text-text-muted">Ready rooms are unoccupied, clean or inspected, and active. Use Check availability to confirm availability for booking dates. Dirty and maintenance totals can overlap.</p>
+      <div className="grid gap-5 xl:grid-cols-2">
+        <TaskQueue title="Check-ins to handle" icon={UserPlus} reservations={data.arrivals} departure={false} />
+        <TaskQueue title="Checkouts to handle" icon={UserMinus} reservations={data.departures} departure />
+      </div>
+      <section className="rounded-xl border border-border bg-surface p-4 sm:p-6 shadow-sm">
+        <h2 className="mb-4 flex items-center gap-2 font-bold text-text"><AlertTriangle size={18} className="text-warning-600" /> Housekeeping & maintenance</h2>
+        {!data.alerts.length ? <p className="py-4 text-sm text-success-700">No dirty rooms or maintenance alerts.</p> : <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{data.alerts.map(room => <Link key={room.roomId} to="/rooms" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-background p-4 hover:border-primary-300"><div><p className="font-bold text-text">Room {room.roomNumber}</p><p className="mt-1 text-xs text-text-muted">{[room.housekeepingStatus === 'Dirty' && 'Needs cleaning', room.operationalStatus === 'Maintenance' && 'Under maintenance'].filter(Boolean).join(' · ')}</p></div><span className="flex items-center gap-1 text-sm font-semibold text-primary-700">Manage <ArrowRight size={15} /></span></Link>)}</div>}
+      </section>
+      <p className="text-xs text-text-muted">Last updated {new Date(data.generatedAt).toLocaleTimeString('en-GH', { timeZone, hour: '2-digit', minute: '2-digit' })} · Refreshes every minute.</p>
+    </>}
+  </div>;
 }
 
-// ==========================================
-// REUSABLE COMPONENTS
-// ==========================================
+function TaskQueue({ title, icon: Icon, reservations, departure }) {
+  return <section className="min-w-0 overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-secondary-50 p-4"><h2 className="flex items-center gap-2 font-bold text-text"><Icon size={18} className="text-primary-600" />{title}</h2><span className="text-xs text-text-muted">{reservations.length} bookings</span></div>
+    {!reservations.length ? <p className="p-8 text-center text-sm text-text-muted">No {departure ? 'checkouts' : 'check-ins'} waiting for today or earlier.</p> : <ul className="max-h-[28rem] space-y-3 overflow-y-auto p-3">{reservations.map(res => <li key={res.reservationId} className="rounded-xl border border-border p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2"><p className="font-bold text-text">{res.guest.fullName}</p>{res.overdue && <span className="rounded-md bg-danger-50 px-2 py-1 text-xs font-bold text-danger-700">Overdue</span>}</div>
+      <div className="mt-2 space-y-1 text-sm text-text-muted">{res.reservationRooms.map(stay => <p key={stay.reservationRoomId}>Room {stay.room?.roomNumber || stay.roomNumberSnapshot || 'unassigned'} · {departure ? 'Departure' : 'Arrival'} {new Date(departure ? stay.checkOutDate : stay.checkInDate).toLocaleDateString('en-GH', { timeZone: 'UTC', day: 'numeric', month: 'short' })}</p>)}</div>
+      {departure && <p className={`mt-2 text-sm font-semibold ${res.balanceDue > 0 ? 'text-danger-700' : 'text-success-700'}`}>{res.balanceDue > 0 ? `Booking balance: GHS ${res.balanceDue.toFixed(2)}` : 'Booking paid in full'}</p>}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3"><span className="break-all text-xs text-text-muted">{res.confirmationCode || res.reservationId}</span><Link to={`/reservations?search=${encodeURIComponent(res.confirmationCode || res.reservationId)}`} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary-50 px-3 py-2 text-sm font-semibold text-primary-700">Open reservation <ArrowRight size={14} /></Link></div>
+    </li>)}</ul>}
+  </section>;
+}
+
 function OpCard({ icon: Icon, label, value, subtext, color }) {
-  const colorMap = {
-    primary: 'bg-primary-50 text-primary-600',
-    warning: 'bg-warning-50 text-warning-600',
-    success: 'bg-success-50 text-success-600',
-    danger: 'bg-danger-50 text-danger-600',
-  };
-
-  return (
-    <div className="bg-surface p-5 rounded-xl border border-border shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-      <div className="flex items-center justify-between mb-3">
-        <div className={`p-2.5 rounded-lg ${colorMap[color]}`}>
-          <Icon size={20} />
-        </div>
-      </div>
-      <div>
-        <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">{label}</p>
-        <h3 className="text-3xl font-bold text-text">{value}</h3>
-        {subtext && <p className="text-xs text-text-muted mt-1.5 font-medium">{subtext}</p>}
-      </div>
-    </div>
-  );
+  const colors = { primary: 'bg-primary-50 text-primary-600', warning: 'bg-warning-50 text-warning-600', success: 'bg-success-50 text-success-600', danger: 'bg-danger-50 text-danger-600' };
+  return <div className="rounded-xl border border-border bg-surface p-4 sm:p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><p className="text-sm font-semibold text-text-muted">{label}</p><span className={`rounded-lg p-2 ${colors[color]}`}><Icon size={19} /></span></div><p className="mt-2 text-3xl font-bold text-text">{value}</p><p className="mt-2 text-xs leading-relaxed text-text-muted">{subtext}</p></div>;
 }
-
 function QuickLink({ to, icon: Icon, label, color }) {
-  const colorMap = {
-    primary: 'bg-primary-50 text-primary-600 hover:bg-primary-100',
-    secondary: 'bg-secondary-100 text-secondary-600 hover:bg-secondary-200',
-    success: 'bg-success-50 text-success-600 hover:bg-success-100',
-    warning: 'bg-warning-50 text-warning-600 hover:bg-warning-100',
-  };
-
-  return (
-    <Link
-      to={to}
-      className={`flex items-center gap-3 p-3 rounded-lg border border-border transition-all group ${colorMap[color]}`}
-    >
-      <Icon size={18} />
-      <span className="text-sm font-semibold text-text flex-1">{label}</span>
-      <ArrowRight size={16} className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all text-text-muted" />
-    </Link>
-  );
+  const colors = { primary: 'bg-primary-50 text-primary-600', secondary: 'bg-secondary-50 text-secondary-600', success: 'bg-success-50 text-success-600', warning: 'bg-warning-50 text-warning-600' };
+  return <Link to={to} className={`flex min-h-14 items-center gap-3 rounded-xl border border-border p-3 transition hover:border-primary-300 ${colors[color]}`}><Icon size={20} className="shrink-0" /><span className="min-w-0 flex-1 text-sm font-semibold text-text">{label}</span><ArrowRight size={16} className="shrink-0" /></Link>;
 }
