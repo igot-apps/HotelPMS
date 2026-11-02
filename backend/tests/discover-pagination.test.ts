@@ -36,6 +36,22 @@ beforeEach(() => {
 });
 
 describe('discovery distance pagination', () => {
+  it('shows only assigned room-type amenities, deduplicated across eligible room types', async () => {
+    const link = (name: string, propertyId = 10) => ({ amenity: { name, propertyId } });
+    (prisma.property.findMany as any).mockResolvedValueOnce([{ ...profile(hotels[4]),
+      amenities: [{ name: 'Unused catalog feature' }],
+      roomTypes: [{ basePrice: 250, amenities: [link('TV'), link('Another hotel feature', 99)] },
+        { basePrice: 500, amenities: [link('Breakfast'), link('Free Wi-Fi'), link('AC'), link('tv')] }],
+    }]);
+    const response = await request(app).get('/api/public/discover');
+    expect(response.status).toBe(200);
+    expect(response.body.data.hotels[0].amenities).toEqual(['tv', 'Breakfast', 'Free Wi-Fi', 'AC']);
+    expect(response.body.data.hotels[0].minPrice).toBe(250);
+    const selection = (prisma.property.findMany as any).mock.calls[0][0].select;
+    expect(selection.roomTypes.take).toBeUndefined();
+    expect(selection.roomTypes.select.amenities).toBeDefined();
+    expect(selection.amenities).toBeUndefined();
+  });
   it('ranks all matches before paginating, with deterministic ties and unknown coordinates last', async () => {
     const codes: string[] = [];
     for (let page = 1; page <= 3; page++) {

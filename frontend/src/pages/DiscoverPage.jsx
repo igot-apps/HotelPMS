@@ -494,6 +494,7 @@ export default function DiscoverPage() {
                             <AmenityIcon name={amenity} /> {amenity}
                           </span>
                         ))}
+                        {hotel.amenities.length > 3 && <span className="inline-flex items-center rounded-md border border-secondary-100 bg-secondary-50 px-2.5 py-1 text-xs font-semibold text-secondary-700" title={`${hotel.amenities.length - 3} more amenities`} aria-label={`${hotel.amenities.length - 3} more amenities`}>…</span>}
                       </div>
                     )}
                     <div className="pt-4 border-t border-border flex items-center justify-between mt-auto">

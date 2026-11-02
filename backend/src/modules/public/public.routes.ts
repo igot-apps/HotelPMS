@@ -168,12 +168,8 @@ router.get('/discover', async (req: any, res: Response) => {
         longitude: true,
         roomTypes: {
           where: roomTypeFilter,
-          select: { basePrice: true },
+          select: { basePrice: true, amenities: { select: { amenity: { select: { name: true, propertyId: true } } } } },
           orderBy: { basePrice: 'asc' },
-          take: 1
-        },
-        amenities: {
-          select: { name: true }
         }
       }
     });
@@ -229,7 +225,11 @@ router.get('/discover', async (req: any, res: Response) => {
         rating: null,
         distance: distanceText,
         distanceKm: distanceKm,
-        amenities: p.amenities.map((a: any) => a.name)
+        // The hotel catalog also contains unused amenities. Advertise only
+        // actual assignments on room types eligible for this search.
+        amenities: [...new Map(p.roomTypes.flatMap(type => (type.amenities || [])
+          .filter(link => link.amenity.propertyId === p.propertyId)
+          .map(link => [link.amenity.name.trim().toLowerCase(), link.amenity.name] as const))).values()]
       };
     }));
 
