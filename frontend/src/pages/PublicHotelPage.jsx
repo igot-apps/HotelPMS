@@ -2,7 +2,7 @@ import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Calendar, MapPin, Phone, Mail, Tag, Loader2, ChevronRight, ChevronLeft,
+  Calendar, MapPin, Phone, Mail, Tag, Loader2, ChevronRight, ChevronLeft, ChevronDown,
   Wifi, Coffee, Car, Utensils, ShieldCheck, Sparkles, Users, MessageCircle
 } from 'lucide-react';
 import api from '../lib/axios';
@@ -44,6 +44,9 @@ const [checkIn, setCheckIn] = useState(today.toISOString().split('T')[0]); // �
 const [checkOut, setCheckOut] = useState(tomorrow.toISOString().split('T')[0]); // ✅ Default to tomorrow
 const [currentPage, setCurrentPage] = useState(1);
 const [activePhoto, setActivePhoto] = useState(0);
+const hasInvalidDates = !checkIn || !checkOut || checkOut <= checkIn;
+const earliestDeparture = checkIn ? new Date(new Date(`${checkIn}T00:00:00Z`).getTime() + 86400000).toISOString().slice(0, 10) : tomorrow.toISOString().slice(0, 10);
+const formatStayDate = value => new Date(`${value}T00:00:00Z`).toLocaleDateString('en-GH', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 
   // Reset to page 1 whenever dates change
   useEffect(() => {
@@ -64,7 +67,7 @@ const [activePhoto, setActivePhoto] = useState(0);
   const { data: roomsResponse, isLoading: isLoadingRooms } = useQuery({
     queryKey: ['publicRooms', propertyCode, checkIn, checkOut, currentPage],
     queryFn: () => fetchRooms({ propertyCode, checkIn, checkOut, page: currentPage }),
-    enabled: !!property,
+    enabled: !!property && !hasInvalidDates,
   });
 
   const rooms = roomsResponse?.data || [];
@@ -72,6 +75,7 @@ const [activePhoto, setActivePhoto] = useState(0);
 
   const handleSearch = (e) => {
     e.preventDefault();
+    if (hasInvalidDates) return;
     roomResultsRef.current?.scrollIntoView({
       behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
       block: 'start',
@@ -176,33 +180,48 @@ const [activePhoto, setActivePhoto] = useState(0);
 
       {/* 2. Floating Search Bar */}
       <div className="max-w-5xl mx-auto px-4 -mt-8 relative z-10">
-        <form onSubmit={handleSearch} className="bg-surface p-4 md:p-6 rounded-2xl shadow-xl border border-border flex flex-col md:flex-row gap-4 items-end">
-          <div className="flex-1 w-full">
-            <label className="block text-xs font-bold text-text-muted uppercase mb-1.5">Check In</label>
+        <details key={propertyCode} className="group min-w-0 rounded-2xl border border-border bg-surface shadow-xl">
+          <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-3 rounded-2xl p-4 text-text md:p-5 [&::-webkit-details-marker]:hidden">
+            <span className="flex min-w-0 items-center gap-3"><Calendar size={21} className="shrink-0 text-primary-600" /><span className="min-w-0"><span className="block font-bold">Check availability</span><span className="mt-1 block text-xs text-text-muted">{checkIn && checkOut ? `${formatStayDate(checkIn)} – ${formatStayDate(checkOut)} · Change dates` : 'Choose your stay dates'}</span></span></span>
+            <ChevronDown size={20} className="shrink-0 text-primary-600 transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+          </summary>
+        <form onSubmit={handleSearch} className="grid min-w-0 grid-cols-1 gap-4 border-t border-border p-4 md:grid-cols-[1fr_1fr_auto] md:items-end md:p-6">
+          <div className="min-w-0 w-full">
+            <label htmlFor="hotel-check-in" className="block text-xs font-bold text-text-muted uppercase mb-1.5">Check In</label>
+            <div className="flex w-full min-w-0 max-w-full">
             <input 
+              id="hotel-check-in"
               type="date" 
               value={checkIn} 
               onChange={(e) => setCheckIn(e.target.value)} 
               min={minDate}
               required 
-              className="w-full px-4 py-3 bg-background border border-border rounded-xl text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" 
+              className="responsive-date-input px-4 py-3 bg-background border border-border rounded-xl text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
             />
+            </div>
           </div>
-          <div className="flex-1 w-full">
-            <label className="block text-xs font-bold text-text-muted uppercase mb-1.5">Check Out</label>
+          <div className="min-w-0 w-full">
+            <label htmlFor="hotel-check-out" className="block text-xs font-bold text-text-muted uppercase mb-1.5">Check Out</label>
+            <div className="flex w-full min-w-0 max-w-full">
             <input 
+              id="hotel-check-out"
               type="date" 
               value={checkOut} 
               onChange={(e) => setCheckOut(e.target.value)} 
-              min={checkIn || minDate}
+              min={earliestDeparture}
+              aria-invalid={hasInvalidDates}
+              aria-describedby={hasInvalidDates ? 'hotel-date-error' : undefined}
               required 
-              className="w-full px-4 py-3 bg-background border border-border rounded-xl text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" 
+              className="responsive-date-input px-4 py-3 bg-background border border-border rounded-xl text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
             />
+            </div>
           </div>
           <button type="submit" className="w-full md:w-auto px-8 py-3 bg-primary-600 text-text-inverted font-bold rounded-xl hover:bg-primary-700 transition flex items-center justify-center gap-2 shadow-lg shadow-primary-600/20">
             <Calendar size={18} /> Check Availability
           </button>
+          {hasInvalidDates && <p id="hotel-date-error" role="alert" className="text-sm text-danger-600 md:col-span-3">Choose check-in and check-out dates. Check-out must be after check-in.</p>}
         </form>
+        </details>
       </div>
 
       {/* 3. Main Content */}

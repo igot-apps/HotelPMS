@@ -311,13 +311,13 @@ export default function DiscoverPage() {
                 <div className="md:col-span-6 lg:col-span-3 min-w-0">
                   <label htmlFor="discover-check-in" className="block text-xs font-bold text-text-muted mb-1 px-1 text-left">Check-in</label>
                   <div className="relative flex w-full min-w-0 max-w-full">
-                    <input id="discover-check-in" aria-label="Check-in date" type="date" value={checkIn} min={today} onChange={(e) => setCheckIn(e.target.value)} className="discover-date-input px-3 py-3 bg-background border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
+                    <input id="discover-check-in" aria-label="Check-in date" type="date" value={checkIn} min={today} onChange={(e) => setCheckIn(e.target.value)} className="responsive-date-input px-3 py-3 bg-background border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
                   </div>
                 </div>
                 <div className="md:col-span-6 lg:col-span-2 min-w-0">
                   <label htmlFor="discover-check-out" className="block text-xs font-bold text-text-muted mb-1 px-1 text-left">Check-out</label>
                   <div className="relative flex w-full min-w-0 max-w-full">
-                    <input id="discover-check-out" aria-label="Check-out date" type="date" value={checkOut} min={checkIn || tomorrow} onChange={(e) => setCheckOut(e.target.value)} aria-invalid={hasInvalidDateRange} aria-describedby={hasInvalidDateRange ? 'discover-date-error' : undefined} className={`discover-date-input px-3 py-3 bg-background border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition ${hasInvalidDateRange ? 'border-danger-500' : 'border-border'}`} />
+                    <input id="discover-check-out" aria-label="Check-out date" type="date" value={checkOut} min={checkIn || tomorrow} onChange={(e) => setCheckOut(e.target.value)} aria-invalid={hasInvalidDateRange} aria-describedby={hasInvalidDateRange ? 'discover-date-error' : undefined} className={`responsive-date-input px-3 py-3 bg-background border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition ${hasInvalidDateRange ? 'border-danger-500' : 'border-border'}`} />
                   </div>
                 </div>
                 <div className="md:col-span-12 lg:col-span-2 flex items-end">
