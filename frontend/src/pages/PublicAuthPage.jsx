@@ -85,7 +85,7 @@ export default function PublicAuthPage() {
       </div>
 
       <div className="flex-1 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-surface border border-border rounded-2xl shadow-xl p-8">
+        <div className="w-full max-w-md bg-surface border border-border rounded-2xl shadow-xl p-4 sm:p-8">
           <div className="flex p-1 bg-secondary-100 rounded-lg mb-6">
             <button onClick={() => setIsLogin(true)} className={`flex-1 py-2 text-sm font-semibold rounded-md transition ${isLogin ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text'}`}>Sign In</button>
             <button onClick={() => setIsLogin(false)} className={`flex-1 py-2 text-sm font-semibold rounded-md transition ${!isLogin ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text'}`}>Create Account</button>

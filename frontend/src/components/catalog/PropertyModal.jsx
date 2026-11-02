@@ -195,7 +195,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto py-10">
+    <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto py-10">
       <div className="bg-surface w-full max-w-3xl rounded-2xl shadow-xl border border-border">
         <div className="p-6 border-b border-border flex justify-between items-center">
           <h2 className="text-xl font-bold text-text">{initialData ? 'Edit Property Settings' : 'Add New Property'}</h2>
@@ -297,7 +297,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
             </h3>
             
             {/* Online Booking Toggle */}
-            <div className="flex items-center justify-between p-4 bg-primary-50 border border-primary-100 rounded-lg mb-6">
+            <div className="flex items-start justify-between gap-4 p-4 bg-primary-50 border border-primary-100 rounded-lg mb-6">
               <div className="flex-1">
                 <label className="text-sm font-bold text-text">Accept Online Bookings</label>
                 <p className="text-xs text-text-muted mt-0.5">Allow guests to discover your hotel and book available rooms on the public website.</p>
@@ -307,7 +307,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
                   </p>
                 )}
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
+              <label className="relative inline-flex shrink-0 min-h-11 items-center cursor-pointer">
                 <input type="checkbox" name="isOnlineBookingEnabled" checked={formData.isOnlineBookingEnabled} onChange={handleChange} className="sr-only peer" />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
               </label>

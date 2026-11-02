@@ -31,7 +31,7 @@ export default function GuestModal({ isOpen, onClose, onSubmit, isLoading, initi
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-surface w-full max-w-2xl rounded-2xl shadow-xl border border-border overflow-hidden animate-in fade-in zoom-in duration-200">
         
         {/* Header */}

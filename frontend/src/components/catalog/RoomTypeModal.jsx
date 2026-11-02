@@ -78,7 +78,7 @@ export default function RoomTypeModal({ isOpen, onClose, onSuccess, initialData 
 
   return (
     // 🌟 FIX: Changed to items-start and overflow-y-auto so the dropdown doesn't get clipped!
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto py-10">
+    <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto py-10">
       
       {/* 🌟 FIX: Removed overflow-hidden and max-h so the dropdown can escape the box */}
       <div className="bg-surface w-full max-w-lg rounded-2xl shadow-xl border border-border">
@@ -106,7 +106,7 @@ export default function RoomTypeModal({ isOpen, onClose, onSuccess, initialData 
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-text mb-1.5">Base Price (GH₵) *</label>
               <input

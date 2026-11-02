@@ -194,10 +194,10 @@ export default function PublicCheckoutPage() {
   // CHECKOUT STATE
   // ==========================================
   return (
-    <div className="min-h-screen bg-background py-12 px-4">
+    <div className="min-h-screen bg-background">
       <PublicNavbar />
       
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-4xl mx-auto px-4 py-6 sm:py-10">
         <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-text-muted hover:text-text mb-6 transition">
           <ArrowLeft size={16} /> Back to Rooms
         </button>
@@ -225,7 +225,7 @@ export default function PublicCheckoutPage() {
                 </div>
                 
                 {/* Editable Date Inputs */}
-                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-border">
                   <div>
                     <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">Check In</label>
                     <input 
@@ -284,7 +284,7 @@ export default function PublicCheckoutPage() {
 
           {/* Right Column: Price Breakdown & Pay */}
           <div className="lg:col-span-1">
-            <div className="bg-surface p-6 rounded-xl border border-border sticky top-6">
+            <div className="bg-surface p-4 sm:p-6 rounded-xl border border-border lg:sticky lg:top-20">
               <h2 className="text-lg font-bold text-text mb-4">Price Details</h2>
               <div className="space-y-3 text-sm mb-6">
                 <div className="flex justify-between text-text">

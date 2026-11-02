@@ -63,7 +63,7 @@ export default function PublicBookingSuccessPage() {
   if (verificationStatus === 'success') {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="max-w-lg w-full bg-surface rounded-2xl shadow-xl border border-border p-8 text-center">
+        <div className="max-w-lg w-full bg-surface rounded-2xl shadow-xl border border-border p-4 sm:p-8 text-center">
           <div className="w-16 h-16 bg-success-50 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 size={32} className="text-success-600" />
           </div>
@@ -109,7 +109,7 @@ export default function PublicBookingSuccessPage() {
   // Failed state
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="max-w-lg w-full bg-surface rounded-2xl shadow-xl border border-border p-8 text-center">
+      <div className="max-w-lg w-full bg-surface rounded-2xl shadow-xl border border-border p-4 sm:p-8 text-center">
         <div className="w-16 h-16 bg-error-50 rounded-full flex items-center justify-center mx-auto mb-4">
           <XCircle size={32} className="text-error-600" />
         </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import api from '../../lib/axios';
@@ -7,6 +7,17 @@ import { useAuthStore } from '../../store/authStore';
 
 export default function AppLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const location = useLocation();
+  useEffect(() => { setIsSidebarOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    if (!isSidebarOpen) return undefined;
+    const escape = event => { if (event.key === 'Escape') setIsSidebarOpen(false); };
+    const desktop = window.matchMedia('(min-width: 768px)');
+    const resized = () => { if (desktop.matches) setIsSidebarOpen(false); };
+    window.addEventListener('keydown', escape);
+    desktop.addEventListener('change', resized);
+    return () => { window.removeEventListener('keydown', escape); desktop.removeEventListener('change', resized); };
+  }, [isSidebarOpen]);
   const accessToken = useAuthStore((state) => state.accessToken);
 
   useEffect(() => {
@@ -27,7 +38,7 @@ export default function AppLayout() {
   const closeSidebar = () => setIsSidebarOpen(false);
 
   return (
-    <div className="flex h-screen bg-background text-text">
+    <div className="flex h-dvh bg-background text-text">
       {/* Sidebar */}
       <Sidebar isOpen={isSidebarOpen} onClose={closeSidebar} />
       
@@ -40,9 +51,9 @@ export default function AppLayout() {
       )}
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden ml-0 md:ml-64">
-        <Topbar onMenuClick={toggleSidebar} />
-        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+      <div className="min-w-0 flex-1 flex flex-col overflow-hidden ml-0 md:ml-64">
+        <Topbar onMenuClick={toggleSidebar} isMenuOpen={isSidebarOpen} />
+        <main id="main-content" className="min-w-0 flex-1 overflow-y-auto p-3 sm:p-4 md:p-8" inert={isSidebarOpen ? true : undefined}>
           <Outlet />
         </main>
       </div>

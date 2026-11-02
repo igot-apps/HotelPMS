@@ -1,3 +1,4 @@
+import ResponsiveTable from '../components/ui/ResponsiveTable';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
@@ -129,7 +130,7 @@ export default function PaymentsPage() {
         className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider cursor-pointer hover:bg-secondary-100/50 transition select-none"
         onClick={() => handleSort(column)}
       >
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap justify-center items-center gap-1">
           {label}
           {isActive && (sortOrder === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
         </div>
@@ -223,7 +224,7 @@ export default function PaymentsPage() {
 
       <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          <ResponsiveTable className="w-full text-left">
             <thead className="bg-secondary-50/50 border-b border-border">
               <tr>
                 <SortableHeader column="paymentId" label="ID / Date" />
@@ -294,7 +295,7 @@ export default function PaymentsPage() {
                 })
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
 
         <div className="px-6 py-4 border-t border-border bg-secondary-50/30 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -313,7 +314,7 @@ export default function PaymentsPage() {
               <option value="100">100 / page</option>
             </select>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap justify-center items-center gap-1">
             <button onClick={() => updateParams({ page: 1 })} disabled={page === 1 || isPlaceholderData} className="px-2 py-1 text-sm font-medium rounded-lg border border-border bg-surface hover:bg-secondary-50 disabled:opacity-40 disabled:cursor-not-allowed transition">First</button>
             <button onClick={() => updateParams({ page: page - 1 })} disabled={page === 1 || isPlaceholderData} className="px-2 py-1 text-sm font-medium rounded-lg border border-border bg-surface hover:bg-secondary-50 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1"><ChevronLeft size={16} /> Prev</button>
             <span className="px-3 py-1 text-sm font-semibold text-text bg-background border border-border rounded-lg min-w-[100px] text-center">

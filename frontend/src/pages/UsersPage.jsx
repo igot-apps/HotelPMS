@@ -1,3 +1,4 @@
+import ResponsiveTable from '../components/ui/ResponsiveTable';
 // frontend/src/pages/UsersPage.jsx
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -109,7 +110,7 @@ export default function UsersPage() {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          <ResponsiveTable className="w-full text-left">
             <thead className="bg-secondary-50/50 border-b border-border">
               <tr>
                 <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase">Staff Member</th>
@@ -163,7 +164,7 @@ export default function UsersPage() {
                 ))
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
       </div>
 

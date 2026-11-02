@@ -114,7 +114,7 @@ export default function HotelRegistrationWizard() {
         </div>
 
         {/* Form Card */}
-        <div className="bg-surface border border-border rounded-2xl shadow-xl p-8">
+        <div className="bg-surface border border-border rounded-2xl shadow-xl p-4 sm:p-8">
           <form onSubmit={step === 1 ? nextStep : handleSubmit}>
             
             {/* ========================================== */}

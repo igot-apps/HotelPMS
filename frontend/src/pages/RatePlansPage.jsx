@@ -1,3 +1,4 @@
+import ResponsiveTable from '../components/ui/ResponsiveTable';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRatePlans, createRatePlan, updateRatePlan, deleteRatePlan } from '../api/ratePlans';
@@ -140,7 +141,7 @@ export default function RatePlansPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            <ResponsiveTable className="w-full text-left">
               <thead className="bg-secondary-50/50 border-b border-border">
                 <tr>
                   <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Plan Name</th>
@@ -198,7 +199,7 @@ export default function RatePlansPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </ResponsiveTable>
           </div>
         )}
 

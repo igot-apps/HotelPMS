@@ -55,7 +55,7 @@ export default function GuestAuthPage() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-surface rounded-2xl shadow-xl border border-border p-8">
+      <div className="w-full max-w-md bg-surface rounded-2xl shadow-xl border border-border p-4 sm:p-8">
         <button onClick={() => navigate(`/public/${propertyCode}`)} className="flex items-center gap-2 text-sm text-text-muted hover:text-text mb-6 transition">
           <ArrowLeft size={16} /> Back to Hotel
         </button>

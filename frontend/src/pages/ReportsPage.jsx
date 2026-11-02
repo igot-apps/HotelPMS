@@ -80,7 +80,7 @@ const currentPropertyName = user?.propertyName || 'All Properties';
         </div>
         
         <div className="flex flex-wrap items-center gap-3 bg-surface p-3 rounded-xl border border-border shadow-sm">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 w-full flex-col sm:w-auto sm:flex-row sm:items-center gap-2">
             <Calendar size={16} className="text-text-muted" />
             <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="px-2 py-1.5 bg-background border border-border rounded-lg text-sm text-text focus:ring-2 focus:ring-primary-500/20 outline-none" />
             <span className="text-text-muted text-sm">to</span>

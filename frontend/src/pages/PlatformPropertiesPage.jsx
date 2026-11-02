@@ -1,3 +1,4 @@
+import ResponsiveTable from '../components/ui/ResponsiveTable';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Building2, CreditCard, Edit2, MapPin, Plus, Power, Search, ShieldCheck, Trash2, Users } from 'lucide-react';
@@ -132,7 +133,7 @@ export default function PlatformPropertiesPage() {
           <div className="p-12 text-center text-sm text-text-muted">No matching properties.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[850px] text-left">
+            <ResponsiveTable className="w-full min-w-[850px] text-left">
               <thead className="border-b border-border bg-secondary-50/50">
                 <tr>
                   <TableHead>Property</TableHead>
@@ -188,7 +189,7 @@ export default function PlatformPropertiesPage() {
                   );
                 })}
               </tbody>
-            </table>
+            </ResponsiveTable>
           </div>
         )}
         {!isLoading && !isError && pagination.total > 0 && (
@@ -204,7 +205,7 @@ export default function PlatformPropertiesPage() {
       </section>
 
       {deletingProperty && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <form role="dialog" aria-modal="true" aria-labelledby="delete-property-title" onSubmit={(event) => {
             event.preventDefault();
             if (!deleteMutation.isPending && confirmationCode === deletingProperty.propertyCode) {

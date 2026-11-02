@@ -1,3 +1,4 @@
+import ResponsiveTable from '../components/ui/ResponsiveTable';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
@@ -119,7 +120,7 @@ export default function RoomManagementPage() {
       </div>
 
       <div className="border-b border-border">
-        <nav className="flex gap-6">
+        <nav className="flex flex-wrap gap-x-4 gap-y-2">
           <button 
             onClick={() => setActiveTab('rooms')} 
             className={`pb-3 text-sm font-semibold border-b-2 transition ${activeTab === 'rooms' ? 'border-primary-600 text-primary-600' : 'border-transparent text-text-muted hover:text-text'}`}
@@ -192,7 +193,7 @@ export default function RoomManagementPage() {
       )}
 
       {roomTypeToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" role="presentation">
+        <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" role="presentation">
           <form onSubmit={confirmDeleteType} role="dialog" aria-modal="true" aria-labelledby="delete-room-type-title" className="bg-surface w-full max-w-lg rounded-2xl shadow-xl border border-border overflow-hidden">
             <div className="p-6 border-b border-border flex items-start gap-4">
               <div className="p-3 rounded-full bg-danger-50 text-danger-600"><AlertCircle size={22} /></div>
@@ -244,7 +245,7 @@ function RoomsTab({ rooms, isLoading, onAdd, onEdit, onDelete, onStatusChange, r
         </RequirePermission>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-left">
+        <ResponsiveTable className="w-full text-left">
           <thead className="bg-secondary-50/50 border-b border-border">
             <tr>
               <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase">Room</th>
@@ -300,7 +301,7 @@ function RoomsTab({ rooms, isLoading, onAdd, onEdit, onDelete, onStatusChange, r
               ))
             )}
           </tbody>
-        </table>
+        </ResponsiveTable>
       </div>
     </div>
   );
@@ -323,7 +324,7 @@ function TypesTab({ types, isLoading, onAdd, onEdit, onDelete, onManageAmenities
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-left">
+        <ResponsiveTable className="w-full text-left">
           <thead className="bg-secondary-50/50 border-b border-border">
             <tr>
               <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase">Type Name</th>
@@ -379,7 +380,7 @@ function TypesTab({ types, isLoading, onAdd, onEdit, onDelete, onManageAmenities
               ))
             )}
           </tbody>
-        </table>
+        </ResponsiveTable>
       </div>
     </div>
   );
@@ -407,14 +408,14 @@ function RoomModal({ room, roomTypes, propertyId, onClose, onSave, isLoading }) 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-surface w-full max-w-lg rounded-2xl shadow-xl border border-border overflow-hidden">
         <div className="p-6 border-b border-border flex justify-between items-center">
           <h2 className="text-xl font-bold text-text">{room ? 'Edit Room' : 'Add New Room'}</h2>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted"> <X size={20} /> </button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-text mb-1.5">Room Number *</label>
               <input type="text" name="roomNumber" value={formData.roomNumber} onChange={handleChange} required className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
@@ -431,7 +432,7 @@ function RoomModal({ room, roomTypes, propertyId, onClose, onSave, isLoading }) 
               {roomTypes.map(t => <option key={t.roomTypeId} value={t.roomTypeId}>{t.typeName} (GH₵ {parseFloat(t.basePrice).toFixed(2)})</option>)}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-text mb-1.5">Operational Status</label>
               <select name="operationalStatus" value={formData.operationalStatus} onChange={handleChange} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20">

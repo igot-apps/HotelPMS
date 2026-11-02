@@ -71,7 +71,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
       </p>
 
       {/* Pagination Controls */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap justify-center items-center gap-1.5">
         {/* Previous Button */}
         <button
           onClick={() => handlePageChange(currentPage - 1)}
@@ -83,7 +83,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
         </button>
 
         {/* Page Numbers */}
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap justify-center items-center gap-1">
           {getPageNumbers().map((page, idx) => {
             if (page === '...') {
               return (

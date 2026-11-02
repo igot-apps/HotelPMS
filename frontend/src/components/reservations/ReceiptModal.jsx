@@ -26,7 +26,7 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
     || Math.max(0, Math.ceil((latestCheckOutDate - new Date(reservation.checkInDate)) / (1000 * 60 * 60 * 24)));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm print-modal-wrapper">
+    <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm print-modal-wrapper">
       <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col print-modal-wrapper">
         
         {/* Screen-only Header (Hidden when printing) */}

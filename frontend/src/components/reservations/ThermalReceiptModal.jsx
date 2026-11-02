@@ -24,7 +24,7 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
     || Math.max(0, Math.ceil((latestCheckOutDate - new Date(reservation.checkInDate)) / (1000 * 60 * 60 * 24)));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm thermal-modal-wrapper">
+    <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm thermal-modal-wrapper">
       <div className="bg-white w-full max-w-xs rounded-2xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col thermal-modal-wrapper">
         
         {/* Screen-only Header */}

@@ -1,3 +1,4 @@
+import ResponsiveTable from '../components/ui/ResponsiveTable';
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -24,6 +25,7 @@ export default function ReservationDetailsPage() {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
   const [isThermalReceiptOpen, setIsThermalReceiptOpen] = useState(false);
+  const [isPrintMenuOpen, setIsPrintMenuOpen] = useState(false);
 
   // States for Form Data
   const [editData, setEditData] = useState({ notes: '', source: '' });
@@ -115,7 +117,7 @@ export default function ReservationDetailsPage() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {/* 🌟 UPDATED: Professional Status Badge */}
           <span className={`px-3 py-1.5 rounded-lg text-sm font-bold ${
             resData.status === 'InHouse' ? 'bg-success-50 text-success-700' :
@@ -131,19 +133,19 @@ export default function ReservationDetailsPage() {
 
           {/* Print Options Dropdown */}
           <div className="relative group">
-            <button className="inline-flex items-center gap-2 px-4 py-2 bg-surface border border-border text-text text-sm font-semibold rounded-lg hover:bg-secondary-50 transition">
+            <button onClick={() => setIsPrintMenuOpen(open => !open)} aria-expanded={isPrintMenuOpen} aria-label="Print options" className="inline-flex items-center gap-2 px-4 py-2 bg-surface border border-border text-text text-sm font-semibold rounded-lg hover:bg-secondary-50 transition">
               <Printer size={16} /> Print <ChevronDown size={14} />
             </button>
-            <div className="absolute right-0 mt-2 w-56 bg-surface border border-border rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+            <div className={`absolute left-0 sm:left-auto sm:right-0 mt-2 w-56 bg-surface border border-border rounded-lg shadow-lg transition-all z-50 ${isPrintMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
               <button
-                onClick={() => setIsReceiptOpen(true)}
+                onClick={() => { setIsReceiptOpen(true); setIsPrintMenuOpen(false); }}
                 className="w-full text-left px-4 py-3 text-sm text-text hover:bg-secondary-50 transition flex flex-col border-b border-border"
               >
                 <span className="font-semibold">A4 Guest Folio</span>
                 <span className="text-xs text-text-muted">Detailed invoice for standard printers</span>
               </button>
               <button
-                onClick={() => setIsThermalReceiptOpen(true)}
+                onClick={() => { setIsThermalReceiptOpen(true); setIsPrintMenuOpen(false); }}
                 className="w-full text-left px-4 py-3 text-sm text-text hover:bg-secondary-50 transition flex flex-col"
               >
                 <span className="font-semibold">80mm Thermal Receipt</span>
@@ -203,7 +205,7 @@ export default function ReservationDetailsPage() {
           <h3 className="text-lg font-bold text-text mb-4 flex items-center gap-2"><BedDouble size={18} /> Assigned Rooms</h3>
           <div className="space-y-3">
             {resData.reservationRooms?.map((rr) => (
-              <div key={rr.reservationRoomId} className="flex items-center justify-between p-4 bg-secondary-50 rounded-lg border border-border">
+              <div key={rr.reservationRoomId} className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between p-4 bg-secondary-50 rounded-lg border border-border">
                 <div>
                   <p className="text-sm font-bold text-text">Room {rr.room?.roomNumber || rr.roomNumberSnapshot || 'Removed'}</p>
                   <p className="text-xs text-text-muted">{rr.roomType?.typeName || rr.room?.roomType?.typeName || rr.roomTypeNameSnapshot || 'Room type removed'}</p>
@@ -221,7 +223,7 @@ export default function ReservationDetailsPage() {
       {/* Payment History */}
       <ReservationRecoveryPanel reservation={resData} />
       <div className="bg-surface p-6 rounded-xl border border-border shadow-sm">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-wrap gap-3 items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-text flex items-center gap-2"><CreditCard size={18} /> Payment History</h3>
           <button
             onClick={() => setIsPaymentModalOpen(true)}
@@ -234,7 +236,7 @@ export default function ReservationDetailsPage() {
         </div>
         {resData.payments?.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            <ResponsiveTable className="w-full text-left">
               <thead className="bg-secondary-50/50 border-b border-border">
                 <tr>
                   <th className="px-4 py-2 text-xs font-semibold text-text-muted uppercase">Date</th>
@@ -262,7 +264,7 @@ export default function ReservationDetailsPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </ResponsiveTable>
           </div>
         ) : (
           <p className="text-sm text-text-muted text-center py-8 bg-secondary-50/50 rounded-lg border border-dashed border-border">
@@ -275,7 +277,7 @@ export default function ReservationDetailsPage() {
       {/* 1. Record Payment Modal                    */}
       {/* ========================================== */}
       {isPaymentModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-surface w-full max-w-md rounded-2xl shadow-xl border border-border overflow-hidden">
             <div className="flex items-center justify-between p-6 border-b border-border">
               <div>
@@ -326,7 +328,7 @@ export default function ReservationDetailsPage() {
       {/* 2. Edit Notes Modal                        */}
       {/* ========================================== */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-surface w-full max-w-md rounded-2xl shadow-xl border border-border overflow-hidden">
             <div className="flex items-center justify-between p-6 border-b border-border">
               <h2 className="text-xl font-bold text-text">Edit Reservation</h2>

@@ -49,7 +49,7 @@ export default function UserModal({ isOpen, onClose, onSubmit, isLoading, editin
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-surface w-full max-w-lg rounded-2xl shadow-xl border border-border overflow-hidden">
         <div className="p-6 border-b border-border flex justify-between items-center">
           <h2 className="text-xl font-bold text-text">{editingUser ? 'Edit Staff Member' : 'Invite Receptionist'}</h2>

@@ -35,7 +35,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
         Page <span className="font-bold text-text">{currentPage}</span> of{' '}
         <span className="font-bold text-text">{totalPages}</span>
       </p>
-      <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap justify-center items-center gap-1.5">
         <button
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}
@@ -44,7 +44,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
           <ChevronLeft size={16} />
           <span className="hidden sm:inline">Previous</span>
         </button>
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap justify-center items-center gap-1">
           {getPageNumbers().map((page, idx) => {
             if (page === '...') {
               return <span key={`ellipsis-${idx}`} className="px-2 py-2 text-text-muted text-sm">...</span>;

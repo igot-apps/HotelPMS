@@ -83,7 +83,9 @@ export default function CalendarPage() {
       </div>
 
       {/* Calendar Grid */}
-      <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
+      <p className="text-sm text-text-muted md:hidden">Swipe the calendar sideways to view all days.</p>
+      <div role="region" aria-label="Reservation calendar; scroll horizontally for more days" tabIndex={0} className="bg-surface border border-border rounded-xl overflow-x-auto shadow-sm">
+        <div className="min-w-[700px]">
         {/* Days of Week Header */}
         <div className="grid grid-cols-7 bg-secondary-50/50 border-b border-border">
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
@@ -124,6 +126,7 @@ export default function CalendarPage() {
               </div>
             );
           })}
+        </div>
         </div>
       </div>
     </div>

@@ -21,7 +21,7 @@ export default function StaffSetupPage() {
     finally { setBusy(false); }
   }
   return <main className="flex min-h-screen items-center justify-center bg-background p-6">
-    <section className="w-full max-w-md space-y-5 rounded-2xl border border-border bg-surface p-8 shadow-sm">
+    <section className="w-full max-w-md space-y-5 rounded-2xl border border-border bg-surface p-4 sm:p-8 shadow-sm">
       <h1 className="text-2xl font-bold text-text">Set up your staff account</h1>
       {done ? <><p className="text-text">Your password is set. Sign in with the username or email your manager registered.</p><Link to="/login" className="block font-semibold text-primary-600">Continue to sign in</Link></> : !token ? <p className="text-danger-600">Invitation link is missing. Ask your manager for a new invitation.</p> : <form onSubmit={submit} className="space-y-4">
         <p className="text-sm text-text-muted">Choose your own password. Your manager will not see it.</p>

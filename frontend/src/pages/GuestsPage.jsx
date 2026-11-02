@@ -1,3 +1,4 @@
+import ResponsiveTable from '../components/ui/ResponsiveTable';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getGuests, createGuest, updateGuest, deleteGuest } from '../api/guests';
@@ -114,7 +115,7 @@ export default function GuestsPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            <ResponsiveTable className="w-full text-left">
               <thead className="bg-secondary-50/50 border-b border-border">
                 <tr>
                   <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Guest</th>
@@ -175,7 +176,7 @@ export default function GuestsPage() {
                   </tr>
                 );})}
               </tbody>
-            </table>
+            </ResponsiveTable>
           </div>
         )}
 
@@ -187,7 +188,7 @@ export default function GuestsPage() {
             Showing <span className="font-semibold text-text">{guests.length}</span> of <span className="font-semibold text-text">{pagination.total}</span> guests
           </p>
           
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap justify-center items-center gap-2">
             <button 
               onClick={() => setPage(p => Math.max(1, p - 1))} 
               disabled={page === 1 || isLoading}

@@ -311,7 +311,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
   // ==========================================
   if (createdReservation) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
         <div className="bg-surface w-full max-w-md rounded-2xl shadow-xl border border-border overflow-hidden">
           <div className="p-8 text-center">
             <div className="w-16 h-16 bg-success-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -357,7 +357,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
   const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-surface w-full max-w-4xl rounded-2xl shadow-xl border border-border overflow-hidden max-h-[90vh] flex flex-col">
         <div className="p-6 border-b border-border">
           <div className="flex items-center justify-between mb-4">
@@ -737,7 +737,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
 
       {/* Nested Quick Add Guest Modal */}
       {isAddGuestOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div className="mobile-dialog-overlay fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-surface w-full max-w-md rounded-2xl shadow-2xl border border-border overflow-hidden">
             <div className="p-5 border-b border-border flex justify-between items-center bg-primary-50/30">
               <h3 className="text-lg font-bold text-text flex items-center gap-2">

@@ -1,24 +1,26 @@
 import { useAuthStore } from '../../store/authStore';
 import { Menu, Building2 } from 'lucide-react';
 
-export default function Topbar({ onMenuClick }) {
+export default function Topbar({ onMenuClick, isMenuOpen }) {
   const user = useAuthStore((state) => state.user);
 
   return (
-    <header className="h-16 bg-surface border-b border-border flex items-center justify-between px-4 md:px-8 sticky top-0 z-40">
+    <header className="h-16 shrink-0 gap-2 bg-surface border-b border-border flex items-center justify-between px-3 sm:px-4 md:px-8 sticky top-0 z-40">
       {/* Left Side: Mobile Menu Button & Current Property */}
-      <div className="flex items-center gap-4">
+      <div className="min-w-0 flex items-center gap-1 sm:gap-4">
         {/* Hamburger Button (Only visible on mobile) */}
         <button 
           onClick={onMenuClick} 
           className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition md:hidden"
           aria-label="Toggle Menu"
+          aria-expanded={isMenuOpen}
+          aria-controls="hotel-sidebar"
         >
           <Menu size={24} />
         </button>
 
         {/* ✅ UPDATED: Current Property Indicator Badge (Tenant concept completely removed) */}
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary-50 border border-border rounded-lg">
+        <div className="min-w-0 flex items-center gap-2 px-2 sm:px-3 py-1.5 bg-secondary-50 border border-border rounded-lg">
           <Building2 size={16} className="text-primary-600" />
           <span 
             className="text-sm font-semibold text-text truncate max-w-[150px] md:max-w-none" 
@@ -31,8 +33,8 @@ export default function Topbar({ onMenuClick }) {
       </div>
 
       {/* Right Side: User Profile */}
-      <div className="flex items-center gap-4 ml-auto">
-        <div className="text-right hidden sm:block">
+      <div className="shrink-0 flex items-center gap-2 sm:gap-4 ml-auto">
+        <div className="text-right hidden sm:block max-w-40 truncate">
           <p className="text-sm font-semibold text-text">{user?.fullName || 'User'}</p>
           <p className="text-xs text-text-muted">{user?.role || 'Staff'}</p>
         </div>

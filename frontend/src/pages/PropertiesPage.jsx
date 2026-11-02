@@ -1,3 +1,4 @@
+import ResponsiveTable from '../components/ui/ResponsiveTable';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getProperties, updateProperty } from '../api/properties';
@@ -92,7 +93,7 @@ export default function PropertiesPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            <ResponsiveTable className="w-full text-left">
               <thead className="bg-secondary-50/50 border-b border-border">
                 <tr>
                   <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Property</th>
@@ -151,7 +152,7 @@ export default function PropertiesPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </ResponsiveTable>
           </div>
         )}
       </div>

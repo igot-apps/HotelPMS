@@ -138,7 +138,7 @@ export default function AvailabilityPage() {
   }, 0);
 
   return (
-    <div className="space-y-6 pb-28"> {/* pb-28 prevents content hiding behind sticky button */}
+    <div className="space-y-6 pb-44 sm:pb-28"> {/* Space for the mobile booking action bar. */}
       <BookingPaymentNotice reservation={paymentRecoveryReservation} onDismiss={() => setPaymentRecoveryReservation(null)} />
       
       {/* Header */}
@@ -314,8 +314,8 @@ export default function AvailabilityPage() {
       {/* 🚨 SINGLE GLOBAL ACTION BAR                */}
       {/* ========================================== */}
       {hasSearched && availableRooms.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-surface border-t border-border shadow-2xl z-40 p-4 flex items-center justify-between backdrop-blur-md bg-surface/95">
-          <div className="flex items-center gap-4">
+        <div className="fixed bottom-0 left-0 md:left-64 right-0 bg-surface border-t border-border shadow-2xl z-30 p-3 sm:p-4 pb-[max(12px,env(safe-area-inset-bottom))] flex flex-col sm:flex-row gap-3 sm:items-center justify-between backdrop-blur-md bg-surface/95">
+          <div className="min-w-0 flex items-center gap-3">
             <div className="p-2 rounded-full bg-primary-100 text-primary-600">
               <ShoppingCart size={20} />
             </div>
@@ -331,7 +331,7 @@ export default function AvailabilityPage() {
           <button 
             onClick={handleProceedToBook}
             disabled={selectedRooms.length === 0}
-            className={`px-6 py-3 font-bold rounded-lg transition flex items-center gap-2 shadow-lg ${
+            className={`w-full sm:w-auto justify-center px-4 sm:px-6 py-3 font-bold rounded-lg transition flex items-center gap-2 shadow-lg ${
               selectedRooms.length === 0 
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
                 : 'bg-success-600 text-text-inverted hover:bg-success-700'

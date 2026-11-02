@@ -8,6 +8,7 @@ export default function PublicNavbar() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  useEffect(() => { setIsOpen(false); }, [location.pathname]);
   
   // 🛡️ STRICT ISOLATION: Read ONLY from public guest localStorage.
   // We completely ignore the PMS authStore so staff logins never leak here.
@@ -53,7 +54,7 @@ export default function PublicNavbar() {
               <span className="text-xl font-black text-text tracking-tight">Stayfolio</span>
             </Link>
 
-            <div className="hidden md:flex items-center gap-8">
+            <div className="hidden lg:flex items-center gap-8">
               <Link to="/discover" className="text-sm font-semibold text-text-muted hover:text-primary-600 transition">Discover Hotels</Link>
               <Link to="/for-hotels" className="text-sm font-semibold text-text-muted hover:text-primary-600 transition">For Hotels</Link>
               
@@ -80,14 +81,14 @@ export default function PublicNavbar() {
               )}
             </div>
 
-            <button onClick={() => setIsOpen(!isOpen)} className="md:hidden p-2 rounded-lg text-text-muted hover:bg-secondary-100 transition" aria-label="Toggle menu">
+            <button onClick={() => setIsOpen(!isOpen)} aria-expanded={isOpen} aria-controls="public-mobile-menu" className="lg:hidden p-2 rounded-lg text-text-muted hover:bg-secondary-100 transition" aria-label="Toggle menu">
               {isOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
           </div>
         </div>
 
         {isOpen && (
-          <div className="md:hidden border-t border-border bg-surface shadow-lg">
+          <div id="public-mobile-menu" className="lg:hidden border-t border-border bg-surface shadow-lg">
             <div className="px-4 py-4 space-y-3">
               <Link to="/discover" onClick={() => setIsOpen(false)} className="block px-3 py-2.5 text-base font-medium text-text hover:bg-secondary-50 rounded-lg transition">Discover Hotels</Link>
               <Link to="/for-hotels" onClick={() => setIsOpen(false)} className="block px-3 py-2.5 text-base font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition">For Hotels · Manage your property</Link>
