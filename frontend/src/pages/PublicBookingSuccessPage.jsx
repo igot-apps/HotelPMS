@@ -96,10 +96,10 @@ export default function PublicBookingSuccessPage() {
           </p>
           
           <button 
-            onClick={() => navigate(`/public/${propertyCode}`)}
+            onClick={() => navigate('/public/reservations')}
             className="w-full py-3 bg-primary-600 text-text-inverted font-bold rounded-lg hover:bg-primary-700 transition flex items-center justify-center gap-2"
           >
-            <ArrowLeft size={16} /> Return to Hotel Page
+            <ArrowLeft size={16} /> My Reservations
           </button>
         </div>
       </div>
