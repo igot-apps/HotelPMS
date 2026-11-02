@@ -2,29 +2,35 @@ import { useState, useRef, useEffect } from 'react';
 import { X, Plus, Check } from 'lucide-react';
 import { createAmenity } from '../../api/amenities';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '../../store/authStore';
+import { amenityPresetOptions } from '../../lib/amenity-presets.mjs';
 
 export default function InlineTagSelect({ 
   label, 
   options, // Array of { amenityId, name, icon }
   selectedIds, // Array of selected amenityIds (numbers)
   onChange, // Callback when selection changes: (newIds) => void
-  onCreateNew // Callback to refresh the parent's options list after creating
+  onCreateNew, // Callback to refresh the parent's options list after creating
+  onBusyChange,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const wrapperRef = useRef(null);
+  const canCreate = useAuthStore(state => state.permissions.includes('CanCreateRoomType'));
+  const normalizedSearch = searchTerm.trim().replace(/\s+/g, ' ').toLowerCase();
+  const suggestions = amenityPresetOptions(options).filter(preset => (canCreate || preset.amenity) && preset.name.toLowerCase().includes(normalizedSearch));
 
   // Filter options based on search
   const filteredOptions = options.filter(opt => 
-    opt.name.toLowerCase().includes(searchTerm.toLowerCase())
+    opt.name.trim().replace(/\s+/g, ' ').toLowerCase().includes(normalizedSearch)
   );
 
   // Check if the search term exactly matches an existing option
-  const exactMatchExists = options.some(opt => opt.name.toLowerCase() === searchTerm.toLowerCase());
+  const exactMatchExists = options.some(opt => opt.name.trim().replace(/\s+/g, ' ').toLowerCase() === normalizedSearch);
   
   // Should we show the "Create New" button?
-  const showCreateOption = searchTerm.trim() !== '' && !exactMatchExists;
+  const showCreateOption = canCreate && normalizedSearch !== '' && !exactMatchExists;
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -46,27 +52,30 @@ export default function InlineTagSelect({
     }
   };
 
-  const handleCreateNew = async () => {
+  const handleCreateNew = async name => {
+    if (isCreating) return;
     setIsCreating(true);
+    onBusyChange?.(true);
     try {
-      const res = await createAmenity({ name: searchTerm.trim() });
+      const res = await createAmenity({ name: name.trim() });
       const newAmenity = res.data.data;
       
-      toast.success(`Created "${newAmenity.name}"`);
+      toast.success(res.data.reused ? `Selected existing amenity "${newAmenity.name}"` : `Created "${newAmenity.name}"`);
       
       // 1. Add the new amenity to the parent's options list
       onCreateNew(newAmenity);
       
       // 2. Auto-select it
-      onChange([...selectedIds, newAmenity.amenityId]);
+      onChange([...new Set([...selectedIds, newAmenity.amenityId])]);
       
       // 3. Clear search and close
       setSearchTerm('');
       setIsOpen(false);
     } catch (error) {
-      toast.error('Failed to create amenity.');
+      toast.error(error.response?.data?.message || 'Failed to create amenity.');
     } finally {
       setIsCreating(false);
+      onBusyChange?.(false);
     }
   };
 
@@ -79,16 +88,23 @@ export default function InlineTagSelect({
       {/* The Input / Tag Area */}
       <div 
         onClick={() => setIsOpen(true)}
+        role="button" tabIndex={0} aria-expanded={isOpen} aria-label={label}
+        onKeyDown={event => {
+          if (event.key === 'Escape') setIsOpen(false);
+          if (event.target === event.currentTarget && ['Enter', ' '].includes(event.key)) { event.preventDefault(); setIsOpen(value => !value); }
+        }}
         className="w-full min-h-[42px] px-3 py-2 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition flex flex-wrap gap-2 items-center cursor-pointer"
       >
         {selectedOptions.length > 0 ? (
           selectedOptions.map(opt => (
-            <span key={opt.amenityId} className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 text-primary-700 text-xs font-bold rounded-md">
-              {opt.name}
+            <span key={opt.amenityId} className="inline-flex max-w-full items-center gap-1 px-2 py-1 bg-primary-100 text-primary-700 text-xs font-bold rounded-md">
+              <span className="min-w-0 break-words">{opt.name}</span>
               <button 
                 type="button" 
+                disabled={isCreating}
+                aria-label={`Remove ${opt.name}`}
                 onClick={(e) => { e.stopPropagation(); toggleOption(opt.amenityId); }}
-                className="hover:bg-primary-200 rounded-full p-0.5"
+                className="shrink-0 hover:bg-primary-200 rounded-full p-0.5"
               >
                 <X size={12} />
               </button>
@@ -108,6 +124,9 @@ export default function InlineTagSelect({
               type="text"
               autoFocus
               value={searchTerm}
+              maxLength={100}
+              aria-label="Search room amenities"
+              onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setIsOpen(false); wrapperRef.current?.querySelector('[role="button"]')?.focus(); } }}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Type to search or create..."
               className="w-full px-3 py-1.5 bg-background border border-border rounded text-sm text-text outline-none focus:ring-1 focus:ring-primary-500"
@@ -124,6 +143,7 @@ export default function InlineTagSelect({
                   <button
                     key={opt.amenityId}
                     type="button"
+                    disabled={isCreating}
                     onClick={() => toggleOption(opt.amenityId)}
                     className={`w-full text-left px-4 py-2.5 text-sm transition flex justify-between items-center ${
                       isSelected ? 'bg-primary-50 text-primary-700 font-semibold' : 'text-text hover:bg-secondary-50'
@@ -135,18 +155,25 @@ export default function InlineTagSelect({
                 );
               })
             ) : (
-              !showCreateOption && (
+              !showCreateOption && suggestions.length === 0 && (
                 <div className="px-4 py-3 text-sm text-text-muted text-center">
                   No amenities found.
                 </div>
               )
             )}
 
-            {/* 🌟 THE MAGIC: Create New Button */}
+            {suggestions.length > 0 && <div className="border-t border-border p-3">
+              <p className="mb-2 text-xs font-semibold text-text-muted">Predefined amenities · select to add</p>
+              <div className="flex flex-wrap gap-2">{suggestions.map(({ name, amenity }) => {
+                const selected = amenity && selectedIds.includes(amenity.amenityId);
+                return <button key={name} type="button" aria-pressed={Boolean(selected)} disabled={isCreating} onClick={() => amenity ? toggleOption(amenity.amenityId) : handleCreateNew(name)} className={`inline-flex min-h-11 max-w-full items-center gap-1 rounded-lg border border-primary-200 px-3 py-2 text-left text-xs font-semibold text-primary-700 disabled:opacity-50 ${selected ? 'bg-primary-100' : 'bg-primary-50'}`}>{selected ? <Check size={14} /> : <Plus size={14} />} {name}</button>;
+              })}</div>
+            </div>}
+            {/* Create a custom amenity */}
             {showCreateOption && (
               <button
                 type="button"
-                onClick={handleCreateNew}
+                onClick={() => handleCreateNew(searchTerm)}
                 disabled={isCreating}
                 className="w-full text-left px-4 py-2.5 text-sm font-bold text-success-700 bg-success-50 hover:bg-success-100 transition flex items-center gap-2 border-t border-border"
               >

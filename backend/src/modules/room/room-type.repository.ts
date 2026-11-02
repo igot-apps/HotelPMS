@@ -10,7 +10,11 @@ export const createRoomType = async (data: {
   isActive?: boolean;
   amenityIds?: number[]; // 🌟 ADDED: Accept array of amenity IDs
 }) => {
-  return prisma.roomType.create({
+  if (data.amenityIds !== undefined && (!Array.isArray(data.amenityIds) || data.amenityIds.some(id => !Number.isSafeInteger(id) || id < 1))) throw new Error('Choose valid room amenities.');
+  const ids = [...new Set(data.amenityIds || [])];
+  return prisma.$transaction(async tx => {
+  if (ids.length && await tx.amenity.count({ where: { propertyId: data.propertyId, amenityId: { in: ids } } }) !== ids.length) throw new Error('Choose amenities belonging to this hotel.');
+  return tx.roomType.create({
     data: {
       propertyId: data.propertyId,
       typeName: data.typeName,
@@ -19,9 +23,9 @@ export const createRoomType = async (data: {
       maxOccupancy: data.maxOccupancy || 1,
       isActive: data.isActive !== undefined ? data.isActive : true,
       // 🌟 ADDED: Link the selected amenities during creation
-      ...(data.amenityIds && data.amenityIds.length > 0 && {
+      ...(ids.length > 0 && {
         amenities: {
-          create: data.amenityIds.map((id) => ({
+          create: ids.map((id) => ({
             amenity: { connect: { amenityId: id } },
           })),
         },
@@ -33,6 +37,7 @@ export const createRoomType = async (data: {
       // 🌟 ADDED: Return the linked amenities in the response
       amenities: { include: { amenity: true } }, 
     },
+  });
   });
 };
 

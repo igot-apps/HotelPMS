@@ -10,6 +10,9 @@ export default function RoomTypeModal({ isOpen, onClose, onSuccess, initialData 
   
   const [amenitiesList, setAmenitiesList] = useState([]);
   const [selectedAmenityIds, setSelectedAmenityIds] = useState([]);
+  const [amenityStatus, setAmenityStatus] = useState('loading');
+  const [amenityRetry, setAmenityRetry] = useState(0);
+  const [amenityCreating, setAmenityCreating] = useState(false);
 
   const [formData, setFormData] = useState({
     typeName: '',
@@ -19,11 +22,17 @@ export default function RoomTypeModal({ isOpen, onClose, onSuccess, initialData 
   });
 
   useEffect(() => {
+    let active = true;
     if (isOpen) {
+      setAmenityStatus('loading');
       getAmenities()
-        .then(res => setAmenitiesList(res.data.data || []))
-        .catch(err => console.error('Failed to load amenities', err));
-
+        .then(res => { if (active) { setAmenitiesList(res.data.data || []); setAmenityStatus('ready'); } })
+        .catch(() => { if (active) setAmenityStatus('error'); });
+    }
+    return () => { active = false; };
+  }, [isOpen, amenityRetry]);
+  useEffect(() => {
+    if (isOpen) {
       if (initialData) {
         setFormData({
           typeName: initialData.typeName || '',
@@ -46,6 +55,7 @@ export default function RoomTypeModal({ isOpen, onClose, onSuccess, initialData 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (amenityStatus !== 'ready' || amenityCreating) return;
     setIsLoading(true);
 
     try {
@@ -148,13 +158,14 @@ export default function RoomTypeModal({ isOpen, onClose, onSuccess, initialData 
           </div>
 
           {/* 🌟 INLINE TAGGING COMPONENT FOR AMENITIES */}
-          <InlineTagSelect 
+          {amenityStatus === 'ready' ? <InlineTagSelect
             label="Room Amenities"
             options={amenitiesList}
             selectedIds={selectedAmenityIds}
             onChange={setSelectedAmenityIds}
-            onCreateNew={(newAmenity) => setAmenitiesList(prev => [...prev, newAmenity])}
-          />
+            onBusyChange={setAmenityCreating}
+            onCreateNew={(newAmenity) => setAmenitiesList(prev => prev.some(a => a.amenityId === newAmenity.amenityId) ? prev : [...prev, newAmenity])}
+          /> : <div role="status" className="rounded-lg border border-border p-3 text-sm text-text-muted">{amenityStatus === 'loading' ? 'Loading room amenities…' : <>Could not load amenities. <button type="button" className="min-h-11 px-2 font-semibold text-primary-700" onClick={() => setAmenityRetry(value => value + 1)}>Try again</button></>}</div>}
 
           <div className="flex justify-end gap-3 pt-4 border-t border-border">
             <button
@@ -166,7 +177,7 @@ export default function RoomTypeModal({ isOpen, onClose, onSuccess, initialData 
             </button>
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || amenityStatus !== 'ready' || amenityCreating}
               className="px-5 py-2.5 text-sm font-semibold text-text-inverted bg-primary-600 rounded-lg hover:bg-primary-700 transition disabled:opacity-50 flex items-center gap-2"
             >
               {isLoading && <Loader2 className="animate-spin" size={16} />}

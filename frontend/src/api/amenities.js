@@ -10,4 +10,4 @@ export const createAmenity = (data) => api.post('/amenities', data);
 export const updateAmenity = (id, data) => api.put(`/amenities/${id}`, data);
 
 // 🌟 NEW: Delete an amenity
-export const deleteAmenity = (id) => api.delete(`/amenities/${id}`);
+export const deleteAmenity = (id, data) => api.delete(`/amenities/${id}`, { data });

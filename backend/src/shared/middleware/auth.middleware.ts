@@ -33,19 +33,23 @@ export const authenticate = async (
     return;
   }
 
-  // 1. User is verified, attach to request
-  req.user = decoded;
-
   try {
     const account = await prisma.user.findUnique({ where: { userId: decoded.userId }, select: { isActive: true, propertyId: true } });
-    if (!account?.isActive || (account.propertyId || 0) !== (decoded.propertyId || 0)) {
-      res.status(401).json({ success: false, message: 'Account is disabled or no longer available.' });
+    if (!account?.isActive) {
+      res.status(401).json({ success: false, code: 'STAFF_ACCOUNT_DISABLED', message: 'Your staff account has been deactivated or is no longer available. Contact your manager.' });
+      return;
+    }
+    if ((account.propertyId || 0) !== (decoded.propertyId || 0)) {
+      res.status(401).json({ success: false, code: 'STAFF_ACCESS_CHANGED', message: 'Your account access has changed. Please sign in again.' });
       return;
     }
   } catch {
     res.status(503).json({ success: false, message: 'Could not verify account access.' });
     return;
   }
+
+  // Attach identity only after checking current account access, never JWT alone.
+  req.user = decoded;
 
   const isPlatformRoute = req.originalUrl.startsWith('/api/platform/');
   const isAuthRoute = req.originalUrl.startsWith('/api/auth/');

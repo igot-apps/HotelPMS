@@ -60,11 +60,15 @@ api.interceptors.response.use(
           window.dispatchEvent(new Event('guest-session-changed'));
           error.guestSessionExpired = true;
         } else if (!isPublicRequest) {
-          toastMessage = 'Your session has expired. Please log in again.';
+          // A response from an older session must not sign out a newer login.
+          const currentToken = useAuthStore.getState().accessToken;
+          const requestToken = error.config?.headers?.Authorization;
+          if (currentToken && requestToken === `Bearer ${currentToken}`) {
+            useAuthStore.getState().logout();
+          }
+          toastMessage = ['STAFF_ACCOUNT_DISABLED', 'STAFF_ACCESS_CHANGED'].includes(data?.code)
+            ? backendMessage : 'Your session has expired. Please log in again.';
         }
-        // Optional: trigger logout here
-        // useAuthStore.getState().logout();
-        // window.location.href = '/login';
         
       } else if (status === 403) {
         // 🌟 FIX: Read the specific message from the backend!
