@@ -1,4 +1,5 @@
-import { Link } from 'react-router-dom';
+import { useLayoutEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { ArrowRight, BedDouble, Building2, CalendarCheck2, ChartNoAxesCombined, ShieldCheck, Users } from 'lucide-react';
 import PublicNavbar from '../components/public/PublicNavbar';
 
@@ -10,6 +11,10 @@ const features = [
 ];
 
 export default function ForHotelsPage() {
+  const { key } = useLocation();
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [key]);
   return (
     <div className="min-h-screen bg-background text-text">
       <PublicNavbar />
