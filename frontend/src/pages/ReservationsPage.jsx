@@ -18,7 +18,7 @@ import BookingPaymentNotice from '../components/reservations/BookingPaymentNotic
 import { createWalkInBooking } from '../lib/createWalkInBooking';
 import RoomCard from '../components/reservations/RoomCard'; // 🌟 NEW: Extracted component
 import {
-  Search, Plus, CalendarDays, AlertCircle, LogIn, LogOut, XCircle,
+  Search, Plus, CalendarDays, AlertCircle, XCircle,
   ChevronLeft, ChevronRight, Eye, X, Check,
   ChevronDown, ChevronUp, BedDouble, Loader2, Clock, Undo2, SlidersHorizontal
 } from 'lucide-react';
@@ -332,11 +332,11 @@ export default function ReservationsPage() {
   const activeRoomActionId = roomActionMutation.isPending ? roomActionMutation.variables?.id : null;
 
   const renderRoomAssignments = (res, compact = false) => (
-    <section className={compact ? 'mt-4 border-t border-border pt-4' : ''}>
+    <section id={`${compact ? 'mobile' : 'desktop'}-rooms-${res.reservationId}`} className={compact ? 'mt-4 rounded-xl border border-border bg-secondary-50/50 p-3' : ''}>
       <div className="flex items-center gap-2 mb-4">
         <BedDouble size={18} className="text-primary-600" />
-        <h4 className="text-sm font-bold text-text uppercase tracking-wider">Individual Room Assignments</h4>
-        <span className="text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full font-semibold">{res.reservationRooms?.length || 0} Rooms</span>
+        <h4 className="min-w-0 flex-1 text-sm font-bold text-text">Room assignments</h4>
+        <span className="shrink-0 whitespace-nowrap text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full font-semibold">{res.reservationRooms?.length || 0} {res.reservationRooms?.length === 1 ? 'room' : 'rooms'}</span>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {(res.reservationRooms || []).map((rr) => (
@@ -550,14 +550,9 @@ export default function ReservationsPage() {
                 </div>
 
                 <div className="mt-4 flex gap-2">
-                  {res.status === 'Confirmed' && (
-                    <button onClick={() => setExpandedId(isExpanded ? null : id)} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-success-600 px-3 text-sm font-bold text-white hover:bg-success-700">
-                      <LogIn size={16} /> Check In
-                    </button>
-                  )}
-                  {res.status === 'InHouse' && (
-                    <button onClick={() => setExpandedId(isExpanded ? null : id)} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-primary-600 px-3 text-sm font-bold text-white hover:bg-primary-700">
-                      <LogOut size={16} /> Check Out
+                  {res.reservationRooms?.length > 0 && (
+                    <button type="button" onClick={() => setExpandedId(isExpanded ? null : id)} aria-expanded={isExpanded} aria-controls={`mobile-rooms-${id}`} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-primary-600 px-3 text-sm font-bold text-white hover:bg-primary-700">
+                      {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />} {isExpanded ? 'Hide rooms' : 'Show rooms'}
                     </button>
                   )}
                   {['Cancelled', 'Expired'].includes(res.status) && res.refundStatus === 'Pending' && permissions?.includes('CanCancelReservation') && (
@@ -568,11 +563,6 @@ export default function ReservationsPage() {
                   <Link to={`/reservations/${id}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50">
                     <Eye size={16} />Details
                   </Link>
-                  {res.reservationRooms?.length > 0 && res.status !== 'Confirmed' && res.status !== 'InHouse' && (
-                    <button onClick={() => setExpandedId(isExpanded ? null : id)} className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-3 text-text-muted" aria-label={isExpanded ? 'Hide room details' : 'Show room details'}>
-                      {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                    </button>
-                  )}
                 </div>
 
                 {(res.status === 'Confirmed' || (res.status !== 'Completed' && res.status !== 'Cancelled' && res.status !== 'NoShow' && res.status !== 'Expired')) && (
@@ -683,9 +673,10 @@ export default function ReservationsPage() {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => setExpandedId(isExpanded ? null : res.reservationId)}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition"
+                          aria-expanded={isExpanded} aria-controls={`desktop-rooms-${res.reservationId}`}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition"
                         >
-                          <LogIn size={14} /> Check In
+                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {isExpanded ? 'Hide rooms' : 'Show rooms'}
                         </button>
                         {isPastCheckIn && (
                           <button
@@ -707,9 +698,10 @@ export default function ReservationsPage() {
                     actions = (
                       <button
                         onClick={() => setExpandedId(isExpanded ? null : res.reservationId)}
+                        aria-expanded={isExpanded} aria-controls={`desktop-rooms-${res.reservationId}`}
                         className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition"
                       >
-                        <LogOut size={14} /> Check Out
+                        {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {isExpanded ? 'Hide rooms' : 'Show rooms'}
                       </button>
                     );
                   }

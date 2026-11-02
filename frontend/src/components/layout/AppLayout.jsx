@@ -51,9 +51,9 @@ export default function AppLayout() {
       )}
 
       {/* Main Content Area */}
-      <div className="min-w-0 flex-1 flex flex-col overflow-hidden ml-0 md:ml-64">
+      <div className="min-h-0 min-w-0 flex-1 flex flex-col overflow-hidden ml-0 md:ml-64">
         <Topbar onMenuClick={toggleSidebar} isMenuOpen={isSidebarOpen} />
-        <main id="main-content" className="min-w-0 flex-1 overflow-y-auto p-3 sm:p-4 md:p-8" inert={isSidebarOpen ? true : undefined}>
+        <main id="main-content" className="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:p-4 md:p-8" inert={isSidebarOpen ? true : undefined}>
           <Outlet />
         </main>
       </div>

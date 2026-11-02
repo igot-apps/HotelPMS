@@ -31,18 +31,18 @@ export default function RoomCard({
         <button
           disabled={isThisRoomBusy}
           onClick={() => onCheckIn(rr, mainGuestName, mainGuestPhone)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex min-h-11 w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-text-inverted hover:bg-success-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isThisRoomBusy ? <Loader2 size={14} className="animate-spin" /> : <LogIn size={14} />} Check In Room
         </button>
       );
     } else if (roomStatus === 'CheckedIn') {
       roomActionBtn = (
-        <div className="flex gap-2">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           <button
             disabled={isThisRoomBusy}
             onClick={() => onCheckOut(rr)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex min-h-11 flex-1 sm:flex-initial items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-text-inverted hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isThisRoomBusy ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />} Check Out Room
           </button>
@@ -50,7 +50,7 @@ export default function RoomCard({
           <button
             disabled={isThisRoomBusy}
             onClick={() => onExtend(rr)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-warning-600 text-text-inverted hover:bg-warning-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex min-h-11 flex-1 sm:flex-initial items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-warning-600 text-text-inverted hover:bg-warning-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Clock size={14} /> Extend
           </button>
@@ -256,7 +256,7 @@ export default function RoomCard({
       </div>
 
       {/* Price and Action Button */}
-      <div className="pt-3 border-t border-border flex items-center justify-between mt-auto">
+      <div className="pt-3 border-t border-border flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:flex-wrap sm:justify-between mt-auto">
         <p className="text-sm font-bold text-primary-600">{parseFloat(rr.agreedPricePerNight).toFixed(2)} GHS <span className="font-normal text-text-muted">per night</span></p>
         {roomActionBtn || (
           isRoomComplete ? (
