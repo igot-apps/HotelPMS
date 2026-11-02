@@ -197,13 +197,14 @@ export const markAsNoShow = async (reservationId: string, userPropertyId?: numbe
 // ============================================================
 export const refundReservation = async (reservationId: string) => {
   return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "reservationId" FROM reservations WHERE "reservationId" = ${reservationId} FOR UPDATE`;
     const reservation = await tx.reservation.findUnique({
       where: { reservationId },
       select: { status: true, refundStatus: true, refundDue: true },
     });
 
     if (!reservation) throw new Error('Reservation not found');
-    if (reservation.status !== 'Cancelled' || reservation.refundStatus !== 'Pending') {
+    if (!['Cancelled', 'Expired'].includes(reservation.status) || reservation.refundStatus !== 'Pending') {
       throw new Error('This reservation has no pending refund.');
     }
 
@@ -223,7 +224,7 @@ export const refundReservation = async (reservationId: string) => {
 
     // Claim the pending refund before changing payments so duplicate requests cannot process it twice.
     const claimed = await tx.reservation.updateMany({
-      where: { reservationId, status: 'Cancelled', refundStatus: 'Pending' },
+      where: { reservationId, status: reservation.status, refundStatus: 'Pending' },
       data: { refundStatus: 'Processed', refundDue: 0, amountPaid: 0 },
     });
     if (claimed.count !== 1) throw new Error('This refund has already been processed.');

@@ -80,6 +80,11 @@ export default function PublicReservationsPage() {
   const client = useQueryClient();
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelReason, setCancelReason] = useState('');
+  const statusMutation = useMutation({
+    mutationFn: async reservation => (await api.get(`/public/${reservation.property.propertyCode}/reservations/${reservation.reservationId}/payment-status`)).data.data,
+    onSuccess: result => { client.invalidateQueries({ queryKey: ['guestReservations'] }); toast(result.message || (result.status === 'paid' ? 'Payment received.' : 'No successful payment confirmed yet.')); },
+    onError: () => toast.error('Could not confirm payment status. If you were charged, do not pay again; check again or contact the hotel.'),
+  });
   const cancelMutation = useMutation({
     mutationFn: async () => (await api.post(`/public/reservations/${cancelTarget.reservationId}/cancel`, { reason: cancelReason })).data.data,
     onSuccess: result => {
@@ -177,7 +182,8 @@ const retryPaymentMutation = useMutation({
       if (paystackData.authorization_url) {
         window.location.href = paystackData.authorization_url;
       } else {
-        toast.error('Failed to initialize payment.');
+        client.invalidateQueries({ queryKey: ['guestReservations'] });
+        toast(paystackData.message || (paystackData.status === 'paid' ? 'Payment already received.' : 'Please check payment status before retrying.'));
       }
     },
     onError: (err) => {
@@ -297,7 +303,7 @@ const retryPaymentMutation = useMutation({
                             {res.property?.propertyName}
                           </h3>
                           {/* 🌟 Pass isFullyPaid to badge */}
-                          {getStatusBadge(expired ? 'Expired' : res.status, isFullyPaid)}
+                          {expired && amountPaid > 0 ? <span className="rounded-full border border-warning-200 bg-warning-50 px-2.5 py-1 text-xs font-semibold text-warning-700">Payment received · Booking not confirmed</span> : getStatusBadge(expired ? 'Expired' : res.status, isFullyPaid)}
                         </div>
                         <p className="text-sm text-text-muted flex items-center gap-1.5 mb-3">
                           <MapPin size={14} className="flex-shrink-0" /> {res.property?.city}, {res.property?.country || 'Ghana'}
@@ -321,8 +327,9 @@ const retryPaymentMutation = useMutation({
                       </div>
                     </div>
 
-                    {holdEnds !== null && !expired && <p className="mb-3 text-sm text-warning-700">Room held for {Math.max(1, Math.ceil((holdEnds - holdNow) / 60000))} more minute(s). Pay before the hold expires.</p>}
+                    {holdEnds !== null && !expired && <p className="mb-3 text-sm text-warning-700">Complete payment: {Math.max(1, Math.ceil((holdEnds - holdNow) / 60000))} minute(s) remaining</p>}
                     {expired && <p className="mb-3 text-sm text-text-muted">The room hold has been released. {amountPaid > 0 ? 'Your late payment was recorded; contact the hotel for refund review.' : 'No payment was recorded for this booking.'}</p>}
+                    {!released && Number(res.refundDue) > 0 && <p className="mb-3 text-sm text-warning-700">Credit awaiting hotel refund review: GH₵ {Number(res.refundDue).toFixed(2)}. No further payment is needed if your balance is zero.</p>}
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-4 border-t border-border gap-4">
                       <div className="flex items-center gap-2">
                         <CreditCard size={16} className="text-text-muted" />
@@ -369,6 +376,7 @@ const retryPaymentMutation = useMutation({
                           </span>
                         )}
                         {!released && ['Pending', 'Confirmed'].includes(res.status) && !res.reservationRooms?.some(stay => stay.status !== 'Reserved' || stay.actualCheckIn) && <button type="button" onClick={() => { setCancelReason(''); cancelMutation.reset(); setCancelTarget(res); }} className="min-h-11 w-full rounded-lg border border-danger-200 px-4 py-2 text-sm font-semibold text-danger-700 hover:bg-danger-50 sm:w-auto">Cancel reservation</button>}
+                        {['Pending', 'Confirmed', 'Cancelled', 'Expired'].includes(res.status) && <button type="button" disabled={statusMutation.isPending} onClick={() => statusMutation.mutate(res)} className="min-h-11 w-full rounded-lg border border-border px-4 py-2 text-sm font-semibold text-primary-700 disabled:opacity-50 sm:w-auto">{statusMutation.isPending && statusMutation.variables?.reservationId === res.reservationId ? 'Checking…' : 'Check payment status'}</button>}
                       </div>
                     </div>
                   </div>

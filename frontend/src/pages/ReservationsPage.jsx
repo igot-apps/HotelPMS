@@ -536,9 +536,9 @@ export default function ReservationsPage() {
                     <p className="text-xs text-text-muted">{res.status === 'Cancelled' ? 'Refund amount' : 'Total'}</p>
                     <p className="font-bold text-text">{(res.status === 'Cancelled' ? cancelledAmount : totalAmount).toFixed(2)} GHS</p>
                   </div>
-                  {res.status === 'Cancelled' && res.refundStatus === 'Pending' ? (
+                  {['Cancelled', 'Expired'].includes(res.status) && res.refundStatus === 'Pending' ? (
                     <span className="text-right text-xs font-semibold text-warning-700">Refund due</span>
-                  ) : res.status === 'Cancelled' && res.refundStatus === 'Processed' ? (
+                  ) : ['Cancelled', 'Expired'].includes(res.status) && res.refundStatus === 'Processed' ? (
                     <span className="text-right text-xs font-semibold text-success-700">Refunded</span>
                   ) : res.status === 'Cancelled' ? (
                     <span className="text-right text-xs text-text-muted">No payment collected</span>
@@ -560,7 +560,7 @@ export default function ReservationsPage() {
                       <LogOut size={16} /> Check Out
                     </button>
                   )}
-                  {res.status === 'Cancelled' && res.refundStatus === 'Pending' && permissions?.includes('CanCancelReservation') && (
+                  {['Cancelled', 'Expired'].includes(res.status) && res.refundStatus === 'Pending' && permissions?.includes('CanCancelReservation') && (
                     <button onClick={() => askReservationAction(id, 'refund', 'Process reservation refund?', `This will mark ${parseFloat(res.refundDue || 0).toFixed(2)} GHS as refunded and update the payment records for reservation ${res.confirmationCode || id}.`, { danger: true, confirmLabel: 'Process Refund' })} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-danger-200 bg-danger-50 px-3 text-sm font-semibold text-danger-700">
                       <Undo2 size={16} /> Refund {parseFloat(res.refundDue || 0).toFixed(2)} GHS
                     </button>
@@ -714,7 +714,7 @@ export default function ReservationsPage() {
                     );
                   }
 
-                  if (res.status === 'Cancelled' && res.refundStatus === 'Pending' && permissions?.includes('CanCancelReservation')) {
+                  if (['Cancelled', 'Expired'].includes(res.status) && res.refundStatus === 'Pending' && permissions?.includes('CanCancelReservation')) {
                     actions = (
                       <button
                         onClick={() => askReservationAction(
@@ -800,9 +800,9 @@ export default function ReservationsPage() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <p className="text-sm font-bold text-text">{(res.status === 'Cancelled' ? cancelledPaymentAmount : totalAmount).toFixed(2)} GHS</p>
-                          {res.status === 'Cancelled' && res.refundStatus === 'Pending' ? (
+                          {['Cancelled', 'Expired'].includes(res.status) && res.refundStatus === 'Pending' ? (
                             <span className="inline-flex items-center gap-1 text-xs font-bold text-warning-700 bg-warning-50 border border-warning-200 px-2 py-0.5 rounded mt-1"><AlertCircle size={12} /> Refund due</span>
-                          ) : res.status === 'Cancelled' && res.refundStatus === 'Processed' ? (
+                          ) : ['Cancelled', 'Expired'].includes(res.status) && res.refundStatus === 'Processed' ? (
                             <span className="inline-flex items-center gap-1 text-xs font-bold text-success-700 bg-success-50 border border-success-200 px-2 py-0.5 rounded mt-1"><Check size={12} /> Refunded</span>
                           ) : res.status === 'Cancelled' ? (
                             <span className="inline-block text-xs font-medium text-text-muted bg-secondary-50 px-2 py-0.5 rounded mt-1">No payment collected</span>

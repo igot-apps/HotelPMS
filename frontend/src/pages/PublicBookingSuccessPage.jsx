@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, XCircle, Loader2, ArrowLeft } from 'lucide-react';
@@ -8,47 +8,31 @@ export default function PublicBookingSuccessPage() {
   const { propertyCode } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  
-  const reference = searchParams.get('reference');
-  const [verificationStatus, setVerificationStatus] = useState('loading'); // 'loading' | 'success' | 'failed'
-  const [transactionData, setTransactionData] = useState(null);
-
-  // Fetch property details
-  const { data: property } = useQuery({
-    queryKey: ['publicProperty', propertyCode],
-    queryFn: async () => (await api.get(`/public/${propertyCode}`)).data.data,
+  const guestIdentity = (() => { try { const guest = JSON.parse(localStorage.getItem('guestInfo') || '{}'); return guest.guestId || guest.platformGuestId || guest.phone || 'guest'; } catch { return 'guest'; } })();
+  const recoveryKey = `payment-return:${propertyCode}:${guestIdentity}`;
+  const [reference] = useState(() => {
+    const returnedReference = searchParams.get('reference') || searchParams.get('trxref');
+    if (returnedReference) return returnedReference;
+    try { return sessionStorage.getItem(recoveryKey) || ''; } catch { return ''; }
   });
-
-  // Verify payment on mount
+  const checks = useRef(0);
   useEffect(() => {
-    const verifyPayment = async () => {
-      if (!reference) {
-        setVerificationStatus('failed');
-        return;
-      }
-
-      // The gateway reference is only needed for verification. Keep the long
-      // transaction token out of the address bar after reading it.
-      window.history.replaceState({}, document.title, window.location.pathname);
-
-      try {
-        const res = await api.get(`/public/${propertyCode}/payments/verify/${reference}`);
-        
-        if (res.data.status === 'success') {
-          setTransactionData(res.data.data);
-          setVerificationStatus('success');
-        } else {
-          setVerificationStatus('failed');
-        }
-      } catch (error) {
-        console.error('Verification failed:', error);
-        setVerificationStatus('failed');
-      }
-    };
-
-    verifyPayment();
-  }, [reference, propertyCode]);
-
+    if (!reference) return;
+    try {
+      sessionStorage.setItem(recoveryKey, reference);
+      window.history.replaceState(window.history.state, document.title, window.location.pathname);
+    } catch { /* Keep the return URL usable when browser storage is disabled. */ }
+  }, [reference, recoveryKey]);
+  const { data: property } = useQuery({ queryKey: ['publicProperty', propertyCode], queryFn: async () => (await api.get(`/public/${propertyCode}`)).data.data });
+  const verification = useQuery({
+    queryKey: ['guestPaymentVerification', propertyCode, reference], enabled: Boolean(reference), retry: false,
+    queryFn: async () => { checks.current++; return (await api.get(`/public/${propertyCode}/payments/verify/${encodeURIComponent(reference)}`)).data; },
+    refetchInterval: query => checks.current < 6 && !['success', 'failed', 'reversed'].includes(query.state.data?.status) ? 5000 : false,
+  });
+  const transactionData = verification.data?.data;
+  const verificationStatus = verification.data?.status === 'success' ? 'success' : reference && verification.isPending ? 'loading' : 'unconfirmed';
+  const confirmedFailure = ['failed', 'reversed'].includes(verification.data?.status);
+  const bookingReleased = ['Cancelled', 'Expired'].includes(transactionData?.bookingStatus);
   if (verificationStatus === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -67,8 +51,8 @@ export default function PublicBookingSuccessPage() {
           <div className="w-16 h-16 bg-success-50 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 size={32} className="text-success-600" />
           </div>
-          <h1 className="text-2xl font-bold text-text mb-2">{transactionData?.requiresRefundReview ? 'Payment received · Review needed' : 'Payment Successful!'}</h1>
-          <p className="text-text-muted mb-6">{transactionData?.requiresRefundReview ? 'This booking was already released. Your payment has been recorded for refund review. Contact the hotel; your room is not confirmed.' : `Your reservation at ${property?.propertyName} has been confirmed.`}</p>
+          <h1 className="text-2xl font-bold text-text mb-2">{transactionData?.requiresRefundReview ? bookingReleased ? 'Payment received · Booking not confirmed' : 'Payment received · Review needed' : 'Payment Successful!'}</h1>
+          <p className="text-text-muted mb-6">{transactionData?.requiresRefundReview ? bookingReleased ? 'This booking was already released. Your payment has been recorded for refund review. Contact the hotel; your room is not confirmed.' : 'Your booking is confirmed, but an extra payment requires hotel refund review. Do not pay again; contact the hotel about your credit.' : `Your reservation at ${property?.propertyName} has been confirmed.`}</p>
           
           <div className="bg-background p-4 rounded-lg border border-border text-left space-y-3 mb-6">
             <div className="flex justify-between text-sm">
@@ -113,23 +97,23 @@ export default function PublicBookingSuccessPage() {
         <div className="w-16 h-16 bg-error-50 rounded-full flex items-center justify-center mx-auto mb-4">
           <XCircle size={32} className="text-error-600" />
         </div>
-        <h1 className="text-2xl font-bold text-text mb-2">Payment Failed</h1>
+        <h1 className="text-2xl font-bold text-text mb-2">{confirmedFailure ? 'Payment not completed' : 'Payment status not confirmed'}</h1>
         <p className="text-text-muted mb-6">
-          We couldn't verify your payment. Please contact the hotel or try again.
+          We have not confirmed a successful payment yet. If your bank or Mobile Money account was charged, do not pay again. Check the status or contact the hotel.
         </p>
         
-        <div className="flex gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row">
           <button 
-            onClick={() => navigate(-1)}
+            onClick={() => verification.refetch()} disabled={!reference || verification.isFetching}
             className="flex-1 py-3 border border-border text-text font-bold rounded-lg hover:bg-secondary-50 transition"
           >
-            Try Again
+            {verification.isFetching ? 'Checking…' : 'Check payment status'}
           </button>
           <button 
-            onClick={() => navigate(`/public/${propertyCode}`)}
+            onClick={() => navigate('/public/reservations')}
             className="flex-1 py-3 bg-primary-600 text-text-inverted font-bold rounded-lg hover:bg-primary-700 transition"
           >
-            Back to Hotel
+            My Reservations
           </button>
         </div>
       </div>

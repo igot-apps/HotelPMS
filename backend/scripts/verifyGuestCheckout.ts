@@ -9,6 +9,8 @@ import publicRoutes from '../src/modules/public/public.routes';
 import { prisma } from '../src/shared/utils/prisma';
 import { hashPassword } from '../src/shared/utils/password';
 import { verifyGuestPayment } from '../src/modules/payment/guest-payment.service';
+import { recordPayment } from '../src/modules/payment/payment.service';
+import { refundReservation } from '../src/modules/reservation/reservation.service';
 
 async function main() {
   assert(['localhost', '127.0.0.1'].includes(new URL(process.env.DATABASE_URL!).hostname));
@@ -20,6 +22,7 @@ async function main() {
   const originalPost = axios.post;
   const originalGet = axios.get;
   try {
+    (axios as any).get = async (url: string) => ({ data: { status: true, data: { reference: decodeURIComponent(url.split('/').pop()!), status: 'pending' } } });
     await prisma.room.create({ data: { propertyId: hotel.propertyId, roomTypeId: hotel.roomTypes[0].roomTypeId, roomNumber: '101' } });
     const base = `/api/public/${code}`;
     for (const endpoint of ['/reservations', '/payments/initialize']) {
@@ -45,16 +48,22 @@ async function main() {
     (axios as any).post = async (_url: string, data: any) => { sentAmount = data.amount; return { data: { data: { authorization_url: 'https://example.test/checkout' } } }; };
     assert.equal((await request(app).post(base + '/payments/initialize').set('Authorization', auth).send({ reservationId: reservation.reservationId, amount: 1 })).status, 200);
     assert.equal(sentAmount, 20000);
+    const firstAttempt = await prisma.guestPaymentAttempt.findFirstOrThrow({ where: { reservationId: reservation.reservationId } });
+    const repeatedInit = await request(app).post(base + '/payments/initialize').set('Authorization', auth).send({ reservationId: reservation.reservationId });
+    assert.equal(repeatedInit.status, 200); assert.equal(repeatedInit.body.data.reference, firstAttempt.reference);
+    assert.equal(await prisma.guestPaymentAttempt.count({ where: { reservationId: reservation.reservationId } }), 1);
     // An abandoned payment releases only its allocation, not physical room status.
     await prisma.reservation.update({ where: { reservationId: reservation.reservationId }, data: { createdAt: new Date(Date.now() - 11 * 60000) } });
     assert.equal((await request(app).get(base + '/room-types')).status, 200);
     const expired = await prisma.reservation.findUniqueOrThrow({ where: { reservationId: reservation.reservationId }, include: { reservationRooms: true } });
     assert.equal(expired.status, 'Expired'); assert.equal(expired.reservationRooms[0].status, 'Cancelled');
-    assert.equal((await request(app).post(base + '/payments/initialize').set('Authorization', auth).send({ reservationId: reservation.reservationId })).status, 404);
+    const expiredInit = await request(app).post(base + '/payments/initialize').set('Authorization', auth).send({ reservationId: reservation.reservationId });
+    assert.equal(expiredInit.status, 200); assert.equal(expiredInit.body.data.status, 'released');
     const replacement = await request(app).post(base + '/reservations').set('Authorization', auth).send({ checkInDate: '2030-01-01', checkOutDate: '2030-01-02', roomTypeId: hotel.roomTypes[0].roomTypeId });
     assert.equal(replacement.status, 201);
     const settle = async (id: string) => {
-      const reference = `RES-${id}-fixture`;
+      const savedAttempt = await prisma.guestPaymentAttempt.findFirst({ where: { reservationId: id }, orderBy: { attemptId: 'desc' } });
+      const reference = savedAttempt?.reference || `RES-${id}-fixture`;
       (axios as any).get = async () => ({ data: { status: true, data: { reference, status: 'success', currency: 'GHS', amount: 20000, channel: 'card', metadata: { reservationId: id, propertyCode: code } } } });
       return verifyGuestPayment(code, reference);
     };
@@ -88,9 +97,119 @@ async function main() {
     assert.equal((await prisma.room.findUniqueOrThrow({ where: { roomId: physicalRoom.roomId } })).operationalStatus, 'Occupied');
     assert.equal((await settle(unpaid.body.data.reservationId)).data.requiresRefundReview, true);
     assert.equal((await prisma.reservation.findUniqueOrThrow({ where: { reservationId: unpaid.body.data.reservationId } })).status, 'Cancelled');
+    await prisma.room.update({ where: { roomId: physicalRoom.roomId }, data: { operationalStatus: 'Available' } });
+    // Truly concurrent cancellation and settlement lock the same booking row.
+    const raced = await request(app).post(base + '/reservations').set('Authorization', auth).send({ checkInDate: '2030-02-01', checkOutDate: '2030-02-02', roomTypeId: hotel.roomTypes[0].roomTypeId });
+    assert.equal(raced.status, 201);
+    const racedId = raced.body.data.reservationId;
+    const raceResults = await Promise.all([
+      settle(racedId),
+      request(app).post(`/api/public/reservations/${racedId}/cancel`).set('Authorization', auth).send({ reason: 'My travel plans have changed.' }),
+    ]);
+    assert.equal(raceResults[1].status, 200);
+    const racedBooking = await prisma.reservation.findUniqueOrThrow({ where: { reservationId: racedId }, include: { payments: true, reservationRooms: true } });
+    assert.equal(racedBooking.status, 'Cancelled'); assert.equal(Number(racedBooking.amountPaid), 200);
+    assert.equal(Number(racedBooking.refundDue), 200); assert.equal(racedBooking.refundStatus, 'Pending');
+    assert.equal(racedBooking.payments.length, 1); assert(racedBooking.reservationRooms.every(s => s.status === 'Cancelled'));
+    // A lost callback can recover from committed payment history without contacting Paystack again.
+    (axios as any).get = async () => { throw new Error('Injected provider outage after settlement'); };
+    const recovered = await verifyGuestPayment(code, `RES-${racedId}-fixture`);
+    assert.equal(recovered.status, 'success'); assert.equal(recovered.data.requiresRefundReview, true);
+    assert.equal(await prisma.payment.count({ where: { reservationId: racedId } }), 1);
+    assert.equal((await request(app).get(`${base}/reservations/${racedId}/payment-status`).set('Authorization', `Bearer ${otherToken}`)).status, 404);
+    const concurrent = await request(app).post(base + '/reservations').set('Authorization', auth).send({ checkInDate: '2030-03-01', checkOutDate: '2030-03-02', roomTypeId: hotel.roomTypes[0].roomTypeId });
+    const concurrentId = concurrent.body.data.reservationId;
+    let providerInitializations = 0;
+    (axios as any).get = async (url: string) => ({ data: { status: true, data: { reference: decodeURIComponent(url.split('/').pop()!), status: 'pending' } } });
+    (axios as any).post = async () => { providerInitializations++; await new Promise(resolve => setTimeout(resolve, 30)); return { data: { data: { authorization_url: 'https://example.test/resume' } } }; };
+    const starts = await Promise.all([1, 2].map(() => request(app).post(base + '/payments/initialize').set('Authorization', auth).send({ reservationId: concurrentId })));
+    assert(starts.every(response => response.status === 200)); assert.equal(providerInitializations, 1);
+    assert.equal(await prisma.guestPaymentAttempt.count({ where: { reservationId: concurrentId } }), 1);
+    const resumed = await request(app).post(base + '/payments/initialize').set('Authorization', auth).send({ reservationId: concurrentId });
+    assert.equal(resumed.body.data.authorization_url, 'https://example.test/resume'); assert.equal(providerInitializations, 1);
+    const lost = await request(app).post(base + '/reservations').set('Authorization', auth).send({ checkInDate: '2030-04-01', checkOutDate: '2030-04-02', roomTypeId: hotel.roomTypes[0].roomTypeId });
+    const lostId = lost.body.data.reservationId;
+    (axios as any).post = async () => { providerInitializations++; throw new Error('Lost response after provider received request'); };
+    const lostStart = await request(app).post(base + '/payments/initialize').set('Authorization', auth).send({ reservationId: lostId });
+    assert.equal(lostStart.body.data.status, 'unknown');
+    (axios as any).get = async () => { throw new Error('Provider verification temporarily unavailable'); };
+    const blockedRetry = await request(app).post(base + '/payments/initialize').set('Authorization', auth).send({ reservationId: lostId });
+    assert.equal(blockedRetry.body.data.status, 'unknown'); assert.equal(providerInitializations, 2);
+    const lostAttempt = await prisma.guestPaymentAttempt.findFirstOrThrow({ where: { reservationId: lostId } });
+    (axios as any).get = async () => ({ data: { status: true, data: { reference: lostAttempt.reference, status: 'success', currency: 'GHS', amount: 20000, channel: 'mobile_money', metadata: { reservationId: lostId, propertyCode: code } } } });
+    const recoveredStatus = await request(app).get(`${base}/reservations/${lostId}/payment-status`).set('Authorization', auth);
+    assert.equal(recoveredStatus.body.data.status, 'paid');
+    const noSecondCharge = await request(app).post(base + '/payments/initialize').set('Authorization', auth).send({ reservationId: lostId });
+    assert.equal(noSecondCharge.body.data.status, 'paid'); assert.equal(providerInitializations, 2);
+    assert.equal(await prisma.payment.count({ where: { reservationId: lostId } }), 1);
+    // Hybrid payments: never reuse a stale full-price checkout after a cash deposit.
+    // Payment after expiry restores inventory when it is still free, exactly once.
+    const recoverable = await request(app).post(base + '/reservations').set('Authorization', auth).send({ checkInDate: '2030-06-01', checkOutDate: '2030-06-02', roomTypeId: hotel.roomTypes[0].roomTypeId });
+    assert.equal(recoverable.status, 201);
+    const recoverableId = recoverable.body.data.reservationId;
+    await prisma.reservation.update({ where: { reservationId: recoverableId }, data: { createdAt: new Date(Date.now() - 11 * 60000) } });
+    await request(app).get(base + '/room-types');
+    assert.equal((await prisma.reservation.findUniqueOrThrow({ where: { reservationId: recoverableId } })).status, 'Expired');
+    const lateRecovered = await settle(recoverableId);
+    assert.equal(lateRecovered.data.bookingStatus, 'Confirmed'); assert.equal(lateRecovered.data.requiresRefundReview, false);
+    await settle(recoverableId);
+    const recoveredBooking = await prisma.reservation.findUniqueOrThrow({ where: { reservationId: recoverableId }, include: { reservationRooms: true, payments: true } });
+    assert.equal(recoveredBooking.payments.length, 1); assert.equal(Number(recoveredBooking.amountPaid), 200);
+    assert.equal(recoveredBooking.reservationRooms[0].status, 'Reserved'); assert.equal(Number(recoveredBooking.refundDue), 0);
+    const blocked = await request(app).post(base + '/reservations').set('Authorization', auth).send({ checkInDate: '2030-06-01', checkOutDate: '2030-06-02', roomTypeId: hotel.roomTypes[0].roomTypeId });
+    assert.notEqual(blocked.status, 201);
+    // A new booking and late settlement compete for the same released room.
+    const racingHold = await request(app).post(base + '/reservations').set('Authorization', auth).send({ checkInDate: '2030-07-01', checkOutDate: '2030-07-02', roomTypeId: hotel.roomTypes[0].roomTypeId });
+    assert.equal(racingHold.status, 201);
+    const racingId = racingHold.body.data.reservationId;
+    await prisma.reservation.update({ where: { reservationId: racingId }, data: { createdAt: new Date(Date.now() - 11 * 60000) } });
+    await request(app).get(base + '/room-types');
+    const [racePayment, raceBooking] = await Promise.all([
+      settle(racingId),
+      request(app).post(base + '/reservations').set('Authorization', auth).send({ checkInDate: '2030-07-01', checkOutDate: '2030-07-02', roomTypeId: hotel.roomTypes[0].roomTypeId }),
+    ]);
+    if (raceBooking.status === 201) {
+      assert.equal(racePayment.data.bookingStatus, 'Expired'); assert.equal(racePayment.data.requiresRefundReview, true);
+    } else assert.equal(racePayment.data.bookingStatus, 'Confirmed');
+    assert.equal(await prisma.reservationRoom.count({ where: { roomId: recoveredBooking.reservationRooms[0].roomId, status: 'Reserved', checkInDate: new Date('2030-07-01'), reservation: { status: { in: ['Pending', 'Confirmed'] } } } }), 1);
+    await prisma.roomType.update({ where: { roomTypeId: hotel.roomTypes[0].roomTypeId }, data: { basePrice: 700 } });
+    const hybrid = await request(app).post(base + '/reservations').set('Authorization', auth).send({ checkInDate: '2030-05-01', checkOutDate: '2030-05-02', roomTypeId: hotel.roomTypes[0].roomTypeId });
+    const hybridId = hybrid.body.data.reservationId;
+    let hybridAmount = 0, hybridStarts = 0;
+    (axios as any).post = async (_url: string, data: any) => { hybridAmount = data.amount; hybridStarts++; return { data: { data: { authorization_url: 'https://example.test/hybrid' } } }; };
+    await request(app).post(base + '/payments/initialize').set('Authorization', auth).send({ reservationId: hybridId });
+    assert.equal(hybridAmount, 70000);
+    const originalHybridAttempt = await prisma.guestPaymentAttempt.findFirstOrThrow({ where: { reservationId: hybridId } });
+    await recordPayment({ reservationId: hybridId, amount: 200, paymentMethod: 'Cash' });
+    (axios as any).get = async (url: string) => ({ data: { status: true, data: { reference: decodeURIComponent(url.split('/').pop()!), status: 'pending' } } });
+    const stillProcessing = await request(app).post(base + '/payments/initialize').set('Authorization', auth).send({ reservationId: hybridId });
+    assert.equal(stillProcessing.body.data.authorization_url, null); assert.equal(hybridStarts, 1);
+    (axios as any).get = async (url: string) => ({ data: { status: true, data: { reference: decodeURIComponent(url.split('/').pop()!), status: 'abandoned' } } });
+    const hybridInit = await request(app).post(base + '/payments/initialize').set('Authorization', auth).send({ reservationId: hybridId });
+    assert.equal(hybridInit.body.data.authorization_url, 'https://example.test/hybrid'); assert.equal(hybridAmount, 50000);
+    assert.equal(hybridStarts, 2);
+    assert.equal((await prisma.guestPaymentAttempt.findUniqueOrThrow({ where: { attemptId: originalHybridAttempt.attemptId } })).status, 'Superseded');
+    const balanceAttempt = await prisma.guestPaymentAttempt.findFirstOrThrow({ where: { reservationId: hybridId, status: 'Pending' } });
+    const settleHybrid = async (reference: string, amount: number) => {
+      (axios as any).get = async () => ({ data: { status: true, data: { reference, status: 'success', currency: 'GHS', amount: amount * 100, channel: 'card', metadata: { reservationId: hybridId, propertyCode: code } } } });
+      return verifyGuestPayment(code, reference);
+    };
+    await settleHybrid(balanceAttempt.reference, 500);
+    const fullyPaid = await prisma.reservation.findUniqueOrThrow({ where: { reservationId: hybridId } });
+    assert.equal(Number(fullyPaid.amountPaid), 700); assert.equal(Number(fullyPaid.refundDue), 0);
+    await settleHybrid(originalHybridAttempt.reference, 700);
+    const overpaid = await prisma.reservation.findUniqueOrThrow({ where: { reservationId: hybridId } });
+    assert.equal(overpaid.status, 'Confirmed'); assert.equal(Number(overpaid.amountPaid), 1400);
+    assert.equal(Number(overpaid.refundDue), 700); assert.equal(overpaid.refundStatus, 'Pending');
+    await settleHybrid(originalHybridAttempt.reference, 700);
+    assert.equal(await prisma.payment.count({ where: { reservationId: hybridId } }), 3);
     await prisma.platformGuest.update({ where: { guestId: guest.guestId }, data: { isActive: false } });
     assert.equal((await request(app).post(base + '/reservations').set('Authorization', auth).send({})).status, 401);
-    console.log('Passed: checkout/expiry/rebooking, cancellation ownership/authentication, required reason, check-in guard, paid/unpaid cancellation, preserved payment history, idempotent cancellation, occupancy isolation, and late payment refund review. No payment provider contacted.');
+    await refundReservation(reservation.reservationId);
+    const refundedLateBooking = await prisma.reservation.findUniqueOrThrow({ where: { reservationId: reservation.reservationId }, include: { payments: true } });
+    assert.equal(refundedLateBooking.status, 'Expired'); assert.equal(refundedLateBooking.refundStatus, 'Processed');
+    assert.equal(Number(refundedLateBooking.amountPaid), 0); assert.equal(refundedLateBooking.payments[0].status, 'Refunded');
+    console.log('Passed checkout, late-payment restoration, concurrent allocation, expired-booking refund recording, cancellation, settlement races, checkout resumption, lost-response protection, and duplicate-charge prevention. Paystack was mocked.');
   } finally {
     axios.post = originalPost;
     axios.get = originalGet;

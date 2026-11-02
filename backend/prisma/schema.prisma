@@ -325,6 +325,7 @@ model Reservation {
   staff             User?          @relation("staffReservations", fields: [staffId], references: [userId])
   reservationRooms  ReservationRoom[]
   payments          Payment[]
+  guestPaymentAttempts GuestPaymentAttempt[]
 
   @@index([propertyId])
   @@index([propertyGuestId])
@@ -398,6 +399,21 @@ model Payment {
   @@index([propertyId])
   @@index([paymentDate])
   @@map("payments")
+}
+
+model GuestPaymentAttempt {
+  attemptId Int @id @default(autoincrement())
+  reservationId String
+  reference String @unique @db.VarChar(200)
+  amount Decimal @db.Decimal(10, 2)
+  currency String @db.VarChar(10)
+  status String @default("Initializing") @db.VarChar(30)
+  checkoutUrl String? @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  reservation Reservation @relation(fields: [reservationId], references: [reservationId], onDelete: Cascade)
+  @@index([reservationId, status])
+  @@map("guest_payment_attempts")
 }
 
 model SubscriptionPayment {

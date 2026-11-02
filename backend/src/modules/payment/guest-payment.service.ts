@@ -2,10 +2,11 @@ import axios from 'axios';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { prisma } from '../../shared/utils/prisma';
 import { isExpiredOnlineHold } from '../reservation/online-hold.service';
+import { restoreLatePaymentAllocation } from './late-payment-allocation';
 
 const failure = (message: string, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 
-async function paymentConfiguration(propertyCode: string) {
+export async function paymentConfiguration(propertyCode: string) {
   const property = await prisma.property.findUnique({
     where: { propertyCode },
     select: { propertyId: true, propertyCode: true, currency: true, paystackSecretKey: true },
@@ -20,6 +21,14 @@ async function paymentConfiguration(propertyCode: string) {
 export async function verifyGuestPayment(propertyCode: string, reference: string) {
   if (!reference || reference.length > 200) throw failure('Invalid payment reference.');
   const { property, secret } = await paymentConfiguration(propertyCode);
+  const recorded = await prisma.payment.findFirst({ where: { gatewayReference: reference, status: 'Completed', reservation: { propertyId: property.propertyId } }, include: { reservation: true } });
+  if (recorded && reference.startsWith(`RES-${recorded.reservationId}-`)) {
+    return { success: true, status: 'success', data: { reference, amount: Math.round(Number(recorded.amount) * 100), currency: property.currency,
+      channel: recorded.paymentMethod === 'Card' ? 'card' : recorded.paymentMethod === 'MobileMoney' ? 'mobile_money' : 'online',
+      confirmationCode: recorded.reservation.confirmationCode, bookingStatus: recorded.reservation.status,
+      requiresRefundReview: ['Cancelled', 'Expired'].includes(recorded.reservation.status) || recorded.reservation.refundStatus === 'Pending',
+    } };
+  }
   const response = await axios.get(
     `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
     { headers: { Authorization: `Bearer ${secret}` }, timeout: 15000 },
@@ -40,7 +49,10 @@ export async function verifyGuestPayment(propertyCode: string, reference: string
     throw failure('Invalid booking payment amount, currency, or reference.');
   }
 
-  const settlement = await prisma.$transaction(async tx => {
+  let settlement: any;
+  for (let retry = 0; ; retry++) {
+    try {
+      settlement = await prisma.$transaction(async tx => {
     // Serialize duplicate webhooks and browser callbacks for this reservation.
     // The lock lasts until payment creation AND balance update commit or roll back.
     const locked = await tx.$queryRaw<{ reservationId: string }[]>`
@@ -49,17 +61,26 @@ export async function verifyGuestPayment(propertyCode: string, reference: string
       FOR UPDATE`;
     if (!locked.length) throw failure('Booking not found for this hotel.', 404);
     const reservation = await tx.reservation.findUniqueOrThrow({ where: { reservationId } });
+    const attempt = await tx.guestPaymentAttempt.findUnique({ where: { reference } });
+    if (attempt && (attempt.reservationId !== reservationId || Number(attempt.amount) !== transaction.amount / 100 || attempt.currency !== transaction.currency)) throw failure('Payment does not match its saved attempt.');
     const existing = await tx.payment.findFirst({ where: { gatewayReference: reference } });
     if (existing) {
       if (existing.reservationId !== reservationId || Number(existing.amount) !== transaction.amount / 100) {
         throw failure('Payment reference is already linked to a different transaction.');
       }
-      return { confirmationCode: reservation.confirmationCode, bookingStatus: reservation.status, requiresRefundReview: ['Cancelled', 'Expired'].includes(reservation.status) };
+      return { confirmationCode: reservation.confirmationCode, bookingStatus: reservation.status, requiresRefundReview: ['Cancelled', 'Expired'].includes(reservation.status) || reservation.refundStatus === 'Pending' };
     }
     const amount = transaction.amount / 100;
     const expired = isExpiredOnlineHold(reservation);
-    const released = expired || ['Cancelled', 'Expired'].includes(reservation.status);
-    if (expired) {
+    const late = expired || reservation.status === 'Expired';
+    const restored = late && await restoreLatePaymentAllocation(tx, reservation);
+    const released = (late && !restored) || reservation.status === 'Cancelled';
+    const paidBefore = Number(reservation.amountPaid || 0);
+    const total = Number(reservation.totalAmount);
+    const newOverpayment = Number.isFinite(total)
+      ? Math.max(0, Math.round((paidBefore + amount - total) * 100)) - Math.max(0, Math.round((paidBefore - total) * 100)) : 0;
+    const refundIncrement = released ? amount : newOverpayment / 100;
+    if (late && !restored) {
       await tx.reservationRoom.updateMany({ where: { reservationId, status: 'Reserved' }, data: { status: 'Cancelled' } });
       await tx.auditLog.create({ data: { entityType: 'Reservation', action: 'OnlinePaymentHoldExpired', oldData: { reservationId, status: reservation.status }, newData: { reservationId, status: 'Expired', reason: 'Payment arrived after the 10-minute hold expired. Allocation released and payment flagged for refund review.' } } });
     }
@@ -72,14 +93,20 @@ export async function verifyGuestPayment(propertyCode: string, reference: string
     } });
     await tx.reservation.update({ where: { reservationId }, data: {
       amountPaid: { increment: amount },
-      ...(expired ? { status: 'Expired' as const } : reservation.status === 'Pending' ? { status: 'Confirmed' as const } : {}),
+      ...(restored ? { status: 'Confirmed' as const } : late ? { status: 'Expired' as const } : reservation.status === 'Pending' ? { status: 'Confirmed' as const } : {}),
       // Never resurrect a cancelled/completed/in-house stay when settlement is delayed.
-      ...(released ? {
-        refundDue: { increment: amount }, refundStatus: 'Pending',
+      ...(refundIncrement > 0 ? {
+        refundDue: { increment: refundIncrement }, refundStatus: 'Pending',
       } : {}),
     } });
-    return { confirmationCode: reservation.confirmationCode, bookingStatus: expired ? 'Expired' : reservation.status === 'Pending' ? 'Confirmed' : reservation.status, requiresRefundReview: released };
-  }, { timeout: 10000 });
+    await tx.guestPaymentAttempt.updateMany({ where: { reference }, data: { status: 'Completed' } });
+    return { confirmationCode: reservation.confirmationCode, bookingStatus: restored ? 'Confirmed' : late ? 'Expired' : reservation.status === 'Pending' ? 'Confirmed' : reservation.status, requiresRefundReview: released || refundIncrement > 0 || reservation.refundStatus === 'Pending' };
+      }, { isolationLevel: 'Serializable', timeout: 15000 });
+      break;
+    } catch (error: any) {
+      if (!['P2034', 'P2010'].includes(error.code) || (error.code === 'P2010' && !['40001', '40P01'].includes(error.meta?.code)) || retry >= 2) throw error;
+    }
+  }
   return { success: true, status: transaction.status, data: { ...transaction, ...settlement } };
 }
 

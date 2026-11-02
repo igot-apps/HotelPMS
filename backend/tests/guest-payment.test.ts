@@ -10,7 +10,7 @@ import { processGuestPaymentWebhook, verifyGuestPayment } from '../src/modules/p
 jest.mock('axios', () => ({ __esModule: true, default: { get: jest.fn() } }));
 jest.mock('../src/modules/payment/subscription.service', () => ({ processSubscriptionWebhook: jest.fn() }));
 jest.mock('../src/shared/utils/prisma', () => ({ prisma: {
-  property: { findUnique: jest.fn() }, $transaction: jest.fn(),
+  property: { findUnique: jest.fn() }, payment: { findFirst: jest.fn() }, $transaction: jest.fn(),
 } }));
 
 const reservationId = 'test-reservation';
@@ -20,11 +20,14 @@ const transaction = { reference, status: 'success', currency: 'GHS', amount: 200
 const body = () => Buffer.from(JSON.stringify({ event: 'charge.success', data: transaction }));
 const signature = (raw: Buffer, key = secret) => createHmac('sha512', key).update(raw).digest('hex');
 const tx = {
+  property: { findUnique: jest.fn<any>() },
+  room: { findMany: jest.fn<any>() },
   $queryRaw: jest.fn<any>(),
   reservation: { findUniqueOrThrow: jest.fn<any>(), update: jest.fn<any>() },
   payment: { findFirst: jest.fn<any>(), create: jest.fn<any>() },
-  reservationRoom: { updateMany: jest.fn<any>() },
+  reservationRoom: { updateMany: jest.fn<any>(), findMany: jest.fn<any>(), findFirst: jest.fn<any>(), update: jest.fn<any>() },
   auditLog: { create: jest.fn<any>() },
+  guestPaymentAttempt: { findUnique: jest.fn<any>(), updateMany: jest.fn<any>() },
 };
 
 beforeEach(() => {
@@ -35,9 +38,34 @@ beforeEach(() => {
   tx.$queryRaw.mockResolvedValue([{ reservationId }]);
   tx.reservation.findUniqueOrThrow.mockResolvedValue({ confirmationCode: 'ABC', status: 'InHouse' });
   tx.payment.findFirst.mockResolvedValue(null);
+  tx.property.findUnique.mockResolvedValue(null);
+  tx.guestPaymentAttempt.findUnique.mockResolvedValue(null);
+  (prisma.payment.findFirst as any).mockResolvedValue(null);
 });
 
 describe('guest payment webhook recovery', () => {
+  it('restores an expired allocation only when matching inventory is available', async () => {
+    const hold = { reservationId, propertyId: 1, checkInDate: new Date('2030-01-01'), confirmationCode: 'ABC', status: 'Expired', source: 'Website', amountPaid: 0, totalAmount: 200 };
+    tx.reservation.findUniqueOrThrow.mockResolvedValue(hold);
+    tx.property.findUnique.mockResolvedValue({ isActive: true, status: 'Active', isOnlineBookingEnabled: true });
+    tx.reservationRoom.findMany.mockResolvedValue([{ reservationRoomId: 1, roomId: 1, roomTypeId: 1, status: 'Cancelled', checkInDate: new Date('2030-01-01'), checkOutDate: new Date('2030-01-02') }]);
+    tx.room.findMany.mockResolvedValue([{ roomId: 2, roomTypeId: 1, roomNumber: '102' }]);
+    tx.reservationRoom.findFirst.mockResolvedValue(null);
+    const result = await verifyGuestPayment('hotel-test', reference);
+    expect(result.data.bookingStatus).toBe('Confirmed');
+    expect(result.data.requiresRefundReview).toBe(false);
+    expect(tx.reservationRoom.update).toHaveBeenCalledWith({ where: { reservationRoomId: 1 }, data: { roomId: 2, roomNumberSnapshot: '102', status: 'Reserved' } });
+    tx.reservationRoom.findFirst.mockResolvedValue({ reservationRoomId: 2 });
+    const unavailable = await verifyGuestPayment('hotel-test', reference);
+    expect(unavailable.data.bookingStatus).toBe('Expired');
+    expect(unavailable.data.requiresRefundReview).toBe(true);
+  });
+  it('recovers a committed payment even when provider verification is unavailable', async () => {
+    (prisma.payment.findFirst as any).mockResolvedValue({ reservationId, amount: 200, paymentMethod: 'Card', reservation: { confirmationCode: 'ABC', status: 'Confirmed', refundStatus: 'None' } });
+    const result = await verifyGuestPayment('hotel-test', reference);
+    expect(result.status).toBe('success'); expect(result.data.amount).toBe(20000);
+    expect(axios.get).not.toHaveBeenCalled(); expect(tx.payment.create).not.toHaveBeenCalled();
+  });
   it('rejects absent/raw-body-invalid and forged signatures before verification', async () => {
     await expect(processGuestPaymentWebhook({}, signature(body()))).rejects.toMatchObject({ statusCode: 401 });
     await expect(processGuestPaymentWebhook(body(), undefined)).rejects.toMatchObject({ statusCode: 401 });
@@ -89,7 +117,7 @@ describe('guest payment webhook recovery', () => {
     expect(tx.reservation.update).toHaveBeenCalledWith({ where: { reservationId }, data: { amountPaid: { increment: 200 }, refundDue: { increment: 200 }, refundStatus: 'Pending' } });
   });
 
-  it('confirms a timely pending hold and refunds an expired hold without reclaiming its room', async () => {
+  it('confirms a timely hold and sends an expired hold to refund review when its hotel is unavailable', async () => {
     const hold = { confirmationCode: 'ABC', status: 'Pending', source: 'Website', platformGuestId: 1, staffId: null, amountPaid: 0, createdAt: new Date() };
     tx.reservation.findUniqueOrThrow.mockResolvedValueOnce(hold);
     const timely = await verifyGuestPayment('hotel-test', reference);

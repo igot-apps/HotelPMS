@@ -1,9 +1,8 @@
 import { Router, Response } from 'express';
 import { prisma } from '../../shared/utils/prisma';
-import axios from 'axios';
 import jwt from 'jsonwebtoken'; // Ensure this is imported at the top of the file
-import { getFrontendBaseUrl } from '../../shared/utils/frontend-url';
 import { verifyGuestPayment } from '../payment/guest-payment.service';
+import { initializeGuestPayment, checkGuestPaymentStatus } from '../payment/guest-payment-attempt.service';
 import { createHotelReservation } from '../reservation/booking-creation.service';
 import { expireOnlineHolds } from '../reservation/online-hold.service';
 import { cancelGuestReservation } from '../reservation/guest-cancellation.service';
@@ -444,52 +443,18 @@ router.post('/:propertyCode/reservations', requireBookingGuest, async (req: any,
 // ============================================================
 router.post('/:propertyCode/payments/initialize', requireBookingGuest, async (req: any, res: Response) => {
   try {
-    const { propertyCode } = req.params;
-    const { reservationId } = req.body;
-    const property = await prisma.property.findUnique({ 
-      where: { propertyCode },
-      select: { propertyId: true, paystackSecretKey: true, currency: true }
-    });
-    const paystackSecretKey = property?.paystackSecretKey || process.env.PAYSTACK_SECRET_KEY;
-
-    if (!property || !paystackSecretKey) {
-      return res.status(400).json({ success: false, message: 'This hotel has not configured Mobile Money payments yet.' });
-    }
-
-    const reservation = await prisma.reservation.findFirst({ where: {
-      reservationId, propertyId: property.propertyId, platformGuestId: req.bookingGuest.guestId,
-      status: { in: ['Pending', 'Confirmed'] },
-    } });
-    if (!reservation) return res.status(404).json({ success: false, message: 'Booking is unavailable or its payment hold has expired. Please choose your room again.' });
-    const amount = Number(reservation.totalAmount || 0) - Number(reservation.amountPaid || 0);
-    if (amount <= 0) return res.status(400).json({ success: false, message: 'No payment is due.' });
-    const email = req.bookingGuest.email || 'guest@stayfolio.com';
-
-    const callbackUrl = `${getFrontendBaseUrl()}/public/${propertyCode}/booking-success`;
-    
-    const response = await axios.post(
-      'https://api.paystack.co/transaction/initialize',
-      {
-        email,
-        amount: Math.round(amount * 100),
-        reference: `RES-${reservationId}-${Date.now()}`,
-        currency: property.currency || 'GHS',
-        channels: ['mobile_money', 'card'],
-        callback_url: callbackUrl,
-        metadata: { propertyCode, reservationId: String(reservationId) }
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${paystackSecretKey}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    return res.json({ success: true, data: response.data.data });
+    if (typeof req.body.reservationId !== 'string') return res.status(400).json({ success: false, message: 'Reservation ID is required.' });
+    return res.json({ success: true, data: await initializeGuestPayment(req.params.propertyCode, req.body.reservationId, req.bookingGuest) });
   } catch (error: any) {
-    console.error('Paystack Initialization Error:', error.response?.data || error.message);
-    return res.status(500).json({ success: false, message: 'Failed to initialize payment' });
+    return res.status(error.statusCode || 400).json({ success: false, message: error.message || 'Could not start payment. Check payment status before retrying.' });
+  }
+});
+
+router.get('/:propertyCode/reservations/:reservationId/payment-status', requireBookingGuest, async (req: any, res: Response) => {
+  try {
+    return res.json({ success: true, data: await checkGuestPaymentStatus(req.params.propertyCode, req.params.reservationId, req.bookingGuest.guestId) });
+  } catch (error: any) {
+    return res.status(error.statusCode || 400).json({ success: false, message: error.message || 'Could not check payment status. Please try again.' });
   }
 });
 

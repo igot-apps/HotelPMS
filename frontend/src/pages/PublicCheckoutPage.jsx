@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Calendar, Tag, Loader2, CheckCircle2, CreditCard, ShieldCheck, AlertCircle } from 'lucide-react';
@@ -6,12 +6,15 @@ import api from '../lib/axios';
 import toast from 'react-hot-toast';
 import PublicNavbar from '../components/public/PublicNavbar';
 import BackButton from '../components/ui/BackButton';
+import { reusableCheckoutBooking } from '../lib/checkout-booking.mjs';
 
 export default function PublicCheckoutPage() {
   const { propertyCode, roomTypeId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const savedBooking = useRef(null);
+  const paymentBusy = useRef(false);
   
   // 🌟 1. Initialize dates from URL, but make them editable state
   const initialCheckIn = searchParams.get('checkIn');
@@ -80,6 +83,17 @@ export default function PublicCheckoutPage() {
   const initializePaymentMutation = useMutation({
     mutationFn: async (guestData) => {
       // 1. Create the reservation using the CURRENT state dates
+      const bookingKey = `${propertyCode}:${roomTypeId}:${checkIn}:${checkOut}:${guestData.platformGuestId}`;
+      if (savedBooking.current?.key !== bookingKey) {
+        try { savedBooking.current = JSON.parse(sessionStorage.getItem(`checkout-booking:${bookingKey}`) || 'null'); } catch { /* Booking retry still works if storage is unavailable. */ }
+      }
+      const previousBooking = savedBooking.current;
+      savedBooking.current = await reusableCheckoutBooking(previousBooking, bookingKey, async reservationId =>
+        (await api.get(`/public/${propertyCode}/reservations/${reservationId}/payment-status`)).data.data);
+      if (previousBooking?.key === bookingKey && !savedBooking.current) {
+        try { sessionStorage.removeItem(`checkout-booking:${bookingKey}`); } catch { /* Storage is optional. */ }
+      }
+      if (savedBooking.current?.key !== bookingKey) {
       const resData = await api.post(`/public/${propertyCode}/reservations`, {
         checkInDate: checkIn,
         checkOutDate: checkOut,
@@ -91,7 +105,10 @@ export default function PublicCheckoutPage() {
         agreedPricePerNight: basePrice,
       });
 
-      const reservationId = resData.data.data.reservationId;
+      savedBooking.current = { key: bookingKey, reservationId: resData.data.data.reservationId };
+      try { sessionStorage.setItem(`checkout-booking:${bookingKey}`, JSON.stringify(savedBooking.current)); } catch { /* Keep the in-memory booking ID. */ }
+      }
+      const reservationId = savedBooking.current.reservationId;
       
       // 2. Initialize Paystack
       const paystackRes = await api.post(`/public/${propertyCode}/payments/initialize`, {
@@ -104,11 +121,19 @@ export default function PublicCheckoutPage() {
     },
     onSuccess: (paystackData) => {
       // 3. Redirect to Paystack
-      window.location.href = paystackData.authorization_url;
+      if (paystackData.authorization_url) window.location.href = paystackData.authorization_url;
+      else {
+        if (paystackData.status === 'released' && savedBooking.current) {
+          try { sessionStorage.removeItem(`checkout-booking:${savedBooking.current.key}`); } catch { /* Storage is optional. */ }
+          savedBooking.current = null;
+        }
+        toast(paystackData.message || 'Check payment status in My Reservations before retrying.'); navigate('/public/reservations');
+      }
     },
     onError: (err) => {
       toast.error(err.response?.data?.message || 'Failed to initialize payment.');
-    }
+    },
+    onSettled: () => { paymentBusy.current = false; },
   });
 
   const [confirmationData, setConfirmationData] = useState(null);
@@ -116,6 +141,7 @@ export default function PublicCheckoutPage() {
   // 🌟 Handle Pay (Smart logic for logged-in vs guest)
   const handlePay = (e) => {
     e.preventDefault();
+    if (paymentBusy.current) return;
     
     let name, phone, email, platformGuestId;
 
@@ -129,6 +155,7 @@ export default function PublicCheckoutPage() {
       return;
     }
 
+    paymentBusy.current = true;
     initializePaymentMutation.mutate({ name, phone, email, platformGuestId });
   };
 
@@ -284,7 +311,6 @@ export default function PublicCheckoutPage() {
           {/* Right Column: Price Breakdown & Pay */}
           <div className="lg:col-span-1">
             <div className="bg-surface p-4 sm:p-6 rounded-xl border border-border lg:sticky lg:top-20">
-              <p className="mb-4 rounded-lg bg-warning-50 p-3 text-sm text-warning-800">Your room is held for 10 minutes after you start payment. Unpaid holds expire automatically.</p>
               <h2 className="text-lg font-bold text-text mb-4">Price Details</h2>
               <div className="space-y-3 text-sm mb-6">
                 <div className="flex justify-between text-text">
