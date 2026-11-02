@@ -21,6 +21,7 @@ import paystackRoutes from './modules/payment/payment.routes'; // ✅ NEW: Moved
 import amenityRoutes from './modules/amenity/amenity.routes';
 import publicRoutes from './modules/public/public.routes';
 import publicAuthRoutes from './modules/public/public-auth.routes';
+import { expireOnlineHolds } from './modules/reservation/online-hold.service';
 
 // Load environment variables
 dotenv.config();
@@ -112,6 +113,10 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 // Start server
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {
+  // Request-time checks also release holds when a sleeping Render service wakes up.
+  const releaseHolds = () => expireOnlineHolds().catch(() => console.error('Could not release expired online booking holds; will retry.'));
+  void releaseHolds();
+  setInterval(releaseHolds, 30000).unref();
   app.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}\n`);
     console.log(`📊 Environment: ${process.env.NODE_ENV}\n`);

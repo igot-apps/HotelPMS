@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import publicRoutes from '../src/modules/public/public.routes';
 import { prisma } from '../src/shared/utils/prisma';
 import { hashPassword } from '../src/shared/utils/password';
+import { verifyGuestPayment } from '../src/modules/payment/guest-payment.service';
 
 async function main() {
   assert(['localhost', '127.0.0.1'].includes(new URL(process.env.DATABASE_URL!).hostname));
@@ -17,6 +18,7 @@ async function main() {
   const guest = await prisma.platformGuest.create({ data: { fullName: 'Checkout fixture', phone: code, passwordHash: await hashPassword('123456789') } });
   const other = await prisma.platformGuest.create({ data: { fullName: 'Other fixture', phone: `${code}-2` } });
   const originalPost = axios.post;
+  const originalGet = axios.get;
   try {
     await prisma.room.create({ data: { propertyId: hotel.propertyId, roomTypeId: hotel.roomTypes[0].roomTypeId, roomNumber: '101' } });
     const base = `/api/public/${code}`;
@@ -35,17 +37,41 @@ async function main() {
     const reservation = await prisma.reservation.findUniqueOrThrow({ where: { reservationId: booking.body.data.reservationId } });
     assert.equal(reservation.platformGuestId, guest.guestId);
     assert.equal(reservation.guestNameSnapshot, guest.fullName);
+    assert.equal(reservation.status, 'Pending');
     const otherToken = jwt.sign({ platformGuestId: other.guestId, type: 'guest' }, process.env.JWT_SECRET || 'your-super-secret-key');
     assert.equal((await request(app).post(base + '/payments/initialize').set('Authorization', `Bearer ${otherToken}`).send({ reservationId: reservation.reservationId })).status, 404);
     let sentAmount = 0;
     (axios as any).post = async (_url: string, data: any) => { sentAmount = data.amount; return { data: { data: { authorization_url: 'https://example.test/checkout' } } }; };
     assert.equal((await request(app).post(base + '/payments/initialize').set('Authorization', auth).send({ reservationId: reservation.reservationId, amount: 1 })).status, 200);
     assert.equal(sentAmount, 20000);
+    // An abandoned payment releases only its allocation, not physical room status.
+    await prisma.reservation.update({ where: { reservationId: reservation.reservationId }, data: { createdAt: new Date(Date.now() - 16 * 60000) } });
+    assert.equal((await request(app).get(base + '/room-types')).status, 200);
+    const expired = await prisma.reservation.findUniqueOrThrow({ where: { reservationId: reservation.reservationId }, include: { reservationRooms: true } });
+    assert.equal(expired.status, 'Expired'); assert.equal(expired.reservationRooms[0].status, 'Cancelled');
+    assert.equal((await request(app).post(base + '/payments/initialize').set('Authorization', auth).send({ reservationId: reservation.reservationId })).status, 404);
+    const replacement = await request(app).post(base + '/reservations').set('Authorization', auth).send({ checkInDate: '2030-01-01', checkOutDate: '2030-01-02', roomTypeId: hotel.roomTypes[0].roomTypeId });
+    assert.equal(replacement.status, 201);
+    const settle = async (id: string) => {
+      const reference = `RES-${id}-fixture`;
+      (axios as any).get = async () => ({ data: { status: true, data: { reference, status: 'success', currency: 'GHS', amount: 20000, channel: 'card', metadata: { reservationId: id, propertyCode: code } } } });
+      return verifyGuestPayment(code, reference);
+    };
+    const late = await settle(reservation.reservationId);
+    assert.equal(late.data.requiresRefundReview, true);
+    const lateBooking = await prisma.reservation.findUniqueOrThrow({ where: { reservationId: reservation.reservationId } });
+    assert.equal(lateBooking.status, 'Expired'); assert.equal(Number(lateBooking.refundDue), 200);
+    assert.equal((await settle(reservation.reservationId)).data.requiresRefundReview, true);
+    assert.equal((await settle(replacement.body.data.reservationId)).data.bookingStatus, 'Confirmed');
+    assert.equal((await prisma.room.findFirstOrThrow({ where: { propertyId: hotel.propertyId } })).operationalStatus, 'Available');
     await prisma.platformGuest.update({ where: { guestId: guest.guestId }, data: { isActive: false } });
     assert.equal((await request(app).post(base + '/reservations').set('Authorization', auth).send({})).status, 401);
-    console.log('Passed: anonymous/staff/disabled guest rejection, session-bound identity, payment ownership, and server-side payment amount. No payment provider contacted.');
+    console.log('Passed: guest identity/ownership, server amounts, pending hold, expiry/release, blocked expired payment, rebooking released inventory, late payment refund review/idempotency, and timely confirmation. No payment provider contacted.');
   } finally {
     axios.post = originalPost;
+    axios.get = originalGet;
+    const fixtureBookings = await prisma.reservation.findMany({ where: { propertyId: hotel.propertyId }, select: { reservationId: true } });
+    if (fixtureBookings.length) await prisma.auditLog.deleteMany({ where: { OR: fixtureBookings.map(r => ({ newData: { path: ['reservationId'], equals: r.reservationId } })) } });
     await prisma.reservation.deleteMany({ where: { propertyId: hotel.propertyId } });
     await prisma.property.delete({ where: { propertyId: hotel.propertyId } });
     await prisma.platformGuest.deleteMany({ where: { guestId: { in: [guest.guestId, other.guestId] } } });

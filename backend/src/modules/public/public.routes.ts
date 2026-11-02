@@ -5,9 +5,13 @@ import jwt from 'jsonwebtoken'; // Ensure this is imported at the top of the fil
 import { getFrontendBaseUrl } from '../../shared/utils/frontend-url';
 import { verifyGuestPayment } from '../payment/guest-payment.service';
 import { createHotelReservation } from '../reservation/booking-creation.service';
+import { expireOnlineHolds } from '../reservation/online-hold.service';
 
 
 const router = Router();
+router.use(async (_req, _res, next) => {
+  try { await expireOnlineHolds(); next(); } catch (error) { next(error); }
+});
 
 const requireBookingGuest = async (req: any, res: Response, next: import('express').NextFunction) => {
   try {
@@ -90,7 +94,7 @@ router.get('/discover', async (req: any, res: Response) => {
           ...(checkInDate && checkOutDate ? {
             reservationRooms: {
               none: {
-                reservation: { status: { in: ['Confirmed', 'InHouse'] } },
+                reservation: { status: { in: ['Pending', 'Confirmed', 'InHouse'] } },
                 checkInDate: { lt: checkOutDate },
                 checkOutDate: { gt: checkInDate },
               }
@@ -197,7 +201,7 @@ router.get('/discover', async (req: any, res: Response) => {
             operationalStatus: 'Available',
             reservationRooms: {
               none: {
-                reservation: { status: { in: ['Confirmed', 'InHouse'] } },
+                reservation: { status: { in: ['Pending', 'Confirmed', 'InHouse'] } },
                 checkInDate: { lt: checkOutDate },
                 checkOutDate: { gt: checkInDate },
               }
@@ -398,7 +402,7 @@ router.get('/:propertyCode/room-types', async (req: any, res: Response) => {
               reservation: {
                 propertyId: property.propertyId,
                 // 🌟 CHANGED: 'CheckedIn' → 'InHouse'
-                status: { in: ['Confirmed', 'InHouse'] },
+                status: { in: ['Pending', 'Confirmed', 'InHouse'] },
               }
             }
           });
@@ -458,7 +462,7 @@ router.post('/:propertyCode/payments/initialize', requireBookingGuest, async (re
       reservationId, propertyId: property.propertyId, platformGuestId: req.bookingGuest.guestId,
       status: { in: ['Pending', 'Confirmed'] },
     } });
-    if (!reservation) return res.status(404).json({ success: false, message: 'Booking not found.' });
+    if (!reservation) return res.status(404).json({ success: false, message: 'Booking is unavailable or its payment hold has expired. Please choose your room again.' });
     const amount = Number(reservation.totalAmount || 0) - Number(reservation.amountPaid || 0);
     if (amount <= 0) return res.status(400).json({ success: false, message: 'No payment is due.' });
     const email = req.bookingGuest.email || 'guest@stayfolio.com';

@@ -75,6 +75,8 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
 };
 
 export default function PublicReservationsPage() {
+  const [holdNow, setHoldNow] = useState(Date.now());
+  useEffect(() => { const timer = setInterval(() => setHoldNow(Date.now()), 15000); return () => clearInterval(timer); }, []);
   const navigate = useNavigate();
   const location = useLocation();
   const [token, setToken] = useState(null);
@@ -103,6 +105,7 @@ export default function PublicReservationsPage() {
       };
     },
     enabled: !!token,
+    refetchInterval: 30000,
     retry: false,
   });
 
@@ -140,7 +143,7 @@ export default function PublicReservationsPage() {
 const retryPaymentMutation = useMutation({
   mutationFn: async (reservation) => {
     // 🛡️ CRITICAL CHECK: Prevent payment if the database says it's cancelled
-    if (reservation.status === 'Cancelled') {
+    if (['Cancelled', 'Expired'].includes(reservation.status)) {
       throw new Error('This reservation has been cancelled. Payment is not allowed.');
     }
 
@@ -170,6 +173,7 @@ const retryPaymentMutation = useMutation({
 
   // 🌟 FIXED LOGIC: Check actual DB status FIRST, then check payment status
   const getStatusBadge = (status, isFullyPaid) => {
+    if (status === 'Expired') return <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary-50 px-2.5 py-1 text-xs font-semibold text-text-muted"><Clock size={12} /> Payment hold expired</span>;
     // 1. If the receptionist actually cancelled it, show Cancelled (Red)
     if (status === 'Cancelled') {
       return (
@@ -268,6 +272,9 @@ const retryPaymentMutation = useMutation({
                 const amountPaid = Number(res.amountPaid || 0);
                 const balanceDue = Math.max(0, totalAmount - amountPaid);
                 const isFullyPaid = balanceDue < 0.01;
+                const holdEnds = res.source === 'Website' && !res.staffId && amountPaid === 0 && ['Pending', 'Confirmed'].includes(res.status) ? new Date(res.createdAt).getTime() + 15 * 60000 : null;
+                const expired = res.status === 'Expired' || (holdEnds !== null && holdEnds <= holdNow);
+                const released = expired || res.status === 'Cancelled';
 
                 return (
                   <div key={res.reservationId} className="group bg-surface border border-border rounded-xl p-6 hover:shadow-lg hover:border-primary-200 transition-all duration-300">
@@ -278,7 +285,7 @@ const retryPaymentMutation = useMutation({
                             {res.property?.propertyName}
                           </h3>
                           {/* 🌟 Pass isFullyPaid to badge */}
-                          {getStatusBadge(res.status, isFullyPaid)}
+                          {getStatusBadge(expired ? 'Expired' : res.status, isFullyPaid)}
                         </div>
                         <p className="text-sm text-text-muted flex items-center gap-1.5 mb-3">
                           <MapPin size={14} className="flex-shrink-0" /> {res.property?.city}, {res.property?.country || 'Ghana'}
@@ -302,24 +309,26 @@ const retryPaymentMutation = useMutation({
                       </div>
                     </div>
 
+                    {holdEnds !== null && !expired && <p className="mb-3 text-sm text-warning-700">Room held for {Math.max(1, Math.ceil((holdEnds - holdNow) / 60000))} more minute(s). Pay before the hold expires.</p>}
+                    {expired && <p className="mb-3 text-sm text-text-muted">The room hold has been released. {amountPaid > 0 ? 'Your late payment was recorded; contact the hotel for refund review.' : 'No payment was recorded for this booking.'}</p>}
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-4 border-t border-border gap-4">
                       <div className="flex items-center gap-2">
                         <CreditCard size={16} className="text-text-muted" />
                         <div className="text-sm">
                           <span className="font-bold text-text">GH₵ {amountPaid.toFixed(2)}</span>
                           <span className="text-text-muted"> paid</span>
-                          {!isFullyPaid && (
+                          {!isFullyPaid && !released && (
                             <span className="text-xs font-bold text-danger-600 bg-danger-50 px-2 py-0.5 rounded ml-2 border border-danger-100">
                               Balance: GH {balanceDue.toFixed(2)}
                             </span>
                           )}
-                          {isFullyPaid && amountPaid > 0 && (
+                          {(isFullyPaid || released) && amountPaid > 0 && (
                             <span className={`text-xs font-bold px-2 py-0.5 rounded ml-2 border inline-flex items-center gap-1 ${
-                              res.status === 'Cancelled'
+                              released
                                 ? 'text-warning-700 bg-warning-50 border-warning-200'
                                 : 'text-success-600 bg-success-50 border-success-100'
                             }`}>
-                              {res.status === 'Cancelled' ? 'Refund Due' : 'Fully Paid'}
+                              {released ? 'Refund review required' : 'Fully Paid'}
                             </span>
                           )}
                         </div>
@@ -327,7 +336,9 @@ const retryPaymentMutation = useMutation({
 
                       {/* 🌟 FIXED ACTION BUTTONS: Blocks payment if receptionist cancelled it */}
                       <div className="w-full sm:w-auto">
-                        {res.status === 'Cancelled' ? (
+                        {expired ? (
+                          <Link to={`/public/${res.property.propertyCode}`} className="block w-full rounded-lg border border-border px-4 py-2.5 text-center text-sm font-semibold text-primary-700">Hold expired · Choose a room again</Link>
+                        ) : res.status === 'Cancelled' ? (
                           <span className="block w-full text-center text-sm font-semibold text-danger-600 bg-danger-50 px-4 py-2.5 rounded-lg border border-danger-200">
                             <XCircle size={14} className="inline mr-1" /> Reservation Cancelled
                           </span>

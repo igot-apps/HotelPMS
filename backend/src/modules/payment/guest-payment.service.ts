@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { prisma } from '../../shared/utils/prisma';
+import { isExpiredOnlineHold } from '../reservation/online-hold.service';
 
 const failure = (message: string, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 
@@ -39,7 +40,7 @@ export async function verifyGuestPayment(propertyCode: string, reference: string
     throw failure('Invalid booking payment amount, currency, or reference.');
   }
 
-  const confirmationCode = await prisma.$transaction(async tx => {
+  const settlement = await prisma.$transaction(async tx => {
     // Serialize duplicate webhooks and browser callbacks for this reservation.
     // The lock lasts until payment creation AND balance update commit or roll back.
     const locked = await tx.$queryRaw<{ reservationId: string }[]>`
@@ -53,9 +54,15 @@ export async function verifyGuestPayment(propertyCode: string, reference: string
       if (existing.reservationId !== reservationId || Number(existing.amount) !== transaction.amount / 100) {
         throw failure('Payment reference is already linked to a different transaction.');
       }
-      return reservation.confirmationCode;
+      return { confirmationCode: reservation.confirmationCode, bookingStatus: reservation.status, requiresRefundReview: ['Cancelled', 'Expired'].includes(reservation.status) };
     }
     const amount = transaction.amount / 100;
+    const expired = isExpiredOnlineHold(reservation);
+    const released = expired || ['Cancelled', 'Expired'].includes(reservation.status);
+    if (expired) {
+      await tx.reservationRoom.updateMany({ where: { reservationId, status: 'Reserved' }, data: { status: 'Cancelled' } });
+      await tx.auditLog.create({ data: { entityType: 'Reservation', action: 'OnlinePaymentHoldExpired', oldData: { reservationId, status: reservation.status }, newData: { reservationId, status: 'Expired', reason: 'Payment arrived after the 15-minute hold expired. Allocation released and payment flagged for refund review.' } } });
+    }
     const paymentMethod = transaction.channel === 'card' ? 'Card'
       : transaction.channel === 'mobile_money' ? 'MobileMoney' : 'Online';
     await tx.payment.create({ data: {
@@ -65,14 +72,15 @@ export async function verifyGuestPayment(propertyCode: string, reference: string
     } });
     await tx.reservation.update({ where: { reservationId }, data: {
       amountPaid: { increment: amount },
+      ...(expired ? { status: 'Expired' as const } : reservation.status === 'Pending' ? { status: 'Confirmed' as const } : {}),
       // Never resurrect a cancelled/completed/in-house stay when settlement is delayed.
-      ...(reservation.status === 'Cancelled' ? {
+      ...(released ? {
         refundDue: { increment: amount }, refundStatus: 'Pending',
       } : {}),
     } });
-    return reservation.confirmationCode;
+    return { confirmationCode: reservation.confirmationCode, bookingStatus: expired ? 'Expired' : reservation.status === 'Pending' ? 'Confirmed' : reservation.status, requiresRefundReview: released };
   }, { timeout: 10000 });
-  return { success: true, status: transaction.status, data: { ...transaction, confirmationCode } };
+  return { success: true, status: transaction.status, data: { ...transaction, ...settlement } };
 }
 
 export async function processGuestPaymentWebhook(rawBody: unknown, signature: string | undefined) {

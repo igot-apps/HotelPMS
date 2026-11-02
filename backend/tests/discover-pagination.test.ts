@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import request from 'supertest';
 import app from '../src/app';
+jest.mock('../src/modules/reservation/online-hold.service', () => ({ expireOnlineHolds: jest.fn<any>().mockResolvedValue(0) }));
 import { prisma } from '../src/shared/utils/prisma';
 
 jest.mock('../src/shared/utils/prisma', () => ({ prisma: {

@@ -1,4 +1,5 @@
 import { PrismaClient } from '../../../src/generated/prisma';
+import { expireOnlineHolds } from '../reservation/online-hold.service';
 
 const prisma = new PrismaClient();
 
@@ -167,6 +168,7 @@ export const findAvailableRooms = async (
   checkOutDate: Date,
   roomTypeId?: number
 ) => {
+  await expireOnlineHolds(propertyId);
   return prisma.room.findMany({
     where: {
       propertyId,
@@ -178,7 +180,7 @@ export const findAvailableRooms = async (
         none: {
           reservation: {
             status: {
-              in: ['Confirmed', 'InHouse'] // ✅ CORRECT: Only one 'status'
+              in: ['Pending', 'Confirmed', 'InHouse']
             },
           },
           checkInDate: {

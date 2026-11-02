@@ -23,6 +23,8 @@ const tx = {
   $queryRaw: jest.fn<any>(),
   reservation: { findUniqueOrThrow: jest.fn<any>(), update: jest.fn<any>() },
   payment: { findFirst: jest.fn<any>(), create: jest.fn<any>() },
+  reservationRoom: { updateMany: jest.fn<any>() },
+  auditLog: { create: jest.fn<any>() },
 };
 
 beforeEach(() => {
@@ -85,6 +87,20 @@ describe('guest payment webhook recovery', () => {
     tx.reservation.findUniqueOrThrow.mockResolvedValueOnce({ confirmationCode: 'ABC', status: 'Cancelled' });
     await processGuestPaymentWebhook(body(), signature(body()));
     expect(tx.reservation.update).toHaveBeenCalledWith({ where: { reservationId }, data: { amountPaid: { increment: 200 }, refundDue: { increment: 200 }, refundStatus: 'Pending' } });
+  });
+
+  it('confirms a timely pending hold and refunds an expired hold without reclaiming its room', async () => {
+    const hold = { confirmationCode: 'ABC', status: 'Pending', source: 'Website', platformGuestId: 1, staffId: null, amountPaid: 0, createdAt: new Date() };
+    tx.reservation.findUniqueOrThrow.mockResolvedValueOnce(hold);
+    const timely = await verifyGuestPayment('hotel-test', reference);
+    expect(timely.data.bookingStatus).toBe('Confirmed');
+    expect(timely.data.requiresRefundReview).toBe(false);
+    tx.reservation.findUniqueOrThrow.mockResolvedValueOnce({ ...hold, createdAt: new Date(Date.now() - 16 * 60000) });
+    const late = await verifyGuestPayment('hotel-test', reference);
+    expect(late.data.bookingStatus).toBe('Expired');
+    expect(late.data.requiresRefundReview).toBe(true);
+    expect(tx.reservationRoom.updateMany).toHaveBeenCalledWith({ where: { reservationId, status: 'Reserved' }, data: { status: 'Cancelled' } });
+    expect(tx.reservation.update).toHaveBeenLastCalledWith({ where: { reservationId }, data: { amountPaid: { increment: 200 }, status: 'Expired', refundDue: { increment: 200 }, refundStatus: 'Pending' } });
   });
 
   it('retries when a signed success event is not yet successful on verification', async () => {

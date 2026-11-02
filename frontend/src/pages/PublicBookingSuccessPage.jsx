@@ -67,8 +67,8 @@ export default function PublicBookingSuccessPage() {
           <div className="w-16 h-16 bg-success-50 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 size={32} className="text-success-600" />
           </div>
-          <h1 className="text-2xl font-bold text-text mb-2">Payment Successful!</h1>
-          <p className="text-text-muted mb-6">Your reservation at {property?.propertyName} has been confirmed.</p>
+          <h1 className="text-2xl font-bold text-text mb-2">{transactionData?.requiresRefundReview ? 'Payment received · Review needed' : 'Payment Successful!'}</h1>
+          <p className="text-text-muted mb-6">{transactionData?.requiresRefundReview ? 'This booking was already released. Your payment has been recorded for refund review. Contact the hotel; your room is not confirmed.' : `Your reservation at ${property?.propertyName} has been confirmed.`}</p>
           
           <div className="bg-background p-4 rounded-lg border border-border text-left space-y-3 mb-6">
             <div className="flex justify-between text-sm">
@@ -92,7 +92,7 @@ export default function PublicBookingSuccessPage() {
           </div>
 
           <p className="text-xs text-text-muted mb-6">
-            Please save this reservation code for check-in.
+            {transactionData?.requiresRefundReview ? 'Keep this code when contacting the hotel about your payment.' : 'Please save this reservation code for check-in.'}
           </p>
           
           <button 

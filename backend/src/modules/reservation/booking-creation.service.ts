@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../../shared/utils/prisma';
+import { expireOnlineHolds } from './online-hold.service';
 
 // Allocation shares SERIALIZABLE transactions and room locks with recovery actions.
 export async function createHotelReservation(input: any, online = false): Promise<any> {
@@ -8,6 +9,7 @@ export async function createHotelReservation(input: any, online = false): Promis
   from.setUTCHours(0, 0, 0, 0); to.setUTCHours(0, 0, 0, 0);
   const today = new Date(); today.setUTCHours(0, 0, 0, 0);
   if (from < today || to <= from) throw new Error('Arrival cannot be in the past and departure must be after arrival.');
+  await expireOnlineHolds(Number(input.propertyId));
   for (let attempt = 0; ; attempt++) {
     try {
       return await prisma.$transaction(async tx => {
@@ -44,7 +46,7 @@ export async function createHotelReservation(input: any, online = false): Promis
         return tx.reservation.create({ data: {
           propertyId: property.propertyId, propertyGuestId: input.propertyGuestId ? Number(input.propertyGuestId) : null,
           platformGuestId: input.propertyGuestId ? null : Number(input.platformGuestId), staffId: input.staffId,
-          source: input.source || 'WalkIn', checkInDate: from, checkOutDate: to, status: 'Confirmed', notes: input.notes || '',
+          source: online ? 'Website' : input.source || 'WalkIn', checkInDate: from, checkOutDate: to, status: online ? 'Pending' : 'Confirmed', notes: input.notes || '',
           guestNameSnapshot: guest.fullName, guestPhoneSnapshot: guest.phone,
           totalAmount: Math.round(subtotal * (online ? 1 + Number(property.taxPercentage) / 100 : 1) * 100) / 100,
           amountPaid: 0, confirmationCode: `RES-${randomUUID().slice(0, 12).toUpperCase()}`,
