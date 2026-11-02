@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/axios';
 import toast from 'react-hot-toast';
 import PublicNavbar from '../components/public/PublicNavbar';
+import ReasonSelect from '../components/reservations/ReasonSelect';
 import {
   Calendar, MapPin, Loader2, Search, ArrowLeft, Clock,
   CheckCircle2, XCircle, CreditCard, ChevronLeft, ChevronRight,
@@ -75,6 +76,18 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
 };
 
 export default function PublicReservationsPage() {
+  const client = useQueryClient();
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const cancelMutation = useMutation({
+    mutationFn: async () => (await api.post(`/public/reservations/${cancelTarget.reservationId}/cancel`, { reason: cancelReason })).data.data,
+    onSuccess: result => {
+      setCancelTarget(null); setCancelReason('');
+      client.invalidateQueries({ queryKey: ['guestReservations'] });
+      toast.success(result.refundDue > 0 ? 'Reservation cancelled. Your payment is awaiting hotel refund review.' : 'Reservation cancelled. Your room hold has been released.');
+    },
+    onError: error => { toast.error(error.response?.data?.message || 'Could not cancel the reservation. Please try again.'); client.invalidateQueries({ queryKey: ['guestReservations'] }); },
+  });
   const [holdNow, setHoldNow] = useState(Date.now());
   useEffect(() => { const timer = setInterval(() => setHoldNow(Date.now()), 15000); return () => clearInterval(timer); }, []);
   const navigate = useNavigate();
@@ -272,7 +285,7 @@ const retryPaymentMutation = useMutation({
                 const amountPaid = Number(res.amountPaid || 0);
                 const balanceDue = Math.max(0, totalAmount - amountPaid);
                 const isFullyPaid = balanceDue < 0.01;
-                const holdEnds = res.source === 'Website' && !res.staffId && amountPaid === 0 && ['Pending', 'Confirmed'].includes(res.status) ? new Date(res.createdAt).getTime() + 15 * 60000 : null;
+                const holdEnds = res.source === 'Website' && !res.staffId && amountPaid === 0 && ['Pending', 'Confirmed'].includes(res.status) ? new Date(res.createdAt).getTime() + 10 * 60000 : null;
                 const expired = res.status === 'Expired' || (holdEnds !== null && holdEnds <= holdNow);
                 const released = expired || res.status === 'Cancelled';
 
@@ -335,7 +348,7 @@ const retryPaymentMutation = useMutation({
                       </div>
 
                       {/* 🌟 FIXED ACTION BUTTONS: Blocks payment if receptionist cancelled it */}
-                      <div className="w-full sm:w-auto">
+                      <div className="w-full sm:w-auto flex flex-col gap-2 sm:items-end">
                         {expired ? (
                           <Link to={`/public/${res.property.propertyCode}`} className="block w-full rounded-lg border border-border px-4 py-2.5 text-center text-sm font-semibold text-primary-700">Hold expired · Choose a room again</Link>
                         ) : res.status === 'Cancelled' ? (
@@ -356,6 +369,7 @@ const retryPaymentMutation = useMutation({
                             <CheckCircle2 size={14} className="inline mr-1" /> Payment Complete
                           </span>
                         )}
+                        {!released && ['Pending', 'Confirmed'].includes(res.status) && !res.reservationRooms?.some(stay => stay.status !== 'Reserved' || stay.actualCheckIn) && <button type="button" onClick={() => { setCancelReason(''); cancelMutation.reset(); setCancelTarget(res); }} className="min-h-11 w-full rounded-lg border border-danger-200 px-4 py-2 text-sm font-semibold text-danger-700 hover:bg-danger-50 sm:w-auto">Cancel reservation</button>}
                       </div>
                     </div>
                   </div>
@@ -370,6 +384,15 @@ const retryPaymentMutation = useMutation({
           </>
         )}
       </div>
+      {cancelTarget && <div className="mobile-dialog-overlay fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+        <form role="dialog" aria-modal="true" aria-labelledby="guest-cancel-title" onSubmit={event => { event.preventDefault(); cancelMutation.mutate(); }} className="w-full max-w-lg space-y-5 rounded-2xl border border-border bg-surface p-5 sm:p-6 shadow-xl">
+          <div><h2 id="guest-cancel-title" className="text-xl font-bold text-text">Cancel this reservation?</h2><p className="mt-2 break-words text-sm text-text-muted">{cancelTarget.property?.propertyName} · {cancelTarget.confirmationCode}</p></div>
+          <p className="text-sm text-text">Your room allocation will be released. {Number(cancelTarget.amountPaid) > 0 ? 'Your payment stays recorded. Any refund requires hotel review under its cancellation policy; no money is returned automatically.' : 'No payment has been recorded.'}</p>
+          {cancelTarget.property?.cancellationPolicy && <div className="rounded-lg border border-border bg-background p-3 text-sm text-text"><p className="mb-1 font-semibold">Hotel cancellation policy</p><p className="whitespace-pre-wrap">{cancelTarget.property.cancellationPolicy}</p></div>}
+          <ReasonSelect action="guest-cancel" value={cancelReason} onChange={setCancelReason} disabled={cancelMutation.isPending} className="mt-1 w-full rounded-lg border border-border bg-background p-3 text-text" />
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button type="button" disabled={cancelMutation.isPending} onClick={() => setCancelTarget(null)} className="min-h-11 rounded-lg border border-border px-4 py-2 font-semibold text-text disabled:opacity-50">Keep reservation</button><button disabled={cancelMutation.isPending} className="min-h-11 rounded-lg bg-danger-600 px-4 py-2 font-semibold text-white disabled:opacity-50">{cancelMutation.isPending ? 'Cancelling…' : 'Confirm cancellation'}</button></div>
+        </form>
+      </div>}
     </div>
   );
 }

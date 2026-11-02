@@ -6,6 +6,7 @@ import { getFrontendBaseUrl } from '../../shared/utils/frontend-url';
 import { verifyGuestPayment } from '../payment/guest-payment.service';
 import { createHotelReservation } from '../reservation/booking-creation.service';
 import { expireOnlineHolds } from '../reservation/online-hold.service';
+import { cancelGuestReservation } from '../reservation/guest-cancellation.service';
 
 
 const router = Router();
@@ -279,20 +280,17 @@ const checkOnlineBookingEnabled = async (propertyCode: string) => {
 // 🌟 6. GET GUEST RESERVATIONS (Paginated)
 // ⚠️ MUST BE PLACED BEFORE ANY /:propertyCode ROUTES!
 // ============================================================
-router.get('/reservations', async (req: any, res: Response) => {
+router.post('/reservations/:reservationId/cancel', requireBookingGuest, async (req: any, res: Response) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ success: false, message: 'Unauthorized: No token provided' });
-    }
+    const data = await cancelGuestReservation(req.params.reservationId, req.bookingGuest.guestId, req.body.reason);
+    return res.json({ success: true, data });
+  } catch (error: any) {
+    return res.status(error.statusCode || 400).json({ success: false, message: error.message });
+  }
+});
 
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
-    
-    if (decoded.type !== 'platform_guest') {
-      return res.status(403).json({ success: false, message: 'Access denied: Invalid user type' });
-    }
-
+router.get('/reservations', requireBookingGuest, async (req: any, res: Response) => {
+  try {
     // 🌟 1. Extract pagination params
     const { page = '1', limit = '5' } = req.query;
     const pageNum = Math.max(1, parseInt(page as string, 10));
@@ -300,7 +298,7 @@ router.get('/reservations', async (req: any, res: Response) => {
     const skip = (pageNum - 1) * limitNum;
 
     const whereClause = { 
-      platformGuestId: decoded.guestId,
+      platformGuestId: req.bookingGuest.guestId,
       source: 'Website'
     };
 
@@ -311,7 +309,7 @@ router.get('/reservations', async (req: any, res: Response) => {
     const reservations = await prisma.reservation.findMany({
       where: whereClause,
       include: {
-        property: { select: { propertyName: true, city: true, propertyCode: true } },
+        property: { select: { propertyName: true, city: true, propertyCode: true, cancellationPolicy: true } },
         reservationRooms: { include: { roomType: { select: { typeName: true } } } }
       },
       orderBy: [

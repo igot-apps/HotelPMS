@@ -1,6 +1,6 @@
 import { prisma } from '../../shared/utils/prisma';
 
-export const ONLINE_HOLD_MINUTES = 15;
+export const ONLINE_HOLD_MINUTES = 10;
 export function isExpiredOnlineHold(reservation: any, now = new Date()) {
   return ['Pending', 'Confirmed'].includes(reservation.status)
     && reservation.source === 'Website' && !reservation.staffId && reservation.platformGuestId != null
@@ -28,7 +28,7 @@ export async function expireOnlineHolds(propertyId?: number) {
       await tx.reservation.update({ where: { reservationId: current.reservationId }, data: { status: 'Expired' } });
       await tx.auditLog.create({ data: { entityType: 'Reservation', action: 'OnlinePaymentHoldExpired',
         oldData: { reservationId: current.reservationId, status: current.status },
-        newData: { reservationId: current.reservationId, reason: 'Online payment was not received within 15 minutes. Room allocation released.', status: 'Expired' },
+        newData: { reservationId: current.reservationId, reason: 'Online payment was not received within 10 minutes. Room allocation released.', status: 'Expired' },
       } });
       expired++;
     });

@@ -95,7 +95,7 @@ describe('guest payment webhook recovery', () => {
     const timely = await verifyGuestPayment('hotel-test', reference);
     expect(timely.data.bookingStatus).toBe('Confirmed');
     expect(timely.data.requiresRefundReview).toBe(false);
-    tx.reservation.findUniqueOrThrow.mockResolvedValueOnce({ ...hold, createdAt: new Date(Date.now() - 16 * 60000) });
+    tx.reservation.findUniqueOrThrow.mockResolvedValueOnce({ ...hold, createdAt: new Date(Date.now() - 11 * 60000) });
     const late = await verifyGuestPayment('hotel-test', reference);
     expect(late.data.bookingStatus).toBe('Expired');
     expect(late.data.requiresRefundReview).toBe(true);

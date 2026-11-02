@@ -4,7 +4,7 @@ import { expireOnlineHolds, isExpiredOnlineHold } from '../src/modules/reservati
 jest.mock('../src/shared/utils/prisma', () => ({ prisma: { reservation: { findMany: jest.fn() }, $transaction: jest.fn() } }));
 const db = prisma as any;
 const now = new Date('2026-11-02T12:00:00Z');
-const hold = { reservationId: 'hold', status: 'Pending', source: 'Website', staffId: null, platformGuestId: 1, amountPaid: 0, createdAt: new Date('2026-11-02T11:45:00Z') };
+const hold = { reservationId: 'hold', status: 'Pending', source: 'Website', staffId: null, platformGuestId: 1, amountPaid: 0, createdAt: new Date('2026-11-02T11:50:00Z') };
 let tx: any;
 beforeEach(() => {
   jest.resetAllMocks();
@@ -12,7 +12,7 @@ beforeEach(() => {
   tx = { $queryRaw: jest.fn<any>(), reservation: { findFirst: jest.fn<any>().mockResolvedValue(hold), update: jest.fn<any>() }, reservationRoom: { updateMany: jest.fn<any>() }, auditLog: { create: jest.fn<any>() } };
   db.$transaction.mockImplementation((work: any) => work(tx));
 });
-test('expires at 15 minutes but never expires paid, staff-created or in-house bookings', () => {
+test('expires at 10 minutes but never expires paid, staff-created or in-house bookings', () => {
   expect(isExpiredOnlineHold(hold, now)).toBe(true);
   expect(isExpiredOnlineHold(hold, new Date(now.getTime() - 1))).toBe(false);
   for (const extra of [{ amountPaid: 1 }, { staffId: 2 }, { source: 'WalkIn' }, { platformGuestId: null }, { status: 'InHouse' }]) {

@@ -61,7 +61,7 @@ export async function verifyGuestPayment(propertyCode: string, reference: string
     const released = expired || ['Cancelled', 'Expired'].includes(reservation.status);
     if (expired) {
       await tx.reservationRoom.updateMany({ where: { reservationId, status: 'Reserved' }, data: { status: 'Cancelled' } });
-      await tx.auditLog.create({ data: { entityType: 'Reservation', action: 'OnlinePaymentHoldExpired', oldData: { reservationId, status: reservation.status }, newData: { reservationId, status: 'Expired', reason: 'Payment arrived after the 15-minute hold expired. Allocation released and payment flagged for refund review.' } } });
+      await tx.auditLog.create({ data: { entityType: 'Reservation', action: 'OnlinePaymentHoldExpired', oldData: { reservationId, status: reservation.status }, newData: { reservationId, status: 'Expired', reason: 'Payment arrived after the 10-minute hold expired. Allocation released and payment flagged for refund review.' } } });
     }
     const paymentMethod = transaction.channel === 'card' ? 'Card'
       : transaction.channel === 'mobile_money' ? 'MobileMoney' : 'Online';

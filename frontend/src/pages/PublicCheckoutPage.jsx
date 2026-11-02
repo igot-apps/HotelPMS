@@ -285,7 +285,7 @@ export default function PublicCheckoutPage() {
           {/* Right Column: Price Breakdown & Pay */}
           <div className="lg:col-span-1">
             <div className="bg-surface p-4 sm:p-6 rounded-xl border border-border lg:sticky lg:top-20">
-              <p className="mb-4 rounded-lg bg-warning-50 p-3 text-sm text-warning-800">Your room is held for 15 minutes after you start payment. Unpaid holds expire automatically.</p>
+              <p className="mb-4 rounded-lg bg-warning-50 p-3 text-sm text-warning-800">Your room is held for 10 minutes after you start payment. Unpaid holds expire automatically.</p>
               <h2 className="text-lg font-bold text-text mb-4">Price Details</h2>
               <div className="space-y-3 text-sm mb-6">
                 <div className="flex justify-between text-text">

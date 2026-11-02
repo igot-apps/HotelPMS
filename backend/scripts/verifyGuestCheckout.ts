@@ -32,6 +32,7 @@ async function main() {
     const token = login.body.data.token;
     assert(token, 'Real guest login must return a token.');
     const auth = `Bearer ${token}`;
+    assert.equal((await request(app).get('/api/public/reservations').set('Authorization', auth)).status, 200);
     const booking = await request(app).post(base + '/reservations').set('Authorization', auth).send({ checkInDate: '2030-01-01', checkOutDate: '2030-01-02', roomTypeId: hotel.roomTypes[0].roomTypeId, agreedPricePerNight: 200, platformGuestId: other.guestId, guestFullName: 'Spoofed name', guestPhone: other.phone });
     assert.equal(booking.status, 201);
     const reservation = await prisma.reservation.findUniqueOrThrow({ where: { reservationId: booking.body.data.reservationId } });
@@ -45,7 +46,7 @@ async function main() {
     assert.equal((await request(app).post(base + '/payments/initialize').set('Authorization', auth).send({ reservationId: reservation.reservationId, amount: 1 })).status, 200);
     assert.equal(sentAmount, 20000);
     // An abandoned payment releases only its allocation, not physical room status.
-    await prisma.reservation.update({ where: { reservationId: reservation.reservationId }, data: { createdAt: new Date(Date.now() - 16 * 60000) } });
+    await prisma.reservation.update({ where: { reservationId: reservation.reservationId }, data: { createdAt: new Date(Date.now() - 11 * 60000) } });
     assert.equal((await request(app).get(base + '/room-types')).status, 200);
     const expired = await prisma.reservation.findUniqueOrThrow({ where: { reservationId: reservation.reservationId }, include: { reservationRooms: true } });
     assert.equal(expired.status, 'Expired'); assert.equal(expired.reservationRooms[0].status, 'Cancelled');
@@ -64,9 +65,32 @@ async function main() {
     assert.equal((await settle(reservation.reservationId)).data.requiresRefundReview, true);
     assert.equal((await settle(replacement.body.data.reservationId)).data.bookingStatus, 'Confirmed');
     assert.equal((await prisma.room.findFirstOrThrow({ where: { propertyId: hotel.propertyId } })).operationalStatus, 'Available');
+    const cancelUrl = `/api/public/reservations/${replacement.body.data.reservationId}/cancel`;
+    assert.equal((await request(app).post(cancelUrl).send({ reason: 'My travel plans have changed.' })).status, 401);
+    assert.equal((await request(app).post(cancelUrl).set('Authorization', `Bearer ${otherToken}`).send({ reason: 'My travel plans have changed.' })).status, 404);
+    assert.equal((await request(app).post(cancelUrl).set('Authorization', auth).send({ reason: 'bad' })).status, 400);
+    const paidStay = await prisma.reservationRoom.findFirstOrThrow({ where: { reservationId: replacement.body.data.reservationId } });
+    await prisma.reservationRoom.update({ where: { reservationRoomId: paidStay.reservationRoomId }, data: { status: 'CheckedIn', actualCheckIn: new Date() } });
+    assert.equal((await request(app).post(cancelUrl).set('Authorization', auth).send({ reason: 'My travel plans have changed.' })).status, 400);
+    await prisma.reservationRoom.update({ where: { reservationRoomId: paidStay.reservationRoomId }, data: { status: 'Reserved', actualCheckIn: null } });
+    const paidCancellation = await request(app).post(cancelUrl).set('Authorization', auth).send({ reason: 'My travel plans have changed.' });
+    assert.equal(paidCancellation.status, 200); assert.equal(paidCancellation.body.data.refundDue, 200);
+    const cancelledPaid = await prisma.reservation.findUniqueOrThrow({ where: { reservationId: replacement.body.data.reservationId }, include: { payments: true } });
+    assert.equal(cancelledPaid.status, 'Cancelled'); assert.equal(Number(cancelledPaid.amountPaid), 200); assert.equal(cancelledPaid.payments[0].status, 'Completed');
+    assert.equal((await request(app).post(cancelUrl).set('Authorization', auth).send({ reason: 'My travel plans have changed.' })).status, 200);
+    assert.equal(await prisma.auditLog.count({ where: { action: 'GuestCancelledReservation', newData: { path: ['reservationId'], equals: replacement.body.data.reservationId } } }), 1);
+    const unpaid = await request(app).post(base + '/reservations').set('Authorization', auth).send({ checkInDate: '2030-01-01', checkOutDate: '2030-01-02', roomTypeId: hotel.roomTypes[0].roomTypeId });
+    assert.equal(unpaid.status, 201);
+    const physicalRoom = await prisma.room.findFirstOrThrow({ where: { propertyId: hotel.propertyId } });
+    await prisma.room.update({ where: { roomId: physicalRoom.roomId }, data: { operationalStatus: 'Occupied' } });
+    const unpaidCancellation = await request(app).post(`/api/public/reservations/${unpaid.body.data.reservationId}/cancel`).set('Authorization', auth).send({ reason: 'I made a duplicate reservation.' });
+    assert.equal(unpaidCancellation.status, 200); assert.equal(unpaidCancellation.body.data.refundDue, 0);
+    assert.equal((await prisma.room.findUniqueOrThrow({ where: { roomId: physicalRoom.roomId } })).operationalStatus, 'Occupied');
+    assert.equal((await settle(unpaid.body.data.reservationId)).data.requiresRefundReview, true);
+    assert.equal((await prisma.reservation.findUniqueOrThrow({ where: { reservationId: unpaid.body.data.reservationId } })).status, 'Cancelled');
     await prisma.platformGuest.update({ where: { guestId: guest.guestId }, data: { isActive: false } });
     assert.equal((await request(app).post(base + '/reservations').set('Authorization', auth).send({})).status, 401);
-    console.log('Passed: guest identity/ownership, server amounts, pending hold, expiry/release, blocked expired payment, rebooking released inventory, late payment refund review/idempotency, and timely confirmation. No payment provider contacted.');
+    console.log('Passed: checkout/expiry/rebooking, cancellation ownership/authentication, required reason, check-in guard, paid/unpaid cancellation, preserved payment history, idempotent cancellation, occupancy isolation, and late payment refund review. No payment provider contacted.');
   } finally {
     axios.post = originalPost;
     axios.get = originalGet;

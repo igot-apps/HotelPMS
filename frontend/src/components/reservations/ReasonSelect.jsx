@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 const suggestions = {
+  'guest-cancel': ['My travel plans have changed.', 'I selected the wrong dates or room.', 'I made a duplicate reservation.', 'I no longer need accommodation.'],
   'undo-checkin': ['Checked in the wrong guest or room by mistake.', 'Guest has not arrived; check-in was recorded too early.', 'Check-in was recorded on the wrong reservation.'],
   'undo-checkout': ['Checked out the wrong guest or room by mistake.', 'Guest is still staying; checkout was recorded too early.'],
   restore: ['Cancelled the wrong reservation by mistake.', 'Guest confirmed they still need the reservation.'],
