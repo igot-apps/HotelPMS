@@ -42,7 +42,8 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
     overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
   .responsive-table > tbody { display: grid; gap: 12px; padding: 12px; }
-  .responsive-table > tbody > tr {
+  .responsive-table > tbody > tr,
+  .responsive-table > tbody > tr:last-child {
     display: block; border: 1px solid #e2e8f0; border-radius: 12px;
     padding: 8px 12px; min-width: 0;
   }
