@@ -270,11 +270,12 @@ export default function DiscoverPage() {
       <PublicNavbar />
 
       {/* 🌟 HERO SECTION WITH SEARCH */}
-      <div className="relative bg-gradient-to-br from-primary-600 via-primary-700 to-secondary-700 overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 left-0 w-96 h-96 bg-white rounded-full -translate-x-1/2 -translate-y-1/2 blur-3xl" />
-          <div className="absolute bottom-0 right-0 w-96 h-96 bg-white rounded-full translate-x-1/2 translate-y-1/2 blur-3xl" />
-        </div>
+      <div className="relative isolate overflow-hidden bg-emerald-950">
+        <picture aria-hidden="true" className="pointer-events-none absolute inset-0 -z-20 block">
+          <source media="(max-width: 767px)" srcSet="/images/discovery-hero-mobile-480.webp 480w, /images/discovery-hero-mobile-768.webp 768w" sizes="100vw" />
+          <img src="/images/discovery-hero-1280.webp" srcSet="/images/discovery-hero-1280.webp 1280w, /images/discovery-hero-1920.webp 1920w" sizes="100vw" width="1920" height="640" alt="" loading="eager" fetchPriority="high" decoding="async" className="h-full w-full object-cover object-center" />
+        </picture>
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-emerald-950/75 via-emerald-950/65 to-emerald-950/40 md:bg-[linear-gradient(90deg,rgba(2,44,34,0.35)_0%,rgba(2,44,34,0.76)_38%,rgba(2,44,34,0.70)_60%,rgba(2,44,34,0.18)_100%)]" />
 
         <div className="relative max-w-7xl mx-auto px-4 py-14 sm:py-16 md:py-20 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full text-white text-xs font-semibold mb-5">
@@ -398,21 +399,6 @@ export default function DiscoverPage() {
               <X size={16} /> Clear Filters
             </button>
           )}
-        </div>
-
-        <div className="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="rounded-xl border border-primary-100 bg-primary-50/70 p-4">
-            <p className="text-sm font-bold text-text">Search before you travel</p>
-            <p className="mt-1 text-xs leading-5 text-text-muted">See participating hotels with rooms for your selected stay, so you can compare options before making the trip.</p>
-          </div>
-          <div className="rounded-xl border border-border bg-surface p-4">
-            <p className="text-sm font-bold text-text">Local details at a glance</p>
-            <p className="mt-1 text-xs leading-5 text-text-muted">Check the area, city, region, GhanaPost GPS address, nightly price, and listed features.</p>
-          </div>
-          <div className="rounded-xl border border-border bg-surface p-4">
-            <p className="text-sm font-bold text-text">Book directly</p>
-            <p className="mt-1 text-xs leading-5 text-text-muted">Review room options and confirm your booking with the hotel through the platform.</p>
-          </div>
         </div>
 
         {/* Loading / Error / Empty States */}
