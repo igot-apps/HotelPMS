@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Calendar, Tag, Loader2, CheckCircle2, ArrowLeft, CreditCard, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Calendar, Tag, Loader2, CheckCircle2, CreditCard, ShieldCheck, AlertCircle } from 'lucide-react';
 import api from '../lib/axios';
 import toast from 'react-hot-toast';
 import PublicNavbar from '../components/public/PublicNavbar';
+import BackButton from '../components/ui/BackButton';
 
 export default function PublicCheckoutPage() {
   const { propertyCode, roomTypeId } = useParams();
@@ -198,9 +199,7 @@ export default function PublicCheckoutPage() {
       <PublicNavbar />
       
       <div className="max-w-4xl mx-auto px-4 py-6 sm:py-10">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-text-muted hover:text-text mb-6 transition">
-          <ArrowLeft size={16} /> Back to Rooms
-        </button>
+        <BackButton fallback={`/public/${propertyCode}${location.search}`} label="Back to rooms" disabled={initializePaymentMutation.isPending} confirmWhen={checkIn !== initialCheckIn || checkOut !== initialCheckOut} className="mb-6" />
         
         <form onSubmit={handlePay} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           

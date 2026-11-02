@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import api from '../lib/axios';
-import { Building2, Mail, Phone, User, Lock, Loader2, ArrowLeft } from 'lucide-react';
+import { Building2, Mail, Phone, User, Lock, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { startGuestSession } from '../lib/guestSession';
+import BackButton from '../components/ui/BackButton';
 
 export default function PublicAuthPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -78,9 +79,7 @@ export default function PublicAuthPage() {
             <Building2 className="text-primary-600 group-hover:text-primary-700 transition" size={24} />
             <span className="text-lg font-black text-text tracking-tight">Stayfolio</span>
           </Link>
-          <Link to="/discover" className="flex items-center gap-1 text-sm text-text-muted hover:text-text transition">
-            <ArrowLeft size={16} /> Back to Discover
-          </Link>
+          <BackButton fallback="/discover" label="Back" confirmWhen={Object.values(formData).some(Boolean)} disabled={authMutation.isPending} />
         </div>
       </div>
 

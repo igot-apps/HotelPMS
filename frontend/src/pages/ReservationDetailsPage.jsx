@@ -1,12 +1,13 @@
 import ResponsiveTable from '../components/ui/ResponsiveTable';
+import BackButton from '../components/ui/BackButton';
 import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getReservationById, getReservationStats, updateReservation } from '../api/reservations';
 import { recordPayment } from '../api/payments';
 import { useAuthStore } from '../store/authStore';
 import {
-  ArrowLeft, User, BedDouble, CreditCard, FileText, Edit2, X, Loader2,
+  User, BedDouble, CreditCard, FileText, Edit2, X, Loader2,
   CalendarDays, DollarSign, Clock, CheckCircle2, AlertCircle, Plus, Printer, ChevronDown, Smartphone
 } from 'lucide-react';
 import ReceiptModal from '../components/reservations/ReceiptModal';
@@ -16,7 +17,7 @@ import ReservationRecoveryPanel from '../components/reservations/ReservationReco
 
 export default function ReservationDetailsPage() {
   const { id } = useParams();
-  const navigate = useNavigate();
+
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
 
@@ -105,10 +106,8 @@ export default function ReservationDetailsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate(-1)} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition">
-            <ArrowLeft size={20} />
-          </button>
+        <div className="min-w-0 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+          <BackButton fallback="/reservations" label="Back" />
           <div>
             <h1 className="text-2xl font-bold text-text">Reservation {resData.confirmationCode || `#${resData.reservationId.slice(0, 8).toUpperCase()}`}</h1>
             <p className="text-sm text-text-muted flex items-center gap-2 mt-1">

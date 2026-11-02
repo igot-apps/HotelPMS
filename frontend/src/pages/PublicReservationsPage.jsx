@@ -5,8 +5,9 @@ import api from '../lib/axios';
 import toast from 'react-hot-toast';
 import PublicNavbar from '../components/public/PublicNavbar';
 import ReasonSelect from '../components/reservations/ReasonSelect';
+import BackButton from '../components/ui/BackButton';
 import {
-  Calendar, MapPin, Loader2, Search, ArrowLeft, Clock,
+  Calendar, MapPin, Loader2, Search, Clock,
   CheckCircle2, XCircle, CreditCard, ChevronLeft, ChevronRight,
   BedDouble
 } from 'lucide-react';
@@ -242,10 +243,8 @@ const retryPaymentMutation = useMutation({
     <div className="min-h-screen bg-background">
       <PublicNavbar />
       <div className="w-full max-w-[900px] mx-auto px-4 py-12">
-        <div className="flex items-center gap-4 mb-8">
-          <button onClick={() => navigate(-1)} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition">
-            <ArrowLeft size={20} />
-          </button>
+        <div className="flex flex-col items-start gap-3 mb-8 sm:flex-row sm:items-center">
+          <BackButton fallback="/discover" label="Back" />
           <div>
             <h1 className="text-2xl font-bold text-text">My Reservations</h1>
             <p className="text-sm text-text-muted">View and manage your upcoming and past stays.</p>

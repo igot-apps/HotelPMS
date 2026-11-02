@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import api from '../lib/axios';
 import PublicNavbar from '../components/public/PublicNavbar';
+import BackButton from '../components/ui/BackButton';
 
 // Helper to fetch property data
 const fetchProperty = async (propertyCode) => {
@@ -142,6 +143,7 @@ const [activePhoto, setActivePhoto] = useState(0);
       <PublicNavbar />
 
       {/* 1. Hero Section with Gradient Overlay */}
+      <div className="mx-auto max-w-7xl px-4 py-3 md:hidden"><BackButton fallback="/discover" label="Back to hotels" /></div>
       <section className="bg-secondary-900 p-3 sm:p-5">
         <div className={`mx-auto grid max-w-7xl gap-2 overflow-hidden rounded-2xl ${propertyPhotos.length > 1 ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1'}`}>
           <div className={`relative h-[300px] bg-gradient-to-br from-primary-700 to-secondary-900 sm:h-[420px] ${propertyPhotos.length > 1 ? 'md:col-span-2' : ''}`}>

@@ -2,6 +2,7 @@ import { useLayoutEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ArrowRight, BedDouble, Building2, CalendarCheck2, ChartNoAxesCombined, ShieldCheck, Users } from 'lucide-react';
 import PublicNavbar from '../components/public/PublicNavbar';
+import BackButton from '../components/ui/BackButton';
 
 const features = [
   { icon: CalendarCheck2, title: 'Reservations in one place', description: 'Track bookings, arrivals, departures, payments, and guest details from a single workspace.' },
@@ -18,6 +19,7 @@ export default function ForHotelsPage() {
   return (
     <div className="min-h-screen bg-background text-text">
       <PublicNavbar />
+      <div className="mx-auto w-full max-w-7xl px-4 py-3 md:hidden"><BackButton fallback="/discover" label="Back" /></div>
 
       <main>
         <section className="relative overflow-hidden bg-gradient-to-br from-primary-700 via-primary-800 to-secondary-900">

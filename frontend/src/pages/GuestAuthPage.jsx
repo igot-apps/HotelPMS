@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
-import { Loader2, Lock, Phone, User, Mail, ArrowLeft } from 'lucide-react';
+import { Loader2, Lock, Phone, User, Mail } from 'lucide-react';
 import api from '../lib/axios';
 import toast from 'react-hot-toast';
 import { startGuestSession } from '../lib/guestSession';
+import BackButton from '../components/ui/BackButton';
 
 export default function GuestAuthPage() {
   const { propertyCode } = useParams();
@@ -56,9 +57,7 @@ export default function GuestAuthPage() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-surface rounded-2xl shadow-xl border border-border p-4 sm:p-8">
-        <button onClick={() => navigate(`/public/${propertyCode}`)} className="flex items-center gap-2 text-sm text-text-muted hover:text-text mb-6 transition">
-          <ArrowLeft size={16} /> Back to Hotel
-        </button>
+        <BackButton fallback={`/public/${propertyCode}`} label="Back to hotel" confirmWhen={Object.values(formData).some(Boolean)} disabled={authMutation.isPending} className="mb-6" />
 
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-text mb-2">{isLogin ? 'Welcome Back' : 'Create Account'}</h1>

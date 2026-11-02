@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
 import { registerHotel } from '../api/auth';
+import BackButton from '../components/ui/BackButton';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 import { Building2, User, ArrowRight, ArrowLeft, Loader2, CheckCircle2, Sparkles, MapPin, LocateFixed } from 'lucide-react';
@@ -99,6 +100,7 @@ export default function HotelRegistrationWizard() {
   return (
     <div className="min-h-screen bg-background flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-2xl">
+        <BackButton mobileOnly fallback="/for-hotels" label={step > 1 ? 'Back to hotel details' : 'Back'} onBack={step > 1 ? prevStep : undefined} confirmWhen={step === 1 && Object.values(formData).some(Boolean)} disabled={mutation.isPending} className="mb-5" />
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-text flex items-center justify-center gap-2">
             <Sparkles className="text-primary-500" size={28} /> Register Your Hotel
