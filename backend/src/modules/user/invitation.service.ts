@@ -15,8 +15,20 @@ export async function inviteStaff(propertyId: number, data: any) {
     throw new Error('Name, username, and a valid email are required.');
   }
   // Invitations have a fixed role; never depend on a client-side roles request or database IDs.
-  const role = await prisma.role.findUnique({ where: { roleName: 'Receptionist' } });
-  if (!role) throw new Error('The Receptionist role is not configured. Ask the platform administrator to run the role setup.');
+  const role = await prisma.role.findUnique({ where: { roleName: 'Receptionist' } })
+    || await prisma.$transaction(async tx => {
+      // Bootstrap only the missing standard role, without reseeding hotels or touching existing roles.
+      const receptionist = await tx.role.upsert({ where: { roleName: 'Receptionist' }, update: {},
+        create: { roleName: 'Receptionist', description: 'Front desk operations', isSystem: true },
+      });
+      const codes = ['CanCreateReservation', 'CanCancelReservation', 'CanCheckInGuest', 'CanCheckOutGuest', 'CanViewRooms', 'CanUpdateRoomStatus', 'CanProcessPayments'];
+      const permissions = [];
+      for (const code of codes) {
+        permissions.push(await tx.permission.upsert({ where: { code }, update: {}, create: { code, name: code.replace(/^Can/, '').replace(/([a-z])([A-Z])/g, '$1 $2'), category: 'Front desk' } }));
+      }
+      await tx.rolePermission.createMany({ data: permissions.map(permission => ({ roleId: receptionist.roleId, permissionId: permission.permissionId })), skipDuplicates: true });
+      return receptionist;
+    });
   const { token, ...fields } = tokenData();
   const email = data.email.trim().toLowerCase();
   const preview = await deliverStaffInvitation(email, token);
