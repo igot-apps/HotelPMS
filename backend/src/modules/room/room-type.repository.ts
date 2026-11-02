@@ -101,27 +101,28 @@ export const updateRoomType = async (
   }>
 ) => {
   const { amenityIds, ...rest } = data;
-
-  return prisma.roomType.update({
-    where: { roomTypeId },
-    data: {
-      ...rest,
-      // 🌟 ADDED: Use the compound unique key to update the amenities junction table
-      ...(amenityIds !== undefined && {
-        amenities: {
-          set: amenityIds.map((id) => ({
-            roomTypeId_amenityId: {
-              roomTypeId: roomTypeId,
-              amenityId: id,
-            },
-          })),
-        },
-      }),
-    },
-    include: {
-      // 🌟 ADDED: Return the updated amenities
-      amenities: { include: { amenity: true } }, 
-    },
+  if (amenityIds !== undefined && (!Array.isArray(amenityIds) || amenityIds.some(id => !Number.isSafeInteger(id) || id < 1))) {
+    throw new Error('Choose valid room amenities.');
+  }
+  const ids = amenityIds === undefined ? undefined : [...new Set(amenityIds)];
+  return prisma.$transaction(async tx => {
+    const roomType = await tx.roomType.findUniqueOrThrow({ where: { roomTypeId }, select: { propertyId: true } });
+    if (ids?.length) {
+      const count = await tx.amenity.count({ where: { amenityId: { in: ids }, propertyId: roomType.propertyId } });
+      if (count !== ids.length) throw new Error('Choose amenities belonging to this hotel.');
+    }
+    return tx.roomType.update({
+      where: { roomTypeId },
+      data: {
+        ...rest,
+        // Junction records cannot be disconnected from their required room type.
+        ...(ids !== undefined && { amenities: {
+          deleteMany: {},
+          create: ids.map(amenityId => ({ amenity: { connect: { amenityId } } })),
+        } }),
+      },
+      include: { amenities: { include: { amenity: true } } },
+    });
   });
 };
 

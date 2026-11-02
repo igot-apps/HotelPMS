@@ -285,7 +285,7 @@ export const getPayments = async (propertyId: number, page: number = 1, limit: n
 export const getPaymentStats = async (propertyId: number) => {
   // 🌟 NEW: Filter by the direct propertyId column
   const where = {
-    propertyId: Number(propertyId)
+    propertyId: Number(propertyId), status: 'Completed' as const
   };
   
   const stats = await prisma.payment.aggregate({

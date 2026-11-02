@@ -11,6 +11,7 @@ import {
 import ReceiptModal from '../components/reservations/ReceiptModal';
 import ThermalReceiptModal from '../components/reservations/ThermalReceiptModal';
 import { formatPaymentMethod } from '../utils/payment';
+import ReservationRecoveryPanel from '../components/reservations/ReservationRecoveryPanel';
 
 export default function ReservationDetailsPage() {
   const { id } = useParams();
@@ -218,6 +219,7 @@ export default function ReservationDetailsPage() {
       </div>
 
       {/* Payment History */}
+      <ReservationRecoveryPanel reservation={resData} />
       <div className="bg-surface p-6 rounded-xl border border-border shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-text flex items-center gap-2"><CreditCard size={18} /> Payment History</h3>

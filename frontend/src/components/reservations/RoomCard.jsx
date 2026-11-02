@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { LogIn, LogOut, Loader2, Clock, Pencil, Check, X } from 'lucide-react';
 
 export default function RoomCard({ 
@@ -79,6 +80,7 @@ export default function RoomCard({
     <div className={`bg-surface p-4 rounded-xl border shadow-sm flex flex-col gap-3 ${
       isRoomComplete ? 'border-secondary-200 opacity-75' : 'border-border'
     }`}>
+      <Link to={`/reservations/${res.reservationId}`} className="text-xs font-semibold text-primary-600 hover:underline">Open reservation / manager corrections</Link>
       {/* Room Header */}
       <div className="flex justify-between items-start">
         <div>

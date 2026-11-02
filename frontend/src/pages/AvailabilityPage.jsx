@@ -1,11 +1,13 @@
 // AvailabilityPage.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAvailableRooms } from '../api/rooms';
 import { createReservation } from '../api/reservations';
 import { recordPayment } from '../api/payments';
 import { useAuthStore } from '../store/authStore';
 import ReservationModal from '../components/reservations/ReservationModal';
+import BookingPaymentNotice from '../components/reservations/BookingPaymentNotice';
+import { createWalkInBooking } from '../lib/createWalkInBooking';
 import toast from 'react-hot-toast';
 import {
   Search, Calendar, BedDouble, AlertCircle, Users, ChevronRight, Loader2, ShoppingCart, CheckCircle2
@@ -25,6 +27,12 @@ export default function AvailabilityPage() {
   
   // State for the single global booking modal
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [isSavingBooking, setIsSavingBooking] = useState(false);
+  const savingBookingRef = useRef(false);
+  const [paymentRecoveryReservation, setPaymentRecoveryReservation] = useState(null);
+  const bookingInitialData = useMemo(() => ({
+    checkInDate, checkOutDate, roomIds: selectedRooms,
+  }), [checkInDate, checkOutDate, selectedRooms]);
 
   // 🌟 HELPER: Prevent past dates and invalid ranges
   const today = new Date().toISOString().split('T')[0];
@@ -91,34 +99,32 @@ export default function AvailabilityPage() {
 
   // Handle booking submission from the Modal
   const handleBookingSubmit = async (payload) => {
+    if (savingBookingRef.current) return;
+    savingBookingRef.current = true;
+    setIsSavingBooking(true);
     try {
-      // 1. Create reservation
-      const resResponse = await createReservation(payload);
-      const newReservation = resResponse.data.data;
-
-      // 2. Record initial payment if applicable
-      if (payload.initialPayment > 0.01) {
-        const paymentPayload = {
-          reservationId: newReservation.reservationId,
-          amount: payload.initialPayment,
-          paymentMethod: payload.paymentMethod,
-          propertyId: payload.propertyId,
-          gatewayReference: payload.gatewayReference || null,
-          notes: 'Initial payment for reservation'
-        };
-        await recordPayment(paymentPayload);
+      const { reservation, paymentError } = await createWalkInBooking(payload, { createReservation, recordPayment });
+      if (paymentError) {
+        setPaymentRecoveryReservation(reservation);
+        toast.error('Reservation saved. Review its initial payment below.');
+      } else {
+        setPaymentRecoveryReservation(null);
+        toast.success('Reservation created successfully!');
       }
-      
-      toast.success('Reservation created successfully!');
       
       // 3. Close modal, clear selections, and refresh availability
       setIsBookingModalOpen(false);
       setSelectedRooms([]); 
       queryClient.invalidateQueries({ queryKey: ['availability'] });
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
+      queryClient.invalidateQueries({ queryKey: ['reservations'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
     } catch (err) {
       console.error('Booking failed:', err);
       toast.error(err.response?.data?.message || 'Failed to create reservation.');
+    } finally {
+      savingBookingRef.current = false;
+      setIsSavingBooking(false);
     }
   };
 
@@ -133,6 +139,7 @@ export default function AvailabilityPage() {
 
   return (
     <div className="space-y-6 pb-28"> {/* pb-28 prevents content hiding behind sticky button */}
+      <BookingPaymentNotice reservation={paymentRecoveryReservation} onDismiss={() => setPaymentRecoveryReservation(null)} />
       
       {/* Header */}
       <div>
@@ -340,14 +347,10 @@ export default function AvailabilityPage() {
       {/* ========================================== */}
       <ReservationModal
         isOpen={isBookingModalOpen}
-        onClose={() => setIsBookingModalOpen(false)}
+        onClose={() => { if (!savingBookingRef.current) setIsBookingModalOpen(false); }}
         onSubmit={handleBookingSubmit}
-        isLoading={false}
-        initialData={{
-          checkInDate,
-          checkOutDate,
-          roomIds: selectedRooms, 
-        }}
+        isLoading={isSavingBooking}
+        initialData={bookingInitialData}
       />
     </div>
   );

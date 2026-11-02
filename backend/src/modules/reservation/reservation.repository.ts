@@ -148,7 +148,7 @@ export const findReservationById = async (reservationId: string) => {
   return prisma.reservation.findUnique({
     where: { reservationId },
     include: {
-      property: { select: { propertyId: true, propertyName: true, propertyCode: true } },
+      property: { select: { propertyId: true, propertyName: true, propertyCode: true, timezone: true } },
       propertyGuest: { select: { guestId: true, fullName: true, phone: true } },
       platformGuest: { select: { guestId: true, fullName: true, phone: true, email: true } },
       staff: { select: { userId: true, fullName: true } },

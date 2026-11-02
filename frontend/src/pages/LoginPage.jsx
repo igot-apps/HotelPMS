@@ -189,6 +189,12 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+          <Link
+            to="/"
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-3 font-semibold text-primary-700 transition hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+          >
+            <Building2 size={18} /> Discover Hotels
+          </Link>
 
           {/* Mobile Registration Link */}
           <div className="lg:hidden text-center pt-6 border-t border-border">

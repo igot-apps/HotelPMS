@@ -1,113 +1,10 @@
 import * as reservationRepository from './reservation.repository';
-import { findAvailableRooms, updateRoomStatus } from '../room/room.repository';
-import { updateGuestLastStay } from '../guest/guest.repository';
 import { prisma } from '../../shared/utils/prisma';
+import * as recovery from './recovery.service';
 
-// 🌟 HELPER: Generate a short, easy-to-read confirmation code (e.g., "RES-8X9K2P")
-const generateConfirmationCode = (): string => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Omitted 0, O, 1, I to avoid confusion
-  let code = 'RES-';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-};
+import { createHotelReservation } from './booking-creation.service';
 
-export const createReservation = async (data: any) => {
-  if (!data.propertyId) throw new Error('Property ID is required');
-  if (!data.propertyGuestId && !data.platformGuestId) {
-    throw new Error('Either Property Guest ID or Platform Guest ID is required');
-  }
-  if (!data.checkInDate) throw new Error('Check-in date is required');
-  if (!data.checkOutDate) throw new Error('Check-out date is required');
-  if (!data.rooms || data.rooms.length === 0) {
-    throw new Error('At least one room is required');
-  }
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const checkIn = new Date(data.checkInDate);
-  checkIn.setHours(0, 0, 0, 0);
-  const checkOut = new Date(data.checkOutDate);
-  checkOut.setHours(0, 0, 0, 0);
-
-  if (checkIn < today) {
-    throw new Error('Check-in date cannot be in the past. For walk-ins, please select today\'s date.');
-  }
-  if (checkIn >= checkOut) {
-    throw new Error('Check-out date must be at least one day after the check-in date.');
-  }
-
-  for (const roomData of data.rooms) {
-    const availableRooms = await findAvailableRooms(
-      data.propertyId,
-      checkIn,
-      checkOut,
-      roomData.roomTypeId
-    );
-    const roomExists = availableRooms.some((r: any) => r.roomId === roomData.roomId);
-    if (!roomExists) {
-      throw new Error(`Room ${roomData.roomId} is not available for the selected dates`);
-    }
-  }
-
-  const nights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
-  let totalAmount = 0;
-  for (const roomData of data.rooms) {
-    totalAmount += roomData.agreedPricePerNight * nights;
-  }
-
-  let guestNameSnapshot: string | null = null;
-  let guestPhoneSnapshot: string | null = null;
-  if (data.propertyGuestId) {
-    const guest = await prisma.propertyGuest.findFirst({
-      where: { guestId: Number(data.propertyGuestId), propertyId: Number(data.propertyId), isActive: true },
-      select: { fullName: true, phone: true },
-    });
-    if (!guest) throw new Error('Selected property guest was not found for this hotel.');
-    guestNameSnapshot = guest.fullName;
-    guestPhoneSnapshot = guest.phone;
-  } else if (data.platformGuestId) {
-    const guest = await prisma.platformGuest.findUnique({
-      where: { guestId: Number(data.platformGuestId) },
-      select: { fullName: true, phone: true },
-    });
-    if (!guest) throw new Error('Selected platform guest was not found.');
-    guestNameSnapshot = guest.fullName;
-    guestPhoneSnapshot = guest.phone;
-  }
-
-  const reservation = await reservationRepository.createReservation({
-    propertyId: data.propertyId,
-    propertyGuestId: data.propertyGuestId || null,
-    platformGuestId: data.platformGuestId || null,
-    staffId: data.staffId,
-    source: data.source || 'Website',
-    checkInDate: checkIn,
-    checkOutDate: checkOut,
-    status: 'Confirmed',
-    notes: data.notes,
-    totalAmount,
-    amountPaid: 0,
-    confirmationCode: generateConfirmationCode(),
-    guestNameSnapshot,
-    guestPhoneSnapshot,
-  });
-
-  for (const roomData of data.rooms) {
-    await reservationRepository.createReservationRoom({
-      reservationId: reservation.reservationId,
-      roomId: roomData.roomId,
-      roomTypeId: roomData.roomTypeId,
-      ratePlanId: roomData.ratePlanId,
-      checkInDate: checkIn,
-      checkOutDate: checkOut,
-      agreedPricePerNight: roomData.agreedPricePerNight,
-    });
-  }
-
-  return reservationRepository.findReservationById(reservation.reservationId);
-};
+export const createReservation = (data: any) => createHotelReservation(data);
 
 export const getReservations = async (
   filters: {
@@ -149,101 +46,19 @@ export const getReservationById = async (reservationId: string) => {
 export const updateReservation = async (reservationId: string, data: any) => {
   const reservation = await reservationRepository.findReservationById(reservationId);
   if (!reservation) throw new Error('Reservation not found');
-  if (data.status === 'Cancelled' && reservation.status !== 'Cancelled') {
-    for (const rr of reservation.reservationRooms) {
-      if (rr.roomId !== null) await updateRoomStatus(rr.roomId, 'Available');
-    }
-  }
-  return reservationRepository.updateReservation(reservationId, data);
+  const allowed = { notes: data.notes, source: data.source };
+  if (Object.keys(data).some(key => !['notes', 'source'].includes(key))) throw new Error('Use the dedicated reservation or manager correction actions.');
+  return reservationRepository.updateReservation(reservationId, allowed);
 };
 
 // 🌟 PERFECT: Auto-flags reservation for refund if money was paid
-export const cancelReservation = async (reservationId: string, _reason?: string) => {
-  // 1. Get the current reservation to check amountPaid
-  const reservation = await prisma.reservation.findUnique({
-    where: { reservationId },
-    select: { amountPaid: true, status: true }
-  });
-  
-  if (!reservation) throw new Error('Reservation not found');
-  if (reservation.status === 'Cancelled') throw new Error('Reservation is already cancelled');
-  
-  // 2. Determine if a refund is needed
-  const amountPaid = Number(reservation.amountPaid || 0);
-  const needsRefund = amountPaid > 0;
-  
-  // 3. Update reservation with cancellation AND refund flag
-  const updated = await prisma.reservation.update({
-    where: { reservationId },
-    data: {
-      status: 'Cancelled',
-      cancellationDate: new Date(),
-      refundStatus: needsRefund ? 'Pending' : 'None', // 🌟 Auto-flag for refund
-      refundDue: needsRefund ? amountPaid : 0,         // 🌟 Set refund amount
-    }
-  });
-  
-  // 4. Release rooms back to Available
-  await prisma.reservationRoom.updateMany({
-    where: { reservationId },
-    data: { status: 'Cancelled' }
-  });
-  
-  // 5. Update room operational status
-  const reservationRooms = await prisma.reservationRoom.findMany({
-    where: { reservationId },
-    select: { roomId: true }
-  });
-  
-  for (const rr of reservationRooms) {
-    if (rr.roomId !== null) {
-      await prisma.room.update({
-        where: { roomId: rr.roomId },
-        data: { operationalStatus: 'Available' }
-      });
-    }
-  }
-  
-  return updated;
-};
+export const cancelReservation = (reservationId: string, actor: recovery.Actor, reason?: string) =>
+  recovery.cancelSafely(reservationId, actor, reason);
 
-export const checkInGuest = async (reservationId: string) => {
-  const reservation = await reservationRepository.findReservationById(reservationId);
-  if (!reservation) throw new Error('Reservation not found');
+export const checkInGuest = (reservationId: string, actor: recovery.Actor) => recovery.checkinBooking(reservationId, actor);
 
-  if (reservation.status !== 'Confirmed') {
-    throw new Error('Reservation must be confirmed to check in');
-  }
-
-  await reservationRepository.updateReservationStatus(reservationId, 'InHouse');
-
-  for (const rr of reservation.reservationRooms) {
-    if (rr.roomId !== null) await updateRoomStatus(rr.roomId, 'Occupied');
-  }
-
-  if (reservation.propertyGuestId) {
-    await updateGuestLastStay(reservation.propertyGuestId);
-  }
-
-  return reservationRepository.findReservationById(reservationId);
-};
-
-export const checkOutGuest = async (reservationId: string) => {
-  const reservation = await reservationRepository.findReservationById(reservationId);
-  if (!reservation) throw new Error('Reservation not found');
-
-  if (reservation.status !== 'InHouse') {
-    throw new Error('Reservation must be checked in to check out');
-  }
-
-  await reservationRepository.updateReservationStatus(reservationId, 'Completed');
-
-  for (const rr of reservation.reservationRooms) {
-    if (rr.roomId !== null) await updateRoomStatus(rr.roomId, 'Available', 'Dirty');
-  }
-
-  return reservationRepository.findReservationById(reservationId);
-};
+export const checkOutGuest = (reservationId: string, actor: recovery.Actor, overrideReason?: unknown) =>
+  recovery.checkoutBooking(reservationId, actor, overrideReason);
 
 export const getReservationsByDateRange = async (
   propertyId: number,
@@ -282,134 +97,16 @@ export const updateReservationFinancials = async (
   );
 };
 
-export const updateReservationRoomStatus = async (
-  reservationRoomId: number,
-  status: string,
-  occupantName?: string,
-  occupantPhone?: string,
-  userPropertyId?: number
-) => {
-  const resRoom = await reservationRepository.findReservationRoomById(reservationRoomId);
-  if (!resRoom) throw new Error('Reservation room not found');
-  
-  if (userPropertyId && resRoom.reservation.propertyId !== userPropertyId) {
-    throw new Error('You do not have access to this reservation room');
-  }
-  if (resRoom.roomId === null) {
-    throw new Error('This reservation room is archived and has no active room inventory.');
-  }
+export const updateReservationRoomStatus = (
+  reservationRoomId: number, status: string, occupantName: string | undefined,
+  occupantPhone: string | undefined, actor: recovery.Actor, overrideReason?: unknown,
+) => recovery.transitionStay(reservationRoomId, status, actor, { occupantName, occupantPhone, overrideReason });
 
-  const updateData: any = { status };
-  if (occupantName !== undefined) updateData.occupantName = occupantName;
-  if (occupantPhone !== undefined) updateData.occupantPhone = occupantPhone.trim() || null;
-
-  if (status === 'CheckedIn') {
-    const conflict = await reservationRepository.findConflictingCheckIn(
-      resRoom.roomId, 
-      reservationRoomId
-    );
-    
-    if (conflict) {
-      const otherGuest = conflict.reservation.guestNameSnapshot
-        || conflict.reservation.platformGuest?.fullName 
-        || conflict.reservation.propertyGuest?.fullName 
-        || 'another guest';
-      const conflictingRoomNumber = conflict.room?.roomNumber || resRoom.roomNumberSnapshot || 'the assigned room';
-      throw new Error(
-        `Room ${conflictingRoomNumber} is already occupied by ${otherGuest} (Reservation #${conflict.reservation.reservationId}). ` +
-        `Please check out the current guest before checking in a new one.`
-      );
-    }
-
-    updateData.actualCheckIn = new Date();
-    await updateRoomStatus(resRoom.roomId, 'Occupied');
-  } else if (status === 'CheckedOut') {
-    updateData.actualCheckOut = new Date();
-    await updateRoomStatus(resRoom.roomId, 'Available', 'Dirty');
-  }
-
-  const updatedRoom = await reservationRepository.updateReservationRoomStatus(reservationRoomId, updateData);
-  const newReservationStatus = await reservationRepository.deriveReservationStatus(resRoom.reservationId);
-  await reservationRepository.updateReservationStatus(resRoom.reservationId, newReservationStatus);
-
-  return updatedRoom;
-};
-
-export const extendReservationRoom = async (
-  reservationRoomId: number,
-  newCheckOutDate: string,
-  userPropertyId?: number
-) => {
-  const resRoom = await reservationRepository.findReservationRoomById(reservationRoomId);
-  if (!resRoom) throw new Error('Reservation room not found');
-  
-  if (userPropertyId && resRoom.reservation.propertyId !== userPropertyId) {
-    throw new Error('You do not have access to this reservation room');
-  }
-  if (resRoom.roomId === null) {
-    throw new Error('This reservation room is archived and cannot be extended.');
-  }
-
-  if (resRoom.status !== 'CheckedIn') {
-    throw new Error('Can only extend stay for checked-in rooms');
-  }
-
-  const newCheckOut = new Date(newCheckOutDate);
-  const currentCheckOut = new Date(resRoom.checkOutDate);
-  
-  if (newCheckOut <= currentCheckOut) {
-    throw new Error('New check-out date must be after current check-out date');
-  }
-
-  const originalCheckOut = resRoom.originalCheckOutDate || currentCheckOut;
-
-  const conflictingBooking = await reservationRepository.findConflictingReservationRoom(
-    resRoom.roomId,
-    reservationRoomId,
-    newCheckOut,
-    currentCheckOut
-  );
-
-  if (conflictingBooking) {
-    const conflictData = conflictingBooking as any;
-    const otherGuest = conflictData.reservation?.guestNameSnapshot
-      || conflictData.reservation?.platformGuest?.fullName 
-      || conflictData.reservation?.propertyGuest?.fullName 
-      || 'another guest';
-    throw new Error(
-      `Room ${conflictData.room?.roomNumber} is already booked by ${otherGuest} ` +
-      `from ${new Date(conflictData.checkInDate).toLocaleDateString()} to ${new Date(conflictData.checkOutDate).toLocaleDateString()}. ` +
-      `Cannot extend stay for this room.`
-    );
-  }
-
-  await reservationRepository.updateReservationRoomCheckOutDate(
-    reservationRoomId,
-    newCheckOut,
-    originalCheckOut
-  );
-
-  const fullReservation = await reservationRepository.findReservationById(resRoom.reservationId);
-  if (!fullReservation) throw new Error('Reservation not found after update');
-  
-  let grandTotal = 0;
-  let reservationCheckOutDate = new Date(fullReservation.reservationRooms[0]?.checkOutDate || fullReservation.checkOutDate);
-  for (const room of fullReservation.reservationRooms) {
-    const roomCheckOut = new Date(room.checkOutDate);
-    if (roomCheckOut > reservationCheckOutDate) reservationCheckOutDate = roomCheckOut;
-    const roomCheckIn = new Date(room.checkInDate);
-    const roomNights = Math.ceil((roomCheckOut.getTime() - roomCheckIn.getTime()) / (1000 * 60 * 60 * 24));
-    grandTotal += parseFloat(room.agreedPricePerNight.toString()) * roomNights;
-  }
-
-  await reservationRepository.updateReservationFinancials(
-    resRoom.reservationId,
-    grandTotal,
-    Number(fullReservation.amountPaid || 0),
-    reservationCheckOutDate
-  );
-
-  return reservationRepository.findReservationRoomById(reservationRoomId);
+export const extendReservationRoom = async (reservationRoomId: number, newCheckOutDate: string, actor: recovery.Actor) => {
+  const stay = await reservationRepository.findReservationRoomById(reservationRoomId);
+  if (!stay || stay.reservation.propertyId !== actor.propertyId) throw new Error('Reservation room not found for this hotel.');
+  if (new Date(newCheckOutDate) <= stay.checkOutDate) throw new Error('New departure must be after the current departure. Use manager corrections to shorten a stay.');
+  return recovery.correctBooking(stay.reservationId, actor, { action: 'correct-date', stayId: reservationRoomId, newCheckOutDate, reason: 'Guest requested a stay extension' });
 };
 
 export const updateOccupantName = async (
@@ -470,6 +167,21 @@ export const markAsNoShow = async (reservationId: string, userPropertyId?: numbe
 
   if (reservation.status !== 'Confirmed') {
     throw new Error(`Cannot mark as no-show. Reservation is currently "${reservation.status}". Only "Confirmed" reservations can be marked as no-show.`);
+  }
+
+  // Scheduled stay dates are calendar dates; compare against today's date in
+  // the hotel's timezone rather than the server's or receptionist's timezone.
+  const checkIn = new Date(reservation.checkInDate);
+  if (Number.isNaN(checkIn.getTime())) throw new Error('The reservation has an invalid arrival date.');
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: reservation.property.timezone || 'Africa/Accra',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date());
+  const part = (type: string) => parts.find(item => item.type === type)!.value;
+  const today = `${part('year')}-${part('month')}-${part('day')}`;
+  const arrivalDate = checkIn.toISOString().slice(0, 10);
+  if (arrivalDate > today) {
+    throw new Error(`Cannot mark as no-show before the arrival date (${arrivalDate}).`);
   }
 
   const hasCheckedInRoom = reservation.reservationRooms.some(r => r.status === 'CheckedIn');

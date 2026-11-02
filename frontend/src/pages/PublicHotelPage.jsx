@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -33,6 +33,7 @@ const toWhatsAppNumber = (phone) => {
 export default function PublicHotelPage() {
   const { propertyCode } = useParams();
   const navigate = useNavigate();
+  const roomResultsRef = useRef(null);
 
 // 🌟 Smart Date Initialization (Prevent past dates)
 const today = new Date();
@@ -70,7 +71,10 @@ const [activePhoto, setActivePhoto] = useState(0);
 
   const handleSearch = (e) => {
     e.preventDefault();
-    // React Query handles the refetch automatically when state changes
+    roomResultsRef.current?.scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+      block: 'start',
+    });
   };
 
   const handleBookNow = (roomTypeId) => {
@@ -248,7 +252,7 @@ const [activePhoto, setActivePhoto] = useState(0);
         </div>
 
         {/* Right Column: Available Room Types */}
-        <div className="lg:col-span-2 space-y-6">
+        <div ref={roomResultsRef} className="lg:col-span-2 space-y-6 scroll-mt-24">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
             <h2 className="text-2xl font-bold text-text">Available Room Types</h2>
             <p className="text-sm text-text-muted font-medium bg-secondary-50 px-3 py-1 rounded-full border border-secondary-100 w-fit">

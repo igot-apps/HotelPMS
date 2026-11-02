@@ -2,9 +2,30 @@ import { Router, Response } from 'express';
 import { createHmac, timingSafeEqual } from 'crypto';
 import * as paymentService from './payment.service';
 import * as subscriptionService from './subscription.service';
-import { authenticate, AuthRequest } from '../../shared/middleware/auth.middleware';
+import { processGuestPaymentWebhook } from './guest-payment.service';
+import { authenticate, AuthRequest, requirePermission } from '../../shared/middleware/auth.middleware';
+import { prisma } from '../../shared/utils/prisma';
 
 const router = Router();
+
+router.post('/webhooks/guest-bookings', async (req, res: Response) => {
+  try {
+    await processGuestPaymentWebhook(req.body, req.header('x-paystack-signature'));
+    const event = JSON.parse(req.body.toString('utf8'));
+    if (event.event === 'charge.success' && String(event.data?.reference || '').startsWith('SUB-')) {
+      try {
+        await subscriptionService.processSubscriptionWebhook(event.data.reference);
+      } catch (error: any) {
+        if (error.statusCode !== 404) throw error;
+      }
+    }
+    return res.sendStatus(200);
+  } catch (error: any) {
+    // Never acknowledge an uncommitted payment; non-200 lets Paystack retry.
+    console.error('Guest payment webhook failed:', error.message);
+    return res.status(error.statusCode || 500).json({ success: false, message: 'Could not process guest payment webhook.' });
+  }
+});
 
 // Paystack mobile money can finish after the browser callback. Accept signed
 // success webhooks as a second path to verification; the service re-verifies
@@ -36,6 +57,10 @@ router.post('/webhooks/platform', async (req: any, res: Response) => {
   if (event.event !== 'charge.success' || !event.data?.reference) return res.sendStatus(200);
 
   try {
+    if (String(event.data.reference).startsWith('RES-')) {
+      await processGuestPaymentWebhook(req.body, signature);
+      return res.sendStatus(200);
+    }
     await subscriptionService.processSubscriptionWebhook(String(event.data.reference));
     return res.sendStatus(200);
   } catch (error: any) {
@@ -87,12 +112,16 @@ router.get('/verify/:reference', authenticate, async (req: AuthRequest, res: Res
 // ============================================================
 // RECORD A NEW PAYMENT
 // ============================================================
-router.post('/', async (req: any, res: Response) => {
+router.use(authenticate, requirePermission('CanProcessPayments'));
+
+router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const payment = await paymentService.recordPayment(req.body);
-    res.status(201).json({ success: true, data: payment });
+    const reservation = await prisma.reservation.findFirst({ where: { reservationId: req.body.reservationId, propertyId: req.user!.propertyId }, select: { reservationId: true } });
+    if (!reservation) return res.status(404).json({ success: false, message: 'Reservation not found for this hotel.' });
+    const payment = await paymentService.recordPayment({ ...req.body, receivedBy: req.user!.userId, status: 'Completed' });
+    return res.status(201).json({ success: true, data: payment });
   } catch (error: any) {
-    res.status(400).json({ success: false, message: error.message });
+    return res.status(400).json({ success: false, message: error.message });
   }
 });
 
@@ -107,9 +136,7 @@ router.get('/', async (req: any, res: Response) => {
     const { page, limit, ...filters } = req.query;
     
     // 🌟 CRITICAL: Get propertyId from query, user session, or fallback to 1
-    const propertyId = req.query.propertyId 
-      ? parseInt(req.query.propertyId as string) 
-      : (req.user?.propertyId || 1);
+    const propertyId = req.user!.propertyId;
 
     console.log(`🔍 [ROUTE] Fetching payments for propertyId: ${propertyId}`);
 
@@ -148,9 +175,10 @@ router.get('/stats', async (req: any, res: Response) => {
 router.get('/:id', async (req: any, res: Response) => {
   try {
     const payment = await paymentService.getPaymentById(parseInt(req.params.id));
-    res.json({ success: true, data: payment });
+    if (payment.reservation.propertyId !== req.user.propertyId) return res.status(404).json({ success: false, message: 'Payment not found.' });
+    return res.json({ success: true, data: payment });
   } catch (error: any) {
-    res.status(404).json({ success: false, message: error.message });
+    return res.status(404).json({ success: false, message: error.message });
   }
 });
 
@@ -158,23 +186,20 @@ router.get('/:id', async (req: any, res: Response) => {
 // UPDATE PAYMENT
 // ============================================================
 router.patch('/:id', async (req: any, res: Response) => {
-  try {
-    const payment = await paymentService.updatePayment(parseInt(req.params.id), req.body);
-    res.json({ success: true, data: payment });
-  } catch (error: any) {
-    res.status(400).json({ success: false, message: error.message });
-  }
+  void req;
+  return res.status(400).json({ success: false, message: 'Use the manager payment correction action on the reservation. Original payments cannot be overwritten.' });
 });
 
 // ============================================================
 // PROCESS REFUND
 // ============================================================
-router.post('/:id/refund', async (req: any, res: Response) => {
+router.post('/:id/refund', requirePermission('CanIssueRefunds'), async (req: any, res: Response) => {
   try {
-    const payment = await paymentService.processRefund(parseInt(req.params.id));
-    res.json({ success: true, data: payment });
+    const existing = await paymentService.getPaymentById(parseInt(req.params.id));
+    if (existing.reservation.propertyId !== req.user.propertyId) return res.status(404).json({ success: false, message: 'Payment not found.' });
+    throw new Error('Use the reservation refund workflow to preserve the full refund balance.');
   } catch (error: any) {
-    res.status(400).json({ success: false, message: error.message });
+    return res.status(400).json({ success: false, message: error.message });
   }
 });
 

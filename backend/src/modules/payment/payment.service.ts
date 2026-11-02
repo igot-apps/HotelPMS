@@ -1,43 +1,24 @@
 import * as paymentRepository from './payment.repository';
 import { findReservationById, updateReservationFinancials, updateReservation } from '../reservation/reservation.repository';
+import { prisma } from '../../shared/utils/prisma';
 
 export const recordPayment = async (data: any) => {
-  if (!data.reservationId) throw new Error('Reservation ID is required');
-  if (!data.amount) throw new Error('Amount is required');
-  if (data.amount <= 0) throw new Error('Amount must be greater than 0');
-  if (!data.paymentMethod) throw new Error('Payment method is required');
-
-  const reservation = await findReservationById(data.reservationId);
-  if (!reservation) throw new Error('Reservation not found');
-  if (reservation.status === 'Cancelled') {
-    throw new Error('Cannot record payment for cancelled reservation');
-  }
-
   const amount = Number(data.amount);
-  const accummulatedPayments = await paymentRepository.calculateAccumulatedPayment(data.reservationId);
-  if (amount + accummulatedPayments > Number(reservation.totalAmount)) {
-    throw new Error('Payment amount exceeds total reservation amount');
-  }
-
-  const payment = await paymentRepository.createPayment({
-    reservationId: data.reservationId,
-    propertyId: reservation.propertyId, // 🌟 NEW: Pass the propertyId from the reservation
-    amount: data.amount,
-    paymentMethod: data.paymentMethod,
-    gatewayReference: data.gatewayReference,
-    receivedBy: data.receivedBy,
-    status: data.status || 'Completed',
-    notes: data.notes,
+  if (typeof data.reservationId !== 'string' || !Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) / 100 !== amount) throw new Error('A reservation and positive payment amount with at most two decimal places are required.');
+  if (typeof data.paymentMethod !== 'string' || !data.paymentMethod.trim()) throw new Error('Payment method is required.');
+  return prisma.$transaction(async tx => {
+    const locked = await tx.$queryRaw<any[]>`SELECT "reservationId" FROM reservations WHERE "reservationId" = ${data.reservationId} FOR UPDATE`;
+    if (!locked.length) throw new Error('Reservation not found.');
+    const reservation = await tx.reservation.findUniqueOrThrow({ where: { reservationId: data.reservationId } });
+    if (reservation.status === 'Cancelled') throw new Error('Cannot record payment for a cancelled reservation.');
+    const ledger = await tx.payment.aggregate({ where: { reservationId: data.reservationId, status: 'Completed' }, _sum: { amount: true } });
+    const paid = Number(ledger._sum.amount || 0);
+    if (Math.abs(paid - Number(reservation.amountPaid)) > 0.01) throw new Error('Payment history and balance differ. Reconcile before adding a payment.');
+    if (paid + amount > Number(reservation.totalAmount) + 0.001) throw new Error('Payment amount exceeds the outstanding balance.');
+    const payment = await tx.payment.create({ data: { reservationId: data.reservationId, propertyId: reservation.propertyId, amount, paymentMethod: data.paymentMethod.trim(), receivedBy: data.receivedBy, status: 'Completed', gatewayReference: data.gatewayReference || null, notes: data.notes || null } });
+    await tx.reservation.update({ where: { reservationId: data.reservationId }, data: { amountPaid: Math.round((paid + amount) * 100) / 100 } });
+    return payment;
   });
-
-  const newAmountPaid = Number(reservation.amountPaid || 0) + amount;
-  await updateReservationFinancials(
-    data.reservationId,
-    Number(reservation.totalAmount || 0),
-    newAmountPaid
-  );
-
-  return payment;
 };
 
 export const getPayments = async (

@@ -12,19 +12,7 @@ const DEMO_GUEST_EMAIL = 'guest@demo.stayfolio.test';
 const DEMO_PAYSTACK_KEY = process.env.DEMO_PAYSTACK_TEST_KEY?.trim();
 const ASSET_DIR = path.join(__dirname, 'demo-assets');
 
-const demoHotels = [
-  { region: 'Greater Accra', city: 'Accra', area: 'Osu' },
-  { region: 'Ashanti', city: 'Kumasi', area: 'Adum' },
-  { region: 'Central', city: 'Cape Coast', area: 'Cape Coast' },
-  { region: 'Eastern', city: 'Koforidua', area: 'Koforidua' },
-  { region: 'Western', city: 'Takoradi', area: 'Takoradi' },
-  { region: 'Northern', city: 'Tamale', area: 'Tamale' },
-  { region: 'Volta', city: 'Ho', area: 'Ho' },
-  { region: 'Upper East', city: 'Bolgatanga', area: 'Bolgatanga' },
-  { region: 'Upper West', city: 'Wa', area: 'Wa' },
-  { region: 'Bono', city: 'Sunyani', area: 'Sunyani' },
-  { region: 'Bono East', city: 'Techiman', area: 'Techiman' },
-];
+const demoHotels: { area: string; city: string; region: string; latitude: number; longitude: number; address: string; ghanaPostAddress: string }[] = require('./demo-locations.json');
 
 const permissions = [
   { code: 'CanCreateReservation', name: 'Create Reservation', category: 'Reservations' },
@@ -135,7 +123,8 @@ async function main() {
         propertyName,
         businessName: propertyName,
         propertyType: 'Hotel',
-        address: 'Demo listing — replace with the hotel’s real address before launch.',
+        address: location.address,
+        latitude: location.latitude, longitude: location.longitude, ghanaPostAddress: location.ghanaPostAddress,
         area: location.area,
         city: location.city,
         region: location.region,
@@ -162,7 +151,8 @@ async function main() {
         propertyName,
         businessName: propertyName,
         propertyType: 'Hotel',
-        address: 'Demo listing — replace with the hotel’s real address before launch.',
+        address: location.address,
+        latitude: location.latitude, longitude: location.longitude, ghanaPostAddress: location.ghanaPostAddress,
         area: location.area,
         city: location.city,
         region: location.region,

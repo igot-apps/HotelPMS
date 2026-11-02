@@ -38,6 +38,7 @@ app.use('/api/paystack/webhooks/platform', express.raw({ type: 'application/json
 
 // 2. 🌟 Hotel Guest Booking Webhook (UNCOMMENTED & ACTIVE)
 app.use('/api/paystack/webhooks/guest-bookings', express.raw({ type: 'application/json' }));
+app.use('/api/payments/webhooks/guest-bookings', express.raw({ type: 'application/json' }));
 
 // Standard JSON parsing for everything else
 app.use(express.json({ limit: '2mb' }));

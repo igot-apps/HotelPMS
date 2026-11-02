@@ -3,6 +3,8 @@ import { prisma } from '../../shared/utils/prisma';
 import axios from 'axios';
 import jwt from 'jsonwebtoken'; // Ensure this is imported at the top of the file
 import { getFrontendBaseUrl } from '../../shared/utils/frontend-url';
+import { verifyGuestPayment } from '../payment/guest-payment.service';
+import { createHotelReservation } from '../reservation/booking-creation.service';
 
 
 const router = Router();
@@ -30,16 +32,6 @@ const requireBookingGuest = async (req: any, res: Response, next: import('expres
   }
 };
 
-// 🌟 HELPER: Generate a short, easy-to-read confirmation code (e.g., "RES-8X9K2P")
-const generateConfirmationCode = (): string => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Omitted 0, O, 1, I to avoid confusion
-  let code = 'RES-';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-};
-
 // 🌟 HELPER: Haversine Formula to calculate distance in KM
 const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
   const R = 6371; // Earth's radius in KM
@@ -60,9 +52,19 @@ const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): 
 router.get('/discover', async (req: any, res: Response) => {
   try {
     const { search, userLat, userLng, checkIn, checkOut, maxPrice, amenity, page = '1', limit = '9' } = req.query;
-    const pageNum = Math.max(1, parseInt(page as string, 10));
-    const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10)));
+    const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10) || 9));
     const skip = (pageNum - 1) * limitNum;
+    const hasLocation = userLat !== undefined && userLng !== undefined;
+    const latitude = Number(userLat);
+    const longitude = Number(userLng);
+    if ((userLat !== undefined || userLng !== undefined) && (
+      !hasLocation || String(userLat).trim() === '' || String(userLng).trim() === ''
+      || !Number.isFinite(latitude) || latitude < -90 || latitude > 90
+      || !Number.isFinite(longitude) || longitude < -180 || longitude > 180
+    )) {
+      return res.status(400).json({ success: false, message: 'Provide valid latitude and longitude.' });
+    }
 
     if (Boolean(checkIn) !== Boolean(checkOut)) {
       return res.status(400).json({ success: false, message: 'Provide both check-in and check-out dates to search availability.' });
@@ -118,12 +120,31 @@ router.get('/discover', async (req: any, res: Response) => {
       ];
     }
 
-    const total = await prisma.property.count({ where });
+    let total: number;
+    let pageIds: number[] | undefined;
+    if (hasLocation) {
+      // Rank the entire matching set using lightweight coordinates before loading
+      // this page's photos and other large profile fields.
+      const candidates = await prisma.property.findMany({
+        where, select: { propertyId: true, latitude: true, longitude: true },
+      });
+      const distance = (hotel: typeof candidates[number]) => hotel.latitude === null || hotel.longitude === null
+        ? Infinity : getDistanceKm(latitude, longitude, hotel.latitude, hotel.longitude);
+      candidates.sort((a, b) => {
+        const aDistance = distance(a), bDistance = distance(b);
+        return aDistance === bDistance ? a.propertyId - b.propertyId : aDistance - bDistance;
+      });
+      total = candidates.length;
+      pageIds = candidates.slice(skip, skip + limitNum).map(hotel => hotel.propertyId);
+    } else {
+      total = await prisma.property.count({ where });
+    }
 
     const properties = await prisma.property.findMany({
-      where,
-      skip,
+      where: pageIds ? { AND: [where, { propertyId: { in: pageIds } }] } : where,
+      ...(pageIds ? {} : { skip }),
       take: limitNum,
+      orderBy: { propertyId: 'asc' },
       select: {
         propertyId: true,
         propertyCode: true,
@@ -157,10 +178,10 @@ router.get('/discover', async (req: any, res: Response) => {
       let distanceText: string | null = null;
       let distanceKm = Number.POSITIVE_INFINITY;
 
-      if (userLat && userLng && p.latitude !== null && p.longitude !== null) {
+      if (hasLocation && p.latitude !== null && p.longitude !== null) {
         const km = getDistanceKm(
-          parseFloat(userLat as string), 
-          parseFloat(userLng as string), 
+          latitude,
+          longitude,
           p.latitude, 
           p.longitude
         );
@@ -208,8 +229,10 @@ router.get('/discover', async (req: any, res: Response) => {
       };
     }));
 
-    if (userLat && userLng) {
-      formatted.sort((a, b) => a.distanceKm - b.distanceKm);
+    if (pageIds) {
+      const ranks = new Map(pageIds.map((id, index) => [id, index]));
+      const codeRanks = new Map(properties.map(hotel => [hotel.propertyCode, ranks.get(hotel.propertyId)!]));
+      formatted.sort((a, b) => codeRanks.get(a.propertyCode)! - codeRanks.get(b.propertyCode)!);
     }
 
     const amenityOptions = await prisma.amenity.findMany({
@@ -408,89 +431,10 @@ router.get('/:propertyCode/room-types', async (req: any, res: Response) => {
 // ============================================================
 router.post('/:propertyCode/reservations', requireBookingGuest, async (req: any, res: Response) => {
   try {
-    const { propertyCode } = req.params;
-    const { checkInDate, checkOutDate, roomTypeId, agreedPricePerNight, notes } = req.body;
-    const property = await checkOnlineBookingEnabled(propertyCode);
-
-    const cIn = new Date(checkInDate);
-    const cOut = new Date(checkOutDate);
-    if (cIn >= cOut) throw new Error('Check-out date must be after check-in date.');
-
-    const nights = Math.ceil((cOut.getTime() - cIn.getTime()) / (1000 * 60 * 60 * 24));
-    const baseTotal = parseFloat(agreedPricePerNight) * nights;
-    const taxAmount = baseTotal * (parseFloat(property.taxPercentage as any) / 100);
-    const finalTotal = baseTotal + taxAmount;
-
-    const availableRoom = await prisma.room.findFirst({
-      where: {
-        propertyId: property.propertyId,
-        roomTypeId: roomTypeId,
-        operationalStatus: 'Available',
-        reservationRooms: {
-          none: {
-            reservation: {
-              // 🌟 CHANGED: 'CheckedIn' → 'InHouse'
-              status: { in: ['Confirmed', 'InHouse'] },
-              OR: [{ checkInDate: { lte: cOut }, checkOutDate: { gte: cIn } }]
-            }
-          }
-        }
-      }
-    });
-
-    if (!availableRoom) {
-      return res.status(400).json({ success: false, message: 'Sorry, this room type is no longer available for the selected dates.' });
-    }
-
-    const bookingGuest = req.bookingGuest;
-    const finalPlatformGuestId = bookingGuest.guestId;
-
-      const reservation = await prisma.reservation.create({
-    data: {
-      propertyId: property.propertyId,
-      platformGuestId: finalPlatformGuestId,
-      source: 'Website',
-      checkInDate: cIn,
-      checkOutDate: cOut,
-      status: 'Confirmed',
-      notes: notes || '',
-      totalAmount: finalTotal,
-      amountPaid: 0,
-      guestNameSnapshot: bookingGuest.fullName,
-      guestPhoneSnapshot: bookingGuest.phone,
-      confirmationCode: generateConfirmationCode(), // 🌟 ADDED: Generates short code
-      // 🌟 REMOVED: balanceDue is no longer in the schema
-    },
-    include: {
-      platformGuest: { select: { fullName: true, phone: true, email: true } }
-    }
-  });
-
-    await prisma.reservationRoom.create({
-      data: {
-        reservationId: reservation.reservationId,
-        roomId: availableRoom.roomId,
-        roomTypeId: roomTypeId,
-        checkInDate: cIn,
-        checkOutDate: cOut,
-        agreedPricePerNight: parseFloat(agreedPricePerNight),
-      }
-    });
-
-    return res.status(201).json({ 
-      success: true, 
-      message: 'Reservation created successfully!',
-      data: {
-        reservationId: reservation.reservationId,
-        confirmationCode: reservation.confirmationCode,
-        totalAmount: finalTotal,
-        guestName: reservation.platformGuest?.fullName
-      }
-    });
-  } catch (error: any) {
-    console.error('Reservation Creation Error:', error);
-    return res.status(400).json({ success: false, message: error.message });
-  }
+    const property = await checkOnlineBookingEnabled(req.params.propertyCode);
+    const reservation = await createHotelReservation({ propertyId: property.propertyId, platformGuestId: req.bookingGuest.guestId, roomTypeId: req.body.roomTypeId, checkInDate: req.body.checkInDate, checkOutDate: req.body.checkOutDate, notes: req.body.notes, source: 'Website' }, true);
+    return res.status(201).json({ success: true, data: { reservationId: reservation.reservationId, confirmationCode: reservation.confirmationCode, totalAmount: reservation.totalAmount, guestName: req.bookingGuest.fullName } });
+  } catch (error: any) { return res.status(400).json({ success: false, message: error.message }); }
 });
 
 // ============================================================
@@ -552,88 +496,10 @@ router.post('/:propertyCode/payments/initialize', requireBookingGuest, async (re
 // ============================================================
 router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Response) => {
   try {
-    const { propertyCode, reference } = req.params;
-    const property = await prisma.property.findUnique({
-      where: { propertyCode },
-      select: { propertyId: true, paystackSecretKey: true }
-    });
-    const paystackSecretKey = property?.paystackSecretKey || process.env.PAYSTACK_SECRET_KEY;
-
-    if (!property || !paystackSecretKey) {
-      return res.status(400).json({ success: false, message: 'Property Paystack configuration not found' });
-    }
-
-    const response = await axios.get(
-      `https://api.paystack.co/transaction/verify/${reference}`,
-      {
-        headers: { Authorization: `Bearer ${paystackSecretKey}` }
-      }
-    );
-
-    const transactionData = response.data.data;
-    let confirmationCode: string | null = null;
-    if (transactionData.status === 'success') {
-      const reservationId = String(transactionData.metadata?.reservationId);
-      const amountPaid = transactionData.amount / 100;
-
-     if (reservationId && reservationId !== 'undefined') {
-       const reservation = await prisma.reservation.findUnique({
-         where: { reservationId },
-         select: { amountPaid: true, status: true, totalAmount: true, confirmationCode: true }
-       });
-       
-       // 🌟 FIX: Removed the "=== 0" check so ALL valid payments are recorded
-       if (reservation) {
-         confirmationCode = reservation.confirmationCode;
-         // 🛡️ Safety: Prevent duplicate payment records for the same Paystack reference
-         const existingPayment = await prisma.payment.findFirst({
-           where: { gatewayReference: transactionData.reference }
-         });
-
-         if (!existingPayment) {
-           await prisma.reservation.update({
-             where: { reservationId },
-             data: { 
-               amountPaid: { increment: amountPaid }, 
-               status: reservation.status !== 'Cancelled' ? 'Confirmed' : reservation.status 
-             }
-           });
-           
-           const paymentMethod = transactionData.channel === 'card'
-             ? 'Card'
-             : transactionData.channel === 'mobile_money'
-               ? 'MobileMoney'
-               : String(transactionData.channel || 'Online');
-
-           await prisma.payment.create({
-         data: {
-           reservationId,
-           propertyId: property.propertyId, // 🌟 CRITICAL FIX: Save the property ID!
-           amount: amountPaid,
-           paymentMethod,
-           paymentDate: new Date(),
-           gatewayReference: transactionData.reference,
-           status: 'Completed',
-           notes: `Online payment verified via ${paymentMethod === 'MobileMoney' ? 'Mobile Money' : paymentMethod}`,
-           receivedBy: null,
-         }
-       });
-           console.log(`✅ [VERIFY SUCCESS] Reservation #${reservationId} payment verified and recorded: GH₵ ${amountPaid}`);
-         } else {
-           console.log(`⚠️ [VERIFY SKIPPED] Payment for reference ${transactionData.reference} already processed.`);
-         }
-       }
-     }
-    }
-
-    return res.json({
-      success: true,
-      data: { ...transactionData, confirmationCode },
-      status: transactionData.status,
-    });
+    return res.json(await verifyGuestPayment(req.params.propertyCode, req.params.reference));
   } catch (error: any) {
-    console.error('Paystack Verify Error:', error.response?.data?.message || error.message);
-    return res.status(500).json({ success: false, message: error.response?.data?.message || error.message });
+    console.error('Paystack Verify Error:', error.message);
+    return res.status(error.statusCode || 500).json({ success: false, message: 'Could not verify guest payment. Please try again.' });
   }
 });
 

@@ -4,14 +4,7 @@ const bcrypt = require('bcryptjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 
-const locations = [
-  ['Osu', 'Accra', 'Greater Accra'], ['Adum', 'Kumasi', 'Ashanti'],
-  ['Cape Coast', 'Cape Coast', 'Central'], ['Koforidua', 'Koforidua', 'Eastern'],
-  ['Takoradi', 'Takoradi', 'Western'], ['Tamale', 'Tamale', 'Northern'],
-  ['Ho', 'Ho', 'Volta'], ['Bolgatanga', 'Bolgatanga', 'Upper East'],
-  ['Wa', 'Wa', 'Upper West'], ['Sunyani', 'Sunyani', 'Bono'],
-  ['Techiman', 'Techiman', 'Bono East'],
-];
+const locations = require('./demo-locations.json');
 
 async function main() {
   const apply = process.argv.includes('--apply');
@@ -34,7 +27,7 @@ async function main() {
     }))));
     const passwordHash = apply ? await bcrypt.hash(process.env.DEMO_SEED_PASSWORD, 10) : null;
     let created = 0, skipped = 0;
-    for (const [index, [area, city, region]] of locations.entries()) {
+    for (const [index, { area, city, region, latitude, longitude, address, ghanaPostAddress }] of locations.entries()) {
       const suffix = String(index + 1).padStart(2, '0');
       const propertyCode = `demo-hotel-${suffix}`;
       if (await prisma.property.findUnique({ where: { propertyCode }, select: { propertyId: true } })) {
@@ -48,7 +41,7 @@ async function main() {
         const hotel = await tx.property.create({ data: {
           propertyCode, propertyName, businessName: propertyName, propertyType: 'Hotel',
           area, city, region, country: 'Ghana', currency: 'GHS', timezone: 'Africa/Accra', totalRooms: 3,
-          address: 'Demo property — not a real hotel.',
+          address, latitude, longitude, ghanaPostAddress,
           publicDescription: 'Demo hotel for testing Stayfolio. Photos and prices are sample data. Do not make real payments.',
           coverImage: galleries[index][0], galleryImages: galleries[index],
           isOnlineBookingEnabled: true, subscriptionStatus: 'Trial',

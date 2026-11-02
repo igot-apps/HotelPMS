@@ -45,6 +45,7 @@ enum PaymentStatus {
   Completed
   Failed
   Refunded
+  Voided
 }
 
 // ============================================================

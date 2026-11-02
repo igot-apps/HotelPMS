@@ -140,7 +140,7 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
                 {reservation.payments.map(p => (
                   <div key={p.paymentId} className="text-[11px] mb-1">
                     <div className="flex justify-between">
-                      <span>{formatDate(p.paymentDate)} ({formatPaymentMethod(p.paymentMethod)})</span>
+                      <span>{formatDate(p.paymentDate)} ({formatPaymentMethod(p.paymentMethod)} · {p.status})</span>
                       <span>{formatCurrency(p.amount)}</span>
                     </div>
                     {p.gatewayReference && <p className="pl-2 text-[9px]">Ref: {p.gatewayReference}</p>}

@@ -163,7 +163,7 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
                     {reservation.payments.map(p => (
                       <tr key={p.paymentId} className="border-b border-gray-100">
                         <td className="py-1">{formatDate(p.paymentDate)}</td>
-                        <td className="py-1">{formatPaymentMethod(p.paymentMethod)}</td>
+                        <td className="py-1">{formatPaymentMethod(p.paymentMethod)} · {p.status}</td>
                         <td className="py-1 text-gray-500">{p.gatewayReference || '-'}</td>
                         <td className="text-right py-1 font-semibold">{formatCurrency(p.amount)}</td>
                       </tr>

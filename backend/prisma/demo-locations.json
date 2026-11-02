@@ -1,0 +1,101 @@
+[
+  {
+    "area": "Osu",
+    "city": "Accra",
+    "region": "Greater Accra",
+    "latitude": 5.556,
+    "longitude": -0.182,
+    "address": "Near Osu Oxford Street taxi rank",
+    "ghanaPostAddress": "GA-001-1001"
+  },
+  {
+    "area": "Near Adum central market car park",
+    "city": "Kumasi",
+    "region": "Ashanti",
+    "latitude": 6.688,
+    "longitude": -1.625,
+    "address": "Near Adum central market car park",
+    "ghanaPostAddress": "AK-001-1002"
+  },
+  {
+    "area": "Near Abura market taxi station",
+    "city": "Cape Coast",
+    "region": "Central",
+    "latitude": 5.131,
+    "longitude": -1.279,
+    "address": "Near Abura market taxi station",
+    "ghanaPostAddress": "CC-001-1003"
+  },
+  {
+    "area": "Effiduase",
+    "city": "Koforidua",
+    "region": "Eastern",
+    "latitude": 6.11,
+    "longitude": -0.27,
+    "address": "Near Effiduase lorry station",
+    "ghanaPostAddress": "EN-001-1004"
+  },
+  {
+    "area": "Anaji taxi rank",
+    "city": "Takoradi",
+    "region": "Western",
+    "latitude": 4.924,
+    "longitude": -1.775,
+    "address": "Near Anaji taxi rank",
+    "ghanaPostAddress": "WS-001-1005"
+  },
+  {
+    "area": "Near Lamashegu market car park",
+    "city": "Tamale",
+    "region": "Northern",
+    "latitude": 9.385,
+    "longitude": -0.859,
+    "address": "Near Lamashegu market car park",
+    "ghanaPostAddress": "NT-001-1006"
+  },
+  {
+    "area": "Bankoe",
+    "city": "Ho",
+    "region": "Volta",
+    "latitude": 6.611,
+    "longitude": 0.472,
+    "address": "Near Bankoe market taxi station",
+    "ghanaPostAddress": "VH-001-1007"
+  },
+  {
+    "area": "Soe junction",
+    "city": "Bolgatanga",
+    "region": "Upper East",
+    "latitude": 10.805,
+    "longitude": -0.858,
+    "address": "Near Soe junction taxi stop",
+    "ghanaPostAddress": "UB-001-1008"
+  },
+  {
+    "area": "Dobile",
+    "city": "Wa",
+    "region": "Upper West",
+    "latitude": 10.075,
+    "longitude": -2.507,
+    "address": "Near Dobile junction car park",
+    "ghanaPostAddress": "XW-001-1009"
+  },
+  {
+    "area": "Near Penkwase market station",
+    "city": "Sunyani",
+    "region": "Bono",
+    "latitude": 7.344,
+    "longitude": -2.327,
+    "address": "Near Penkwase market station",
+    "ghanaPostAddress": "BS-001-1010"
+  },
+  {
+    "area": "Kenten market car park",
+    "city": "Techiman",
+    "region": "Bono East",
+    "latitude": 7.578,
+    "longitude": -1.93,
+    "address": "Near Kenten market car park",
+    "ghanaPostAddress": "BT-001-1011"
+  }
+]

@@ -13,10 +13,10 @@ const getParamId = (req: Request): string => {
 
 export const createReservation = async (req: AuthRequest, res: Response) => {
   try {
-    if (req.user && !req.body.propertyId) {
+    if (req.user) {
       req.body.propertyId = req.user.propertyId;
     }
-    if (req.user && !req.body.staffId) {
+    if (req.user) {
       req.body.staffId = req.user.userId;
     }
     const reservation = await reservationService.createReservation(req.body);
@@ -88,7 +88,7 @@ export const cancelReservation = async (req: AuthRequest, res: Response) => {
     if (req.user && reservation.propertyId !== req.user.propertyId) {
       return res.status(403).json({ success: false, message: 'You do not have access to this reservation' });
     }
-    const cancelled = await reservationService.cancelReservation(reservationId);
+    const cancelled = await reservationService.cancelReservation(reservationId, { userId: req.user!.userId, propertyId: req.user!.propertyId }, req.body?.reason);
     return res.status(200).json({ success: true, data: cancelled });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });
@@ -121,7 +121,7 @@ export const checkInGuest = async (req: AuthRequest, res: Response) => {
     if (req.user && reservation.propertyId !== req.user.propertyId) {
       return res.status(403).json({ success: false, message: 'You do not have access to this reservation' });
     }
-    const checkedIn = await reservationService.checkInGuest(reservationId);
+    const checkedIn = await reservationService.checkInGuest(reservationId, { userId: req.user!.userId, propertyId: req.user!.propertyId });
     return res.status(200).json({ success: true, data: checkedIn, message: 'Guest checked in successfully' });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });
@@ -135,7 +135,7 @@ export const checkOutGuest = async (req: AuthRequest, res: Response) => {
     if (req.user && reservation.propertyId !== req.user.propertyId) {
       return res.status(403).json({ success: false, message: 'You do not have access to this reservation' });
     }
-    const checkedOut = await reservationService.checkOutGuest(reservationId);
+    const checkedOut = await reservationService.checkOutGuest(reservationId, { userId: req.user!.userId, propertyId: req.user!.propertyId }, req.body?.overrideReason);
     return res.status(200).json({ success: true, data: checkedOut, message: 'Guest checked out successfully' });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });
@@ -200,7 +200,8 @@ export const updateReservationRoomStatus = async (req: AuthRequest, res: Respons
       status,
       occupantName,
       occupantPhone,
-      req.user?.propertyId
+      { userId: req.user!.userId, propertyId: req.user!.propertyId },
+      req.body.overrideReason,
     );
 
     return res.status(200).json({ success: true, data: updatedRoom, message: `Room status updated to ${status}` });
@@ -228,7 +229,7 @@ export const extendReservationRoom = async (req: AuthRequest, res: Response) => 
     const updatedRoom = await reservationService.extendReservationRoom(
       reservationRoomId,
       newCheckOutDate,
-      req.user?.propertyId // Pass propertyId for security check
+      { userId: req.user!.userId, propertyId: req.user!.propertyId }
     );
 
     return res.status(200).json({

@@ -14,6 +14,8 @@ import {
 import { recordPayment } from '../api/payments';
 import { useAuthStore } from '../store/authStore';
 import ReservationModal from '../components/reservations/ReservationModal';
+import BookingPaymentNotice from '../components/reservations/BookingPaymentNotice';
+import { createWalkInBooking } from '../lib/createWalkInBooking';
 import RoomCard from '../components/reservations/RoomCard'; // 🌟 NEW: Extracted component
 import {
   Search, Plus, CalendarDays, AlertCircle, LogIn, LogOut, XCircle,
@@ -108,6 +110,7 @@ export default function ReservationsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [localSearch, setLocalSearch] = useState(searchParams.get('search') || '');
   const [createdReservation, setCreatedReservation] = useState(null);
+  const [paymentRecoveryReservation, setPaymentRecoveryReservation] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [pendingConfirm, setPendingConfirm] = useState(null);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
@@ -235,27 +238,11 @@ export default function ReservationsPage() {
 
   const createMutation = useMutation({
     mutationFn: async (payload) => {
-      const resResponse = await createReservation(payload);
-      const newReservation = resResponse.data.data;
-      if (payload.initialPayment > 0.01) {
-        const paymentPayload = {
-          reservationId: newReservation.reservationId,
-          amount: parseFloat(payload.initialPayment), // ✅ Ensure it's a number for Prisma Decimal
-          paymentMethod: payload.paymentMethod,
-          // propertyId removed
-          gatewayReference: payload.gatewayReference || null,
-          notes: 'Initial payment for reservation'
-        };
-        try {
-          await recordPayment(paymentPayload);
-        } catch (err) {
-          console.error('Initial payment recording failed:', err);
-          toast.error('Reservation created, but the initial payment failed to record. Please add it manually.');
-        }
-      }
-      return resResponse;
+      return createWalkInBooking(payload, { createReservation, recordPayment });
     },
-    onSuccess: (response) => {
+    onSuccess: ({ response, reservation, paymentError }) => {
+      setPaymentRecoveryReservation(paymentError ? reservation : null);
+      if (paymentError) toast.error('Reservation saved. Review its initial payment below.');
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       queryClient.invalidateQueries({ queryKey: ['payments'] });
@@ -411,6 +398,7 @@ export default function ReservationsPage() {
 
   return (
     <div className="space-y-6">
+      <BookingPaymentNotice reservation={paymentRecoveryReservation} onDismiss={() => setPaymentRecoveryReservation(null)} />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-text tracking-tight">Reservations</h1>

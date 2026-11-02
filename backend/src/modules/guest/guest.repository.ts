@@ -219,7 +219,7 @@ export const getGuestStats = async (guestId: number) => {
   );
 
   const totalSpent = guest.reservations.reduce((sum: number, r: any) => {
-    const paid = r.payments.reduce((ps: number, p: any) => {
+    const paid = r.payments.filter((p: any) => p.status === 'Completed').reduce((ps: number, p: any) => {
       const amount = typeof p.amount === 'number' ? p.amount : Number(p.amount);
       return ps + amount;
     }, 0);
