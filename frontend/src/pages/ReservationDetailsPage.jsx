@@ -241,6 +241,7 @@ export default function ReservationDetailsPage() {
                   <th className="px-4 py-2 text-xs font-semibold text-text-muted uppercase">Method</th>
                   <th className="px-4 py-2 text-xs font-semibold text-text-muted uppercase">Reference</th>
                   <th className="px-4 py-2 text-xs font-semibold text-text-muted uppercase">Status</th>
+                  <th className="px-4 py-2 text-xs font-semibold text-text-muted uppercase">Recorded by</th>
                   <th className="px-4 py-2 text-xs font-semibold text-text-muted uppercase text-right">Amount</th>
                 </tr>
               </thead>
@@ -256,6 +257,7 @@ export default function ReservationDetailsPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-text-muted font-mono text-xs">{p.gatewayReference || '-'}</td>
                     <td className="px-4 py-3"><span className="px-2 py-1 rounded-md text-xs font-semibold bg-success-50 text-success-700">{p.status}</span></td>
+                    <td className="px-4 py-3 text-sm text-text">{p.gatewayReference?.startsWith('RES-') ? 'Online / Paystack' : p.receiver?.fullName || 'Unknown / former staff'}</td>
                     <td className="px-4 py-3 text-sm font-bold text-text text-right">{fmt(p.amount)} GHS</td>
                   </tr>
                 ))}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import DailyOverview from '../components/DailyOverview';
 import { useQuery } from '@tanstack/react-query';
 import { getFullDashboardReport } from '../api/reports';
 import { getProperties } from '../api/properties';
@@ -61,6 +62,7 @@ const currentPropertyName = user?.propertyName || 'All Properties';
 
   return (
     <div className="space-y-6">
+      {user?.role === 'Manager' && <DailyOverview />}
       {/* Header & Filters */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>

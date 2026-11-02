@@ -257,7 +257,7 @@ export default function RoomCard({
 
       {/* Price and Action Button */}
       <div className="pt-3 border-t border-border flex items-center justify-between mt-auto">
-        <p className="text-sm font-bold text-primary-600">{parseFloat(rr.agreedPricePerNight).toFixed(2)} GHS</p>
+        <p className="text-sm font-bold text-primary-600">{parseFloat(rr.agreedPricePerNight).toFixed(2)} GHS <span className="font-normal text-text-muted">per night</span></p>
         {roomActionBtn || (
           isRoomComplete ? (
             <span className="text-xs text-text-muted font-semibold italic">Completed</span>

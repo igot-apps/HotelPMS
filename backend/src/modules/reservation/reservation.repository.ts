@@ -156,7 +156,7 @@ export const findReservationById = async (reservationId: string) => {
         orderBy: { reservationRoomId: 'asc' },
         include: { room: { include: { roomType: true } }, ratePlan: true },
       },
-      payments: true,
+      payments: { include: { receiver: { select: { userId: true, fullName: true } } } },
     },
   });
 };

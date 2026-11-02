@@ -163,6 +163,18 @@ async function main() {
     assert.equal(released.operationalStatus, 'Available'); assert.equal(released.housekeepingStatus, 'Dirty');
     assert((await correctionHistory(accidental.reservationId, actor)).some(entry => entry.action === 'Correction:undo-checkin')); checks++;
     await assert.rejects(correction(accidental.reservationId, undoInput), /checked-in room/); checks++;
+    const dailyResponse = await request(app).get('/api/reports/daily').set('Authorization', `Bearer ${managerToken}`);
+    assert.equal(dailyResponse.status, 200);
+    const daily = dailyResponse.body.data;
+    assert.equal(daily.timeZone, 'Africa/Accra');
+    assert(daily.byStaff.some((row: any) => row.name === 'Fixture manager'));
+    assert(daily.payments.every((payment: any) => payment.guest === 'Fixture guest'));
+    assert(daily.events.some((event: any) => event.action === 'Correction:undo-checkin'));
+    const expectedCollections = daily.payments.filter((p: any) => p.status === 'Completed' && !p.correction).reduce((sum: number, p: any) => sum + p.amount, 0);
+    assert.equal(daily.collections, expectedCollections); checks++;
+    assert.equal((await request(app).get('/api/reports/daily').set('Authorization', `Bearer ${receptionistToken}`)).status, 403); checks++;
+    assert.equal((await request(app).get('/api/reports/daily')).status, 401); checks++;
+    assert.equal((await request(app).get('/api/reports/daily?date=2026-02-30').set('Authorization', `Bearer ${managerToken}`)).status, 400); checks++;
     console.log(`Passed ${checks} recovery scenarios against real local PostgreSQL, including undo check-in preview, permissions, preserved finances, room readiness and audit history.`);
   } finally {
     (prisma as any).$transaction = originalTransaction;
