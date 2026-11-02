@@ -147,8 +147,6 @@ export default function DiscoverPage() {
   const [debouncedDestination, setDebouncedDestination] = useState(searchParams.get('search') || '');
   const [checkIn, setCheckIn] = useState(searchParams.get('checkIn') || '');
   const [checkOut, setCheckOut] = useState(searchParams.get('checkOut') || '');
-  const [maxPrice, setMaxPrice] = useState('');
-  const [selectedAmenity, setSelectedAmenity] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   
   // 🌟 NEW: Pagination state
@@ -202,7 +200,7 @@ export default function DiscoverPage() {
 
   // 🌟 Fetch hotels WITH pagination
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['publicDiscover', debouncedDestination, checkIn, checkOut, maxPrice, selectedAmenity, userLocation, currentPage],
+    queryKey: ['publicDiscover', debouncedDestination, checkIn, checkOut, userLocation, currentPage],
     enabled: !hasInvalidDateRange,
     queryFn: async () => {
       const params = {
@@ -214,8 +212,6 @@ export default function DiscoverPage() {
         params.checkIn = checkIn;
         params.checkOut = checkOut;
       }
-      if (maxPrice) params.maxPrice = maxPrice;
-      if (selectedAmenity) params.amenity = selectedAmenity;
       if (userLocation) {
         params.userLat = userLocation.lat;
         params.userLng = userLocation.lng;
@@ -231,10 +227,9 @@ export default function DiscoverPage() {
 
   const hotels = data?.hotels || [];
   const totalHotels = data?.total || 0;
-  const amenityOptions = data?.amenities || [];
   const totalPages = Math.ceil(totalHotels / ITEMS_PER_PAGE);
 
-  const hasActiveFilters = destination || checkIn || checkOut || maxPrice || selectedAmenity;
+  const hasActiveFilters = destination || checkIn || checkOut;
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -261,8 +256,6 @@ export default function DiscoverPage() {
     setDestination('');
     setCheckIn('');
     setCheckOut('');
-    setMaxPrice('');
-    setSelectedAmenity('');
     setSearchParams({}, { replace: true });
     setCurrentPage(1);
   };
@@ -316,40 +309,21 @@ export default function DiscoverPage() {
                   </div>
                 </div>
                 <div className="md:col-span-6 lg:col-span-3 min-w-0">
-                  <label className="block text-xs font-bold text-text-muted mb-1 px-1 text-left">Check-in</label>
-                  <div className="relative">
-                    <input aria-label="Check-in date" type="date" value={checkIn} min={today} onChange={(e) => setCheckIn(e.target.value)} className="w-full min-w-0 px-3 py-3 bg-background border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
+                  <label htmlFor="discover-check-in" className="block text-xs font-bold text-text-muted mb-1 px-1 text-left">Check-in</label>
+                  <div className="relative flex w-full min-w-0 max-w-full">
+                    <input id="discover-check-in" aria-label="Check-in date" type="date" value={checkIn} min={today} onChange={(e) => setCheckIn(e.target.value)} className="discover-date-input px-3 py-3 bg-background border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
                   </div>
                 </div>
                 <div className="md:col-span-6 lg:col-span-2 min-w-0">
-                  <label className="block text-xs font-bold text-text-muted mb-1 px-1 text-left">Check-out</label>
-                  <div className="relative">
-                    <input aria-label="Check-out date" type="date" value={checkOut} min={checkIn || tomorrow} onChange={(e) => setCheckOut(e.target.value)} aria-invalid={hasInvalidDateRange} aria-describedby={hasInvalidDateRange ? 'discover-date-error' : undefined} className={`w-full min-w-0 px-3 py-3 bg-background border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition ${hasInvalidDateRange ? 'border-danger-500' : 'border-border'}`} />
+                  <label htmlFor="discover-check-out" className="block text-xs font-bold text-text-muted mb-1 px-1 text-left">Check-out</label>
+                  <div className="relative flex w-full min-w-0 max-w-full">
+                    <input id="discover-check-out" aria-label="Check-out date" type="date" value={checkOut} min={checkIn || tomorrow} onChange={(e) => setCheckOut(e.target.value)} aria-invalid={hasInvalidDateRange} aria-describedby={hasInvalidDateRange ? 'discover-date-error' : undefined} className={`discover-date-input px-3 py-3 bg-background border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition ${hasInvalidDateRange ? 'border-danger-500' : 'border-border'}`} />
                   </div>
                 </div>
                 <div className="md:col-span-12 lg:col-span-2 flex items-end">
                   <button type="submit" className="w-full min-h-[48px] bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-lg transition flex items-center justify-center gap-2 shadow-lg shadow-primary-600/30 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
                     {isSearching ? <Loader2 className="animate-spin" size={18} /> : <><Search size={18} /><span>Search</span></>}
                   </button>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 pt-3 border-t border-border text-left">
-                <div>
-                  <label htmlFor="discover-budget" className="block text-xs font-bold text-text-muted mb-1 px-1">Maximum price per night</label>
-                  <select id="discover-budget" value={maxPrice} onChange={(e) => { setMaxPrice(e.target.value); setCurrentPage(1); }} className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20">
-                    <option value="">Any nightly price</option>
-                    <option value="200">Up to GHS 200</option>
-                    <option value="500">Up to GHS 500</option>
-                    <option value="1000">Up to GHS 1,000</option>
-                    <option value="2000">Up to GHS 2,000</option>
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="discover-amenity" className="block text-xs font-bold text-text-muted mb-1 px-1">Hotel feature</label>
-                  <select id="discover-amenity" value={selectedAmenity} onChange={(e) => { setSelectedAmenity(e.target.value); setCurrentPage(1); }} className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20">
-                    <option value="">Any feature</option>
-                    {amenityOptions.map((amenity) => <option key={amenity} value={amenity}>{amenity}</option>)}
-                  </select>
                 </div>
               </div>
               <p className="mt-3 text-left text-xs text-text-muted">Availability updates as you choose your dates. Room availability can change until your booking is confirmed.</p>
@@ -453,7 +427,7 @@ export default function DiscoverPage() {
           <div className="text-center py-16 bg-surface border border-border rounded-2xl">
             <Search size={48} className="mx-auto text-text-muted mb-4 opacity-50" />
             <h3 className="text-xl font-bold text-text mb-2">{checkIn && checkOut ? 'No rooms found for these dates' : 'No hotels match your search'}</h3>
-            <p className="text-text-muted mb-6">{checkIn && checkOut ? 'Try different dates or widen your destination and budget filters.' : 'Try adjusting your filters or search a different destination.'}</p>
+            <p className="text-text-muted mb-6">{checkIn && checkOut ? 'Try different dates or search a nearby destination.' : 'Try adjusting your filters or search a different destination.'}</p>
             {checkIn && checkOut && <button onClick={() => { setCheckIn(''); setCheckOut(''); setSearchParams((current) => { const params = new URLSearchParams(current); params.delete('checkIn'); params.delete('checkOut'); return params; }, { replace: true }); setCurrentPage(1); }} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-semibold rounded-lg hover:bg-primary-700 transition">Clear dates</button>}
           </div>
         )}

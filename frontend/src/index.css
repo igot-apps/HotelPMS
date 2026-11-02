@@ -9,6 +9,20 @@ body {
 
 .grid > * { min-width: 0; }
 input, select, textarea { max-width: 100%; }
+/* iOS date controls have an intrinsic width; allow them to shrink inside the search grid. */
+.discover-date-input {
+  display: block;
+  box-sizing: border-box;
+  flex: 1 1 0%;
+  width: 0;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 48px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.discover-date-input::-webkit-date-and-time-value { min-width: 0; text-align: left; }
+.discover-date-input::-webkit-datetime-edit { min-width: 0; padding: 0; }
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 :focus-visible { outline: 2px solid #059669; outline-offset: 3px; }
 
