@@ -1,6 +1,7 @@
 import * as paymentRepository from './payment.repository';
-import { findReservationById, updateReservationFinancials, updateReservation } from '../reservation/reservation.repository';
+import { findReservationById, updateReservationFinancials } from '../reservation/reservation.repository';
 import { prisma } from '../../shared/utils/prisma';
+import { netPaid } from '../reservation/refund.service';
 
 export const recordPayment = async (data: any) => {
   const amount = Number(data.amount);
@@ -11,8 +12,7 @@ export const recordPayment = async (data: any) => {
     if (!locked.length) throw new Error('Reservation not found.');
     const reservation = await tx.reservation.findUniqueOrThrow({ where: { reservationId: data.reservationId } });
     if (reservation.status === 'Cancelled') throw new Error('Cannot record payment for a cancelled reservation.');
-    const ledger = await tx.payment.aggregate({ where: { reservationId: data.reservationId, status: 'Completed' }, _sum: { amount: true } });
-    const paid = Number(ledger._sum.amount || 0);
+    const paid = await netPaid(tx, data.reservationId);
     if (Math.abs(paid - Number(reservation.amountPaid)) > 0.01) throw new Error('Payment history and balance differ. Reconcile before adding a payment.');
     if (paid + amount > Number(reservation.totalAmount) + 0.001) throw new Error('Payment amount exceeds the outstanding balance.');
     const payment = await tx.payment.create({ data: { reservationId: data.reservationId, propertyId: reservation.propertyId, amount, paymentMethod: data.paymentMethod.trim(), receivedBy: data.receivedBy, status: 'Completed', gatewayReference: data.gatewayReference || null, notes: data.notes || null } });
@@ -90,40 +90,7 @@ export const updatePayment = async (paymentId: number, data: any) => {
 };
 
 // ✅ UPGRADED: Now respects the "Flag & Review" workflow
-export const processRefund = async (paymentId: number) => {
-  const payment = await paymentRepository.findPaymentById(paymentId);
-  if (!payment) throw new Error('Payment not found');
-  if (payment.status === 'Refunded') throw new Error('This payment has already been refunded');
-
-  const reservation = await findReservationById(payment.reservationId);
-  if (!reservation) throw new Error('Reservation not found');
-
-  // 🚨 SECURITY CHECK: Ensure the reservation was actually flagged for a refund
-  if (reservation.refundStatus !== 'Pending') {
-    throw new Error('This reservation is not flagged for a refund. It must be cancelled first.');
-  }
-
-  // 1. Update the Payment status to 'Refunded'
-  const updatedPayment = await paymentRepository.updatePayment(paymentId, { status: 'Refunded' });
-
-  // 2. Deduct the amount from the Reservation's financials
-  const currentAmountPaid = Number(reservation.amountPaid || 0);
-  const refundAmount = Number(payment.amount);
-  const newAmountPaid = currentAmountPaid - refundAmount;
-
-  await updateReservationFinancials(
-    payment.reservationId,
-    Number(reservation.totalAmount || 0),
-    newAmountPaid < 0 ? 0 : newAmountPaid // Prevent negative paid amounts
-  );
-
-  // 3. Update the Reservation's refund status to 'Processed'
-  await updateReservation(reservation.reservationId, {
-    refundStatus: 'Processed',
-  });
-
-  return updatedPayment;
-};
+export const processRefund = async (_paymentId: number): Promise<never> => { throw new Error('Use the reservation refund request and approval workflow.'); };
 
 export const getPaymentStatistics = async (propertyId: number) => {
   return paymentRepository.getPaymentStats(propertyId);

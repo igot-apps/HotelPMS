@@ -1,16 +1,20 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Search, BedDouble, Users, CalendarDays, BarChart3,
-  LogOut, Settings, Layers, Building2, X, Shield, Crown
+  LogOut, Settings, Building2, X, Shield, Crown, ClipboardCheck, Undo2
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import RequirePermission from '../RequirePermission'; 
+import useApprovalCount from '../../hooks/useApprovalCount';
+import useRefundCount from '../../hooks/useRefundCount';
 
 const operationItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/availability', icon: Search, label: 'Check Availability' },
   { to: '/reservations', icon: CalendarDays, label: 'Reservations', permission: 'CanCreateReservation' },
+  { to: '/approvals', icon: ClipboardCheck, label: 'Approvals', managerOnly: true },
+  { to: '/refunds', icon: Undo2, label: 'Refunds', staffOnly: true },
   { to: '/rooms', icon: BedDouble, label: 'Rooms & Inventory' },
   { to: '/guests', icon: Users, label: 'Guests' },
   { to: '/reports', icon: BarChart3, label: 'Reports', permission: 'CanViewFinancialReports' },
@@ -33,6 +37,8 @@ export default function Sidebar({ isOpen, onClose }) {
   const logout = useAuthStore((state) => state.logout);
   const user = useAuthStore((state) => state.user); // 🌟 Get user for trial check
   const navigate = useNavigate();
+  const approvals = useApprovalCount();
+  const refunds = useRefundCount();
 
   const handleLogout = () => {
     logout();
@@ -49,6 +55,8 @@ export default function Sidebar({ isOpen, onClose }) {
 
   const renderLinks = (items) => (
     items.map((item) => {
+      if (item.managerOnly && user?.role !== 'Manager') return null;
+      if (item.staffOnly && !['Manager','Receptionist'].includes(user?.role)) return null;
       const linkElement = (
         <li key={item.to}>
           <NavLink
@@ -64,6 +72,8 @@ export default function Sidebar({ isOpen, onClose }) {
           >
             <item.icon size={20} />
             <span className="flex-1">{item.label}</span>
+            {item.to === '/refunds' && (refunds.isError ? <span title="Could not refresh refunds" className="rounded bg-amber-100 px-2 text-xs text-amber-900">!</span> : refunds.data?.ready > 0 && <span aria-label={`${refunds.data.ready} approved refunds ready to return`} className="rounded-full bg-primary-100 px-2 py-0.5 text-xs font-bold text-primary-900">{refunds.data.ready > 99 ? '99+' : refunds.data.ready}</span>)}
+            {item.to === '/approvals' && (approvals.isError ? <span title="Could not refresh approvals" className="rounded bg-amber-100 px-2 text-xs text-amber-900">!</span> : (approvals.data?.actionRequired ?? approvals.data?.pending) > 0 && <span aria-label={`${(approvals.data.actionRequired ?? approvals.data.pending)} requests needing attention`} className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">{(approvals.data.actionRequired ?? approvals.data.pending) > 99 ? '99+' : (approvals.data.actionRequired ?? approvals.data.pending)}</span>)}
             
             {/* 🌟 Premium UX: Pulsing red dot if trial is expiring in 3 days or less */}
             {item.to === '/billing' && user?.subscriptionStatus === 'Trial' && daysLeft <= 3 && (

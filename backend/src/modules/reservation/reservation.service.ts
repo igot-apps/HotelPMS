@@ -1,5 +1,4 @@
 import * as reservationRepository from './reservation.repository';
-import { prisma } from '../../shared/utils/prisma';
 import * as recovery from './recovery.service';
 
 import { createHotelReservation } from './booking-creation.service';
@@ -99,33 +98,16 @@ export const updateReservationFinancials = async (
 
 export const updateReservationRoomStatus = (
   reservationRoomId: number, status: string, occupantName: string | undefined,
-  occupantPhone: string | undefined, actor: recovery.Actor, overrideReason?: unknown,
-) => recovery.transitionStay(reservationRoomId, status, actor, { occupantName, occupantPhone, overrideReason });
+  occupantPhone: string | undefined, actor: recovery.Actor, overrideReason?: unknown, duplicateOccupantConfirmation?: unknown,
+) => recovery.transitionStay(reservationRoomId, status, actor, { occupantName, occupantPhone, overrideReason, duplicateOccupantConfirmation });
 
 export const extendReservationRoom = async (reservationRoomId: number, newCheckOutDate: string, actor: recovery.Actor) => {
   const stay = await reservationRepository.findReservationRoomById(reservationRoomId);
   if (!stay || stay.reservation.propertyId !== actor.propertyId) throw new Error('Reservation room not found for this hotel.');
   if (new Date(newCheckOutDate) <= stay.checkOutDate) throw new Error('New departure must be after the current departure. Use manager corrections to shorten a stay.');
-  return recovery.correctBooking(stay.reservationId, actor, { action: 'correct-date', stayId: reservationRoomId, newCheckOutDate, reason: 'Guest requested a stay extension' });
-};
-
-export const updateOccupantName = async (
-  reservationRoomId: number,
-  occupantName: string,
-  occupantPhone?: string,
-  userPropertyId?: number
-) => {
-  const resRoom = await reservationRepository.findReservationRoomById(reservationRoomId);
-  if (!resRoom) throw new Error('Reservation room not found');
-  
-  if (userPropertyId && resRoom.reservation.propertyId !== userPropertyId) {
-    throw new Error('You do not have access to this reservation room');
-  }
-
-  return reservationRepository.updateReservationRoomStatus(reservationRoomId, {
-    occupantName,
-    ...(occupantPhone !== undefined && { occupantPhone: occupantPhone.trim() || null }),
-  });
+  const input = { action: 'correct-date', stayId: reservationRoomId, newCheckOutDate, reason: 'Guest requested a stay extension' };
+  const preview = await recovery.correctBooking(stay.reservationId, actor, { ...input, preview: true });
+  return recovery.correctBooking(stay.reservationId, actor, { ...input, expectedVersion: preview.version });
 };
 
 export const updateGuestPresence = async (
@@ -195,51 +177,4 @@ export const markAsNoShow = async (reservationId: string, userPropertyId?: numbe
 // ============================================================
 // 🌟 NEW: REFUND A CANCELLED RESERVATION
 // ============================================================
-export const refundReservation = async (reservationId: string) => {
-  return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT "reservationId" FROM reservations WHERE "reservationId" = ${reservationId} FOR UPDATE`;
-    const reservation = await tx.reservation.findUnique({
-      where: { reservationId },
-      select: { status: true, refundStatus: true, refundDue: true },
-    });
-
-    if (!reservation) throw new Error('Reservation not found');
-    if (!['Cancelled', 'Expired'].includes(reservation.status) || reservation.refundStatus !== 'Pending') {
-      throw new Error('This reservation has no pending refund.');
-    }
-
-    const payments = await tx.payment.findMany({
-      where: { reservationId, status: 'Completed' },
-      orderBy: { paymentDate: 'desc' },
-      select: { paymentId: true, amount: true },
-    });
-    const refundDue = Number(reservation.refundDue);
-    const completedPaymentTotal = payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
-
-    if (refundDue <= 0) throw new Error('The pending refund amount must be greater than zero.');
-    if (payments.length === 0) throw new Error('No completed payments are available to refund.');
-    if (Math.abs(completedPaymentTotal - refundDue) > 0.01) {
-      throw new Error('The completed payment total does not match the refund due. Review the reservation payments before refunding.');
-    }
-
-    // Claim the pending refund before changing payments so duplicate requests cannot process it twice.
-    const claimed = await tx.reservation.updateMany({
-      where: { reservationId, status: reservation.status, refundStatus: 'Pending' },
-      data: { refundStatus: 'Processed', refundDue: 0, amountPaid: 0 },
-    });
-    if (claimed.count !== 1) throw new Error('This refund has already been processed.');
-
-    const updatedPayments = await tx.payment.updateMany({
-      where: { reservationId, status: 'Completed' },
-      data: { status: 'Refunded' },
-    });
-    if (updatedPayments.count !== payments.length) {
-      throw new Error('The payment records changed while processing the refund. Please try again.');
-    }
-
-    return tx.payment.findMany({
-      where: { paymentId: { in: payments.map((payment) => payment.paymentId) } },
-      orderBy: { paymentDate: 'desc' },
-    });
-  });
-};
+export const refundReservation = async (_reservationId: string): Promise<never> => { throw new Error('Use refund requests, manager approval, and money-return recording.'); };

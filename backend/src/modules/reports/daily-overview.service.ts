@@ -27,7 +27,7 @@ export async function dailyOverview(userId: number, propertyId: number, requeste
   const date = requestedDate || hotelDate(new Date(), timeZone);
   const bounds = dayBounds(date, timeZone);
   return prisma.$transaction(async tx => {
-    const [payments, events, bookingsCreated, checkIns, checkOuts, cancellations, unpaid] = await Promise.all([
+    const [payments, events, bookingsCreated, checkIns, checkOuts, cancellations, unpaid, refunds] = await Promise.all([
       tx.payment.findMany({
         where: { reservation: { propertyId }, paymentDate: bounds },
         orderBy: [{ paymentDate: 'desc' }, { paymentId: 'desc' }],
@@ -42,6 +42,7 @@ export async function dailyOverview(userId: number, propertyId: number, requeste
       tx.reservationRoom.count({ where: { reservation: { propertyId }, actualCheckOut: bounds } }),
       tx.reservation.count({ where: { propertyId, cancellationDate: bounds } }),
       tx.reservation.findMany({ where: { propertyId, status: { in: ['Confirmed', 'InHouse', 'Completed'] } }, select: { totalAmount: true, amountPaid: true } }),
+      tx.refund.findMany({ where: { propertyId, isSimulated: false, returnedAt: bounds }, orderBy: { returnedAt: 'desc' }, include: { reservation: { select: { confirmationCode: true } } } }),
     ]);
     const staff = new Map<string, any>();
     const methods = new Map<string, number>();
@@ -60,7 +61,8 @@ export async function dailyOverview(userId: number, propertyId: number, requeste
       if (p.status === 'Completed' && correction) correctionCents += cents;
       return { paymentId: p.paymentId, reservationId: p.reservationId, confirmationCode: p.reservation.confirmationCode, guest: p.reservation.guestNameSnapshot || p.reservation.propertyGuest?.fullName || p.reservation.platformGuest?.fullName || 'Guest', amount: Number(p.amount), method: p.paymentMethod, status: p.status, time: p.paymentDate, recordedBy, staffKey: key, correction };
     });
-    return { date, timeZone, generatedAt: new Date(), collections: totalCents / 100, transactions, correctionEntries: correctionCents / 100,
+    const refundsReturned = refunds.reduce((sum, refund) => sum + Math.round(Number(refund.amount) * 100), 0) / 100;
+    return { date, timeZone, generatedAt: new Date(), collections: totalCents / 100, transactions, correctionEntries: correctionCents / 100, refundsReturned, netCollections: (totalCents + correctionCents) / 100 - refundsReturned, refunds,
       byStaff: [...staff.values()].map(row => ({ ...row, total: row.total / 100, methods: Object.fromEntries(Object.entries(row.methods).map(([k, v]) => [k, Number(v) / 100])) })).sort((a, b) => b.total - a.total),
       byMethod: [...methods].map(([method, cents]) => ({ method, total: cents / 100 })),
       activity: { bookingsCreated, checkIns, checkOuts, cancellations, outstandingNow: unpaid.reduce((sum, r) => sum + Math.max(0, Math.round((Number(r.totalAmount || 0) - Number(r.amountPaid)) * 100)), 0) / 100 },

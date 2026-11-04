@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import * as reservationService from './reservation.service';
+import { updateOccupantDetails } from './recovery.service';
 import { AuthRequest } from '../../shared/middleware/auth.middleware';
 
 // 🌟 FIX: Return string (UUID) instead of number
@@ -124,7 +125,7 @@ export const checkInGuest = async (req: AuthRequest, res: Response) => {
     const checkedIn = await reservationService.checkInGuest(reservationId, { userId: req.user!.userId, propertyId: req.user!.propertyId });
     return res.status(200).json({ success: true, data: checkedIn, message: 'Guest checked in successfully' });
   } catch (error: any) {
-    return res.status(400).json({ success: false, message: error.message });
+    return res.status(error.statusCode || 400).json({ success: false, message: error.message, code: error.code, details: error.details });
   }
 };
 
@@ -179,10 +180,7 @@ export const updateReservationRoomStatus = async (req: AuthRequest, res: Respons
     if (occupantPhone !== undefined && typeof occupantPhone !== 'string') {
       return res.status(400).json({ success: false, message: 'Occupant phone number must be text.' });
     }
-    if (occupantPhone?.trim() && !/^\d{10}$/.test(occupantPhone.trim())) {
-      return res.status(400).json({ success: false, message: 'Occupant phone number must be exactly 10 digits.' });
-    }
-    if (status === 'CheckedIn' && (!occupantName || !occupantName.trim())) {
+    if (status === 'CheckedIn' && (typeof occupantName !== 'string' || !occupantName.trim())) {
       return res.status(400).json({ success: false, message: 'Occupant name is required to check in a room.' });
     }
 
@@ -202,11 +200,12 @@ export const updateReservationRoomStatus = async (req: AuthRequest, res: Respons
       occupantPhone,
       { userId: req.user!.userId, propertyId: req.user!.propertyId },
       req.body.overrideReason,
+      req.body.duplicateOccupantConfirmation,
     );
 
     return res.status(200).json({ success: true, data: updatedRoom, message: `Room status updated to ${status}` });
   } catch (error: any) {
-    return res.status(400).json({ success: false, message: error.message });
+    return res.status(error.statusCode || 400).json({ success: false, message: error.message, code: error.code, details: error.details });
   }
 };
 
@@ -255,22 +254,13 @@ export const updateOccupantName = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: 'Invalid reservation room ID' });
     }
 
-    if (!occupantName || occupantName.trim() === '') {
+    if (typeof occupantName !== 'string' || occupantName.trim() === '') {
       return res.status(400).json({ success: false, message: 'Occupant name is required' });
     }
     if (occupantPhone !== undefined && typeof occupantPhone !== 'string') {
       return res.status(400).json({ success: false, message: 'Occupant phone number must be text.' });
     }
-    if (occupantPhone?.trim() && !/^\d{10}$/.test(occupantPhone.trim())) {
-      return res.status(400).json({ success: false, message: 'Occupant phone number must be exactly 10 digits.' });
-    }
-
-    const updatedRoom = await reservationService.updateOccupantName(
-      reservationRoomId,
-      occupantName.trim(),
-      typeof occupantPhone === 'string' ? occupantPhone : undefined,
-      req.user?.propertyId
-    );
+    const updatedRoom = await updateOccupantDetails(reservationRoomId, { userId: req.user!.userId, propertyId: req.user!.propertyId }, { occupantName, occupantPhone, duplicateOccupantConfirmation: req.body.duplicateOccupantConfirmation });
 
     return res.status(200).json({
       success: true,
@@ -278,7 +268,7 @@ export const updateOccupantName = async (req: AuthRequest, res: Response) => {
       message: 'Occupant details updated successfully',
     });
   } catch (error: any) {
-    return res.status(400).json({ success: false, message: error.message });
+    return res.status(error.statusCode || 400).json({ success: false, message: error.message, code: error.code, details: error.details });
   }
 };
 

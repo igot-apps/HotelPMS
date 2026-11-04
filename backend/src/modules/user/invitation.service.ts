@@ -2,6 +2,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { prisma } from '../../shared/utils/prisma';
 import { hashPassword } from '../../shared/utils/password';
 import { deliverStaffInvitation } from '../../shared/utils/staffEmail';
+import { DEFAULT_RECEPTIONIST_CORRECTIONS } from '../reservation/correction-policy';
 
 const digest = (token: string) => createHash('sha256').update(token).digest('hex');
 const tokenData = () => {
@@ -35,6 +36,7 @@ export async function inviteStaff(propertyId: number, data: any) {
   const user = await prisma.user.create({ data: {
     propertyId, fullName: data.fullName.trim(), username: data.username.trim(), email,
     roleId: role.roleId, passwordHash: await hashPassword(randomBytes(32).toString('hex')),
+    correctionPermissions: [...DEFAULT_RECEPTIONIST_CORRECTIONS],
     isActive: false, invitationPending: true, ...fields,
   }, select: { userId: true } });
   return { user, preview };

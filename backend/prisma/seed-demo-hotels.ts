@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 
 const DEMO_PASSWORD = process.env.DEMO_SEED_PASSWORD;
 const DEMO_GUEST_PHONE = '0000000000';
-const DEMO_GUEST_EMAIL = 'guest@demo.stayfolio.test';
+const DEMO_GUEST_EMAIL = 'guest@demo.hideout24.test';
 const DEMO_PAYSTACK_KEY = process.env.DEMO_PAYSTACK_TEST_KEY?.trim();
 const ASSET_DIR = path.join(__dirname, 'demo-assets');
 
@@ -110,8 +110,8 @@ async function main() {
     const suffix = String(index).padStart(2, '0');
     const propertyCode = `demo-hotel-${suffix}`;
     const propertyName = `Demo Hotel ${suffix}`;
-    const managerEmail = `manager.hotel${suffix}@demo.stayfolio.test`;
-    const receptionistEmail = `receptionist.hotel${suffix}@demo.stayfolio.test`;
+    const managerEmail = `manager.hotel${suffix}@demo.hideout24.test`;
+    const receptionistEmail = `receptionist.hotel${suffix}@demo.hideout24.test`;
     const galleryImages = await Promise.all([1, 2, 3, 4].map((slot) => imageDataUri(index, slot)));
     // Intentionally invalid demo-only contact: shows the WhatsApp-only UI without
     // directing guests to a real person's phone number. Replace before launch.
@@ -140,7 +140,7 @@ async function main() {
         galleryImages,
         primaryPhone: demoWhatsAppPhone,
         primaryPhoneWhatsappOnly: true,
-        publicDescription: 'A Stayfolio demo listing for local testing. The displayed WhatsApp contact is a placeholder. Update the property details and contact information before using with real guests.',
+        publicDescription: 'A HideOut24 demo listing for local testing. The displayed WhatsApp contact is a placeholder. Update the property details and contact information before using with real guests.',
         // Preserve the manager's current public-booking choice on reruns. New
         // demo records start enabled below, but seeding must not re-publish a
         // property that a manager has intentionally disabled.
@@ -167,7 +167,7 @@ async function main() {
         galleryImages,
         primaryPhone: demoWhatsAppPhone,
         primaryPhoneWhatsappOnly: true,
-        publicDescription: 'A Stayfolio demo listing for local testing. The displayed WhatsApp contact is a placeholder. Update the property details and contact information before using with real guests.',
+        publicDescription: 'A HideOut24 demo listing for local testing. The displayed WhatsApp contact is a placeholder. Update the property details and contact information before using with real guests.',
         isOnlineBookingEnabled: true,
         ...(DEMO_PAYSTACK_KEY ? { paystackSecretKey: DEMO_PAYSTACK_KEY } : {}),
       },
@@ -208,8 +208,8 @@ async function main() {
 
   await prisma.platformGuest.upsert({
     where: { phone: DEMO_GUEST_PHONE },
-    update: { fullName: 'Stayfolio Demo Guest', email: DEMO_GUEST_EMAIL, passwordHash, isActive: true },
-    create: { fullName: 'Stayfolio Demo Guest', phone: DEMO_GUEST_PHONE, email: DEMO_GUEST_EMAIL, passwordHash, isActive: true },
+    update: { fullName: 'HideOut24 Demo Guest', email: DEMO_GUEST_EMAIL, passwordHash, isActive: true },
+    create: { fullName: 'HideOut24 Demo Guest', phone: DEMO_GUEST_PHONE, email: DEMO_GUEST_EMAIL, passwordHash, isActive: true },
   });
 
   console.log('Local demo seed complete. Hotel staff sign in at /login. The shared online guest account signs in by phone.');

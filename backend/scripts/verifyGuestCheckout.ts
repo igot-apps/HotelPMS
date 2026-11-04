@@ -142,6 +142,26 @@ async function main() {
     const noSecondCharge = await request(app).post(base + '/payments/initialize').set('Authorization', auth).send({ reservationId: lostId });
     assert.equal(noSecondCharge.body.data.status, 'paid'); assert.equal(providerInitializations, 2);
     assert.equal(await prisma.payment.count({ where: { reservationId: lostId } }), 1);
+    // A checkout never received by the provider can recover using its original reference.
+    const stalled = await request(app).post(base + '/reservations').set('Authorization', auth).send({ checkInDate: '2031-01-01', checkOutDate: '2031-01-02', roomTypeId: hotel.roomTypes[0].roomTypeId });
+    assert.equal(stalled.status, 201);
+    const stalledId = stalled.body.data.reservationId;
+    const stalledAttempt = await prisma.guestPaymentAttempt.create({ data: { reservationId: stalledId, reference: `RES-${stalledId}-${randomUUID()}`, amount: 200, currency: 'GHS', status: 'Unknown' } });
+    const missing = () => { throw Object.assign(new Error('Reference missing'), { response: { status: 400, data: { message: 'Transaction reference not found.' } } }); };
+    (axios as any).get = async () => missing();
+    assert.equal((await request(app).get(`${base}/reservations/${stalledId}/payment-status`).set('Authorization', auth)).body.data.status, 'unknown');
+    await prisma.guestPaymentAttempt.update({ where: { attemptId: stalledAttempt.attemptId }, data: { updatedAt: new Date(Date.now() - 60000) } });
+    (axios as any).get = async () => { throw Object.assign(new Error('Wrong key'), { response: { status: 401, data: { message: 'Invalid key' } } }); };
+    assert.equal((await request(app).post(base + '/payments/initialize').set('Authorization', auth).send({ reservationId: stalledId })).body.data.status, 'unknown');
+    (axios as any).get = async () => missing();
+    assert.equal((await request(app).get(`${base}/reservations/${stalledId}/payment-status`).set('Authorization', auth)).body.data.status, 'retryable');
+    let recoveryStarts = 0;
+    (axios as any).post = async (_url: string, body: any) => { recoveryStarts++; assert.equal(body.reference, stalledAttempt.reference); await new Promise(resolve => setTimeout(resolve, 30)); return { data: { data: { authorization_url: 'https://example.test/recovered' } } }; };
+    const recovery = await Promise.all([1,2].map(() => request(app).post(base + '/payments/initialize').set('Authorization', auth).send({ reservationId: stalledId })));
+    assert(recovery.some(response => response.body.data.authorization_url === 'https://example.test/recovered'));
+    assert.equal(recoveryStarts, 1);
+    assert.equal(await prisma.guestPaymentAttempt.count({ where: { reservationId: stalledId } }), 1);
+    assert.equal((await prisma.guestPaymentAttempt.findUniqueOrThrow({ where: { attemptId: stalledAttempt.attemptId } })).reference, stalledAttempt.reference);
     // Hybrid payments: never reuse a stale full-price checkout after a cash deposit.
     // Payment after expiry restores inventory when it is still free, exactly once.
     const recoverable = await request(app).post(base + '/reservations').set('Authorization', auth).send({ checkInDate: '2030-06-01', checkOutDate: '2030-06-02', roomTypeId: hotel.roomTypes[0].roomTypeId });
@@ -205,10 +225,10 @@ async function main() {
     assert.equal(await prisma.payment.count({ where: { reservationId: hybridId } }), 3);
     await prisma.platformGuest.update({ where: { guestId: guest.guestId }, data: { isActive: false } });
     assert.equal((await request(app).post(base + '/reservations').set('Authorization', auth).send({})).status, 401);
-    await refundReservation(reservation.reservationId);
+    await assert.rejects(refundReservation(reservation.reservationId), /refund requests/);
     const refundedLateBooking = await prisma.reservation.findUniqueOrThrow({ where: { reservationId: reservation.reservationId }, include: { payments: true } });
-    assert.equal(refundedLateBooking.status, 'Expired'); assert.equal(refundedLateBooking.refundStatus, 'Processed');
-    assert.equal(Number(refundedLateBooking.amountPaid), 0); assert.equal(refundedLateBooking.payments[0].status, 'Refunded');
+    assert.equal(refundedLateBooking.status, 'Expired'); assert.equal(refundedLateBooking.refundStatus, 'Pending');
+    assert(Number(refundedLateBooking.amountPaid) > 0); assert.equal(refundedLateBooking.payments[0].status, 'Completed');
     console.log('Passed checkout, late-payment restoration, concurrent allocation, expired-booking refund recording, cancellation, settlement races, checkout resumption, lost-response protection, and duplicate-charge prevention. Paystack was mocked.');
   } finally {
     axios.post = originalPost;

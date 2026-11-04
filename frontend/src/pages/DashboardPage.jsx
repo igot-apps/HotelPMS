@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import CorrectionRequests from '../components/reservations/CorrectionRequests';
+import ApprovalSummary from '../components/reservations/ApprovalSummary';
+import RefundSummary from '../components/reservations/RefundSummary';
 import RequirePermission from '../components/RequirePermission';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -100,6 +103,8 @@ export default function DashboardPage() {
         <button disabled={isFetching || !propertyId} onClick={() => refetch()} className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-text disabled:opacity-50"><RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />Refresh</button>
       </div>
     </header>
+    {user?.role === 'Receptionist' && <RefundSummary />}
+    {user?.propertyId && (user.role === 'Manager' ? <ApprovalSummary /> : <CorrectionRequests />)}
 
     <section aria-labelledby="quick-actions-title" className="rounded-xl border border-border bg-surface p-4 shadow-sm">
       <h2 id="quick-actions-title" className="mb-3 flex items-center gap-2 text-sm font-bold text-text"><LayoutGrid size={17} className="text-primary-600" /> Quick Actions</h2>

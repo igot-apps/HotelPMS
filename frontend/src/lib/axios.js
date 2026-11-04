@@ -40,6 +40,8 @@ api.interceptors.response.use(
     if (error.response) {
       // The request was made and the server responded with a status code out of 2xx
       const { status, data } = error.response;
+      // This is an expected confirmation step, shown inline by the occupant form.
+      if (status === 409 && data?.code === 'OCCUPANT_ALREADY_CHECKED_IN') return Promise.reject(error);
       const backendMessage = data?.message || 'An unexpected error occurred.';
 
       // 🛑 CONSOLE LOG THE RAW ERROR FOR DEVELOPER DEBUGGING
@@ -93,18 +95,18 @@ api.interceptors.response.use(
 
       // Public pages present their own auth errors and expired-session state.
       if (!(status === 401 && error.config && new URL(error.config.url || '', error.config.baseURL || window.location.origin).pathname.startsWith('/public/'))) {
-        toast.error(toastMessage);
+        if (!error.config?.skipErrorToast) toast.error(toastMessage);
       }
       
     } else if (error.request) {
       // The request was made but no response was received (Network Error / Offline)
       console.error('[Network Error]:', error.request);
-      toast.error('Network error. Please check your internet connection.');
+      if (!error.config?.skipErrorToast) toast.error('Network error. Please check your internet connection.');
       
     } else {
       // Something happened in setting up the request that triggered an Error
       console.error('[Setup Error]:', error.message);
-      toast.error('An unexpected error occurred.');
+      if (!error.config?.skipErrorToast) toast.error('An unexpected error occurred.');
     }
 
     // IMPORTANT: Return Promise.reject so the component's catch() block still works

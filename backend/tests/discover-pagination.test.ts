@@ -70,7 +70,7 @@ describe('discovery distance pagination', () => {
   });
 
   it('retains search/date/price/amenity filters when ranking and loading profiles', async () => {
-    const response = await request(app).get('/api/public/discover?userLat=5&userLng=-1&search=Accra&maxPrice=300&amenity=Wifi&checkIn=2030-01-01&checkOut=2030-01-03');
+    const response = await request(app).get('/api/public/discover?userLat=5&userLng=-1&search=Accra&maxPrice=300&amenity=Wifi&checkIn=2030-01-01&checkOut=2030-01-03&availability=available');
     expect(response.status).toBe(200);
     const [ranking, profiles] = (prisma.property.findMany as any).mock.calls.map((call: any[]) => call[0]);
     expect(profiles.where.AND[0]).toEqual(ranking.where);
@@ -86,6 +86,42 @@ describe('discovery distance pagination', () => {
     expect(response.body.data.hotels.map((hotel: any) => hotel.propertyCode)).toEqual(['hotel-30', 'hotel-40']);
     expect(prisma.property.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.property.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 2, take: 2, orderBy: { propertyId: 'asc' } }));
+  });
+
+  it('keeps hotels without rooms in the default results and avoids advertising a zero rate', async () => {
+    (prisma.property.findMany as any).mockResolvedValueOnce([{ ...profile(hotels[4]), roomTypes: [] }]);
+    (prisma.room.count as any).mockResolvedValue(0);
+    const response = await request(app).get('/api/public/discover?checkIn=2030-01-01&checkOut=2030-01-03');
+    expect(response.status).toBe(200);
+    expect(response.body.data.hotels[0]).toMatchObject({ availableRooms: 0, availabilityStatus: 'unavailable', minPrice: null });
+    expect((prisma.property.count as any).mock.calls[0][0].where.roomTypes).toBeUndefined();
+  });
+
+  it('quotes an available room rate rather than a cheaper sold-out room type', async () => {
+    (prisma.property.findMany as any).mockResolvedValueOnce([{ ...profile(hotels[4]),
+      roomTypes: [{ basePrice: 100, rooms: [] }, { basePrice: 300, rooms: [{ roomId: 1 }] }],
+    }]);
+    const response = await request(app).get('/api/public/discover?checkIn=2030-01-01&checkOut=2030-01-03');
+    expect(response.status).toBe(200);
+    expect(response.body.data.hotels[0].minPrice).toBe(300);
+  });
+
+  it('filters unavailable hotels before GPS pagination and checks tonight without selected dates', async () => {
+    (prisma.room.count as any).mockResolvedValue(0);
+    const response = await request(app).get('/api/public/discover?availability=unavailable&userLat=0&userLng=0&limit=2');
+    expect(response.status).toBe(200);
+    const ranking = (prisma.property.findMany as any).mock.calls[0][0];
+    const roomWhere = ranking.where.NOT.roomTypes.some.rooms.some;
+    expect(roomWhere.operationalStatus).toBe('Available');
+    expect(roomWhere.reservationRooms.none.status.in).toEqual(['Reserved', 'CheckedIn']);
+    expect(roomWhere.reservationRooms.none.checkInDate.lt.getTime() - roomWhere.reservationRooms.none.checkOutDate.gt.getTime()).toBe(86400000);
+    expect(response.body.data.hotels[0].availabilityStatus).toBe('unavailable');
+    expect(response.body.data.hotels[0].availabilityCheckIn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('rejects an unknown availability filter', async () => {
+    expect((await request(app).get('/api/public/discover?availability=wrong')).status).toBe(400);
+    expect(prisma.property.findMany).not.toHaveBeenCalled();
   });
 
   it('rejects partial and invalid coordinates and returns an empty out-of-range page', async () => {

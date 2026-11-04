@@ -134,6 +134,8 @@ export const findReservations = async (
           include: { room: { include: { roomType: true } }, ratePlan: true },
         },
         payments: true,
+        refunds: true,
+        correctionRequests: { where: { action: 'refund', status: { in: ['Pending', 'Approved', 'Simulated'] } }, orderBy: { requestId: 'desc' }, select: { status: true, input: true } },
       },
     }),
     prisma.reservation.count({ where }),
@@ -157,6 +159,7 @@ export const findReservationById = async (reservationId: string) => {
         include: { room: { include: { roomType: true } }, ratePlan: true },
       },
       payments: { include: { receiver: { select: { userId: true, fullName: true } } } },
+      refunds: true,
     },
   });
 };

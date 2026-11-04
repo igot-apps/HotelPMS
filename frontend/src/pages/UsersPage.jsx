@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getUsers, inviteStaff, resendStaffInvitation, updateUser, deactivateUser } from '../api/users';
 import { useAuthStore } from '../store/authStore'; // ✅ ADDED: To get the current user's propertyId
 import UserModal from '../components/users/UserModal';
+import CorrectionPermissions from '../components/users/CorrectionPermissions';
 import RequirePermission from '../components/RequirePermission';
 import toast from 'react-hot-toast';
 import { Shield, Plus, Edit2, Trash2, Search, Building2 } from 'lucide-react';
@@ -17,6 +18,7 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [emailPreview, setEmailPreview] = useState(null);
+  const [permissionUser, setPermissionUser] = useState(null);
 
   const { data: usersData, isLoading } = useQuery({
     queryKey: ['users'],
@@ -102,6 +104,7 @@ export default function UsersPage() {
         </section>
       )}
 
+      {permissionUser && <CorrectionPermissions key={permissionUser.userId} user={permissionUser} onClose={() => setPermissionUser(null)} />}
       <div className="bg-surface border border-border rounded-xl shadow-sm overflow-hidden">
         <div className="p-4 border-b border-border">
           <div className="relative max-w-sm">
@@ -146,7 +149,8 @@ export default function UsersPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        {user.role?.roleName === 'Receptionist' && <button onClick={() => setPermissionUser(user)} className="min-h-11 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-primary-700">Approval requirements</button>}
                         {user.invitationPending && <button disabled={resendMutation.isPending} onClick={() => resendMutation.mutate(user.userId)} className="text-xs font-semibold text-primary-600 disabled:opacity-50">Resend invite</button>}
                         <RequirePermission permission="CanManageStaffAndRoles">
                           <button disabled={user.role?.roleName !== 'Receptionist'} onClick={() => { setEditingUser(user); setIsModalOpen(true); }} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition disabled:opacity-30" title="Edit User">

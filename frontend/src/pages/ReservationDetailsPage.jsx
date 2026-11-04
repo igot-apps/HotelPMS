@@ -5,21 +5,21 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getReservationById, getReservationStats, updateReservation } from '../api/reservations';
 import { recordPayment } from '../api/payments';
-import { useAuthStore } from '../store/authStore';
 import {
   User, BedDouble, CreditCard, FileText, Edit2, X, Loader2,
-  CalendarDays, DollarSign, Clock, CheckCircle2, AlertCircle, Plus, Printer, ChevronDown, Smartphone
+  CalendarDays, DollarSign, Clock, AlertCircle, Plus, Printer, ChevronDown, Smartphone, Undo2, Wrench
 } from 'lucide-react';
 import ReceiptModal from '../components/reservations/ReceiptModal';
 import ThermalReceiptModal from '../components/reservations/ThermalReceiptModal';
 import { formatPaymentMethod } from '../utils/payment';
 import ReservationRecoveryPanel from '../components/reservations/ReservationRecoveryPanel';
+import RefundPanel from '../components/reservations/RefundPanel';
+import ReservationSection from '../components/reservations/ReservationSection';
 
 export default function ReservationDetailsPage() {
   const { id } = useParams();
 
   const queryClient = useQueryClient();
-  const user = useAuthStore((state) => state.user);
 
   // States for Modals
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -159,20 +159,19 @@ export default function ReservationDetailsPage() {
         </div>
       </div>
 
+      <ReservationSection key={`${id}-overview`} id="overview" title="Reservation overview" icon={FileText} summary={resData.guestNameSnapshot || resData.platformGuest?.fullName || resData.propertyGuest?.fullName || undefined}>
+      <div className="space-y-6">
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={DollarSign} label="Total Amount" value={`${fmt(totalAmount)} GHS`} color="primary" />
-        <StatCard icon={CreditCard} label="Total Paid" value={`${fmt(amountPaid)} GHS`} color="success" />
+        <StatCard icon={CreditCard} label={resData.refunds?.length ? 'Net paid after refunds' : 'Total Paid'} value={`${fmt(amountPaid)} GHS`} color="success" />
         <StatCard icon={AlertCircle} label="Balance Due" value={`${fmt(balanceDue)} GHS`} color={balanceDue > 0 ? "danger" : "success"} />
         <StatCard icon={Clock} label="Total Nights" value={`${statsData?.totalNights || 0} Nights`} color="secondary" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-3">
         {/* Guest Info */}
-        <div className="bg-surface p-6 rounded-xl border border-border shadow-sm">
-          <h3 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
-            <User size={18} /> Guest Information
-          </h3>
+        <section className="min-w-0 rounded-lg border border-border p-4"><h3 className="mb-4 flex items-center gap-2 font-bold text-text"><User size={18} />Booking contact</h3>
           <div className="space-y-3">
             <div>
               <p className="text-xs text-text-muted uppercase font-semibold">Full Name</p>
@@ -197,17 +196,19 @@ export default function ReservationDetailsPage() {
               <p className="text-sm text-text font-medium">{resData.source}</p>
             </div>
           </div>
-        </div>
+        </section>
 
         {/* Room Assignments */}
-        <div className="lg:col-span-2 bg-surface p-6 rounded-xl border border-border shadow-sm">
-          <h3 className="text-lg font-bold text-text mb-4 flex items-center gap-2"><BedDouble size={18} /> Assigned Rooms</h3>
+        <section className="min-w-0 rounded-lg border border-border p-4 lg:col-span-2"><h3 className="mb-4 flex items-center gap-2 font-bold text-text"><BedDouble size={18} />Assigned rooms <span className="text-xs font-normal text-text-muted">({resData.reservationRooms?.length || 0})</span></h3>
           <div className="space-y-3">
+            {!resData.reservationRooms?.length && <p className="text-sm text-text-muted">No rooms assigned to this reservation.</p>}
             {resData.reservationRooms?.map((rr) => (
               <div key={rr.reservationRoomId} className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between p-4 bg-secondary-50 rounded-lg border border-border">
                 <div>
                   <p className="text-sm font-bold text-text">Room {rr.room?.roomNumber || rr.roomNumberSnapshot || 'Removed'}</p>
                   <p className="text-xs text-text-muted">{rr.roomType?.typeName || rr.room?.roomType?.typeName || rr.roomTypeNameSnapshot || 'Room type removed'}</p>
+                  <p className="mt-2 break-words text-sm text-text"><span className="text-text-muted">Room occupant: </span>{rr.occupantName || 'Not assigned'}</p>
+                  {rr.occupantPhone && <p className="text-xs text-text-muted">{rr.occupantPhone}</p>}
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-bold text-primary-600">{fmt(rr.agreedPricePerNight)} GHS</p>
@@ -216,14 +217,16 @@ export default function ReservationDetailsPage() {
               </div>
             ))}
           </div>
-        </div>
+        </section>
       </div>
+      </div>
+      </ReservationSection>
 
       {/* Payment History */}
-      <ReservationRecoveryPanel reservation={resData} />
-      <div className="bg-surface p-6 rounded-xl border border-border shadow-sm">
-        <div className="flex flex-wrap gap-3 items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-text flex items-center gap-2"><CreditCard size={18} /> Payment History</h3>
+      <ReservationSection key={`${id}-corrections`} id="corrections" title="Correct or undo actions" icon={Wrench}><ReservationRecoveryPanel reservation={resData} embedded /></ReservationSection>
+      <ReservationSection key={`${id}-refunds`} id="refunds" title="Refunds" icon={Undo2} summary={Number(resData.refundDue) > 0 ? `GHS ${fmt(resData.refundDue)} remaining` : resData.refunds?.length ? 'View refund history' : undefined}><RefundPanel reservation={resData} embedded /></ReservationSection>
+      <ReservationSection key={`${id}-payments`} id="payments" title="Payment history" icon={CreditCard} summary={`${resData.payments?.length || 0} payment(s)`}>
+        <div className="flex flex-wrap gap-3 items-center justify-end mb-4">
           <button
             onClick={() => setIsPaymentModalOpen(true)}
             // 🌟 FIXED: 'CheckedIn' → 'InHouse'
@@ -270,7 +273,7 @@ export default function ReservationDetailsPage() {
             No payments recorded yet. Click "Record Payment" to add one.
           </p>
         )}
-      </div>
+      </ReservationSection>
 
       {/* ========================================== */}
       {/* 1. Record Payment Modal                    */}

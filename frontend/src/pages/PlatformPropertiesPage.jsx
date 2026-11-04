@@ -99,7 +99,7 @@ export default function PlatformPropertiesPage() {
             <ShieldCheck size={14} /> Platform administration
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-text">All properties</h1>
-          <p className="mt-1 text-sm text-text-muted">Manage properties across the Stayfolio platform.</p>
+          <p className="mt-1 text-sm text-text-muted">Manage properties across the HideOut24 platform.</p>
         </div>
         <button onClick={openAdd} className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-text-inverted shadow-sm transition hover:bg-primary-700">
           <Plus size={16} /> Add property

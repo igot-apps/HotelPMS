@@ -98,7 +98,7 @@ export default function PublicAuthModal({ isOpen, onClose }) {
 
         <div className="flex items-center gap-2 mb-6">
           <Building2 className="text-primary-600" size={24} />
-          <span className="text-lg font-black text-text tracking-tight">Stayfolio</span>
+          <span className="text-lg font-black text-text tracking-tight">HideOut24</span>
         </div>
 
         <div className="flex p-1 bg-secondary-100 rounded-lg mb-6">
@@ -106,7 +106,7 @@ export default function PublicAuthModal({ isOpen, onClose }) {
           <button onClick={() => setIsLogin(false)} className={`flex-1 py-2 text-sm font-semibold rounded-md transition ${!isLogin ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text'}`}>Create Account</button>
         </div>
 
-        <h2 className="text-2xl font-bold text-text mb-1">{isLogin ? 'Welcome back!' : 'Join Stayfolio'}</h2>
+        <h2 className="text-2xl font-bold text-text mb-1">{isLogin ? 'Welcome back!' : 'Join HideOut24'}</h2>
         <p className="text-sm text-text-muted mb-6">{isLogin ? 'Sign in to manage your bookings.' : 'Create an account to book your next stay.'}</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

@@ -3,6 +3,8 @@
 export async function restoreLatePaymentAllocation(tx: any, booking: any): Promise<boolean> {
   const today = new Date(); today.setUTCHours(0, 0, 0, 0);
   if (booking.source !== 'Website' || new Date(booking.checkInDate) < today) return false;
+  // A booking with money already returned must stay released for refund review.
+  if (await tx.refund.count({ where: { reservationId: booking.reservationId } })) return false;
   const hotel = await tx.property.findUnique({ where: { propertyId: booking.propertyId } });
   if (!hotel?.isActive || hotel.status !== 'Active' || !hotel.isOnlineBookingEnabled) return false;
   const stays = await tx.reservationRoom.findMany({ where: { reservationId: booking.reservationId }, orderBy: { reservationRoomId: 'asc' } });

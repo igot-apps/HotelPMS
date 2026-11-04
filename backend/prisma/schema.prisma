@@ -93,6 +93,7 @@ model Property {
   taxPercentage          Decimal   @default(0.00) @db.Decimal(5, 2)
   isOnlineBookingEnabled Boolean   @default(false)
   paystackSecretKey      String?   @db.Text
+  refundSimulationEnabled Boolean @default(false)
 
   users                  User[]
   propertyGuests         PropertyGuest[]
@@ -103,6 +104,8 @@ model Property {
   amenities              Amenity[]
   payments               Payment[] // 🌟 NEW: Opposite relation for Payment
   subscriptionPayments   SubscriptionPayment[]
+  correctionRequests     CorrectionRequest[]
+  refunds                Refund[]
 
   @@map("properties")
 }
@@ -121,6 +124,8 @@ model User {
   invitationTokenHash String? @unique
   invitationExpiresAt DateTime?
   invitationPending Boolean @default(false)
+  correctionPermissions Json @default("[\"undo-checkin\",\"undo-checkout\",\"restore\",\"transfer\"]")
+  financialDelegation Json @default("{}")
   roleId            Int
   isPlatformAdmin   Boolean   @default(false)
   isActive          Boolean   @default(true)
@@ -135,6 +140,9 @@ model User {
   auditLogs         AuditLog[]
   presenceUpdates   ReservationRoom[] @relation("presenceUpdatedBy")
   initiatedSubscriptionPayments SubscriptionPayment[] @relation("initiatedSubscriptionPayments")
+  requestedCorrections CorrectionRequest[] @relation("correctionRequester")
+  reviewedCorrections CorrectionRequest[] @relation("correctionReviewer")
+  returnedRefunds Refund[]
 
   @@map("users")
 }
@@ -326,6 +334,8 @@ model Reservation {
   reservationRooms  ReservationRoom[]
   payments          Payment[]
   guestPaymentAttempts GuestPaymentAttempt[]
+  correctionRequests CorrectionRequest[]
+  refunds Refund[]
 
   @@index([propertyId])
   @@index([propertyGuestId])
@@ -333,6 +343,29 @@ model Reservation {
   @@index([status])
   @@index([checkInDate, checkOutDate])
   @@map("reservations")
+}
+
+model CorrectionRequest {
+  requestId Int @id @default(autoincrement())
+  propertyId Int
+  reservationId String
+  requestedBy Int?
+  reviewedBy Int?
+  action String @db.VarChar(40)
+  input Json
+  expectedVersion String @db.Text
+  status String @default("Pending") @db.VarChar(20)
+  reviewReason String? @db.VarChar(500)
+  createdAt DateTime @default(now())
+  reviewedAt DateTime?
+  property Property @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
+  reservation Reservation @relation(fields: [reservationId], references: [reservationId], onDelete: Cascade)
+  requester User? @relation("correctionRequester", fields: [requestedBy], references: [userId], onDelete: SetNull)
+  reviewer User? @relation("correctionReviewer", fields: [reviewedBy], references: [userId], onDelete: SetNull)
+  refund Refund?
+  @@index([propertyId, status, createdAt])
+  @@index([reservationId, status])
+  @@map("correction_requests")
 }
 
 model ReservationRoom {
@@ -394,11 +427,38 @@ model Payment {
   reservation       Reservation @relation(fields: [reservationId], references: [reservationId], onDelete: Cascade)
   property          Property?   @relation(fields: [propertyId], references: [propertyId]) // 🌟 ONLY ONE 'property' field
   receiver          User?       @relation("receivedPayments", fields: [receivedBy], references: [userId])
+  refunds           Refund[]
 
   @@index([reservationId])
   @@index([propertyId])
   @@index([paymentDate])
   @@map("payments")
+}
+
+model Refund {
+  refundId Int @id @default(autoincrement())
+  isSimulated Boolean @default(false)
+  requestId Int @unique
+  propertyId Int
+  reservationId String
+  paymentId Int
+  amount Decimal @db.Decimal(10, 2)
+  method String @db.VarChar(30)
+  reference String? @db.VarChar(200)
+  returnedBy Int?
+  returnedByName String @db.VarChar(200)
+  returnedAt DateTime
+  createdAt DateTime @default(now())
+  request CorrectionRequest @relation(fields: [requestId], references: [requestId], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
+  reservation Reservation @relation(fields: [reservationId], references: [reservationId], onDelete: Cascade)
+  payment Payment @relation(fields: [paymentId], references: [paymentId], onDelete: Restrict)
+  returner User? @relation(fields: [returnedBy], references: [userId], onDelete: SetNull)
+  @@index([reservationId])
+  @@index([paymentId])
+  @@index([propertyId, returnedAt])
+  @@unique([propertyId, method, reference])
+  @@map("refunds")
 }
 
 model GuestPaymentAttempt {

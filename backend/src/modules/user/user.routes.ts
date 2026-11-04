@@ -4,9 +4,11 @@ import { authenticate, authorize } from '../../shared/middleware/auth.middleware
 import { PERMISSIONS } from '../../shared/constants/permissions';
 import * as userController from './user.controller';
 import * as invitations from './invitation.service';
+import { setCorrectionPermissions } from '../reservation/correction-approval.service';
 
 const router = Router();
 const setupAttempts = new Map<string, { count: number; resetAt: number }>();
+const delegationAttempts = new Map<number, { count: number; resetAt: number }>();
 
 router.post('/accept-invitation', async (req, res) => {
   const now = Date.now();
@@ -45,6 +47,18 @@ router.post('/:id/resend-invitation', async (req: import('../../shared/middlewar
 
 // 🚨 GET ROLES MUST BE BEFORE /:id
 router.get('/roles', userController.getRoles);
+router.put('/:id/correction-permissions', async (req: import('../../shared/middleware/auth.middleware').AuthRequest, res) => {
+  if (req.body.confirmDelegation === true || req.body.managerPassword) {
+    const now = Date.now();
+    for (const [key, value] of delegationAttempts) if (value.resetAt <= now) delegationAttempts.delete(key);
+    const attempts = delegationAttempts.get(req.user!.userId) || { count: 0, resetAt: now + 300_000 };
+    attempts.count++;
+    delegationAttempts.set(req.user!.userId, attempts);
+    if (attempts.count > 10) return res.status(429).json({ success: false, message: 'Too many financial delegation confirmations. Try again in five minutes.' });
+  }
+  try { return res.json({ success: true, data: await setCorrectionPermissions({ userId: req.user!.userId, propertyId: req.user!.propertyId }, Number(req.params.id), req.body.permissions, req.body.financialDelegation, req.body.managerPassword, req.body.confirmDelegation) }); }
+  catch (error: any) { return res.status(400).json({ success: false, message: error.message }); }
+});
 
 router.get('/', userController.getUsers);
 router.get('/:id', userController.getUserById);

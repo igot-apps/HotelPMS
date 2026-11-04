@@ -51,7 +51,7 @@ export default function PublicNavbar() {
           <div className="flex justify-between items-center h-16">
             <Link to="/discover" className="flex items-center gap-2 group">
               <Building2 className="text-primary-600 group-hover:text-primary-700 transition" size={28} />
-              <span className="text-xl font-black text-text tracking-tight">Stayfolio</span>
+              <span className="text-xl font-black text-text tracking-tight">HideOut24</span>
             </Link>
 
             <div className="hidden lg:flex items-center gap-8">

@@ -9,7 +9,7 @@ let tx: any;
 beforeEach(() => {
   jest.resetAllMocks();
   mock.user.findFirst.mockResolvedValue({ role: { roleName: 'Manager' }, property: { timezone: 'Africa/Accra' } });
-  tx = { payment: { findMany: jest.fn<any>().mockResolvedValue([]) }, auditLog: { findMany: jest.fn<any>().mockResolvedValue([]) }, reservation: { count: jest.fn<any>().mockResolvedValue(0), findMany: jest.fn<any>().mockResolvedValue([]) }, reservationRoom: { count: jest.fn<any>().mockResolvedValue(0) } };
+  tx = { refund: { findMany: jest.fn<any>().mockResolvedValue([]) }, payment: { findMany: jest.fn<any>().mockResolvedValue([]) }, auditLog: { findMany: jest.fn<any>().mockResolvedValue([]) }, reservation: { count: jest.fn<any>().mockResolvedValue(0), findMany: jest.fn<any>().mockResolvedValue([]) }, reservationRoom: { count: jest.fn<any>().mockResolvedValue(0) } };
   mock.$transaction.mockImplementation((work: any) => work(tx));
 });
 
@@ -49,4 +49,13 @@ test('separates staff, online, unknown, voids and replacement entries without do
 test('returns explicit empty results when nothing happened', async () => {
   const result = await dailyOverview(1, 4, '2026-11-02');
   expect(result.collections).toBe(0); expect(result.byStaff).toEqual([]); expect(result.events).toEqual([]);
+});
+
+test('shows returned refunds on their own date without rewriting original receipts', async () => {
+  tx.refund.findMany.mockResolvedValue([{ refundId: 1, amount: 30.25, returnedByName: 'Manager', returnedAt: new Date(), reservation: { confirmationCode: 'ABC' } }]);
+  const result = await dailyOverview(1, 4, '2026-11-02');
+  expect(result.collections).toBe(0);
+  expect(result.refundsReturned).toBe(30.25);
+  expect(result.netCollections).toBe(-30.25);
+  expect(tx.refund.findMany.mock.calls[0][0].where.propertyId).toBe(4);
 });

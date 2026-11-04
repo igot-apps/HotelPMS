@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import { Prisma } from '../../generated/prisma';
 import { prisma } from '../../shared/utils/prisma';
 import jwt from 'jsonwebtoken'; // Ensure this is imported at the top of the file
 import { verifyGuestPayment } from '../payment/guest-payment.service';
@@ -49,13 +50,28 @@ const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): 
   return R * c;
 };
 
+const availableRoomsForStay = (checkInDate: Date, checkOutDate: Date): Prisma.RoomWhereInput => ({
+  operationalStatus: 'Available',
+  reservationRooms: {
+    none: {
+      status: { in: ['Reserved', 'CheckedIn'] },
+      reservation: { status: { in: ['Pending', 'Confirmed', 'InHouse'] } },
+      checkInDate: { lt: checkOutDate },
+      checkOutDate: { gt: checkInDate },
+    },
+  },
+});
+
 // ============================================================
 // 🌟 0. DISCOVER: Fetch all public properties with GPS sorting & TRUE Availability
 // ⚠️ MUST BE FIRST - Before any /:propertyCode routes!
 // ============================================================
 router.get('/discover', async (req: any, res: Response) => {
   try {
-    const { search, userLat, userLng, checkIn, checkOut, maxPrice, amenity, page = '1', limit = '9' } = req.query;
+    const { search, userLat, userLng, checkIn, checkOut, maxPrice, amenity, availability = 'all', page = '1', limit = '9' } = req.query;
+    if (!['all', 'available', 'unavailable'].includes(String(availability))) {
+      return res.status(400).json({ success: false, message: 'Choose a valid availability filter.' });
+    }
     const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
     const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10) || 9));
     const skip = (pageNum - 1) * limitNum;
@@ -85,24 +101,11 @@ router.get('/discover', async (req: any, res: Response) => {
       isOnlineBookingEnabled: true,
     };
 
+    const availabilityFrom = checkInDate || new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+    const availabilityTo = checkOutDate || new Date(availabilityFrom.getTime() + 86400000);
+    const availableRoomFilter = availableRoomsForStay(availabilityFrom, availabilityTo);
     const parsedMaxPrice = Number(maxPrice);
-    const roomTypeFilter: any = {
-      isActive: true,
-      rooms: {
-        some: {
-          operationalStatus: 'Available',
-          ...(checkInDate && checkOutDate ? {
-            reservationRooms: {
-              none: {
-                reservation: { status: { in: ['Pending', 'Confirmed', 'InHouse'] } },
-                checkInDate: { lt: checkOutDate },
-                checkOutDate: { gt: checkInDate },
-              }
-            }
-          } : {})
-        }
-      }
-    };
+    const roomTypeFilter: any = { isActive: true };
     if (Number.isFinite(parsedMaxPrice) && parsedMaxPrice > 0) {
       roomTypeFilter.basePrice = { lte: parsedMaxPrice };
     }
@@ -111,7 +114,14 @@ router.get('/discover', async (req: any, res: Response) => {
         some: { amenity: { name: { equals: String(amenity).trim(), mode: 'insensitive' } } }
       };
     }
-    where.roomTypes = { some: roomTypeFilter };
+    // Keep unavailable hotels in the default results. Filter availability in the
+    // database before counting, distance sorting, or pagination.
+    if (roomTypeFilter.basePrice || roomTypeFilter.amenities) {
+      where.roomTypes = { some: roomTypeFilter };
+    }
+    const availableRoomTypes = { some: { ...roomTypeFilter, rooms: { some: availableRoomFilter } } };
+    if (availability === 'available') where.roomTypes = availableRoomTypes;
+    if (availability === 'unavailable') where.NOT = { roomTypes: availableRoomTypes };
 
     if (search && String(search).trim() !== '') {
       const searchTerm = String(search).trim();
@@ -168,7 +178,7 @@ router.get('/discover', async (req: any, res: Response) => {
         longitude: true,
         roomTypes: {
           where: roomTypeFilter,
-          select: { basePrice: true, amenities: { select: { amenity: { select: { name: true, propertyId: true } } } } },
+          select: { roomTypeId: true, basePrice: true, rooms: { where: availableRoomFilter, take: 1, select: { roomId: true } }, amenities: { select: { amenity: { select: { name: true, propertyId: true } } } } },
           orderBy: { basePrice: 'asc' },
         }
       }
@@ -189,23 +199,16 @@ router.get('/discover', async (req: any, res: Response) => {
         distanceText = km < 1 ? `${Math.round(km * 1000)} m away` : `${km.toFixed(1)} km away`;
       }
 
-      let availableRooms: number | null = null;
-      if (checkInDate && checkOutDate) {
-        availableRooms = await prisma.room.count({
+      const availableRooms = await prisma.room.count({
           where: {
             propertyId: p.propertyId,
-            operationalStatus: 'Available',
-            reservationRooms: {
-              none: {
-                reservation: { status: { in: ['Pending', 'Confirmed', 'InHouse'] } },
-                checkInDate: { lt: checkOutDate },
-                checkOutDate: { gt: checkInDate },
-              }
-            }
+            roomType: roomTypeFilter,
+            ...availableRoomFilter,
           }
         });
-      }
 
+      const bookableTypes = p.roomTypes.filter(type => type.rooms?.length > 0);
+      const displayTypes = bookableTypes.length ? bookableTypes : p.roomTypes;
       return {
         propertyCode: p.propertyCode,
         propertyName: p.propertyName,
@@ -220,8 +223,11 @@ router.get('/discover', async (req: any, res: Response) => {
         galleryImages: Array.isArray(p.galleryImages) ? p.galleryImages : [],
         primaryPhone: p.primaryPhone,
         primaryPhoneWhatsappOnly: p.primaryPhoneWhatsappOnly,
-        minPrice: p.roomTypes.length > 0 ? Number(p.roomTypes[0].basePrice) : 0,
+        minPrice: displayTypes.length > 0 ? Number(displayTypes[0].basePrice) : null,
         availableRooms,
+        availabilityStatus: availableRooms > 0 ? 'available' : 'unavailable',
+        availabilityCheckIn: availabilityFrom.toISOString().slice(0, 10),
+        availabilityCheckOut: availabilityTo.toISOString().slice(0, 10),
         rating: null,
         distance: distanceText,
         distanceKm: distanceKm,
@@ -309,7 +315,9 @@ router.get('/reservations', requireBookingGuest, async (req: any, res: Response)
       where: whereClause,
       include: {
         property: { select: { propertyName: true, city: true, propertyCode: true, cancellationPolicy: true } },
-        reservationRooms: { include: { roomType: { select: { typeName: true } } } }
+        reservationRooms: { include: { roomType: { select: { typeName: true } } } },
+        refunds: { select: { amount: true, returnedAt: true, method: true, isSimulated: true } },
+        correctionRequests: { where: { action: 'refund', status: { in: ['Pending', 'Approved'] } }, select: { status: true } },
       },
       orderBy: [
      { checkInDate: 'desc' },
@@ -388,22 +396,9 @@ router.get('/:propertyCode/room-types', async (req: any, res: Response) => {
       const checkOutDate = new Date(checkOut as string);
       const availabilityChecks = await Promise.all(
         roomTypes.map(async (rt) => {
-          const totalRoomsOfType = await prisma.room.count({
-            where: { propertyId: property.propertyId, roomTypeId: rt.roomTypeId, operationalStatus: 'Available' }
+          const availableCount = await prisma.room.count({
+            where: { propertyId: property.propertyId, roomTypeId: rt.roomTypeId, ...availableRoomsForStay(checkInDate, checkOutDate) }
           });
-          const bookedRooms = await prisma.reservationRoom.count({
-            where: {
-              roomTypeId: rt.roomTypeId,
-              checkInDate: { lt: checkOutDate },
-              checkOutDate: { gt: checkInDate },
-              reservation: {
-                propertyId: property.propertyId,
-                // 🌟 CHANGED: 'CheckedIn' → 'InHouse'
-                status: { in: ['Pending', 'Confirmed', 'InHouse'] },
-              }
-            }
-          });
-          const availableCount = totalRoomsOfType - bookedRooms;
           return { ...rt, availableRooms: availableCount, isAvailable: availableCount > 0 };
         })
       );

@@ -1,3 +1,6 @@
+import RefundPaymentSummary from '../components/reservations/RefundPaymentSummary';
+import RefundSummary from '../components/reservations/RefundSummary';
+import RefundApprovalBadge from '../components/reservations/RefundApprovalBadge';
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
@@ -5,7 +8,6 @@ import {
   getReservations,
   createReservation,
   cancelReservation,
-  refundReservation,
   updateReservationRoomStatus,
   extendReservationRoom,
   updateOccupantName,
@@ -17,17 +19,13 @@ import ReservationModal from '../components/reservations/ReservationModal';
 import BookingPaymentNotice from '../components/reservations/BookingPaymentNotice';
 import { createWalkInBooking } from '../lib/createWalkInBooking';
 import RoomCard from '../components/reservations/RoomCard'; // 🌟 NEW: Extracted component
+import RoomOccupantDialog from '../components/reservations/RoomOccupantDialog';
 import {
   Search, Plus, CalendarDays, AlertCircle, XCircle,
   ChevronLeft, ChevronRight, Eye, X, Check,
   ChevronDown, ChevronUp, BedDouble, Loader2, Clock, Undo2, SlidersHorizontal
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-const toLocalPhoneNumber = (value) => {
-  const digits = String(value || '').replace(/\D/g, '');
-  return digits.startsWith('233') && digits.length === 12 ? `0${digits.slice(3)}` : digits;
-};
 
 // ─────────────────────────────────────────────────────────────
 // Lightweight confirmation modal with optional input field
@@ -113,6 +111,7 @@ export default function ReservationsPage() {
   const [paymentRecoveryReservation, setPaymentRecoveryReservation] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [pendingConfirm, setPendingConfirm] = useState(null);
+  const [occupantDialog, setOccupantDialog] = useState(null);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   const page = parseInt(searchParams.get('page') || '1');
@@ -158,6 +157,7 @@ export default function ReservationsPage() {
     },
     placeholderData: keepPreviousData,
     enabled: !!propertyId,
+    refetchInterval: 15000,
   });
 
   const reservations = data?.data || [];
@@ -169,10 +169,11 @@ export default function ReservationsPage() {
 
   // 🌟 Room action mutation
   const roomActionMutation = useMutation({
-    mutationFn: ({ id, status, occupantName, occupantPhone }) => {
+    mutationFn: ({ id, status, occupantName, occupantPhone, duplicateOccupantConfirmation }) => {
       const data = { status };
       if (occupantName !== undefined) data.occupantName = occupantName;
       if (occupantPhone !== undefined) data.occupantPhone = occupantPhone;
+      if (duplicateOccupantConfirmation !== undefined) data.duplicateOccupantConfirmation = duplicateOccupantConfirmation;
       return updateReservationRoomStatus(id, data);
     },
     onSuccess: () => {
@@ -181,8 +182,11 @@ export default function ReservationsPage() {
       queryClient.invalidateQueries({ queryKey: ['dashboardActive'] });
       toast.success('Room status updated');
       setPendingConfirm(null);
+      setOccupantDialog(null);
+      for (const key of ['reservation', 'reservationCorrections', 'operationalOverview']) queryClient.invalidateQueries({ queryKey: [key] });
     },
     onError: (err) => {
+      if (occupantDialog) return;
       toast.dismiss();
       toast.error(err.response?.data?.message || 'Failed to update room status');
       setPendingConfirm(null);
@@ -209,13 +213,15 @@ export default function ReservationsPage() {
 
   // 🌟 Update occupant name mutation
   const updateOccupantMutation = useMutation({
-    mutationFn: ({ id, occupantName, occupantPhone }) => updateOccupantName(id, occupantName, occupantPhone),
+    mutationFn: ({ id, occupantName, occupantPhone, duplicateOccupantConfirmation }) => updateOccupantName(id, occupantName, occupantPhone, duplicateOccupantConfirmation),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
       toast.success('Occupant details updated');
+      setOccupantDialog(null);
+      for (const key of ['reservation', 'reservationCorrections', 'operationalOverview']) queryClient.invalidateQueries({ queryKey: [key] });
     },
     onError: (err) => {
-      toast.error(err.response?.data?.message || 'Failed to update occupant name');
+      if (!occupantDialog) toast.error(err.response?.data?.message || 'Failed to update occupant name');
     },
   });
 
@@ -258,7 +264,7 @@ export default function ReservationsPage() {
   const actionMutation = useMutation({
     mutationFn: ({ id, action }) => {
       if (action === 'cancel') return cancelReservation(id);
-      if (action === 'refund') return refundReservation(id);
+
     },
     onSuccess: (_response, variables) => {
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
@@ -346,20 +352,7 @@ export default function ReservationsPage() {
             res={res}
             isThisRoomBusy={activeRoomActionId === rr.reservationRoomId}
             isUpdatingOccupant={updatingOccupantId === rr.reservationRoomId}
-            onCheckIn={(room, mainGuestName, mainGuestPhone) => {
-              askRoomAction(
-                room.reservationRoomId,
-                'CheckedIn',
-                'Check in room?',
-                `You are about to check in Room ${room.room?.roomNumber}. Confirm or enter the actual occupant details.`,
-                {
-                  inputLabel: 'Occupant Name',
-                  inputValue: room.occupantName || mainGuestName,
-                  secondaryInputLabel: 'Occupant Phone Number (optional)',
-                  secondaryInputValue: toLocalPhoneNumber(room.occupantPhone || mainGuestPhone),
-                }
-              );
-            }}
+            onCheckIn={room => setOccupantDialog({ room, reservation: res, mode: 'checkin' })}
             onCheckOut={(room) => {
               const occupant = room.occupantName || 'Not assigned';
               askRoomAction(
@@ -387,9 +380,7 @@ export default function ReservationsPage() {
                 toast.error('New date must be after current check-out date.');
               }
             }}
-            onUpdateOccupant={(reservationRoomId, occupantName, occupantPhone) => {
-              updateOccupantMutation.mutate({ id: reservationRoomId, occupantName, occupantPhone });
-            }}
+            onEditOccupant={room => setOccupantDialog({ room, reservation: res, mode: 'edit' })}
           />
         ))}
       </div>
@@ -398,6 +389,7 @@ export default function ReservationsPage() {
 
   return (
     <div className="space-y-6">
+      <RefundSummary />
       <BookingPaymentNotice reservation={paymentRecoveryReservation} onDismiss={() => setPaymentRecoveryReservation(null)} />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
@@ -502,8 +494,7 @@ export default function ReservationsPage() {
           const totalAmount = parseFloat(res.totalAmount || 0);
           const amountPaid = parseFloat(res.amountPaid || 0);
           const balanceDue = Math.max(0, totalAmount - amountPaid);
-          const refundedAmount = (res.payments || []).filter((payment) => payment.status === 'Refunded').reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
-          const cancelledAmount = res.refundStatus === 'Pending' ? parseFloat(res.refundDue || 0) : res.refundStatus === 'Processed' ? refundedAmount : 0;
+          const refundedAmount = (res.refunds || []).filter(refund => !refund.isSimulated).reduce((sum, refund) => sum + Number(refund.amount), 0) + (res.payments || []).filter((payment) => payment.status === 'Refunded').reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
           const isPastCheckIn = new Date(res.checkInDate) < new Date();
           const cardStatusClass = res.status === 'Confirmed' ? 'bg-primary-50 text-primary-700 ring-1 ring-primary-600/20' : res.status === 'InHouse' ? 'bg-success-50 text-success-700 ring-1 ring-success-600/20' : res.status === 'Cancelled' ? 'bg-danger-50 text-danger-700 ring-1 ring-danger-600/20' : res.status === 'NoShow' ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-600/20' : res.status === 'Expired' ? 'bg-warning-50 text-warning-700 ring-1 ring-warning-600/20' : 'bg-secondary-100 text-secondary-700';
           const cardStatusLabel = res.status === 'InHouse' ? 'In-House' : res.status === 'NoShow' ? 'No Show' : res.status;
@@ -514,6 +505,7 @@ export default function ReservationsPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{res.confirmationCode || `#${id.slice(0, 8)}`}</p>
+                    <p className="mt-2 text-xs text-text-muted">Booking contact</p>
                     <h2 className="mt-1 break-words text-base font-bold leading-snug text-text">{guestName}</h2>
                     {phone && <p className="mt-0.5 text-sm text-text-muted">{phone}</p>}
                   </div>
@@ -531,23 +523,8 @@ export default function ReservationsPage() {
                   </div>
                 </div>
 
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs text-text-muted">{res.status === 'Cancelled' ? 'Refund amount' : 'Total'}</p>
-                    <p className="font-bold text-text">{(res.status === 'Cancelled' ? cancelledAmount : totalAmount).toFixed(2)} GHS</p>
-                  </div>
-                  {['Cancelled', 'Expired'].includes(res.status) && res.refundStatus === 'Pending' ? (
-                    <span className="text-right text-xs font-semibold text-warning-700">Refund due</span>
-                  ) : ['Cancelled', 'Expired'].includes(res.status) && res.refundStatus === 'Processed' ? (
-                    <span className="text-right text-xs font-semibold text-success-700">Refunded</span>
-                  ) : res.status === 'Cancelled' ? (
-                    <span className="text-right text-xs text-text-muted">No payment collected</span>
-                  ) : balanceDue > 0.01 ? (
-                    <span className="rounded-md bg-danger-50 px-2 py-1 text-right text-xs font-bold text-danger-700">Due {balanceDue.toFixed(2)} GHS</span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-success-700"><Check size={14} /> Paid</span>
-                  )}
-                </div>
+                <RefundApprovalBadge reservation={res} />
+                {['Cancelled', 'Expired'].includes(res.status) ? <div className="mt-3"><RefundPaymentSummary returned={refundedAmount} remaining={res.refundDue} requests={res.correctionRequests} simulated={(res.refunds || []).filter(r => r.isSimulated).reduce((sum,r) => sum + Number(r.amount),0)} /></div> : <div className="mt-3 flex items-center justify-between gap-3"><div><p className="text-xs text-text-muted">Total</p><p className="font-bold text-text">{totalAmount.toFixed(2)} GHS</p></div>{balanceDue > 0.01 ? <span className="rounded-md bg-danger-50 px-2 py-1 text-right text-xs font-bold text-danger-700">Due {balanceDue.toFixed(2)} GHS</span> : <span className="inline-flex items-center gap-1 text-xs font-semibold text-success-700"><Check size={14} /> Paid</span>}</div>}
 
                 <div className="mt-4 flex gap-2">
                   {res.reservationRooms?.length > 0 && (
@@ -556,10 +533,11 @@ export default function ReservationsPage() {
                     </button>
                   )}
                   {['Cancelled', 'Expired'].includes(res.status) && res.refundStatus === 'Pending' && permissions?.includes('CanCancelReservation') && (
-                    <button onClick={() => askReservationAction(id, 'refund', 'Process reservation refund?', `This will mark ${parseFloat(res.refundDue || 0).toFixed(2)} GHS as refunded and update the payment records for reservation ${res.confirmationCode || id}.`, { danger: true, confirmLabel: 'Process Refund' })} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-danger-200 bg-danger-50 px-3 text-sm font-semibold text-danger-700">
-                      <Undo2 size={16} /> Refund {parseFloat(res.refundDue || 0).toFixed(2)} GHS
-                    </button>
+                    <Link to={`/reservations/${id}#refunds`} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-danger-200 bg-danger-50 px-3 text-sm font-semibold text-danger-700">
+                      <Undo2 size={16} /> Manage refund {parseFloat(res.refundDue || 0).toFixed(2)} GHS
+                    </Link>
                   )}
+                  {['Cancelled', 'Expired'].includes(res.status) && Number(res.refundDue) <= 0 && res.refunds?.length > 0 && <Link to={`/reservations/${id}#refunds`} className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg border border-border px-3 text-sm font-semibold text-primary-700">Refund history</Link>}
                   <Link to={`/reservations/${id}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50">
                     <Eye size={16} />Details
                   </Link>
@@ -610,7 +588,7 @@ export default function ReservationsPage() {
             <thead className="bg-secondary-50/50 border-b border-border">
               <tr>
                 <th className="w-10 px-2 py-3"></th>
-                <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">ID / Guest</th>
+                <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">ID / Booking contact</th>
                 <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Room(s)</th>
                 <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Dates</th>
                 <th className="px-6 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">Status</th>
@@ -708,18 +686,7 @@ export default function ReservationsPage() {
 
                   if (['Cancelled', 'Expired'].includes(res.status) && res.refundStatus === 'Pending' && permissions?.includes('CanCancelReservation')) {
                     actions = (
-                      <button
-                        onClick={() => askReservationAction(
-                          res.reservationId,
-                          'refund',
-                          'Process reservation refund?',
-                          `This will mark ${parseFloat(res.refundDue || 0).toFixed(2)} GHS as refunded and update the payment records for reservation ${res.confirmationCode || res.reservationId}.`,
-                          { danger: true, confirmLabel: 'Process Refund' }
-                        )}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-danger-200 text-danger-600 hover:bg-danger-50 transition"
-                      >
-                        <Undo2 size={14} /> Refund {parseFloat(res.refundDue || 0).toFixed(2)} GHS
-                      </button>
+                      <Link to={`/reservations/${res.reservationId}#refunds`} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-danger-200 text-danger-600 hover:bg-danger-50 transition"><Undo2 size={14} /> Manage refund</Link>
                     );
                   }
 
@@ -742,17 +709,16 @@ export default function ReservationsPage() {
                     );
                   }
 
+                  if (['Cancelled', 'Expired'].includes(res.status) && Number(res.refundDue) <= 0 && res.refunds?.length > 0) actions = <Link to={`/reservations/${res.reservationId}#refunds`} className="inline-flex min-h-11 items-center rounded-lg border border-border px-3 text-xs font-semibold text-primary-700">Refund history</Link>;
+
                   // ✅ NEW: Calculated on-demand from the single source of truth
                   const totalAmount = parseFloat(res.totalAmount || 0);
                   const amountPaid = parseFloat(res.amountPaid || 0);
                   const balanceDue = Math.max(0, totalAmount - amountPaid);
                   const hasBalance = balanceDue > 0.01;
-                  const refundedAmount = (res.payments || [])
+                  const refundedAmount = (res.refunds || []).filter(refund => !refund.isSimulated).reduce((sum, refund) => sum + Number(refund.amount), 0) + (res.payments || [])
                     .filter((payment) => payment.status === 'Refunded')
                     .reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
-                  const cancelledPaymentAmount = res.refundStatus === 'Pending'
-                    ? parseFloat(res.refundDue || 0)
-                    : res.refundStatus === 'Processed' ? refundedAmount : 0;
 
                   return (
                     <Fragment key={res.reservationId}>
@@ -788,21 +754,11 @@ export default function ReservationsPage() {
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1.5">
                             <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold ${statusClass}`}>{res.status}</span>
+                            <RefundApprovalBadge reservation={res} />
                           </div>
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <p className="text-sm font-bold text-text">{(res.status === 'Cancelled' ? cancelledPaymentAmount : totalAmount).toFixed(2)} GHS</p>
-                          {['Cancelled', 'Expired'].includes(res.status) && res.refundStatus === 'Pending' ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-bold text-warning-700 bg-warning-50 border border-warning-200 px-2 py-0.5 rounded mt-1"><AlertCircle size={12} /> Refund due</span>
-                          ) : ['Cancelled', 'Expired'].includes(res.status) && res.refundStatus === 'Processed' ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-bold text-success-700 bg-success-50 border border-success-200 px-2 py-0.5 rounded mt-1"><Check size={12} /> Refunded</span>
-                          ) : res.status === 'Cancelled' ? (
-                            <span className="inline-block text-xs font-medium text-text-muted bg-secondary-50 px-2 py-0.5 rounded mt-1">No payment collected</span>
-                          ) : hasBalance ? (
-                            <span className="inline-block text-xs font-bold text-danger-600 bg-danger-50 px-2 py-0.5 rounded mt-1">Due: {balanceDue.toFixed(2)} GHS</span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-xs font-bold text-success-600 bg-success-50 px-2 py-0.5 rounded mt-1"><Check size={10} /> Paid</span>
-                          )}
+                          {['Cancelled', 'Expired'].includes(res.status) ? <RefundPaymentSummary returned={refundedAmount} remaining={res.refundDue} requests={res.correctionRequests} simulated={(res.refunds || []).filter(r => r.isSimulated).reduce((sum,r) => sum + Number(r.amount),0)} align="right" /> : <><p className="text-sm font-bold text-text">{totalAmount.toFixed(2)} GHS</p>{hasBalance ? <span className="inline-block text-xs font-bold text-danger-600 bg-danger-50 px-2 py-0.5 rounded mt-1">Due: {balanceDue.toFixed(2)} GHS</span> : <span className="inline-flex items-center gap-1 text-xs font-bold text-success-600 bg-success-50 px-2 py-0.5 rounded mt-1"><Check size={10} /> Paid</span>}</>}
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
@@ -859,6 +815,7 @@ export default function ReservationsPage() {
         createdReservation={createdReservation}
       />
 
+      {occupantDialog && <RoomOccupantDialog key={`${occupantDialog.room.reservationRoomId}-${occupantDialog.mode}`} {...occupantDialog} busy={roomActionMutation.isPending || updateOccupantMutation.isPending} onClose={() => setOccupantDialog(null)} onSubmit={details => occupantDialog.mode === 'checkin' ? roomActionMutation.mutateAsync({ id: occupantDialog.room.reservationRoomId, status: 'CheckedIn', ...details }) : updateOccupantMutation.mutateAsync({ id: occupantDialog.room.reservationRoomId, ...details })} />}
       <ConfirmDialog
         open={!!pendingConfirm}
         title={pendingConfirm?.title}

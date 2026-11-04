@@ -20,6 +20,7 @@ const transaction = { reference, status: 'success', currency: 'GHS', amount: 200
 const body = () => Buffer.from(JSON.stringify({ event: 'charge.success', data: transaction }));
 const signature = (raw: Buffer, key = secret) => createHmac('sha512', key).update(raw).digest('hex');
 const tx = {
+  refund: { count: jest.fn<any>() },
   property: { findUnique: jest.fn<any>() },
   room: { findMany: jest.fn<any>() },
   $queryRaw: jest.fn<any>(),
@@ -32,6 +33,7 @@ const tx = {
 
 beforeEach(() => {
   jest.resetAllMocks();
+  tx.refund.count.mockResolvedValue(0);
   (prisma.property.findUnique as any).mockResolvedValue({ propertyId: 1, propertyCode: 'hotel-test', currency: 'GHS', paystackSecretKey: secret });
   (axios.get as any).mockResolvedValue({ data: { status: true, data: transaction } });
   (prisma.$transaction as any).mockImplementation((callback: any) => callback(tx));
@@ -44,6 +46,15 @@ beforeEach(() => {
 });
 
 describe('guest payment webhook recovery', () => {
+  it('keeps a refunded expired booking released when another late payment arrives', async () => {
+    tx.reservation.findUniqueOrThrow.mockResolvedValue({ reservationId, propertyId: 1, checkInDate: new Date('2030-01-01'), confirmationCode: 'ABC', status: 'Expired', source: 'Website', amountPaid: 0, totalAmount: 200 });
+    tx.refund.count.mockResolvedValue(1);
+    const result = await verifyGuestPayment('hotel-test', reference);
+    expect(result.data.bookingStatus).toBe('Expired');
+    expect(tx.reservationRoom.update).not.toHaveBeenCalled();
+    expect(tx.reservationRoom.updateMany).toHaveBeenCalledWith({ where: { reservationId, status: 'Reserved' }, data: { status: 'Cancelled' } });
+    expect(tx.reservation.update).toHaveBeenCalledWith({ where: { reservationId }, data: { amountPaid: { increment: 200 }, status: 'Expired', refundDue: { increment: 200 }, refundStatus: 'Pending' } });
+  });
   it('restores an expired allocation only when matching inventory is available', async () => {
     const hold = { reservationId, propertyId: 1, checkInDate: new Date('2030-01-01'), confirmationCode: 'ABC', status: 'Expired', source: 'Website', amountPaid: 0, totalAmount: 200 };
     tx.reservation.findUniqueOrThrow.mockResolvedValue(hold);

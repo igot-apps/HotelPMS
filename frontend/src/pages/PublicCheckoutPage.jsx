@@ -113,7 +113,7 @@ export default function PublicCheckoutPage() {
       // 2. Initialize Paystack
       const paystackRes = await api.post(`/public/${propertyCode}/payments/initialize`, {
         reservationId,
-        email: guestData.email || 'guest@stayfolio.com',
+        email: guestData.email || 'guest@hideout24.com',
         amount: totalAmount,
       });
       

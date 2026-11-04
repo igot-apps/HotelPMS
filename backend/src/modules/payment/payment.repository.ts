@@ -321,7 +321,7 @@ export const getPaymentStats = async (propertyId: number) => {
   });
   
   return {
-    totalRevenue: Number(stats._sum.amount) || 0,
+    totalRevenue: Number(stats._sum.amount || 0) - Number((await prisma.refund.aggregate({ where: { propertyId, isSimulated: false }, _sum: { amount: true } }))._sum.amount || 0),
     totalTransactions: stats._count.amount || 0,
     recentPayments
   };

@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Calendar, MapPin, Phone, Mail, Tag, Loader2, ChevronRight, ChevronLeft, ChevronDown,
@@ -34,19 +34,32 @@ const toWhatsAppNumber = (phone) => {
 export default function PublicHotelPage() {
   const { propertyCode } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const roomResultsRef = useRef(null);
 
 // 🌟 Smart Date Initialization (Prevent past dates)
 const today = new Date();
 const tomorrow = new Date(today);
 tomorrow.setDate(tomorrow.getDate() + 1);
-const [checkIn, setCheckIn] = useState(today.toISOString().split('T')[0]); // ✅ Default to today
-const [checkOut, setCheckOut] = useState(tomorrow.toISOString().split('T')[0]); // ✅ Default to tomorrow
+// Discovery, availability, and checkout share the same stay dates in the URL.
+const checkIn = searchParams.get('checkIn') ?? today.toISOString().slice(0, 10);
+const checkOut = searchParams.get('checkOut') ?? tomorrow.toISOString().slice(0, 10);
+const updateStayDate = (field, value) => {
+  setSearchParams(current => {
+    const next = new URLSearchParams(current);
+    next.set('checkIn', field === 'checkIn' ? value : checkIn);
+    next.set('checkOut', field === 'checkOut' ? value : checkOut);
+    return next;
+  }, { replace: true });
+};
+const isStayDate = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '')
+  && Number.isFinite(new Date(`${value}T00:00:00Z`).getTime())
+  && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
 const [currentPage, setCurrentPage] = useState(1);
 const [activePhoto, setActivePhoto] = useState(0);
-const hasInvalidDates = !checkIn || !checkOut || checkOut <= checkIn;
-const earliestDeparture = checkIn ? new Date(new Date(`${checkIn}T00:00:00Z`).getTime() + 86400000).toISOString().slice(0, 10) : tomorrow.toISOString().slice(0, 10);
-const formatStayDate = value => new Date(`${value}T00:00:00Z`).toLocaleDateString('en-GH', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+const hasInvalidDates = !isStayDate(checkIn) || !isStayDate(checkOut) || checkOut <= checkIn;
+const earliestDeparture = isStayDate(checkIn) ? new Date(new Date(`${checkIn}T00:00:00Z`).getTime() + 86400000).toISOString().slice(0, 10) : tomorrow.toISOString().slice(0, 10);
+const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z`).toLocaleDateString('en-GH', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : 'Choose date';
 
   // Reset to page 1 whenever dates change
   useEffect(() => {
@@ -193,7 +206,7 @@ const formatStayDate = value => new Date(`${value}T00:00:00Z`).toLocaleDateStrin
               id="hotel-check-in"
               type="date" 
               value={checkIn} 
-              onChange={(e) => setCheckIn(e.target.value)} 
+              onChange={(e) => updateStayDate('checkIn', e.target.value)}
               min={minDate}
               required 
               className="responsive-date-input px-4 py-3 bg-background border border-border rounded-xl text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
@@ -207,7 +220,7 @@ const formatStayDate = value => new Date(`${value}T00:00:00Z`).toLocaleDateStrin
               id="hotel-check-out"
               type="date" 
               value={checkOut} 
-              onChange={(e) => setCheckOut(e.target.value)} 
+              onChange={(e) => updateStayDate('checkOut', e.target.value)}
               min={earliestDeparture}
               aria-invalid={hasInvalidDates}
               aria-describedby={hasInvalidDates ? 'hotel-date-error' : undefined}

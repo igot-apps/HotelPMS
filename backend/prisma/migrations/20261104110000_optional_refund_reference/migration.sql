@@ -1,0 +1,1 @@
+ALTER TABLE "refunds" ALTER COLUMN "reference" DROP NOT NULL;

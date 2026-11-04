@@ -119,7 +119,7 @@ const currentPropertyName = user?.propertyName || 'All Properties';
         <>
           {/* 🌟 KPI CARDS */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            <KpiCard icon={DollarSign} label="Total Revenue" value={`${summary.currentRevenue?.toFixed(2) || 0} GHS`} growth={summary.revenueGrowth} color="primary" />
+            <KpiCard icon={DollarSign} label="Net collections after refunds" value={`${summary.currentRevenue?.toFixed(2) || 0} GHS`} growth={summary.revenueGrowth} color="primary" />
             <KpiCard icon={Activity} label="Transactions" value={summary.totalTransactions || 0} color="secondary" />
             <KpiCard icon={Percent} label="Occupancy Rate" value={`${summary.occupancyRate || 0}%`} subtext={`${summary.actualOccupiedNights || 0} / ${summary.totalAvailableNights || 0} nights`} color="success" />
             <KpiCard icon={BedDouble} label="ADR" value={`${summary.adr?.toFixed(2) || 0} GHS`} subtext="Avg. Daily Rate" color="warning" />

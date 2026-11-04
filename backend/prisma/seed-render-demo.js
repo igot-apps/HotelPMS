@@ -42,7 +42,7 @@ async function main() {
           propertyCode, propertyName, businessName: propertyName, propertyType: 'Hotel',
           area, city, region, country: 'Ghana', currency: 'GHS', timezone: 'Africa/Accra', totalRooms: 3,
           address, latitude, longitude, ghanaPostAddress,
-          publicDescription: 'Demo hotel for testing Stayfolio. Photos and prices are sample data. Do not make real payments.',
+          publicDescription: 'Demo hotel for testing HideOut24. Photos and prices are sample data. Do not make real payments.',
           coverImage: galleries[index][0], galleryImages: galleries[index],
           isOnlineBookingEnabled: true, subscriptionStatus: 'Trial',
           trialEndsAt: new Date(Date.now() + 30 * 86400000),
@@ -50,7 +50,7 @@ async function main() {
         for (const [prefix, roleId] of [['manager', role.roleId], ['receptionist', reception.roleId]]) {
           await tx.user.create({ data: {
             propertyId: hotel.propertyId, fullName: `${propertyName} ${prefix}`,
-            username: `${prefix}_hotel${suffix}`, email: `${prefix}.hotel${suffix}@demo.stayfolio.test`,
+            username: `${prefix}_hotel${suffix}`, email: `${prefix}.hotel${suffix}@demo.hideout24.test`,
             passwordHash, roleId,
           } });
         }

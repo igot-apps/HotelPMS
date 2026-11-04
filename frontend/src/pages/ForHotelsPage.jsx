@@ -28,13 +28,13 @@ export default function ForHotelsPage() {
           <div className="relative mx-auto grid max-w-7xl gap-12 px-5 py-20 sm:px-8 md:grid-cols-[1.1fr_0.9fr] md:items-center md:py-28">
             <div>
               <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white">
-                <Building2 size={17} /> STAYFOLIO FOR HOTELS
+                <Building2 size={17} /> HideOut24 FOR HOTELS
               </div>
               <h1 className="max-w-3xl text-4xl font-black leading-tight tracking-tight text-white sm:text-5xl lg:text-6xl">
                 Run your hotel with more clarity.
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-white/80">
-                Stayfolio gives independent hotels one place to manage reservations, rooms, guests, and everyday front desk work.
+                HideOut24 gives independent hotels one place to manage reservations, rooms, guests, and everyday front desk work.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
                 <Link to="/register-your-hotel" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 py-3 font-bold text-primary-800 shadow-lg transition hover:bg-primary-50">
@@ -44,7 +44,7 @@ export default function ForHotelsPage() {
                   Hotel staff sign in
                 </Link>
               </div>
-              <p className="mt-4 text-sm text-white/65">Already using Stayfolio? Sign in to your hotel workspace.</p>
+              <p className="mt-4 text-sm text-white/65">Already using HideOut24? Sign in to your hotel workspace.</p>
             </div>
 
             <div className="rounded-3xl border border-white/15 bg-white/10 p-5 shadow-2xl backdrop-blur-sm sm:p-7">

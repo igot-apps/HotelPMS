@@ -1,0 +1,36 @@
+import useRefundSimulation from '../../hooks/useRefundSimulation';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import api from '../../lib/axios';
+import toast from 'react-hot-toast';
+import { useAuthStore } from '../../store/authStore';
+import ReasonSelect from './ReasonSelect';
+import { RequestCard, CorrectionImpact } from './CorrectionRequests';
+import { invalidateCorrections } from '../../lib/correction-actions';
+export default function RefundPanel({ reservation, embedded = false }) {
+  const user = useAuthStore(state => state.user);
+  const client = useQueryClient();
+  const simulation = useRefundSimulation();
+  const [mode, setMode] = useState('Manual');
+  const section = useRef(null);
+  const location = useLocation();
+  const [paymentId, setPaymentId] = useState(''), [amount, setAmount] = useState(''), [reason, setReason] = useState(''), [preview, setPreview] = useState(null);
+  const id = reservation.reservationId;
+  const query = useQuery({ queryKey: ['refunds', id], queryFn: async () => (await api.get(`/reservations/${id}/refunds`)).data.data, refetchInterval: 30000 });
+  useEffect(() => { if (!embedded && location.hash === '#refunds') section.current?.scrollIntoView({ block: 'start' }); }, [location.key, location.hash, embedded]);
+  const mutation = useMutation({ mutationFn: async apply => (await api.post(`/reservations/${id}/refund-requests`, { paymentId: Number(paymentId), amount: Number(amount), reason, mode, preview: !apply, expectedVersion: apply ? preview?.version : undefined })).data.data, onSuccess: (result, apply) => { if (!apply) { setPreview(result); return; } setPreview(null); setAmount(''); setReason(''); invalidateCorrections(client); toast.success('Refund request sent for manager approval.'); }, onError: e => { setPreview(null); toast.error(e.response?.data?.message || 'Could not request the refund.'); } });
+  const change = setter => event => { setPreview(null); setter(event.target.value); };
+  const field = 'mt-1 min-h-11 w-full min-w-0 rounded-lg border border-border bg-background p-2 text-sm text-text';
+  const data = query.data;
+  const available = data?.payments.find(payment => payment.paymentId === Number(paymentId))?.available || 0;
+  return <section ref={section} id={embedded ? undefined : "refunds"} className={embedded ? "min-w-0 space-y-4" : "scroll-mt-4 space-y-4 rounded-xl border border-border bg-surface p-4 sm:p-6"}>{!embedded && <h3 className="text-lg font-bold text-text">Refunds</h3>}
+    {query.isLoading && <p className="text-sm text-text-muted">Loading refund balance…</p>}
+    {query.isError && <p role="alert" className="text-sm text-danger-700">{query.error.response?.data?.message || 'Could not load refunds.'} <button onClick={() => query.refetch()} className="min-h-11 underline">Try again</button></p>}
+    {data && <><div className="grid gap-3 sm:grid-cols-2"><p className="rounded-lg border border-border p-3 text-sm text-text-muted">Available to request<strong className="mt-1 block text-lg text-text">GHS {data.refundable.toFixed(2)}</strong></p><p className="rounded-lg border border-border p-3 text-sm text-text-muted">Refunds completed<strong className="mt-1 block text-lg text-text">GHS {data.returnedTotal.toFixed(2)}</strong>{data.simulatedReturnedTotal > 0 && <span className="mt-1 block text-xs text-primary-700">Includes GHS {data.simulatedReturnedTotal.toFixed(2)} sent in simulation</span>}</p></div>
+      {data.refundable > 0 ? <form onSubmit={event => { event.preventDefault(); mutation.mutate(Boolean(preview)); }} className="space-y-3"><h4 className="font-semibold text-text">Request a refund</h4><fieldset disabled={mutation.isPending} className="min-w-0 space-y-3"><label className="block text-sm text-text">Refund method<select value={mode} onChange={e => { setMode(e.target.value); setPreview(null); }} className={field}><option value="Manual">Manual · record money returned after approval</option><option value="SimulatedMoMo" disabled={!simulation.data?.enabled || !data.simulationRecipientPhone}>MoMo · simulation only</option></select></label>{mode === 'SimulatedMoMo' && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">TEST refund to {data.simulationRecipientPhone}. Manager approval runs the simulation. No real money is sent.</p>}{simulation.data?.enabled && !data.simulationRecipientPhone && <p className="text-sm text-text-muted">A saved Ghana mobile number is required for MoMo simulation. Update the booking contact first.</p>}<label className="block text-sm text-text">Original payment<select required value={paymentId} onChange={change(setPaymentId)} className={field}><option value="">Choose payment</option>{data.payments.filter(p => p.available > 0).map(p => <option key={p.paymentId} value={p.paymentId}>#{p.paymentId} · {p.method} · up to GHS {p.available.toFixed(2)}</option>)}</select></label><label className="block text-sm text-text">Refund amount (GHS)<input required type="number" min="0.01" step="0.01" max={available || undefined} value={amount} onChange={change(setAmount)} className={field} /></label><ReasonSelect action="refund" value={reason} onChange={value => { setPreview(null); setReason(value); }} className={field} disabled={mutation.isPending} />{preview && <CorrectionImpact preview={preview} />}<div className="flex flex-wrap gap-2"><button className="min-h-11 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white">{mutation.isPending ? 'Checking…' : preview ? 'Send refund for approval' : 'Preview refund'}</button>{preview && <button type="button" onClick={() => setPreview(null)} className="min-h-11 rounded-lg border border-border px-4 text-sm text-text">Back to edit</button>}</div></fieldset></form> : <p className="text-sm text-text-muted">{data.totalRefundable > 0 ? 'The available refund balance is already covered by pending or approved requests.' : 'No refundable balance. For an active stay, correct its charges first if a refund is due.'}</p>}
+      {data.requests.length > 0 && <div className="space-y-3"><h4 className="font-semibold text-text">Refund requests</h4>{data.requests.map(request => <RequestCard key={`${request.requestId}-${request.status}`} request={{ ...request, reservation: { confirmationCode: reservation.confirmationCode } }} manager={user?.role === 'Manager'} />)}</div>}
+      {data.refunds.length > 0 && <div className="space-y-3"><h4 className="font-semibold text-text">Refund history</h4>{data.refunds.map(refund => <div key={refund.refundId} className="space-y-1 rounded-lg border border-border p-3 text-sm text-text"><p className="font-bold">GHS {Number(refund.amount).toFixed(2)} · {refund.isSimulated ? 'Sent (simulation)' : 'Refund completed'}</p><p>Original payment #{refund.paymentId} · {refund.method}</p><p className="break-all">Reference: {refund.reference || 'Not provided'}</p><p className="text-text-muted">{refund.isSimulated ? 'Simulated at ' : 'Returned '}{new Date(refund.returnedAt).toLocaleString()} · Recorded by {refund.returnedByName}</p></div>)}</div>}
+    </>}
+  </section>;
+}

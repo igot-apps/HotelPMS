@@ -82,8 +82,10 @@ export const getFinancialSummary = async (
   const adr = actualOccupiedNights > 0 ? totalRoomRevenue / actualOccupiedNights : 0;
   const revpar = totalAvailableNights > 0 ? totalRoomRevenue / totalAvailableNights : 0;
 
-  const currentRevenue = currentPeriod._sum.amount ? Number(currentPeriod._sum.amount) : 0;
-  const prevRevenue = previousPeriod._sum.amount ? Number(previousPeriod._sum.amount) : 0;
+  const returned = await prisma.refund.aggregate({ where: { propertyId, isSimulated: false, returnedAt: { gte: startDate, lte: endDate } }, _sum: { amount: true } });
+  const previousReturned = await prisma.refund.aggregate({ where: { propertyId, isSimulated: false, returnedAt: { gte: prevStartDate, lte: prevEndDate } }, _sum: { amount: true } });
+  const currentRevenue = Number(currentPeriod._sum.amount || 0) - Number(returned._sum.amount || 0);
+  const prevRevenue = Number(previousPeriod._sum.amount || 0) - Number(previousReturned._sum.amount || 0);
   const revenueGrowth = prevRevenue > 0 ? ((currentRevenue - prevRevenue) / prevRevenue) * 100 : (currentRevenue > 0 ? 100 : 0);
 
   return {
@@ -141,6 +143,11 @@ export const getRevenueTimeSeries = async (
   }
 
   // Format for frontend charting
+  const refunds = await prisma.refund.findMany({ where: { propertyId, isSimulated: false, returnedAt: { gte: startDate, lte: endDate } }, select: { returnedAt: true, amount: true } });
+  for (const refund of refunds) {
+    const day = refund.returnedAt.toISOString().split('T')[0];
+    if (grouped[day] !== undefined) grouped[day] -= Number(refund.amount);
+  }
   return Object.entries(grouped).map(([date, total]) => ({
     date,
     total: parseFloat(total.toFixed(2)),

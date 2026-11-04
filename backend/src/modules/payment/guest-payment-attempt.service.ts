@@ -7,6 +7,10 @@ import { paymentConfiguration, verifyGuestPayment } from './guest-payment.servic
 
 const failure = (message: string, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 const activeStatuses = ['Initializing', 'Pending', 'Unknown'];
+const recoveryDelayMs = 30000;
+function providerReferenceMissing(error: any) {
+  return [400, 404].includes(error.response?.status) && /^transaction (reference )?not found\.?$/i.test(String(error.response?.data?.message || '').trim());
+}
 async function ownedBooking(propertyCode: string, reservationId: string, guestId: number) {
   const booking = await prisma.reservation.findFirst({ where: { reservationId, platformGuestId: guestId, property: { propertyCode } } });
   if (!booking) throw failure('Booking not found.', 404);
@@ -25,18 +29,20 @@ export async function checkGuestPaymentStatus(propertyCode: string, reservationI
       if (result.status === 'failed' || result.status === 'reversed') {
         await prisma.guestPaymentAttempt.updateMany({ where: { reference: attempt.reference, status: { not: 'Completed' } }, data: { status: 'Failed' } });
       }
-    } catch { uncertain = true; }
+    } catch (error) { uncertain = true; if (providerReferenceMissing(error)) providerStatus = 'not_found'; }
     booking = await ownedBooking(propertyCode, reservationId, guestId);
   }
   const amountPaid = Number(booking.amountPaid || 0);
   const balanceDue = Math.max(0, Number(booking.totalAmount || 0) - amountPaid);
   const released = ['Cancelled', 'Expired'].includes(booking.status);
+  const retryable = attempt && ['Initializing', 'Unknown'].includes(attempt.status) && !attempt.checkoutUrl && Date.now() - attempt.updatedAt.getTime() >= recoveryDelayMs && providerStatus === 'not_found';
   const status = released ? 'released' : balanceDue === 0 && amountPaid > 0 ? 'paid'
-    : uncertain ? 'unknown' : attempt && !['failed', 'reversed', 'success'].includes(providerStatus) ? 'pending' : 'unpaid';
+    : retryable ? 'retryable' : uncertain ? 'unknown' : attempt && !['failed', 'reversed', 'success'].includes(providerStatus) ? 'pending' : 'unpaid';
   return { status, reservationId, bookingStatus: booking.status, confirmationCode: booking.confirmationCode, amountPaid, balanceDue,
     checkedReference: attempt?.reference, providerStatus,
     refundDue: Number(booking.refundDue), requiresRefundReview: booking.refundStatus === 'Pending',
-    message: status === 'unknown' ? 'Payment status is not yet confirmed. Check again before paying; do not start another booking if you were charged.'
+    message: status === 'retryable' ? 'The payment checkout did not start. You can try again; we will reuse the same payment reference.'
+      : status === 'unknown' ? 'Payment status is not yet confirmed. Check again before paying; do not start another booking if you were charged.'
       : status === 'released' && amountPaid > 0 ? 'Payment recorded. This booking was released and requires hotel refund review.'
       : status === 'paid' ? 'Payment received. No further payment is due.'
       : status === 'pending' ? 'Payment is still pending. If you were charged, wait and check again before paying.'
@@ -59,7 +65,11 @@ export async function initializeGuestPayment(propertyCode: string, reservationId
     const existing = await tx.guestPaymentAttempt.findFirst({ where: { reservationId, status: { in: activeStatuses } }, orderBy: { attemptId: 'desc' } });
     if (existing) {
       const changedBalance = Number(existing.amount) !== amount;
-      if (changedBalance && checked.checkedReference === existing.reference && checked.providerStatus === 'abandoned') {
+      if (checked.status === 'retryable' && checked.checkedReference === existing.reference && ['Initializing', 'Unknown'].includes(existing.status) && !existing.checkoutUrl && Date.now() - existing.updatedAt.getTime() >= recoveryDelayMs) {
+        // Reuse the reference: never create a second charge opportunity after an uncertain initialize.
+        const attempt = await tx.guestPaymentAttempt.update({ where: { attemptId: existing.attemptId }, data: { status: 'Initializing', amount, currency: property.currency } });
+        return { status: 'new' as const, attempt };
+      } else if (changedBalance && checked.checkedReference === existing.reference && checked.providerStatus === 'abandoned') {
         // Keep the old reference for late-settlement reconciliation; never redirect to its stale amount.
         await tx.guestPaymentAttempt.update({ where: { attemptId: existing.attemptId }, data: { status: 'Superseded' } });
       } else {
@@ -79,7 +89,7 @@ export async function initializeGuestPayment(propertyCode: string, reservationId
   const { attempt } = prepared;
   try {
     const response = await axios.post('https://api.paystack.co/transaction/initialize', {
-      email: guest.email || 'guest@stayfolio.com', amount: Math.round(Number(attempt.amount) * 100), reference: attempt.reference,
+      email: guest.email || 'guest@hideout24.com', amount: Math.round(Number(attempt.amount) * 100), reference: attempt.reference,
       currency: attempt.currency, channels: ['mobile_money', 'card'],
       callback_url: `${getFrontendBaseUrl()}/public/${propertyCode}/booking-success`, metadata: { propertyCode, reservationId },
     }, { headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' }, timeout: 15000 });

@@ -50,8 +50,8 @@ export const getReservationsByDateRange = (fromDate, toDate, propertyId) => {
    export const extendReservationRoom = (reservationRoomId, newCheckOutDate) => 
   api.patch(`/reservations/rooms/${reservationRoomId}/extend`, { newCheckOutDate });
 
-   export const updateOccupantName = (reservationRoomId, occupantName, occupantPhone) =>
-  api.patch(`/reservations/rooms/${reservationRoomId}/occupant`, { occupantName, occupantPhone });
+   export const updateOccupantName = (reservationRoomId, occupantName, occupantPhone, duplicateOccupantConfirmation) =>
+  api.patch(`/reservations/rooms/${reservationRoomId}/occupant`, { occupantName, occupantPhone, duplicateOccupantConfirmation });
 
 export const updateGuestPresence = (reservationRoomId, action, expectedReturnAt) =>
   api.patch(`/reservations/rooms/${reservationRoomId}/presence`, { action, expectedReturnAt });

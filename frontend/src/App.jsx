@@ -22,6 +22,8 @@ import PublicReservationsPage from './pages/PublicReservationsPage';
 
 // Protected Pages (Staff PMS)
 import DashboardPage from './pages/DashboardPage';
+import ApprovalsPage from './pages/ApprovalsPage';
+import RefundsPage from './pages/RefundsPage';
 import RoomsPage from './pages/RoomsPage';
 import GuestsPage from './pages/GuestsPage';
 import ReservationsPage from './pages/ReservationsPage';
@@ -100,6 +102,8 @@ function App() {
         {/* ========================================== */}
         <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/approvals" element={<ApprovalsPage />} />
+          <Route path="/refunds" element={<RefundsPage />} />
           <Route path="/rooms" element={<RoomsPage />} />
           <Route path="/guests" element={<GuestsPage />} />
           <Route path="/reservations" element={<ReservationsPage />} />

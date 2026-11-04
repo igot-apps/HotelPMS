@@ -77,7 +77,7 @@ export default function PublicAuthPage() {
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link to="/discover" className="flex items-center gap-2 group">
             <Building2 className="text-primary-600 group-hover:text-primary-700 transition" size={24} />
-            <span className="text-lg font-black text-text tracking-tight">Stayfolio</span>
+            <span className="text-lg font-black text-text tracking-tight">HideOut24</span>
           </Link>
           <BackButton fallback="/discover" label="Back" confirmWhen={Object.values(formData).some(Boolean)} disabled={authMutation.isPending} />
         </div>
