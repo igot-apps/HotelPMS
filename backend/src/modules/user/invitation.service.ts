@@ -19,27 +19,32 @@ export async function inviteStaff(propertyId: number, data: any) {
   if (!data.fullName?.trim() || !data.username?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email || '')) {
     throw new Error('Name, username, and a valid email are required.');
   }
-  // Invitations have a fixed role; never depend on a client-side roles request or database IDs.
-  const role = await prisma.role.findUnique({ where: { roleName: 'Receptionist' } })
+  // Allow only the two staff roles shown in Staff Management.
+  const roleName = data.role === 'Housekeeper' ? 'Housekeeper' : data.role === undefined || data.role === 'Receptionist' ? 'Receptionist' : null;
+  if (!roleName) throw new Error('Choose Receptionist or Housekeeper.');
+  if (roleName === 'Housekeeper') {
+    const property = await prisma.property.findUnique({ where: { propertyId }, select: { housekeepingEnabled: true } });
+    if (!property?.housekeepingEnabled) throw new Error('Turn on Housekeeping before inviting a housekeeper.');
+  }
+  const role = await prisma.role.findUnique({ where: { roleName } })
     || await prisma.$transaction(async tx => {
-      // Bootstrap only the missing standard role, without reseeding hotels or touching existing roles.
-      const receptionist = await tx.role.upsert({ where: { roleName: 'Receptionist' }, update: {},
-        create: { roleName: 'Receptionist', description: 'Front desk operations', isSystem: true },
+      const staffRole = await tx.role.upsert({ where: { roleName }, update: {},
+        create: { roleName, description: roleName === 'Housekeeper' ? 'Room cleaning and readiness' : 'Front desk operations', isSystem: true },
       });
-      const codes = ['CanCreateReservation', 'CanCancelReservation', 'CanCheckInGuest', 'CanCheckOutGuest', 'CanViewRooms', 'CanUpdateRoomStatus', 'CanProcessPayments'];
+      const codes = roleName === 'Housekeeper' ? ['CanManageHousekeeping'] : ['CanCreateReservation', 'CanCancelReservation', 'CanCheckInGuest', 'CanCheckOutGuest', 'CanViewRooms', 'CanUpdateRoomStatus', 'CanProcessPayments'];
       const permissions = [];
       for (const code of codes) {
         permissions.push(await tx.permission.upsert({ where: { code }, update: {}, create: { code, name: code.replace(/^Can/, '').replace(/([a-z])([A-Z])/g, '$1 $2'), category: 'Front desk' } }));
       }
-      await tx.rolePermission.createMany({ data: permissions.map(permission => ({ roleId: receptionist.roleId, permissionId: permission.permissionId })), skipDuplicates: true });
-      return receptionist;
+      await tx.rolePermission.createMany({ data: permissions.map(permission => ({ roleId: staffRole.roleId, permissionId: permission.permissionId })), skipDuplicates: true });
+      return staffRole;
     });
   const { token, ...fields } = tokenData();
   const email = data.email.trim().toLowerCase();
   const user = await prisma.user.create({ data: {
     propertyId, fullName: data.fullName.trim(), username: data.username.trim(), email,
     roleId: role.roleId, passwordHash: await hashPassword(randomBytes(32).toString('hex')),
-    correctionPermissions: [...DEFAULT_RECEPTIONIST_CORRECTIONS],
+    correctionPermissions: roleName === 'Receptionist' ? [...DEFAULT_RECEPTIONIST_CORRECTIONS] : [],
     isActive: false, invitationPending: true, ...fields,
   }, select: { userId: true } });
   let delivery;

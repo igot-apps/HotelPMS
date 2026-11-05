@@ -38,3 +38,25 @@ export async function deliverStaffInvitation(email: string, token: string, invit
   console.info('Staff invitation accepted by Resend', { emailId: data.id });
   return { mode: 'resend', to: email, emailId: data.id };
 }
+
+export async function deliverStaffPasswordReset(email: string, token: string): Promise<void> {
+  const resetUrl = `${getFrontendBaseUrl()}/staff/reset-password#${token}`;
+  if (process.env.STAFF_EMAIL_MODE === 'simulation') {
+    console.info('Staff password reset simulation requested', { to: email });
+    return;
+  }
+  const key = process.env.RESEND_API_KEY?.trim();
+  const from = process.env.RESEND_FROM_EMAIL?.trim();
+  if (!key || !from || (process.env.NODE_ENV === 'production' && /@resend\.dev\b/i.test(from))) {
+    throw new Error('Staff email delivery is not configured.');
+  }
+  const { data, error } = await new Resend(key).emails.send({
+    from,
+    to: [email],
+    subject: 'Reset your hotel staff password',
+    text: `To reset your hotel staff password, open this link:\n\n${resetUrl}\n\nThe link expires in 30 minutes and can be used once. If you did not request this, ignore this email.`,
+    html: `<p>To reset your hotel staff password, <a href="${resetUrl}">open this secure link</a>.</p><p>The link expires in 30 minutes and can be used once. If you did not request this, ignore this email.</p>`,
+  });
+  if (error || !data?.id) throw new Error('Password reset email was not accepted.');
+  console.info('Staff password reset accepted by Resend', { emailId: data.id });
+}

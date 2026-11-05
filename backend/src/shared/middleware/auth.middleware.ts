@@ -34,13 +34,21 @@ export const authenticate = async (
   }
 
   try {
-    const account = await prisma.user.findUnique({ where: { userId: decoded.userId }, select: { isActive: true, propertyId: true } });
+    const account = await prisma.user.findUnique({ where: { userId: decoded.userId }, select: { isActive: true, propertyId: true, sessionVersion: true, role: { select: { roleName: true } } } });
     if (!account?.isActive) {
       res.status(401).json({ success: false, code: 'STAFF_ACCOUNT_DISABLED', message: 'Your staff account has been deactivated or is no longer available. Contact your manager.' });
       return;
     }
     if ((account.propertyId || 0) !== (decoded.propertyId || 0)) {
       res.status(401).json({ success: false, code: 'STAFF_ACCESS_CHANGED', message: 'Your account access has changed. Please sign in again.' });
+      return;
+    }
+    if ((account.sessionVersion || null) !== (decoded.sessionVersion || null)) {
+      res.status(401).json({ success: false, code: 'STAFF_SESSION_EXPIRED', message: 'Your password changed. Please sign in again.' });
+      return;
+    }
+    if (account.role?.roleName === 'Housekeeper' && !req.originalUrl.startsWith('/api/housekeeping/') && !req.originalUrl.startsWith('/api/auth/')) {
+      res.status(403).json({ success: false, message: 'This account can access Housekeeping only.' });
       return;
     }
   } catch {

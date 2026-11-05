@@ -12,6 +12,7 @@ export interface JwtPayload {
   propertyId: number; // ✅ CHANGED from tenantId
   roleId: number;
   username: string;
+  sessionVersion?: string | null;
   iat?: number;
   exp?: number;
 }

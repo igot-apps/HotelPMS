@@ -25,6 +25,7 @@ export const findUserByUsernameOrEmail = async (identifier: string) => {
       select: {
         propertyId: true,
         propertyName: true,
+        housekeepingEnabled: true,
         subscriptionPlan: true,
         subscriptionStatus: true,
         trialEndsAt: true,

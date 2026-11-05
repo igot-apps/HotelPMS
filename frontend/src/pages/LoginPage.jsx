@@ -27,7 +27,7 @@ export default function LoginPage() {
       login(user, { accessToken, refreshToken }, user.permissions); 
       
       toast.success(`Welcome back, ${user.fullName}!`);
-      navigate('/dashboard');
+      navigate(user.role === 'Housekeeper' ? '/housekeeping' : '/dashboard');
     },
     onError: (error) => {
       toast.error(error.response?.data?.message || 'Invalid username or password.');
@@ -144,9 +144,9 @@ export default function LoginPage() {
                 <label htmlFor="password" className="block text-sm font-semibold text-text">
                   Password
                 </label>
-                <a href="#" className="text-xs font-semibold text-primary-600 hover:text-primary-700 transition">
+                <Link to="/staff/reset-password" className="text-xs font-semibold text-primary-600 hover:text-primary-700 transition">
                   Forgot password?
-                </a>
+                </Link>
               </div>
               <div className="relative">
                 <input

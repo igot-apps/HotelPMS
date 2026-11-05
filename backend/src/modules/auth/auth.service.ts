@@ -72,6 +72,7 @@ export interface LoginResponse {
     isPlatformAdmin: boolean;
     propertyId: number | null; 
     propertyName: string | null; 
+    housekeepingEnabled?: boolean;
     permissions: string[];
     // 🌟 NEW: Subscription & Trial fields added to the interface
     subscriptionPlan: string;
@@ -117,6 +118,7 @@ export const loginUser = async (
     propertyId: user.propertyId || 0, 
     roleId: user.roleId,
     username: user.username,
+    sessionVersion: user.sessionVersion,
   };
 
   const accessToken = generateAccessToken(payload);
@@ -144,6 +146,7 @@ export const loginUser = async (
       isPlatformAdmin: user.isPlatformAdmin,
       propertyId: user.propertyId || null,
       propertyName: (user as any).property?.propertyName || null, // ✅ Safe navigation
+      housekeepingEnabled: Boolean((user as any).property?.housekeepingEnabled),
       subscriptionPlan: user.property?.subscriptionPlan || 'Platform',
       subscriptionStatus: user.property?.subscriptionStatus || 'Active',
       trialEndsAt: user.property?.trialEndsAt || null,
@@ -165,6 +168,9 @@ export const refreshAccessToken = async (refreshToken: string) => {
   if (!user || !user.isActive) {
     return { success: false, message: 'User not found or inactive' };
   }
+  if ((user.sessionVersion || null) !== (decoded.sessionVersion || null)) {
+    return { success: false, message: 'Your password changed. Please sign in again.' };
+  }
 
   // 🚨 JWT PAYLOAD: Fallback to 0 if null
   const payload = {
@@ -172,6 +178,7 @@ export const refreshAccessToken = async (refreshToken: string) => {
     propertyId: user.propertyId || 0,
     roleId: user.roleId,
     username: user.username,
+    sessionVersion: user.sessionVersion,
   };
 
   const accessToken = generateAccessToken(payload);
@@ -199,6 +206,7 @@ export const getUserById = async (userId: number) => {
     isPlatformAdmin: user.isPlatformAdmin,
     propertyId: user.propertyId || null,
     propertyName: (user as any).property?.propertyName || null, // ✅ Safe navigation
+    housekeepingEnabled: Boolean((user as any).property?.housekeepingEnabled),
     isActive: user.isActive,
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,

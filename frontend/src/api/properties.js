@@ -12,6 +12,8 @@ export const updateProperty = (id, data) => {
   return api.put(`/properties/${id}`, data);
 };
 
+export const setHousekeepingEnabled = (enabled) => api.patch('/properties/housekeeping', { enabled });
+
 export const deleteProperty = (id) => {
   return api.delete(`/properties/${id}`);
 };

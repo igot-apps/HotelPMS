@@ -23,8 +23,8 @@ export default function RoomCard({ room, onToggleHousekeeping, onToggleOperation
   let statusIcon = null;
 
   if (opStatus === 'AVAILABLE') {
-    borderColor = 'border-l-4 border-l-success-500 border-t border-r border-b border-border';
-    statusBadgeClass = 'bg-success-50 text-success-700 ring-1 ring-success-600/20';
+    borderColor = hkStatus === 'DIRTY' ? 'border-l-4 border-l-warning-500 border-t border-r border-b border-border' : 'border-l-4 border-l-success-500 border-t border-r border-b border-border';
+    statusBadgeClass = hkStatus === 'DIRTY' ? 'bg-warning-50 text-warning-800' : 'bg-success-50 text-success-700 ring-1 ring-success-600/20';
   } else if (opStatus === 'OCCUPIED') {
     borderColor = 'border-l-4 border-l-primary-500 border-t border-r border-b border-border';
     statusBadgeClass = 'bg-primary-50 text-primary-700 ring-1 ring-primary-600/20';
@@ -49,7 +49,7 @@ export default function RoomCard({ room, onToggleHousekeeping, onToggleOperation
     hkLabel = 'Out of Service';
   }
 
-  const hkBtnText = hkStatus === 'CLEAN' ? 'Mark Dirty' : 'Mark Clean';
+  const hkBtnText = ['CLEAN', 'INSPECTED'].includes(hkStatus) ? 'Mark needs cleaning' : 'Mark ready';
   const opBtnText = opStatus === 'MAINTENANCE' ? 'Set Available' : 'Set Maintenance';
 
   return (
@@ -67,7 +67,7 @@ export default function RoomCard({ room, onToggleHousekeeping, onToggleOperation
             </p>
           </div>
           <span className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 ${statusBadgeClass}`}>
-            {statusIcon} {opStatus}
+            {statusIcon} {opStatus === 'AVAILABLE' ? (hkStatus === 'DIRTY' ? 'Not ready' : 'Ready') : opStatus}
           </span>
         </div>
 

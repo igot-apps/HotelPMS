@@ -7,6 +7,7 @@ import GuestProtectedRoute from './components/auth/GuestProtectedRoute';
 // Property Registration and PMS Public Pages
 import LoginPage from './pages/LoginPage';
 import StaffSetupPage from './pages/StaffSetupPage';
+import StaffPasswordResetPage from './pages/StaffPasswordResetPage';
 import HotelRegistrationWizard from './pages/HotelRegistrationWizard';
 import DiscoverPage from './pages/DiscoverPage'; // 🌟 NEW: Main Public Homepage
 import ForHotelsPage from './pages/ForHotelsPage';
@@ -25,6 +26,7 @@ import DashboardPage from './pages/DashboardPage';
 import ApprovalsPage from './pages/ApprovalsPage';
 import RefundsPage from './pages/RefundsPage';
 import RoomsPage from './pages/RoomsPage';
+import HousekeepingPage from './pages/HousekeepingPage';
 import GuestsPage from './pages/GuestsPage';
 import ReservationsPage from './pages/ReservationsPage';
 import ReportsPage from './pages/ReportsPage';
@@ -83,6 +85,7 @@ function App() {
         <Route path="/" element={<DiscoverPage />} /> {/* 🌟 NEW: Main Public Homepage */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/staff/setup" element={<StaffSetupPage />} />
+        <Route path="/staff/reset-password" element={<StaffPasswordResetPage />} />
         <Route path="/hotel/login" element={<LoginPage />} />
         <Route path="/for-hotels" element={<ForHotelsPage />} />
         <Route path="/superadmin" element={<SuperAdminPage />} />
@@ -105,6 +108,7 @@ function App() {
           <Route path="/approvals" element={<ApprovalsPage />} />
           <Route path="/refunds" element={<RefundsPage />} />
           <Route path="/rooms" element={<RoomsPage />} />
+          <Route path="/housekeeping" element={<HousekeepingPage />} />
           <Route path="/guests" element={<GuestsPage />} />
           <Route path="/reservations" element={<ReservationsPage />} />
           <Route path="/reservations/:id" element={<ReservationDetailsPage />} />

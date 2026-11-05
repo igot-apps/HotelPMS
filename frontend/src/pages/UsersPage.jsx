@@ -3,12 +3,13 @@ import ResponsiveTable from '../components/ui/ResponsiveTable';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getUsers, inviteStaff, resendStaffInvitation, updateUser, deactivateUser } from '../api/users';
+import { getProperties, setHousekeepingEnabled } from '../api/properties';
 import { useAuthStore } from '../store/authStore'; // ✅ ADDED: To get the current user's propertyId
 import UserModal from '../components/users/UserModal';
 import CorrectionPermissions from '../components/users/CorrectionPermissions';
 import RequirePermission from '../components/RequirePermission';
 import toast from 'react-hot-toast';
-import { Shield, Plus, Edit2, Trash2, Search, Building2 } from 'lucide-react';
+import { Shield, Plus, Edit2, Trash2, Search, Building2, Sparkles } from 'lucide-react';
 
 export default function UsersPage() {
   const queryClient = useQueryClient();
@@ -26,6 +27,15 @@ export default function UsersPage() {
   });
 
   const users = usersData || [];
+  const { data: propertyData } = useQuery({ queryKey: ['properties'], queryFn: () => getProperties({ limit: 50 }).then(res => res.data.data), enabled: Boolean(user?.propertyId) });
+  const property = propertyData?.find(item => item.propertyId === user?.propertyId);
+  const housekeepingEnabled = property?.housekeepingEnabled ?? user?.housekeepingEnabled ?? false;
+  const housekeepingMutation = useMutation({ mutationFn: setHousekeepingEnabled, onSuccess: (response) => {
+    const enabled = response.data.data.housekeepingEnabled;
+    useAuthStore.setState(state => ({ user: { ...state.user, housekeepingEnabled: enabled } }));
+    queryClient.invalidateQueries({ queryKey: ['properties'] });
+    toast.success(enabled ? 'Housekeeping is on.' : 'Housekeeping is off. Reception can still update rooms.');
+  }, onError: err => toast.error(err.response?.data?.message || 'Could not update Housekeeping.') });
 
   const filteredUsers = users.filter(u =>
     u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -86,18 +96,23 @@ export default function UsersPage() {
         </div>
         <RequirePermission permission="CanManageStaffAndRoles">
           <button onClick={() => { setEditingUser(null); setIsModalOpen(true); }} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm">
-            <Plus size={16} /> Invite Receptionist
+            <Plus size={16} /> Invite staff
           </button>
         </RequirePermission>
       </div>
+
+      <section className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <div><h2 className="flex items-center gap-2 font-bold text-text"><Sparkles size={18} className="text-primary-600" /> Housekeeping</h2><p className="mt-1 text-sm text-text-muted">{housekeepingEnabled ? 'Housekeepers can see room readiness and mark rooms ready. Reception keeps its room controls.' : 'Turn on to invite housekeepers and give them a simple room cleaning view. Reception can still update rooms while this is off.'}</p></div>
+        <label className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-3 text-sm font-semibold text-text"><input type="checkbox" role="switch" aria-label="Enable Housekeeping" checked={housekeepingEnabled} disabled={!property || housekeepingMutation.isPending} onChange={event => housekeepingMutation.mutate(event.target.checked)} className="h-5 w-5 accent-primary-600" />{housekeepingEnabled ? 'On' : 'Off'}</label>
+      </section>
 
       {emailDelivery && (
         <section className={`space-y-3 rounded-xl border p-5 ${emailDelivery.mode === 'failed' ? 'border-danger-200 bg-danger-50' : 'border-primary-200 bg-primary-50'}`}>
           <h2 className="font-bold text-text">{emailDelivery.mode === 'resend' ? 'Invitation submitted for delivery' : emailDelivery.mode === 'failed' ? 'Invitation email could not be sent' : 'Simulated email — no email was sent'}</h2>
           <p className="text-sm text-text-muted">To: {emailDelivery.to}</p>
-          {emailDelivery.mode === 'resend' && <p className="text-sm text-text">Resend accepted the email. The receptionist can use its link to set their password within 24 hours.</p>}
+          {emailDelivery.mode === 'resend' && <p className="text-sm text-text">Resend accepted the email. The staff member can use its link to set their password within 24 hours.</p>}
           {emailDelivery.mode === 'failed' && <p role="alert" className="text-sm text-danger-700">{emailDelivery.message}</p>}
-          {emailDelivery.mode === 'simulation' && <><p className="text-sm text-text">Share this link with the receptionist. It expires in 24 hours and works once.</p><input aria-label="Receptionist setup link" readOnly value={emailDelivery.setupUrl} onFocus={(event) => event.target.select()} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text" /></>}
+          {emailDelivery.mode === 'simulation' && <><p className="text-sm text-text">Share this link with the staff member. It expires in 24 hours and works once.</p><input aria-label="Staff setup link" readOnly value={emailDelivery.setupUrl} onFocus={(event) => event.target.select()} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text" /></>}
           <div className="flex flex-wrap gap-3">
             {emailDelivery.mode === 'simulation' && <button onClick={async () => { try { await navigator.clipboard.writeText(emailDelivery.setupUrl); toast.success('Link copied.'); } catch { toast.error('Select and copy the link above.'); } }} className="rounded-lg bg-primary-600 px-4 py-2 text-sm text-white">Copy setup link</button>}
             <button onClick={() => setEmailDelivery(null)} className="px-4 py-2 text-sm text-text">Dismiss</button>
@@ -154,12 +169,12 @@ export default function UsersPage() {
                         {user.role?.roleName === 'Receptionist' && <button onClick={() => setPermissionUser(user)} className="min-h-11 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-primary-700">Approval requirements</button>}
                         {user.invitationPending && <button disabled={resendMutation.isPending} onClick={() => resendMutation.mutate(user.userId)} className="text-xs font-semibold text-primary-600 disabled:opacity-50">Resend invite</button>}
                         <RequirePermission permission="CanManageStaffAndRoles">
-                          <button disabled={user.role?.roleName !== 'Receptionist'} onClick={() => { setEditingUser(user); setIsModalOpen(true); }} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition disabled:opacity-30" title="Edit User">
+                          <button disabled={!['Receptionist', 'Housekeeper'].includes(user.role?.roleName)} onClick={() => { setEditingUser(user); setIsModalOpen(true); }} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition disabled:opacity-30" title="Edit User">
                             <Edit2 size={16} />
                           </button>
                         </RequirePermission>
                         <RequirePermission permission="CanManageStaffAndRoles">
-                          <button onClick={() => handleDeactivate(user.userId, user.fullName)} className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition" title="Disable account and cancel invitation" disabled={user.role?.roleName !== 'Receptionist' || (!user.isActive && !user.invitationPending)}>
+                          <button onClick={() => handleDeactivate(user.userId, user.fullName)} className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition" title="Disable account and cancel invitation" disabled={!['Receptionist', 'Housekeeper'].includes(user.role?.roleName) || (!user.isActive && !user.invitationPending)}>
                             <Trash2 size={16} />
                           </button>
                         </RequirePermission>
@@ -179,6 +194,7 @@ export default function UsersPage() {
         onSubmit={handleSave} 
         isLoading={mutation.isPending} 
         editingUser={editingUser} 
+        housekeepingEnabled={housekeepingEnabled}
       />
     </div>
   );

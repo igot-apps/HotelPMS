@@ -3,9 +3,9 @@ import { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
 
 
-export default function UserModal({ isOpen, onClose, onSubmit, isLoading, editingUser }) {
+export default function UserModal({ isOpen, onClose, onSubmit, isLoading, editingUser, housekeepingEnabled }) {
   const [formData, setFormData] = useState({
-    fullName: '', username: '', email: '', isActive: false,
+    fullName: '', username: '', email: '', role: 'Receptionist', isActive: false,
   });
 
   useEffect(() => {
@@ -15,10 +15,11 @@ export default function UserModal({ isOpen, onClose, onSubmit, isLoading, editin
           fullName: editingUser.fullName || '',
           username: editingUser.username || '',
           email: editingUser.email || '',
+          role: editingUser.role?.roleName || 'Receptionist',
           isActive: editingUser.isActive,
         });
       } else {
-        setFormData({ fullName: '', username: '', email: '', isActive: false });
+        setFormData({ fullName: '', username: '', email: '', role: 'Receptionist', isActive: false });
       }
     }
   }, [isOpen, editingUser]);
@@ -39,7 +40,7 @@ export default function UserModal({ isOpen, onClose, onSubmit, isLoading, editin
     <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-surface w-full max-w-lg rounded-2xl shadow-xl border border-border overflow-hidden">
         <div className="p-6 border-b border-border flex justify-between items-center">
-          <h2 className="text-xl font-bold text-text">{editingUser ? 'Edit Staff Member' : 'Invite Receptionist'}</h2>
+          <h2 className="text-xl font-bold text-text">{editingUser ? 'Edit Staff Member' : 'Invite staff member'}</h2>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted"><X size={20} /></button>
         </div>
         
@@ -58,12 +59,13 @@ export default function UserModal({ isOpen, onClose, onSubmit, isLoading, editin
               <input type="email" name="email" required value={formData.email} onChange={handleChange} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
             </div>
 
-            <p className="text-sm text-text-muted">Role: Receptionist. The receptionist sets their own password using an invitation link.</p>
+            {!editingUser && <div className="md:col-span-2"><label htmlFor="staff-role" className="block text-sm font-semibold text-text mb-1.5">Role</label><select id="staff-role" name="role" value={formData.role} onChange={handleChange} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text"><option value="Receptionist">Receptionist — front desk</option>{housekeepingEnabled && <option value="Housekeeper">Housekeeper — room cleaning only</option>}</select></div>}
+            <p className="md:col-span-2 text-sm text-text-muted">The staff member sets their own password using an invitation link.</p>
 
             {editingUser ? <div className="md:col-span-2 flex items-center gap-3 p-3 bg-secondary-50 rounded-lg border border-border">
               <input type="checkbox" name="isActive" id="isActive" disabled={editingUser?.invitationPending || !editingUser} checked={formData.isActive} onChange={handleChange} className="w-4 h-4 rounded border-border text-primary-600 focus:ring-primary-500" />
               <label htmlFor="isActive" className="text-sm font-semibold text-text cursor-pointer">Active Account</label>
-            </div> : <p className="md:col-span-2 rounded-lg border border-border bg-secondary-50 p-3 text-sm text-text-muted">The account becomes active after the receptionist sets their password.</p>}
+            </div> : <p className="md:col-span-2 rounded-lg border border-border bg-secondary-50 p-3 text-sm text-text-muted">The account becomes active after the staff member sets their password.</p>}
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-border">

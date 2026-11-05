@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, Search, BedDouble, Users, CalendarDays, BarChart3,
+  LayoutDashboard, Search, BedDouble, Users, CalendarDays, BarChart3, Sparkles,
   LogOut, Settings, Building2, X, Shield, Crown, ClipboardCheck, Undo2
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
@@ -17,6 +17,7 @@ const operationItems = [
   { to: '/approvals', icon: ClipboardCheck, label: 'Approvals', managerOnly: true },
   { to: '/refunds', icon: Undo2, label: 'Refunds', staffOnly: true },
   { to: '/rooms', icon: BedDouble, label: 'Rooms & Inventory' },
+  { to: '/housekeeping', icon: Sparkles, label: 'Housekeeping', housekeeping: true },
   { to: '/guests', icon: Users, label: 'Guests' },
   { to: '/reports', icon: BarChart3, label: 'Reports', permission: 'CanViewFinancialReports' },
 ];
@@ -57,6 +58,8 @@ export default function Sidebar({ isOpen, onClose }) {
   const renderLinks = (items) => (
     items.map((item) => {
       if (item.managerOnly && user?.role !== 'Manager') return null;
+      if (user?.role === 'Housekeeper' && item.to !== '/housekeeping') return null;
+      if (item.housekeeping && user?.role !== 'Housekeeper' && (!user?.housekeepingEnabled || !user?.permissions?.includes('CanManageHousekeeping'))) return null;
       if (item.staffOnly && !['Manager','Receptionist'].includes(user?.role)) return null;
       const linkElement = (
         <li key={item.to}>

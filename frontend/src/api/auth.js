@@ -20,3 +20,6 @@ export const refreshToken = (refreshToken) => api.post('/auth/refresh-token', { 
 // 4. GET CURRENT USER (Protected)
 // ==========================================
 export const getMe = () => api.get('/auth/me');
+
+export const requestStaffPasswordReset = (email) => api.post('/auth/forgot-password', { email });
+export const resetStaffPassword = (token, password) => api.post('/auth/reset-password', { token, password });

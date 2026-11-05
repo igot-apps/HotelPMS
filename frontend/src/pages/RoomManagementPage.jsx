@@ -279,7 +279,7 @@ function RoomsTab({ rooms, isLoading, onAdd, onEdit, onDelete, onStatusChange, r
                   </td>
                   <td className="px-6 py-4">
                     <span className={`px-2.5 py-1 rounded-md text-xs font-bold ${room.housekeepingStatus === 'Clean' ? 'bg-primary-50 text-primary-700' : 'bg-danger-50 text-danger-700'}`}>
-                      {room.housekeepingStatus}
+                      {room.housekeepingStatus === 'Dirty' ? 'Needs cleaning' : room.housekeepingStatus}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
@@ -444,7 +444,7 @@ function RoomModal({ room, roomTypes, propertyId, onClose, onSave, isLoading }) 
               <label className="block text-sm font-semibold text-text mb-1.5">Housekeeping</label>
               <select name="housekeepingStatus" value={formData.housekeepingStatus} onChange={handleChange} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20">
                 <option value="Clean">Clean</option>
-                <option value="Dirty">Dirty</option>
+                <option value="Dirty">Needs cleaning</option>
               </select>
             </div>
           </div>

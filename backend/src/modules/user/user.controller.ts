@@ -3,7 +3,7 @@ import * as userService from './user.service';
 import { AuthRequest } from '../../shared/middleware/auth.middleware';
 
 const safeUser = (user: any) => {
-  const { passwordHash, invitationTokenHash, ...safe } = user;
+  const { passwordHash, invitationTokenHash, passwordResetTokenHash, passwordResetExpiresAt, sessionVersion, ...safe } = user;
   return safe;
 };
 
@@ -84,8 +84,8 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ success: false, message: 'You do not have access to this user' });
     }
 
-    if (user.userId === req.user?.userId || user.role.roleName !== 'Receptionist') {
-      return res.status(403).json({ success: false, message: 'Only receptionist accounts can be managed here.' });
+    if (user.userId === req.user?.userId || !['Receptionist', 'Housekeeper'].includes(user.role.roleName)) {
+      return res.status(403).json({ success: false, message: 'Only staff accounts can be managed here.' });
     }
     const updatedUser = await userService.updateUser(userId, {
       fullName: req.body.fullName, username: req.body.username, email: req.body.email,
@@ -107,8 +107,8 @@ export const deactivateUser = async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ success: false, message: 'You do not have access to this user' });
     }
 
-    if (user.userId === req.user?.userId || user.role.roleName !== 'Receptionist') {
-      return res.status(403).json({ success: false, message: 'Only receptionist accounts can be managed here.' });
+    if (user.userId === req.user?.userId || !['Receptionist', 'Housekeeper'].includes(user.role.roleName)) {
+      return res.status(403).json({ success: false, message: 'Only staff accounts can be managed here.' });
     }
     await userService.deactivateUser(userId);
     return res.status(200).json({ success: true, message: 'User deactivated successfully' });

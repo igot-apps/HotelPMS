@@ -29,6 +29,7 @@ export default function RoomsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rooms', propertyId] });
     },
+    onError: (error) => toast.error(error.response?.data?.message || 'Could not update room status.'),
   });
 
   const guestPresenceMutation = useMutation({
@@ -44,7 +45,7 @@ export default function RoomsPage() {
 
   // 3. Handlers
   const handleToggleHousekeeping = (room) => {
-    const newStatus = room.housekeepingStatus?.toUpperCase() === 'CLEAN' ? 'Dirty' : 'Clean';
+    const newStatus = ['CLEAN', 'INSPECTED'].includes(room.housekeepingStatus?.toUpperCase()) ? 'Dirty' : 'Clean';
     statusMutation.mutate({ roomId: room.roomId, payload: { operationalStatus: room.operationalStatus, housekeepingStatus: newStatus } });
   };
 
@@ -73,20 +74,21 @@ export default function RoomsPage() {
   const rooms = roomsData || [];
   const filteredRooms = rooms.filter(room => {
     if (filter === 'all') return true;
+    if (filter === 'ready') return room.operationalStatus === 'Available' && ['Clean', 'Inspected'].includes(room.housekeepingStatus);
     if (filter === 'dirty') return room.housekeepingStatus?.toUpperCase() === 'DIRTY';
     return room.operationalStatus?.toUpperCase() === filter.toUpperCase();
   });
 
   const stats = {
     total: rooms.length,
-    available: rooms.filter(r => r.operationalStatus?.toUpperCase() === 'AVAILABLE').length,
+    ready: rooms.filter(r => r.operationalStatus === 'Available' && ['Clean', 'Inspected'].includes(r.housekeepingStatus)).length,
     occupied: rooms.filter(r => r.operationalStatus?.toUpperCase() === 'OCCUPIED').length,
     dirty: rooms.filter(r => r.housekeepingStatus?.toUpperCase() === 'DIRTY').length,
   };
 
   const filters = [
     { id: 'all', label: 'All Rooms', count: stats.total, icon: LayoutGrid },
-    { id: 'AVAILABLE', label: 'Available', count: stats.available, icon: CheckCircle2 },
+    { id: 'ready', label: 'Ready', count: stats.ready, icon: CheckCircle2 },
     { id: 'OCCUPIED', label: 'Occupied', count: stats.occupied, icon: BedDouble },
     { id: 'MAINTENANCE', label: 'Maintenance', count: rooms.filter(r => r.operationalStatus?.toUpperCase() === 'MAINTENANCE').length, icon: Wrench },
     { id: 'dirty', label: 'Needs Cleaning', count: stats.dirty, icon: Sparkles },
@@ -103,7 +105,7 @@ export default function RoomsPage() {
       {/* Quick Stats Dashboard */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatBox label="Total Rooms" value={stats.total} color="secondary" />
-        <StatBox label="Available" value={stats.available} color="success" />
+        <StatBox label="Ready" value={stats.ready} color="success" />
         <StatBox label="Occupied" value={stats.occupied} color="primary" />
         <StatBox label="Needs Cleaning" value={stats.dirty} color="warning" />
       </div>

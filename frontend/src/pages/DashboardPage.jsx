@@ -125,16 +125,16 @@ export default function DashboardPage() {
         <OpCard icon={UserPlus} label="Awaiting check-in" value={tasks.arrivals || 0} subtext={`Rooms due today or earlier · ${tasks.overdueArrivals || 0} overdue`} color="primary" />
         <OpCard icon={UserMinus} label="Awaiting checkout" value={tasks.departures || 0} subtext={`In-house rooms due today or earlier · ${tasks.overdueDepartures || 0} overdue`} color="warning" />
         <OpCard icon={BedDouble} label="Ready rooms now" value={stats.Available || 0} subtext={`${stats.Occupied || 0} occupied · ${data.totalRooms} total rooms`} color="success" />
-        <OpCard icon={Sparkles} label="Rooms needing attention" value={data.alerts.length} subtext={`${stats.Dirty || 0} dirty · ${stats.Maintenance || 0} under maintenance`} color="danger" />
+        <OpCard icon={Sparkles} label="Rooms needing attention" value={data.alerts.length} subtext={`${stats.Dirty || 0} need cleaning · ${stats.Maintenance || 0} under maintenance`} color="danger" />
       </div>
-      <p className="text-xs text-text-muted">Ready rooms are unoccupied, clean or inspected, and active. Use Check availability to confirm availability for booking dates. Dirty and maintenance totals can overlap.</p>
+      <p className="text-xs text-text-muted">Ready rooms are unoccupied, clean or inspected, and active. Use Check availability to confirm availability for booking dates. Cleaning and maintenance totals can overlap.</p>
       <div className="grid gap-5 xl:grid-cols-2">
         <TaskQueue title="Check-ins to handle" icon={UserPlus} reservations={data.arrivals} departure={false} />
         <TaskQueue title="Checkouts to handle" icon={UserMinus} reservations={data.departures} departure />
       </div>
       <section className="rounded-xl border border-border bg-surface p-4 sm:p-6 shadow-sm">
         <h2 className="mb-4 flex items-center gap-2 font-bold text-text"><AlertTriangle size={18} className="text-warning-600" /> Housekeeping & maintenance</h2>
-        {!data.alerts.length ? <p className="py-4 text-sm text-success-700">No dirty rooms or maintenance alerts.</p> : <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{data.alerts.map(room => <Link key={room.roomId} to="/rooms" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-background p-4 hover:border-primary-300"><div><p className="font-bold text-text">Room {room.roomNumber}</p><p className="mt-1 text-xs text-text-muted">{[room.housekeepingStatus === 'Dirty' && 'Needs cleaning', room.operationalStatus === 'Maintenance' && 'Under maintenance'].filter(Boolean).join(' · ')}</p></div><span className="flex items-center gap-1 text-sm font-semibold text-primary-700">Manage <ArrowRight size={15} /></span></Link>)}</div>}
+        {!data.alerts.length ? <p className="py-4 text-sm text-success-700">No rooms need cleaning or maintenance.</p> : <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{data.alerts.map(room => <Link key={room.roomId} to="/rooms" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-background p-4 hover:border-primary-300"><div><p className="font-bold text-text">Room {room.roomNumber}</p><p className="mt-1 text-xs text-text-muted">{[room.housekeepingStatus === 'Dirty' && 'Needs cleaning', room.operationalStatus === 'Maintenance' && 'Under maintenance'].filter(Boolean).join(' · ')}</p></div><span className="flex items-center gap-1 text-sm font-semibold text-primary-700">Manage <ArrowRight size={15} /></span></Link>)}</div>}
       </section>
       <p className="text-xs text-text-muted">Last updated {new Date(data.generatedAt).toLocaleTimeString('en-GH', { timeZone, hour: '2-digit', minute: '2-digit' })} · Refreshes every minute.</p>
     </>}
