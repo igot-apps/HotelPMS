@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { Building2, Eye, EyeOff, LoaderCircle, LogOut, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, LoaderCircle, LogOut, ShieldCheck } from 'lucide-react';
+import BrandMark from '../components/ui/BrandMark';
 import toast from 'react-hot-toast';
 import { loginUser } from '../api/auth';
 import PlatformPropertiesPage from './PlatformPropertiesPage';
@@ -59,7 +60,7 @@ export default function SuperAdminPage() {
         <header className="sticky top-0 z-20 border-b border-border bg-surface/95 backdrop-blur">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-600 text-white"><Building2 size={21} /></span>
+              <BrandMark className="h-10 w-10" />
               <span><strong className="block text-sm font-bold sm:text-base">HideOut24 Platform</strong><span className="text-xs text-text-muted">Super administrator</span></span>
             </div>
             <div className="flex items-center gap-3">

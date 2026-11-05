@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import RequirePermission from '../RequirePermission'; 
 import useApprovalCount from '../../hooks/useApprovalCount';
 import useRefundCount from '../../hooks/useRefundCount';
+import BrandMark from '../ui/BrandMark';
 
 const operationItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -103,7 +104,7 @@ export default function Sidebar({ isOpen, onClose }) {
           aria-label="Hotel PMS dashboard"
           className="group rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
         >
-          <h1 className="text-xl font-bold text-text-inverted transition-colors group-hover:text-primary-300">🏨 Hotel PMS</h1>
+          <h1 className="flex items-center gap-2 text-xl font-bold text-text-inverted transition-colors group-hover:text-primary-300"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white"><BrandMark className="h-8 w-8" /></span>Hotel PMS</h1>
           <p className="text-xs text-secondary-400 mt-1">Management System</p>
         </NavLink>
         <button aria-label="Close navigation" onClick={onClose} className="p-2 rounded-lg hover:bg-secondary-800 text-secondary-400 transition md:hidden">

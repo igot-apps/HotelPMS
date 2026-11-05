@@ -9,6 +9,7 @@ import {
   Building2, Sparkles, Shield, ArrowRight, Eye, EyeOff, Loader2, 
   CheckCircle2, BedDouble, CreditCard, BarChart3 
 } from 'lucide-react';
+import BrandMark from '../components/ui/BrandMark';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -59,9 +60,7 @@ export default function LoginPage() {
 
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-12">
-            <div className="w-10 h-10 bg-primary-600 rounded-lg flex items-center justify-center">
-              <Building2 size={24} className="text-text-inverted" />
-            </div>
+            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center"><BrandMark className="h-9 w-9" /></div>
             <span className="text-2xl font-bold tracking-tight">HotelPMS</span>
           </div>
 
@@ -111,9 +110,7 @@ export default function LoginPage() {
           {/* Mobile Logo (Only shows on small screens) */}
           <div className="lg:hidden text-center mb-8">
             <div className="inline-flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-                <Building2 size={20} className="text-text-inverted" />
-              </div>
+              <BrandMark className="h-8 w-8" />
               <span className="text-xl font-bold text-text">HotelPMS</span>
             </div>
           </div>

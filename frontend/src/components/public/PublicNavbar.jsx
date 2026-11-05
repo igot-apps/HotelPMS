@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Menu, X, User, LogOut, Calendar, Building2 } from 'lucide-react';
+import { Menu, X, User, LogOut, Calendar } from 'lucide-react';
 import PublicAuthModal from "./PublicAuthModal"; // Correct relative path
+import BrandMark from '../ui/BrandMark';
 
 export default function PublicNavbar() {
   const [isOpen, setIsOpen] = useState(false);
@@ -50,7 +51,7 @@ export default function PublicNavbar() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <Link to="/discover" className="flex items-center gap-2 group">
-              <Building2 className="text-primary-600 group-hover:text-primary-700 transition" size={28} />
+              <BrandMark className="h-9 w-9" />
               <span className="text-xl font-black text-text tracking-tight">HideOut24</span>
             </Link>
 

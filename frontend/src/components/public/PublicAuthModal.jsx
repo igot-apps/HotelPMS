@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../../lib/axios';
-import { X, Phone, User, Lock, Loader2, Building2 } from 'lucide-react';
+import { X, Phone, User, Lock, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { startGuestSession } from '../../lib/guestSession';
+import BrandMark from '../ui/BrandMark';
 
 export default function PublicAuthModal({ isOpen, onClose }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -97,7 +98,7 @@ export default function PublicAuthModal({ isOpen, onClose }) {
         </button>
 
         <div className="flex items-center gap-2 mb-6">
-          <Building2 className="text-primary-600" size={24} />
+          <BrandMark className="h-8 w-8" />
           <span className="text-lg font-black text-text tracking-tight">HideOut24</span>
         </div>
 
