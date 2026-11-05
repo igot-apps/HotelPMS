@@ -19,6 +19,7 @@ test('creates invitations without a browser-supplied role ID', async () => {
   expect(db.role.findUnique).toHaveBeenCalledWith({ where: { roleName: 'Receptionist' } });
   expect(db.user.create.mock.calls[0][0].data).toMatchObject({ propertyId: 5, roleId: 27, isActive: false, invitationPending: true });
   expect(result.user.userId).toBe(91);
+  expect(db.user.create.mock.invocationCallOrder[0]).toBeLessThan((deliverStaffInvitation as jest.Mock).mock.invocationCallOrder[0]);
 });
 test('always assigns the configured receptionist role despite supplied role or hotel overrides', async () => {
   await inviteStaff(5, { ...input, roleId: 1, propertyId: 999, isActive: true });
@@ -42,4 +43,11 @@ test('preserves existing role permissions without overwriting custom configurati
 test('rejects incomplete invitation fields before querying roles', async () => {
   await expect(inviteStaff(5, { ...input, email: 'invalid' })).rejects.toThrow('valid email');
   expect(db.role.findUnique).not.toHaveBeenCalled();
+});
+test('keeps a pending account when delivery fails so the manager can retry', async () => {
+  (deliverStaffInvitation as any).mockRejectedValueOnce(new Error('sender not verified'));
+  const result = await inviteStaff(5, input);
+  expect(result.user.userId).toBe(91);
+  expect(result.delivery).toMatchObject({ mode: 'failed', to: input.email });
+  expect(JSON.stringify(result.delivery)).not.toContain('sender not verified');
 });

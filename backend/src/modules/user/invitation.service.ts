@@ -5,6 +5,10 @@ import { deliverStaffInvitation } from '../../shared/utils/staffEmail';
 import { DEFAULT_RECEPTIONIST_CORRECTIONS } from '../reservation/correction-policy';
 
 const digest = (token: string) => createHash('sha256').update(token).digest('hex');
+const deliveryFailureMessage = (error: unknown) =>
+  error instanceof Error && /unable to fetch data|fetch failed|network/i.test(error.message)
+    ? 'Could not connect to Resend. Check backend network access, then use Resend invite.'
+    : 'Invitation email was not sent. Check the backend email settings, then use Resend invite.';
 const tokenData = () => {
   const token = randomBytes(32).toString('hex');
   return { token, invitationTokenHash: digest(token), invitationExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) };
@@ -32,24 +36,35 @@ export async function inviteStaff(propertyId: number, data: any) {
     });
   const { token, ...fields } = tokenData();
   const email = data.email.trim().toLowerCase();
-  const preview = await deliverStaffInvitation(email, token);
   const user = await prisma.user.create({ data: {
     propertyId, fullName: data.fullName.trim(), username: data.username.trim(), email,
     roleId: role.roleId, passwordHash: await hashPassword(randomBytes(32).toString('hex')),
     correctionPermissions: [...DEFAULT_RECEPTIONIST_CORRECTIONS],
     isActive: false, invitationPending: true, ...fields,
   }, select: { userId: true } });
-  return { user, preview };
+  let delivery;
+  try {
+    delivery = await deliverStaffInvitation(email, token, fields.invitationTokenHash);
+  } catch (error) {
+    console.error('Staff invitation delivery failed', { userId: user.userId, error });
+    delivery = { mode: 'failed' as const, to: email, message: deliveryFailureMessage(error) };
+  }
+  return { user, delivery };
 }
 
 export async function resendInvitation(propertyId: number, userId: number) {
   const user = await prisma.user.findFirst({ where: { userId, propertyId, invitationPending: true } });
   if (!user?.email) throw new Error('Pending invitation not found.');
   const { token, ...fields } = tokenData();
-  const preview = await deliverStaffInvitation(user.email, token);
   const updated = await prisma.user.updateMany({ where: { userId, propertyId, invitationPending: true }, data: fields });
   if (!updated.count) throw new Error('Invitation is no longer pending.');
-  return { preview };
+  try {
+    const delivery = await deliverStaffInvitation(user.email, token, fields.invitationTokenHash);
+    return { delivery };
+  } catch (error) {
+    console.error('Staff invitation resend failed', { userId, error });
+    return { delivery: { mode: 'failed' as const, to: user.email, message: deliveryFailureMessage(error) } };
+  }
 }
 
 export async function acceptInvitation(token: string, password: string) {

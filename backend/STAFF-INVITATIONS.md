@@ -6,17 +6,25 @@ until the receptionist sets a password using the invitation link. Invitations la
 24 hours; resending invalidates the previous link. Disabling a pending account
 cancels its invitation. Managers cannot set or retrieve staff passwords.
 
-Email currently uses the simulation adapter in src/shared/utils/staffEmail.ts.
-The manager sees an email preview with a copyable setup link; no email is sent.
-Set FRONTEND_URL to the browser-facing frontend origin. For production testing,
-explicitly set STAFF_EMAIL_MODE=simulation; otherwise production invitations fail
-until a delivery provider is configured. Simulation grants the manager access to
-the setup link, so use it only for testing with trusted managers.
+Staff invitation email uses Resend's official Node SDK. Set these environment
+variables on the backend service (including Render's Environment page):
 
-To connect a provider, implement delivery inside deliverStaffInvitation, send the
-setup URL to the recipient, and return delivery status without the setup URL.
-The invitation lifecycle and password setup page can remain unchanged. Update
-the manager UI to show delivery status instead of the simulation preview.
+  RESEND_API_KEY       A Resend sending-only API key
+  RESEND_FROM_EMAIL   Example: HideOut24 <staff@mail.yourdomain.com>
+  FRONTEND_URL        The browser-facing app origin
+
+Verify the sender domain in Resend before sending to receptionists. A Resend
+account without a verified domain can use onboarding@resend.dev only for test
+messages to the account owner; it cannot deliver invitations to arbitrary staff.
+Production rejects this test sender. Never put the API key in Git or the frontend.
+
+For local testing without delivery, explicitly set STAFF_EMAIL_MODE=simulation.
+The manager then sees a copyable setup link. Do not enable simulation in a live
+hotel; it grants the manager access to the receptionist's setup link. With Resend
+configured, the manager sees a delivery confirmation without the secret link.
+If delivery fails, the pending account remains and the manager can use Resend
+invite after fixing the sender configuration. A successful Resend API response
+means Resend accepted the email, not that the recipient has opened it.
 
 Apply migrations with npx prisma migrate deploy, then npx prisma generate.
 Managers gain the staff management permission on their next login.

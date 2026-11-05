@@ -17,7 +17,7 @@ export default function UsersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [emailPreview, setEmailPreview] = useState(null);
+  const [emailDelivery, setEmailDelivery] = useState(null);
   const [permissionUser, setPermissionUser] = useState(null);
 
   const { data: usersData, isLoading } = useQuery({
@@ -36,9 +36,9 @@ export default function UsersPage() {
   const mutation = useMutation({
     mutationFn: ({ id, data }) => id ? updateUser(id, data) : inviteStaff(data),
     onSuccess: (response) => {
-      if (response.data.data?.preview) setEmailPreview(response.data.data.preview);
+      if (response.data.data?.delivery) setEmailDelivery(response.data.data.delivery);
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      toast.success(editingUser ? 'User updated!' : 'Invitation prepared!');
+      if (editingUser) toast.success('User updated!');
       setIsModalOpen(false);
       setEditingUser(null);
     },
@@ -55,7 +55,7 @@ export default function UsersPage() {
 
   const resendMutation = useMutation({
     mutationFn: resendStaffInvitation,
-    onSuccess: (response) => { setEmailPreview(response.data.data.preview); toast.success('New invitation prepared. Previous link is invalid.'); },
+    onSuccess: (response) => { setEmailDelivery(response.data.data.delivery); },
     onError: (error) => toast.error(error.response?.data?.message || 'Could not resend invitation.'),
   });
 
@@ -91,15 +91,16 @@ export default function UsersPage() {
         </RequirePermission>
       </div>
 
-      {emailPreview && (
-        <section className="space-y-3 rounded-xl border border-primary-200 bg-primary-50 p-5">
-          <h2 className="font-bold text-text">Simulated email — no email was sent</h2>
-          <p className="text-sm text-text-muted">To: {emailPreview.to}<br />{emailPreview.subject}</p>
-          <p className="text-sm text-text">Share this link with the receptionist. It expires in 24 hours and works once. They choose their own password.</p>
-          <input aria-label="Receptionist setup link" readOnly value={emailPreview.setupUrl} onFocus={(event) => event.target.select()} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text" />
-          <div className="flex gap-3">
-            <button onClick={async () => { try { await navigator.clipboard.writeText(emailPreview.setupUrl); toast.success('Link copied.'); } catch { toast.error('Select and copy the link above.'); } }} className="rounded-lg bg-primary-600 px-4 py-2 text-sm text-white">Copy setup link</button>
-            <button onClick={() => setEmailPreview(null)} className="px-4 py-2 text-sm text-text">Dismiss</button>
+      {emailDelivery && (
+        <section className={`space-y-3 rounded-xl border p-5 ${emailDelivery.mode === 'failed' ? 'border-danger-200 bg-danger-50' : 'border-primary-200 bg-primary-50'}`}>
+          <h2 className="font-bold text-text">{emailDelivery.mode === 'resend' ? 'Invitation submitted for delivery' : emailDelivery.mode === 'failed' ? 'Invitation email could not be sent' : 'Simulated email — no email was sent'}</h2>
+          <p className="text-sm text-text-muted">To: {emailDelivery.to}</p>
+          {emailDelivery.mode === 'resend' && <p className="text-sm text-text">Resend accepted the email. The receptionist can use its link to set their password within 24 hours.</p>}
+          {emailDelivery.mode === 'failed' && <p role="alert" className="text-sm text-danger-700">{emailDelivery.message}</p>}
+          {emailDelivery.mode === 'simulation' && <><p className="text-sm text-text">Share this link with the receptionist. It expires in 24 hours and works once.</p><input aria-label="Receptionist setup link" readOnly value={emailDelivery.setupUrl} onFocus={(event) => event.target.select()} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text" /></>}
+          <div className="flex flex-wrap gap-3">
+            {emailDelivery.mode === 'simulation' && <button onClick={async () => { try { await navigator.clipboard.writeText(emailDelivery.setupUrl); toast.success('Link copied.'); } catch { toast.error('Select and copy the link above.'); } }} className="rounded-lg bg-primary-600 px-4 py-2 text-sm text-white">Copy setup link</button>}
+            <button onClick={() => setEmailDelivery(null)} className="px-4 py-2 text-sm text-text">Dismiss</button>
           </div>
         </section>
       )}
