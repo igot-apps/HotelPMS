@@ -7,6 +7,7 @@ import { initializeGuestPayment, checkGuestPaymentStatus } from '../payment/gues
 import { createHotelReservation } from '../reservation/booking-creation.service';
 import { expireOnlineHolds } from '../reservation/online-hold.service';
 import { cancelGuestReservation } from '../reservation/guest-cancellation.service';
+import { publicPhotoReferences } from './public-images.routes';
 
 
 const router = Router();
@@ -172,6 +173,7 @@ router.get('/discover', async (req: any, res: Response) => {
         publicDescription: true,
         coverImage: true,
         galleryImages: true,
+        updatedAt: true,
         primaryPhone: true,
         primaryPhoneWhatsappOnly: true,
         latitude: true,
@@ -219,8 +221,8 @@ router.get('/discover', async (req: any, res: Response) => {
         ghanaPostAddress: p.ghanaPostAddress,
         country: p.country,
         description: p.publicDescription,
-        coverImage: p.coverImage,
-        galleryImages: Array.isArray(p.galleryImages) ? p.galleryImages : [],
+        coverImage: publicPhotoReferences(p.propertyCode, p.coverImage, p.galleryImages, p.updatedAt, 'card')[0] || null,
+        galleryImages: publicPhotoReferences(p.propertyCode, p.coverImage, p.galleryImages, p.updatedAt, 'card').slice(1),
         primaryPhone: p.primaryPhone,
         primaryPhoneWhatsappOnly: p.primaryPhoneWhatsappOnly,
         minPrice: displayTypes.length > 0 ? Number(displayTypes[0].basePrice) : null,
@@ -356,12 +358,14 @@ router.get('/:propertyCode', async (req: any, res: Response) => {
       where: { propertyCode },
       select: {
         propertyId: true, propertyCode: true, propertyName: true, businessName: true,
-        coverImage: true, galleryImages: true, publicDescription: true, cancellationPolicy: true,
+        coverImage: true, galleryImages: true, updatedAt: true, publicDescription: true, cancellationPolicy: true,
         houseRules: true, taxPercentage: true, checkInTime: true, checkOutTime: true,
         address: true, city: true, country: true, primaryPhone: true, primaryPhoneWhatsappOnly: true, primaryEmail: true,
       }
     });
-    return res.json({ success: true, data: property });
+    if (!property) return res.status(404).json({ success: false, message: 'Property not found.' });
+    const photos = publicPhotoReferences(property.propertyCode, property.coverImage, property.galleryImages, property.updatedAt, 'full');
+    return res.json({ success: true, data: { ...property, coverImage: photos[0] || null, galleryImages: photos.slice(1) } });
   } catch (error: any) {
     if (error.message.includes('disabled') || error.message.includes('not found')) {
       return res.status(404).json({ success: false, message: error.message });

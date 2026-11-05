@@ -27,6 +27,7 @@ import ApprovalsPage from './pages/ApprovalsPage';
 import RefundsPage from './pages/RefundsPage';
 import RoomsPage from './pages/RoomsPage';
 import HousekeepingPage from './pages/HousekeepingPage';
+import NotificationsPage from './pages/NotificationsPage';
 import GuestsPage from './pages/GuestsPage';
 import ReservationsPage from './pages/ReservationsPage';
 import ReportsPage from './pages/ReportsPage';
@@ -109,6 +110,7 @@ function App() {
           <Route path="/refunds" element={<RefundsPage />} />
           <Route path="/rooms" element={<RoomsPage />} />
           <Route path="/housekeeping" element={<HousekeepingPage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/guests" element={<GuestsPage />} />
           <Route path="/reservations" element={<ReservationsPage />} />
           <Route path="/reservations/:id" element={<ReservationDetailsPage />} />

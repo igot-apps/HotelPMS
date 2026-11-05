@@ -12,6 +12,7 @@ import propertyRoutes from './modules/property/property.routes';
 import platformPropertyRoutes from './modules/property/platformProperty.routes';
 import roomRoutes from './modules/room/room.routes';
 import housekeepingRoutes from './modules/housekeeping/housekeeping.routes';
+import notificationsRoutes from './modules/notifications/notifications.routes';
 import guestRoutes from './modules/guest/guest.routes';
 import reservationRoutes from './modules/reservation/reservation.routes';
 import paymentRoutes from './modules/payment/payment.routes';
@@ -21,6 +22,7 @@ import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import paystackRoutes from './modules/payment/payment.routes'; // ✅ NEW: Moved to payment module
 import amenityRoutes from './modules/amenity/amenity.routes';
 import publicRoutes from './modules/public/public.routes';
+import publicImagesRoutes from './modules/public/public-images.routes';
 import publicAuthRoutes from './modules/public/public-auth.routes';
 import { expireOnlineHolds } from './modules/reservation/online-hold.service';
 
@@ -84,6 +86,7 @@ app.use('/api/properties', propertyRoutes);
 app.use('/api/platform/properties', platformPropertyRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/housekeeping', housekeepingRoutes);
+app.use('/api/notifications', notificationsRoutes);
 app.use('/api/guests', guestRoutes);
 app.use('/api/reservations', reservationRoutes);
 app.use('/api/payments', paymentRoutes);
@@ -92,6 +95,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/amenities', amenityRoutes);
 app.use('/api/paystack', paystackRoutes); // 🌟 Mount Paystack Routes
+app.use('/api/public/images', publicImagesRoutes);
 app.use('/api/public', publicRoutes); // 🌟 Mount Public Routes
 app.use('/api/public/auth', publicAuthRoutes); // 🌟 Mount Public Auth Routes
 

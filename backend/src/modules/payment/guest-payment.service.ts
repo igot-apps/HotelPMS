@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { prisma } from '../../shared/utils/prisma';
 import { isExpiredOnlineHold } from '../reservation/online-hold.service';
 import { restoreLatePaymentAllocation } from './late-payment-allocation';
+import { recordSimulatedSms } from '../notifications/simulated-sms.service';
 
 const failure = (message: string, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 
@@ -107,6 +108,7 @@ export async function verifyGuestPayment(propertyCode: string, reference: string
       if (!['P2034', 'P2010'].includes(error.code) || (error.code === 'P2010' && !['40001', '40P01'].includes(error.meta?.code)) || retry >= 2) throw error;
     }
   }
+  if (settlement.bookingStatus === 'Confirmed') await recordSimulatedSms(reservationId, 'confirmed');
   return { success: true, status: transaction.status, data: { ...transaction, ...settlement } };
 }
 

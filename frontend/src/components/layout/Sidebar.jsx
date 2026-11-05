@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, Search, BedDouble, Users, CalendarDays, BarChart3, Sparkles,
+  LayoutDashboard, Search, BedDouble, Users, CalendarDays, BarChart3, Sparkles, MessageSquare,
   LogOut, Settings, Building2, X, Shield, Crown, ClipboardCheck, Undo2
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
@@ -18,6 +18,7 @@ const operationItems = [
   { to: '/refunds', icon: Undo2, label: 'Refunds', staffOnly: true },
   { to: '/rooms', icon: BedDouble, label: 'Rooms & Inventory' },
   { to: '/housekeeping', icon: Sparkles, label: 'Housekeeping', housekeeping: true },
+  { to: '/notifications', icon: MessageSquare, label: 'Guest messages', permission: 'CanViewRooms' },
   { to: '/guests', icon: Users, label: 'Guests' },
   { to: '/reports', icon: BarChart3, label: 'Reports', permission: 'CanViewFinancialReports' },
 ];

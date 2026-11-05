@@ -95,6 +95,7 @@ model Property {
   paystackSecretKey      String?   @db.Text
   refundSimulationEnabled Boolean @default(false)
   housekeepingEnabled Boolean @default(false)
+  smsSimulationEnabled Boolean @default(false)
 
   users                  User[]
   propertyGuests         PropertyGuest[]
@@ -107,6 +108,7 @@ model Property {
   subscriptionPayments   SubscriptionPayment[]
   correctionRequests     CorrectionRequest[]
   refunds                Refund[]
+  simulatedSms           SimulatedSms[]
 
   @@map("properties")
 }
@@ -114,6 +116,22 @@ model Property {
 // ============================================================
 // RBAC - USERS, ROLES, PERMISSIONS
 // ============================================================
+model SimulatedSms {
+  messageId     Int      @id @default(autoincrement())
+  propertyId    Int
+  reservationId String
+  eventKey      String   @unique @db.VarChar(180)
+  kind          String   @db.VarChar(40)
+  recipient     String   @db.VarChar(20)
+  body          String   @db.Text
+  createdAt     DateTime @default(now())
+
+  property      Property @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
+
+  @@index([propertyId, createdAt])
+  @@map("simulated_sms")
+}
+
 model User {
   userId            Int       @id @default(autoincrement())
   propertyId        Int?

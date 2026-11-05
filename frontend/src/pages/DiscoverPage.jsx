@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PublicNavbar from '../components/public/PublicNavbar';
+import { publicImageSrc } from '../lib/publicImages';
 //import PublicPropertyCard from '../components/public/PublicPropertyCard';
 
 
@@ -462,16 +463,16 @@ export default function DiscoverPage() {
               {hotels.map((hotel, index) => (
                 <article
                   key={hotel.propertyCode || index}
-                  className="group bg-surface border border-border rounded-2xl overflow-hidden hover:shadow-xl hover:border-primary-200 transition-all duration-300 flex flex-col"
+                  className="group bg-surface border border-border rounded-2xl overflow-hidden hover:shadow-xl hover:border-primary-200 transition-all duration-300 flex flex-col motion-safe:animate-[card-enter_450ms_ease-out_both]"
                 >
                   {(() => {
                     const photos = [...new Set([hotel.coverImage, ...(Array.isArray(hotel.galleryImages) ? hotel.galleryImages : [])].filter(Boolean))].slice(0, 3);
                     const fallback = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80';
                     return (
                   <Link to={`/public/${hotel.propertyCode}${checkIn && checkOut ? `?checkIn=${checkIn}&checkOut=${checkOut}` : ''}`} aria-label={`View ${hotel.propertyName || 'hotel'} photos and details`} className="relative grid h-56 grid-cols-3 gap-1 overflow-hidden bg-secondary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
-                    <img src={photos[0] || fallback} alt={`${hotel.propertyName || 'Hotel'} — main photo`} className={`${photos.length > 1 ? 'col-span-2 row-span-2' : 'col-span-3'} h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]`} onError={(e) => { e.currentTarget.src = fallback; }} />
+                    <img src={publicImageSrc(photos[0]) || fallback} alt={`${hotel.propertyName || 'Hotel'} — main photo`} loading={index < 3 ? 'eager' : 'lazy'} fetchPriority={index === 0 ? 'high' : 'auto'} decoding="async" width="480" height="320" className={`${photos.length > 1 ? 'col-span-2 row-span-2' : 'col-span-3'} h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]`} onError={(e) => { e.currentTarget.src = fallback; }} />
                     {photos.slice(1).map((photo, photoIndex) => (
-                      <img key={`${hotel.propertyCode}-photo-${photoIndex}`} src={photo} alt={`${hotel.propertyName || 'Hotel'} — photo ${photoIndex + 2}`} className="h-full min-h-0 w-full object-cover" onError={(e) => { e.currentTarget.src = fallback; }} />
+                      <img key={`${hotel.propertyCode}-photo-${photoIndex}`} src={publicImageSrc(photo)} alt={`${hotel.propertyName || 'Hotel'} — photo ${photoIndex + 2}`} loading="lazy" decoding="async" width="240" height="160" className="h-full min-h-0 w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" onError={(e) => { e.currentTarget.src = fallback; }} />
                     ))}
                     {photos.length > 1 && <span className="absolute bottom-3 left-3 rounded-lg bg-black/65 px-2.5 py-1.5 text-xs font-semibold text-white backdrop-blur-sm">{photos.length} photos · View gallery</span>}
                     {typeof hotel.availableRooms === 'number' && (

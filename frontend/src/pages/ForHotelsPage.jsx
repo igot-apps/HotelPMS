@@ -8,7 +8,7 @@ const features = [
   { icon: CalendarCheck2, title: 'Reservations in one place', description: 'Track bookings, arrivals, departures, payments, and guest details from a single workspace.' },
   { icon: BedDouble, title: 'Rooms and daily operations', description: 'See room availability, occupancy, housekeeping needs, and in-house guests at a glance.' },
   { icon: ChartNoAxesCombined, title: 'A public booking page', description: 'Give guests a simple way to discover your property and book directly online.' },
-  { icon: Users, title: 'A team for your property', description: 'Give managers and reception staff access to the tools they need for their work.' },
+  { icon: Users, title: 'A team for your property', description: 'Invite receptionists and cleaners, with access suited to their work.' },
 ];
 
 export default function ForHotelsPage() {
@@ -31,10 +31,10 @@ export default function ForHotelsPage() {
                 <Building2 size={17} /> HideOut24 FOR HOTELS
               </div>
               <h1 className="max-w-3xl text-4xl font-black leading-tight tracking-tight text-white sm:text-5xl lg:text-6xl">
-                Run your hotel with more clarity.
+                Your front desk, all in one place.
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-white/80">
-                HideOut24 gives independent hotels one place to manage reservations, rooms, guests, and everyday front desk work.
+                Keep bookings, guests, room availability, and your team in sync from one simple workspace.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
                 <Link to="/register-your-hotel" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 py-3 font-bold text-primary-800 shadow-lg transition hover:bg-primary-50">
@@ -44,7 +44,7 @@ export default function ForHotelsPage() {
                   Hotel staff sign in
                 </Link>
               </div>
-              <p className="mt-4 text-sm text-white/65">Already using HideOut24? Sign in to your hotel workspace.</p>
+              <p className="mt-4 text-sm text-white/65">Already registered? Use hotel staff sign in.</p>
             </div>
 
             <div className="rounded-3xl border border-white/15 bg-white/10 p-5 shadow-2xl backdrop-blur-sm sm:p-7">

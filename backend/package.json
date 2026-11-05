@@ -38,6 +38,7 @@
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.11.0",
     "resend": "^6.37.0",
+    "sharp": "^0.35.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {

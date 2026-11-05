@@ -1,7 +1,7 @@
 export default function BrandMark({ className = 'h-9 w-9' }) {
   return (
     <img
-      src="/images/hideout24-logo.webp"
+      src="/images/hideout24-logo-green.webp"
       alt=""
       width="512"
       height="385"

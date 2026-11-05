@@ -12,7 +12,7 @@ export async function createHotelReservation(input: any, online = false): Promis
   await expireOnlineHolds(Number(input.propertyId));
   for (let attempt = 0; ; attempt++) {
     try {
-      return await prisma.$transaction(async tx => {
+      const reservation = await prisma.$transaction(async tx => {
         const property = await tx.property.findUnique({ where: { propertyId: Number(input.propertyId) } });
         if (!property || !property.isActive || property.status !== 'Active') throw new Error('Hotel is not active.');
         const guest = input.propertyGuestId
@@ -53,6 +53,7 @@ export async function createHotelReservation(input: any, online = false): Promis
           reservationRooms: { create: allocations },
         }, include: { reservationRooms: { include: { room: { include: { roomType: true } } } }, propertyGuest: true, platformGuest: { select: { fullName: true, phone: true, email: true } } } });
       }, { isolationLevel: 'Serializable', timeout: 15000 });
+      return reservation;
     } catch (error: any) { if ((error.code !== 'P2034' && error.meta?.code !== '40001') || attempt >= 2) throw error; }
   }
 }

@@ -8,6 +8,7 @@ import {
 import api from '../lib/axios';
 import PublicNavbar from '../components/public/PublicNavbar';
 import BackButton from '../components/ui/BackButton';
+import { publicImageSrc } from '../lib/publicImages';
 
 // Helper to fetch property data
 const fetchProperty = async (propertyCode) => {
@@ -164,7 +165,7 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
       <section className="bg-secondary-900 p-3 sm:p-5">
         <div className={`mx-auto grid max-w-7xl gap-2 overflow-hidden rounded-2xl ${propertyPhotos.length > 1 ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1'}`}>
           <div className={`relative h-[300px] bg-gradient-to-br from-primary-700 to-secondary-900 sm:h-[420px] ${propertyPhotos.length > 1 ? 'md:col-span-2' : ''}`}>
-            {selectedPhoto && <img src={selectedPhoto} alt={`${property.propertyName} — photo ${activePhoto + 1}`} className="h-full w-full object-cover" />}
+            {selectedPhoto && <img key={selectedPhoto} src={publicImageSrc(selectedPhoto)} alt={`${property.propertyName} — photo ${activePhoto + 1}`} loading="eager" fetchPriority="high" decoding="async" width="1280" height="900" className="h-full w-full object-cover motion-safe:animate-[photo-enter_350ms_ease-out_both]" />}
             <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
             <div className="absolute inset-x-0 bottom-0 p-5 text-white sm:p-8">
               <h1 className="mb-2 text-3xl font-bold drop-shadow-lg sm:text-5xl">{property.propertyName}</h1>
@@ -182,7 +183,7 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
             <div className="grid grid-cols-2 gap-2 md:grid-cols-1 md:grid-rows-2">
               {propertyPhotos.map((photo, index) => index !== activePhoto && (
                 <button key={photo} type="button" onClick={() => setActivePhoto(index)} aria-label={`View property photo ${index + 1}`} className="group relative h-36 overflow-hidden bg-secondary-800 sm:h-[208px]">
-                  <img src={photo} alt={`${property.propertyName} — photo ${index + 1}`} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
+                  <img src={publicImageSrc(photo)} alt={`${property.propertyName} — photo ${index + 1}`} loading="lazy" decoding="async" width="480" height="320" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
                   <span className="absolute inset-0 bg-black/10 transition group-hover:bg-black/0" />
                 </button>
               ))}

@@ -1,4 +1,5 @@
 import { prisma } from '../../shared/utils/prisma';
+import { recordSimulatedSms } from '../notifications/simulated-sms.service';
 import { canCorrect } from './correction-policy';
 import { occupantDetails, confirmOccupant } from './occupant.service';
 import { netPaid } from './refund.service';
@@ -80,11 +81,13 @@ function balanceApproval(res: any, user: any, overrideReason?: unknown) {
 }
 
 export async function cancelSafely(id: string, actor: Actor, reason = 'Staff cancelled the reservation') {
-  return atomic(async tx => {
+  let wasConfirmed = false;
+  const cancelled = await atomic(async tx => {
     const { res } = await booking(tx, id, actor);
     if (!['Pending', 'Confirmed'].includes(res.status) || res.reservationRooms.some((r: any) => r.status === 'CheckedIn')) {
       throw new Error('Only an unoccupied pending or confirmed reservation can be cancelled. Check out in-house guests first.');
     }
+    wasConfirmed = res.status === 'Confirmed';
     await lockRooms(tx, res.reservationRooms.map((r: any) => r.roomId).filter((id: any) => id !== null));
     await tx.reservationRoom.updateMany({ where: { reservationId: id }, data: { status: 'Cancelled' } });
     const updated = await tx.reservation.update({ where: { reservationId: id }, data: {
@@ -95,6 +98,8 @@ export async function cancelSafely(id: string, actor: Actor, reason = 'Staff can
     await audit(tx, actor, id, 'ReservationCancelled', reason, res, updated);
     return updated;
   });
+  if (wasConfirmed) await recordSimulatedSms(id, 'cancelled');
+  return cancelled;
 }
 
 export async function transitionStay(stayId: number, status: string, actor: Actor, details: any = {}) {
