@@ -360,7 +360,7 @@ router.get('/:propertyCode', async (req: any, res: Response) => {
         propertyId: true, propertyCode: true, propertyName: true, businessName: true,
         coverImage: true, galleryImages: true, updatedAt: true, publicDescription: true, cancellationPolicy: true,
         houseRules: true, taxPercentage: true, checkInTime: true, checkOutTime: true,
-        address: true, city: true, country: true, primaryPhone: true, primaryPhoneWhatsappOnly: true, primaryEmail: true,
+        address: true, area: true, city: true, region: true, country: true, ghanaPostAddress: true, primaryPhone: true, primaryPhoneWhatsappOnly: true, primaryEmail: true,
       }
     });
     if (!property) return res.status(404).json({ success: false, message: 'Property not found.' });

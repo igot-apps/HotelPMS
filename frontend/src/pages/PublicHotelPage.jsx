@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Calendar, MapPin, Phone, Mail, Tag, Loader2, ChevronRight, ChevronLeft, ChevronDown,
-  Wifi, Coffee, Car, Utensils, ShieldCheck, Sparkles, Users, MessageCircle
+  Wifi, Coffee, Car, Utensils, ShieldCheck, Sparkles, Users, MessageCircle, ExternalLink
 } from 'lucide-react';
 import api from '../lib/axios';
 import PublicNavbar from '../components/public/PublicNavbar';
@@ -142,6 +142,10 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
   const minDate = today.toISOString().split('T')[0];
   const propertyPhotos = [...new Set([property.coverImage, ...(Array.isArray(property.galleryImages) ? property.galleryImages : [])].filter(Boolean))].slice(0, 3);
   const selectedPhoto = propertyPhotos[activePhoto] || propertyPhotos[0];
+  const ghanaPostAddress = property.ghanaPostAddress?.trim();
+  const ghanaPostMapUrl = ghanaPostAddress
+    ? `https://ghanapostgps.com/map#${ghanaPostAddress.replace(/[^a-z0-9]/gi, '').toUpperCase()}`
+    : null;
   const whatsappNumber = toWhatsAppNumber(property.primaryPhone);
   const contactHref = property.primaryPhone
     ? property.primaryPhoneWhatsappOnly
@@ -250,6 +254,16 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
               {property.publicDescription || "Welcome to our beautiful property. We offer comfortable rooms and excellent service to make your stay memorable."}
             </p>
           </div>
+          {ghanaPostMapUrl && (
+            <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+              <h3 className="mb-3 flex items-center gap-2 text-lg font-bold text-text"><MapPin size={18} className="text-primary-600" /> Hotel location</h3>
+              <a href={ghanaPostMapUrl} target="_blank" rel="noopener noreferrer" aria-label={`View ${property.propertyName} at ${ghanaPostAddress} on GhanaPostGPS`} className="group flex min-h-12 items-center justify-between gap-3 rounded-xl border border-primary-100 bg-primary-50 px-4 py-3 text-primary-800 transition hover:border-primary-300 hover:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
+                <span className="min-w-0"><span className="block text-xs font-medium text-text-muted">GhanaPost GPS address</span><span className="block break-all font-bold">{ghanaPostAddress}</span></span>
+                <ExternalLink size={18} className="shrink-0 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 motion-reduce:transform-none" />
+              </a>
+              <p className="mt-2 text-xs text-text-muted">View this address on GhanaPostGPS</p>
+            </div>
+          )}
           <div className="bg-surface p-6 rounded-2xl border border-border shadow-sm">
             <h3 className="text-lg font-bold text-text mb-3 flex items-center gap-2">
               <Phone size={18} className="text-primary-600" /> Contact Us

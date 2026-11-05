@@ -73,8 +73,10 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
   const [locationError, setLocationError] = useState('');
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState('');
+  const [isReplacingPaystackKey, setIsReplacingPaystackKey] = useState(false);
 
   useEffect(() => {
+    setIsReplacingPaystackKey(false);
     if (initialData) {
       setFormData({
         propertyName: initialData.propertyName || '',
@@ -175,7 +177,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
     const galleryArray = formData.galleryImages.filter((image) => image !== formData.coverImage);
 
     // 🌟 CRITICAL: Only send the Paystack key if it's a NEW value (not the masked version)
-    const shouldUpdatePaystackKey = formData.paystackSecretKey.trim().length > 0;
+    const shouldUpdatePaystackKey = isReplacingPaystackKey && formData.paystackSecretKey.trim().length > 0;
 
     const { paystackSecretKey, ...propertyFields } = formData;
     const payload = {
@@ -186,7 +188,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
       latitude: formData.latitude === '' ? null : Number(formData.latitude),
       longitude: formData.longitude === '' ? null : Number(formData.longitude),
       // 🌟 Conditionally include the key
-      ...(shouldUpdatePaystackKey && { paystackSecretKey: paystackSecretKey.trim() }),
+      ...(shouldUpdatePaystackKey && { paystackSecretKey: paystackSecretKey.trim(), replacePaystackSecretKey: true }),
     };
 
     onSubmit(payload);
@@ -361,20 +363,31 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
                 <Smartphone size={16} className="text-primary-600" />
                 Paystack Secret Key (Online Payments)
               </label>
-              <input 
-                type="password" 
-                name="paystackSecretKey" 
-                value={formData.paystackSecretKey} 
-                onChange={handleChange} 
-                placeholder={initialData?.hasPaystackSecretKey ? 'A key is configured — enter a new key to replace it' : initialData?.usesPlatformPaystackKey ? 'Using the platform-configured Paystack key' : 'sk_test_...'}
-                className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 font-mono text-sm" 
-              />
+              {isReplacingPaystackKey ? (
+                <div className="space-y-2">
+                  <input
+                    type="password"
+                    name="newHotelPaystackSecret"
+                    value={formData.paystackSecretKey}
+                    onChange={(event) => setFormData((current) => ({ ...current, paystackSecretKey: event.target.value }))}
+                    autoComplete="new-password"
+                    required
+                    placeholder="Enter the new sk_test_ or sk_live_ key"
+                    className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 font-mono text-sm"
+                  />
+                  <button type="button" onClick={() => { setIsReplacingPaystackKey(false); setFormData((current) => ({ ...current, paystackSecretKey: '' })); }} className="text-sm font-semibold text-text-muted hover:text-text">Cancel key change</button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => { setFormData((current) => ({ ...current, paystackSecretKey: '' })); setIsReplacingPaystackKey(true); }} className="rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-semibold text-primary-700 transition hover:bg-primary-50">
+                  {initialData?.hasPaystackSecretKey ? 'Replace Paystack key' : 'Set Paystack key'}
+                </button>
+              )}
               <p className="text-xs text-text-muted mt-1">
                 Your hotel's Paystack secret key for public booking payments by Mobile Money or card.
                 <a href="https://dashboard.paystack.com/#/settings/developer" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline ml-1">Get your key here →</a>
               </p>
               {(initialData?.hasPaystackSecretKey || initialData?.usesPlatformPaystackKey) && (
-                <p className="text-xs text-warning-600 mt-1">Leave blank to keep the current payment setup. Enter a new key to replace this property’s key.</p>
+                <p className="text-xs text-text-muted mt-1">Saving other property details keeps the current payment setup.</p>
               )}
               {initialData?.usesPlatformPaystackKey && (
                 <p className="text-xs text-success-700 mt-1">The platform Paystack {initialData.paystackMode === 'test' ? 'test' : 'live'} key is currently used as this hotel’s default.</p>

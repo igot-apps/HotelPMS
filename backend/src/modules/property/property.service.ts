@@ -53,7 +53,13 @@ export const updateProperty = async (propertyId: number, data: any) => {
     if (Object.prototype.hasOwnProperty.call(data, field)) updateData[field] = data[field];
   }
 
-  if (typeof data.paystackSecretKey === 'string' && data.paystackSecretKey.trim()) {
+  if (data.paystackSecretKey !== undefined && data.replacePaystackSecretKey !== true) {
+    throw new Error('Choose Replace Paystack key before changing the payment setup.');
+  }
+  if (data.replacePaystackSecretKey === true && (typeof data.paystackSecretKey !== 'string' || !data.paystackSecretKey.trim())) {
+    throw new Error('Enter a new Paystack key to replace the current one.');
+  }
+  if (data.replacePaystackSecretKey === true) {
     const key = data.paystackSecretKey.trim();
     if (!/^sk_(test|live)_[A-Za-z0-9]+$/.test(key)) {
       throw new Error('Enter a valid Paystack secret key beginning with sk_test_ or sk_live_.');

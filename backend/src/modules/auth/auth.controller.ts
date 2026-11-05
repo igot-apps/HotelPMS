@@ -135,17 +135,12 @@ export const registerHotel = async (req: Request, res: Response) => {
       });
     }
 
-    const hasLatitude = latitude !== undefined && latitude !== null && latitude !== '';
-    const hasLongitude = longitude !== undefined && longitude !== null && longitude !== '';
-    if (hasLatitude !== hasLongitude) {
-      return res.status(400).json({ success: false, message: 'Both GPS coordinates must be provided together.' });
+    const hasGhanaPostAddress = typeof ghanaPostAddress === 'string' && !!ghanaPostAddress.trim();
+    if (!hasGhanaPostAddress) {
+      return res.status(400).json({ success: false, message: 'Enter the hotel’s GhanaPost GPS address.' });
     }
-    const parsedLatitude = hasLatitude ? Number(latitude) : null;
-    const parsedLongitude = hasLongitude ? Number(longitude) : null;
-    if (hasLatitude && (parsedLatitude === null || parsedLongitude === null
-      || !Number.isFinite(parsedLatitude) || parsedLatitude < -90 || parsedLatitude > 90
-      || !Number.isFinite(parsedLongitude) || parsedLongitude < -180 || parsedLongitude > 180)) {
-      return res.status(400).json({ success: false, message: 'The captured GPS location is invalid. Please capture it again.' });
+    if ((latitude !== undefined && latitude !== null) || (longitude !== undefined && longitude !== null)) {
+      return res.status(400).json({ success: false, message: 'Hotel registration accepts a GhanaPost GPS address only.' });
     }
 
     const result = await authService.registerNewHotel({
@@ -156,9 +151,7 @@ export const registerHotel = async (req: Request, res: Response) => {
       area: String(area).trim(),
       city: String(city).trim(),
       region: String(region).trim(),
-      ghanaPostAddress: ghanaPostAddress ? String(ghanaPostAddress).trim() : undefined,
-      latitude: parsedLatitude,
-      longitude: parsedLongitude,
+      ghanaPostAddress: ghanaPostAddress.trim(),
       ownerName,
       ownerEmail,
       password,
