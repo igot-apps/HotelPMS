@@ -13,7 +13,7 @@ export const CORRECTION_ACTIONS = [
 export function canCorrect(user: any, action: string) {
   const policy = CORRECTION_ACTIONS.find(item => item.action === action);
   if (!policy || !user.isActive) return false;
-  return user.role?.roleName === 'Manager' || (user.role?.roleName === 'Receptionist' && (DEFAULT_RECEPTIONIST_CORRECTIONS.includes(action) || delegationLimit(user, action) !== null));
+  return user.role?.roleName === 'Manager' || (user.role?.roleName === 'Receptionist' && (DEFAULT_RECEPTIONIST_CORRECTIONS.includes(action) || action === 'correct-date' || delegationLimit(user, action) !== null));
 }
 export function validateCorrectionPermissions(value: unknown): string[] {
   if (!Array.isArray(value) || value.some(action => typeof action !== 'string' || !CORRECTION_ACTIONS.some(item => item.action === action && item.delegatable))) throw new Error('Choose valid operational correction permissions. Financial corrections require a manager.');

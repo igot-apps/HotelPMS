@@ -1,9 +1,9 @@
 import { test, expect } from '@jest/globals';
 import { canCorrect, validateCorrectionPermissions, CORRECTION_ACTIONS, DEFAULT_RECEPTIONIST_CORRECTIONS } from '../src/modules/reservation/correction-policy';
 
-test('default receptionist access allows every room correction and no financial action', () => {
+test('default receptionist access allows room corrections and departure previews', () => {
   const user = { isActive: true, role: { roleName: 'Receptionist' }, correctionPermissions: DEFAULT_RECEPTIONIST_CORRECTIONS };
-  for (const item of CORRECTION_ACTIONS) expect(canCorrect(user, item.action)).toBe(item.delegatable);
+  for (const item of CORRECTION_ACTIONS) expect(canCorrect(user, item.action)).toBe(item.delegatable || item.action === 'correct-date');
   expect(canCorrect({ ...user, correctionPermissions: [] }, 'restore')).toBe(true);
 });
 test('active receptionists can handle room corrections regardless of legacy permissions, but not financial corrections', () => {

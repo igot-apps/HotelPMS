@@ -1,5 +1,5 @@
 export const financialOptions = [
-  ['correct-date', 'Change departure dates and charges', 'Maximum charge reduction per correction (GHS)', 'Extensions and reductions within this limit can be applied directly.'],
+  ['correct-date', 'Shorten a stay or reduce charges', 'Maximum charge reduction per correction (GHS)', 'Extensions at the agreed rate are always direct. Reductions within this limit can be applied directly.'],
   ['correct-payment', 'Correct or void a manual payment', 'Maximum original or corrected payment amount (GHS)', 'Only their own manual payments recorded today, using the hotel time zone. Both amounts must be within the limit.'],
   ['credit-checkout', 'Checkout with an unpaid balance', 'Maximum outstanding booking balance (GHS)', 'The unpaid balance stays on the reservation for collection.'],
 ];

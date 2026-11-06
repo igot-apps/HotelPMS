@@ -287,7 +287,7 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
       // Preserve the original effective tax/adjustment multiplier instead of using current hotel tax.
       const totalAmount = money(base(revised) * Number(res.totalAmount) / oldBase);
       const credit = Math.max(0, money(Number(res.amountPaid) - totalAmount));
-      await checkDelegation({ oldTotal: money(res.totalAmount), newTotal: totalAmount });
+      await checkDelegation({ oldTotal: money(res.totalAmount), newTotal: totalAmount, isExtension: selected.every(stay => date > stay.checkOutDate) });
       Object.assign(result, { oldTotal: money(res.totalAmount), newTotal: totalAmount, credit, balanceDue: Math.max(0, money(totalAmount - Number(res.amountPaid))), message: 'Correct departure and reprice the booking. Any overpayment remains recorded as a credit requiring refund review; no money is automatically returned.' });
       if (preview) return result;
       for (const stay of selected) await tx.reservationRoom.update({ where: { reservationRoomId: stay.reservationRoomId }, data: { checkOutDate: date, originalCheckOutDate: stay.originalCheckOutDate || stay.checkOutDate } });

@@ -13,8 +13,9 @@ export function delegationLimit(user: any, action: string): number | null {
   const value = user.financialDelegation?.[action];
   return FINANCIAL_ACTIONS.includes(action) && typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
 }
-export function financialDecision(user: any, action: string, context: { oldTotal?: number; newTotal?: number; balance?: number; payment?: any; newAmount?: number; timezone?: string }, now = new Date()) {
+export function financialDecision(user: any, action: string, context: { oldTotal?: number; newTotal?: number; isExtension?: boolean; balance?: number; payment?: any; newAmount?: number; timezone?: string }, now = new Date()) {
   if (user.isActive && user.role?.roleName === 'Manager') return { canApply: true, delegationReason: '' };
+  if (user.isActive && user.role?.roleName === 'Receptionist' && action === 'correct-date' && context.isExtension && Number.isFinite(context.oldTotal) && Number.isFinite(context.newTotal) && context.newTotal! >= context.oldTotal!) return { canApply: true, delegationReason: 'Stay extended at the agreed room rate.' };
   const limit = delegationLimit(user, action);
   let allowed = user.isActive && user.role?.roleName === 'Receptionist' && limit !== null;
   if (allowed && action === 'correct-date') allowed = Number.isFinite(context.oldTotal) && Number.isFinite(context.newTotal) && Math.round(Math.max(0, context.oldTotal! - context.newTotal!) * 100) <= Math.round(limit! * 100);

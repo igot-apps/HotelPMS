@@ -16,6 +16,13 @@ test('charge reductions and booking debt use inclusive cent-accurate limits', ()
   expect(financialDecision(user, 'credit-checkout', { balance: 100 }).canApply).toBe(true);
   expect(financialDecision(user, 'credit-checkout', { balance: 100.01 }).canApply).toBe(false);
 });
+test('an extension at the agreed rate is direct without financial delegation', () => {
+  const receptionist = { ...user, financialDelegation: {} };
+  expect(financialDecision(receptionist, 'correct-date', { oldTotal: 200, newTotal: 400, isExtension: true }).canApply).toBe(true);
+  expect(financialDecision(receptionist, 'correct-date', { oldTotal: 200, newTotal: 100, isExtension: false }).canApply).toBe(false);
+  expect(financialDecision(receptionist, 'correct-date', { oldTotal: 200, newTotal: 100, isExtension: true }).canApply).toBe(false);
+  expect(financialDecision({ ...receptionist, isActive: false }, 'correct-date', { oldTotal: 200, newTotal: 400, isExtension: true }).canApply).toBe(false);
+});
 test('payment delegation requires ownership, hotel-local today and both amounts within limit', () => {
   const payment = { receivedBy: 2, paymentDate: now, amount: 100 };
   const context = { payment, newAmount: 50, timezone: 'America/New_York' };
