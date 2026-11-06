@@ -5,7 +5,7 @@ import api from '../lib/axios';
 import {
   Star, MapPin, Wifi, Coffee, Car, Utensils, Waves, Plane,
   Dumbbell, Mountain, Loader2, Building2, Search, CheckCircle2,
-  X, Navigation, Crosshair, Map, ChevronLeft, ChevronRight, ArrowUp
+  X, Navigation, Crosshair, Map, ChevronLeft, ChevronRight, ArrowUp, ChevronDown, CalendarDays
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PublicNavbar from '../components/public/PublicNavbar';
@@ -129,6 +129,7 @@ export default function DiscoverPage() {
   const resultsRef = useRef(null);
   const searchRef = useRef(null);
   const [showBackToSearch, setShowBackToSearch] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(() => !searchParams.has('search') && !searchParams.has('checkIn') && !searchParams.has('checkOut'));
 
   useEffect(() => {
     const updateVisibility = () => {
@@ -261,6 +262,7 @@ export default function DiscoverPage() {
     // 🌟 Reset to page 1 when searching
     setCurrentPage(1);
     setIsSearching(true);
+    setIsSearchOpen(false);
     resultsRef.current?.scrollIntoView({
       behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
       block: 'start',
@@ -275,6 +277,14 @@ export default function DiscoverPage() {
     setAvailability('all');
     setSearchParams({}, { replace: true });
     setCurrentPage(1);
+  };
+
+  const openSearch = () => {
+    setIsSearchOpen(true);
+    searchRef.current?.scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+      block: 'start',
+    });
   };
 
   const handlePageChange = (page) => {
@@ -310,8 +320,33 @@ export default function DiscoverPage() {
           </p>
 
           {/* 🌟 SEARCH FORM */}
-          <form ref={searchRef} onSubmit={handleSearch} className="max-w-6xl mx-auto scroll-mt-24">
-            <div className="bg-surface rounded-2xl shadow-2xl p-3 sm:p-4 border border-border">
+          <div ref={searchRef} className="max-w-6xl mx-auto scroll-mt-24 rounded-2xl border border-border bg-surface text-left shadow-2xl">
+            <button
+              type="button"
+              aria-expanded={isSearchOpen}
+              aria-controls="discover-search-fields"
+              onClick={() => setIsSearchOpen(open => !open)}
+              className="flex w-full flex-wrap items-center gap-3 rounded-2xl px-4 py-4 text-left text-text transition-colors hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-300 sm:flex-nowrap sm:px-5"
+            >
+              <CalendarDays size={22} className="shrink-0 text-primary-600" />
+              <span className="min-w-0 flex-1">
+                <span className="block font-bold">Search hotels</span>
+                <span className="block text-sm text-text-muted">
+                  {!isSearchOpen && !checkIn && !checkOut
+                    ? 'Pick dates to book'
+                    : [destination.trim(), checkIn && checkOut ? `${checkIn} – ${checkOut}` : checkIn ? `From ${checkIn}` : checkOut ? `Until ${checkOut}` : 'Pick dates to book'].filter(Boolean).join(' · ')}
+                </span>
+              </span>
+              {checkIn && checkOut ? (
+                <ChevronDown size={20} className={`shrink-0 text-primary-600 transition-transform motion-reduce:transition-none ${isSearchOpen ? 'rotate-180' : ''}`} />
+              ) : (
+                <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm">
+                  {isSearchOpen ? 'Hide search' : 'Pick dates'}
+                  <ChevronDown size={17} className={`transition-transform motion-reduce:transition-none ${isSearchOpen ? 'rotate-180' : ''}`} />
+                </span>
+              )}
+            </button>
+            {isSearchOpen && <form id="discover-search-fields" onSubmit={handleSearch} className="border-t border-border p-3 sm:p-4">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-3">
                 <div className="md:col-span-12 lg:col-span-5 relative">
                   <label className="block text-xs font-bold text-text-muted mb-1 px-1 text-left">Destination</label>
@@ -350,8 +385,8 @@ export default function DiscoverPage() {
                   Check-out must be after check-in.
                 </p>
               )}
-            </div>
-          </form>
+          </form>}
+          </div>
         </div>
       </div>
 
@@ -529,7 +564,13 @@ export default function DiscoverPage() {
                         </span>
                       )}
                     </div>
-                    {hotel.availableRooms === 0 ? <Link to={`/public/${hotel.propertyCode}${checkIn && checkOut ? `?checkIn=${checkIn}&checkOut=${checkOut}` : ''}`} className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-primary-700 hover:underline">View hotel & try other dates <span aria-hidden="true" className="ml-1">→</span></Link> : !(checkIn && checkOut) && <p className="mt-3 text-xs text-primary-700 font-medium">Choose your dates to check room availability <span aria-hidden="true">→</span></p>}
+                    {hotel.availableRooms === 0 ? (
+                      <Link to={`/public/${hotel.propertyCode}${checkIn && checkOut ? `?checkIn=${checkIn}&checkOut=${checkOut}` : ''}`} className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-primary-700 hover:underline">View hotel & try other dates <span aria-hidden="true" className="ml-1">→</span></Link>
+                    ) : checkIn && checkOut ? (
+                      <Link to={`/public/${hotel.propertyCode}?checkIn=${checkIn}&checkOut=${checkOut}`} className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-primary-700 hover:underline">View rooms & book <span aria-hidden="true" className="ml-1">→</span></Link>
+                    ) : (
+                      <button type="button" onClick={openSearch} className="mt-3 inline-flex min-h-11 items-center text-left text-sm font-semibold text-primary-700 hover:underline">Pick dates to book at {hotel.propertyName || 'this hotel'} <span aria-hidden="true" className="ml-1">→</span></button>
+                    )}
                   </div>
                 </article>
               ))}
@@ -549,10 +590,7 @@ export default function DiscoverPage() {
         aria-label="Back to search"
         aria-hidden={!showBackToSearch}
         tabIndex={showBackToSearch ? 0 : -1}
-        onClick={() => searchRef.current?.scrollIntoView({
-          behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
-          block: 'start',
-        })}
+        onClick={openSearch}
         className={`fixed bottom-6 right-5 z-40 inline-flex items-center gap-2 rounded-full border border-white/20 bg-primary-600 px-4 py-3 text-sm font-semibold text-white shadow-xl transition-all duration-300 hover:-translate-y-1 hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-300 motion-reduce:transition-none sm:right-8 ${showBackToSearch ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-4 opacity-0'}`}
       >
         <ArrowUp size={19} /> Back to search
