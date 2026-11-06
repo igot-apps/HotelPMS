@@ -129,7 +129,10 @@ export default function DiscoverPage() {
   const resultsRef = useRef(null);
   const searchRef = useRef(null);
   const [showBackToSearch, setShowBackToSearch] = useState(false);
-  const [isSearchOpen, setIsSearchOpen] = useState(() => !searchParams.has('search') && !searchParams.has('checkIn') && !searchParams.has('checkOut'));
+  const [isSearchOpen, setIsSearchOpen] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches &&
+    !searchParams.has('search') && !searchParams.has('checkIn') && !searchParams.has('checkOut')
+  );
 
   useEffect(() => {
     const updateVisibility = () => {
