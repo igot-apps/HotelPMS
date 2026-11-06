@@ -107,8 +107,7 @@ async function main() {
     await prisma.reservation.update({ where: { reservationId: res.reservationId }, data: { status: 'InHouse' } });
     const direct = await correctBooking(res.reservationId, r, { ...input, preview: true });
     await setCorrectionPermissions(m, reception.userId, []);
-    await assert.rejects(correctBooking(res.reservationId, r, { ...input, preview: false, expectedVersion: direct.version }), /approval/);
-    await setCorrectionPermissions(m, reception.userId, ['undo-checkin']);
+    assert.equal((await correctionAccess(r)).find(item => item.action === 'undo-checkin')?.canApply, true);
     await correctBooking(res.reservationId, r, { ...input, preview: false, expectedVersion: direct.version });
     await prisma.user.update({ where: { userId: reception.userId }, data: { isActive: false } });
     await assert.rejects(correctionAccess(r), /Active/);

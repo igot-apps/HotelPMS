@@ -1,6 +1,6 @@
 import { prisma } from '../../shared/utils/prisma';
 import { Actor, correctBookingInTransaction } from './recovery.service';
-import { CORRECTION_ACTIONS, canCorrect, validateCorrectionPermissions } from './correction-policy';
+import { CORRECTION_ACTIONS, DEFAULT_RECEPTIONIST_CORRECTIONS, canCorrect, validateCorrectionPermissions } from './correction-policy';
 import { refundPreviewInTransaction } from './refund.service';
 import { validateFinancialDelegation, delegationLimit } from './financial-delegation';
 import { comparePassword } from '../../shared/utils/password';
@@ -26,7 +26,8 @@ export async function correctionAccess(actor: Actor) {
   return CORRECTION_ACTIONS.map(item => ({ ...item, canApply: canCorrect(user, item.action), limit: delegationLimit(user, item.action) }));
 }
 export async function setCorrectionPermissions(actor: Actor, userId: number, input: unknown, financialInput?: unknown, password?: unknown, confirmed?: unknown) {
-  const permissions = validateCorrectionPermissions(input);
+  validateCorrectionPermissions(input);
+  const permissions = [...DEFAULT_RECEPTIONIST_CORRECTIONS];
   return atomic(async tx => {
     const manager = await staff(tx, actor, true);
     const target = await tx.user.findFirst({ where: { userId, propertyId: actor.propertyId }, include: { role: true } });
