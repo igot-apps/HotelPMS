@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getReservationById, getReservationStats, updateReservation } from '../api/reservations';
+import api from '../lib/axios';
 import { recordPayment } from '../api/payments';
 import {
   User, BedDouble, CreditCard, FileText, Edit2, X, Loader2,
@@ -15,9 +16,11 @@ import { formatPaymentMethod } from '../utils/payment';
 import ReservationRecoveryPanel from '../components/reservations/ReservationRecoveryPanel';
 import RefundPanel from '../components/reservations/RefundPanel';
 import ReservationSection from '../components/reservations/ReservationSection';
+import { useAuthStore } from '../store/authStore';
 
 export default function ReservationDetailsPage() {
   const { id } = useParams();
+  const user = useAuthStore(state => state.user);
 
   const queryClient = useQueryClient();
 
@@ -46,6 +49,13 @@ export default function ReservationDetailsPage() {
   const { data: statsData } = useQuery({
     queryKey: ['reservationStats', id],
     queryFn: () => getReservationStats(id).then(res => res.data.data),
+  });
+
+  const { data: refundOverview } = useQuery({
+    queryKey: ['refunds', id],
+    queryFn: async () => (await api.get(`/reservations/${id}/refunds`)).data.data,
+    enabled: Boolean(id && ['Manager', 'Receptionist'].includes(user?.role)),
+    refetchInterval: 30000,
   });
 
   // 2. Mutations
@@ -101,6 +111,9 @@ export default function ReservationDetailsPage() {
   const totalAmount = parseFloat(resData?.totalAmount || 0);
   const amountPaid = parseFloat(resData?.amountPaid || 0);
   const balanceDue = Math.max(0, totalAmount - amountPaid); // 🌟 NO MORE stale DB column
+  const approvedRefunds = refundOverview?.requests?.filter(request => request.status === 'Approved') || [];
+  const approvedRefundTotal = approvedRefunds.reduce((sum, request) => sum + Number(request.input?.amount || 0), 0);
+  const pendingRefunds = refundOverview?.requests?.filter(request => request.status === 'Pending') || [];
 
   return (
     <div className="space-y-6">
@@ -224,7 +237,7 @@ export default function ReservationDetailsPage() {
 
       {/* Payment History */}
       <ReservationSection key={`${id}-corrections`} id="corrections" title="Correct or undo actions" icon={Wrench}><ReservationRecoveryPanel reservation={resData} embedded /></ReservationSection>
-      <ReservationSection key={`${id}-refunds`} id="refunds" title="Refunds" icon={Undo2} summary={Number(resData.refundDue) > 0 ? `GHS ${fmt(resData.refundDue)} remaining` : resData.refunds?.length ? 'View refund history' : undefined}><RefundPanel reservation={resData} embedded /></ReservationSection>
+      <ReservationSection key={`${id}-refunds`} id="refunds" title={<span className="flex flex-wrap items-center gap-2">Refunds{approvedRefunds.length > 0 && <span className="rounded-full bg-success-50 px-2.5 py-0.5 text-xs font-semibold text-success-700">Approved · ready to return</span>}{approvedRefunds.length === 0 && pendingRefunds.length > 0 && <span className="rounded-full bg-warning-50 px-2.5 py-0.5 text-xs font-semibold text-warning-700">Awaiting approval</span>}</span>} icon={Undo2} summary={approvedRefunds.length > 0 ? `GHS ${fmt(approvedRefundTotal)} approved · money not yet returned` : Number(resData.refundDue) > 0 ? `GHS ${fmt(resData.refundDue)} remaining` : resData.refunds?.length ? 'View refund history' : undefined}><RefundPanel reservation={resData} embedded /></ReservationSection>
       <ReservationSection key={`${id}-payments`} id="payments" title="Payment history" icon={CreditCard} summary={`${resData.payments?.length || 0} payment(s)`}>
         <div className="flex flex-wrap gap-3 items-center justify-end mb-4">
           <button

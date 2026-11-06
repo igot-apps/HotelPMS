@@ -6,6 +6,7 @@ import api from '../lib/axios';
 import { useAuthStore } from '../store/authStore';
 import { correctionLabels, approvalStatusLabel } from '../lib/correction-actions';
 import { RequestCard } from '../components/reservations/CorrectionRequests';
+import RefundCompletionDialog from '../components/reservations/RefundCompletionDialog';
 
 const inputClass = 'min-h-11 w-full min-w-0 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text';
 const buttonClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-text disabled:opacity-50';
@@ -63,6 +64,7 @@ export default function ApprovalsPage() {
   const page = Math.max(1, Number(params.get('page')) || 1);
   const [draft, setDraft] = useState(search);
   const [selected, setSelected] = useState(null);
+  const [selectedRefund, setSelectedRefund] = useState(null);
   useEffect(() => { setDraft(search); }, [search]);
   const update = values => setParams(current => { const next = new URLSearchParams(current); next.delete('page'); for (const [key, value] of Object.entries(values)) { if (value) next.set(key, String(value)); else next.delete(key); } return next; });
   const query = useQuery({ queryKey: ['correctionRequests', 'inbox', user?.propertyId, user?.userId, status, search, action, page], enabled: manager, queryFn: async () => (await api.get('/reservations/approval-inbox', { params: { status, search, action, page, limit: 20 } })).data.data, refetchInterval: 30000 });
@@ -76,7 +78,7 @@ export default function ApprovalsPage() {
   const filtered = Boolean(search || action || (history && status !== 'History'));
   const clearFilters = () => { setDraft(''); update({ search: '', action: '', status: '' }); };
   return <>
-    <div className="space-y-5" inert={selected ? true : undefined}>
+    <div className="space-y-5" inert={selected || selectedRefund ? true : undefined}>
       <header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="flex items-center gap-2 text-2xl font-bold text-text"><ClipboardCheck className="text-primary-600" />Approvals</h1><p className="mt-1 text-sm text-text-muted">Review corrections and refunds from your team in one place.</p></div><button disabled={query.isFetching} onClick={() => client.invalidateQueries({ queryKey: ['correctionRequests'] })} className={buttonClass}><RefreshCw size={16} className={query.isFetching ? 'animate-spin' : ''} />Refresh</button></header>
       <div className="flex gap-1 overflow-x-auto border-b border-border" role="group" aria-label="Approval views">{[['pending', 'Pending', data?.counts.pending], ['to-return', 'To return', data?.counts.toReturn], ['history', 'History', data?.counts.history]].map(([value, label, count]) => <button key={value} aria-pressed={view === value} onClick={() => update({ view: value === 'pending' ? '' : value, status: '' })} className={`flex min-h-12 items-center gap-2 shrink-0 border-b-2 px-3 text-sm font-semibold ${view === value ? 'border-primary-600 text-primary-700' : 'border-transparent text-text-muted'}`}>{label}<span className="rounded-full bg-secondary-100 px-2 py-0.5 text-xs">{count ?? '…'}</span></button>)}</div>
       <form onSubmit={event => { event.preventDefault(); update({ search: draft.trim() }); }} className="grid gap-3 rounded-xl border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -90,7 +92,7 @@ export default function ApprovalsPage() {
       {data && !query.isError && <>
         <p aria-live="polite" className="text-sm text-text-muted">{data.pagination.total} {data.pagination.total === 1 ? 'request' : 'requests'}{filtered && ' matching your filters'}</p>
         {!data.items.length && <div className="space-y-2 rounded-xl border border-border bg-surface p-8 text-center"><CheckCircle2 className="mx-auto text-primary-600" size={30} /><h2 className="font-bold text-text">{filtered ? 'No matching requests' : history ? 'No reviewed requests yet' : 'All caught up'}</h2><p className="text-sm text-text-muted">{filtered ? 'Try another search or clear the filters.' : history ? 'Approved, rejected and withdrawn requests appear here.' : toReturn ? 'There are no approved refunds awaiting money return.' : 'There are no requests waiting for your approval.'}</p>{filtered && <button onClick={clearFilters} className={buttonClass}>Clear filters</button>}</div>}
-        <div className="grid gap-3 lg:grid-cols-2">{data.items.map(request => <button key={request.requestId} onClick={() => setSelected(request.requestId)} className="min-w-0 space-y-3 rounded-xl border border-border bg-surface p-4 text-left text-sm text-text transition hover:border-primary-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 sm:p-5">
+        <div className="grid gap-3 lg:grid-cols-2">{data.items.map(request => <button key={request.requestId} onClick={() => request.action === 'refund' && request.status === 'Approved' ? setSelectedRefund(request) : setSelected(request.requestId)} className="min-w-0 space-y-3 rounded-xl border border-border bg-surface p-4 text-left text-sm text-text transition hover:border-primary-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-2"><span className="min-w-0 break-words text-base font-bold">{request.guestName}</span><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${request.needsReview ? 'bg-amber-100 text-amber-900' : request.status === 'Pending' ? 'bg-primary-50 text-primary-700' : 'bg-secondary-100 text-text-muted'}`}>{request.needsReview ? 'Needs review' : approvalStatusLabel(request)}</span></div>
           <p className="font-semibold">{correctionLabels[request.action] || request.action}{request.action === 'refund' && ` · GHS ${Number(request.input.amount).toFixed(2)}`}</p>{request.input.mode === 'SimulatedMoMo' && <p className="text-xs font-bold text-amber-800">TEST · MoMo simulation · no real money</p>}<p className="break-words text-text-muted">{request.roomLabel || 'Whole reservation'} · {request.reservation.confirmationCode}</p>
           <p className="line-clamp-2 break-words">{request.input.reason}</p>
@@ -102,5 +104,6 @@ export default function ApprovalsPage() {
       </>}
     </div>
     {selected && <ReviewPanel key={selected} id={selected} user={user} onClose={() => setSelected(null)} />}
+    {selectedRefund && <RefundCompletionDialog request={selectedRefund} onClose={() => setSelectedRefund(null)} onCompleted={() => query.refetch()} />}
   </>;
 }
