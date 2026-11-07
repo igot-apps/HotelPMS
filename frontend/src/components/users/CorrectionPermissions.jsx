@@ -8,7 +8,7 @@ const roomCorrections = ['undo-checkin', 'undo-checkout', 'restore', 'transfer']
 export default function CorrectionPermissions({ user, onClose }) {
   const section = useRef(null);
   useEffect(() => { section.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); section.current?.focus({ preventScroll: true }); }, []);
-  const [financial, setFinancial] = useState(user.financialDelegation || {});
+  const [financial, setFinancial] = useState(() => Object.fromEntries(Object.entries(user.financialDelegation || {}).filter(([action]) => action !== 'correct-payment')));
   const [confirming, setConfirming] = useState(false);
   const [managerPassword, setManagerPassword] = useState('');
   const [confirmed, setConfirmed] = useState(false);

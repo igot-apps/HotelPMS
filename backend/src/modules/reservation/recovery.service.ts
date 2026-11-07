@@ -213,7 +213,7 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
     const roomLabels = await Promise.all(selected.map(async room => `Room ${room.roomNumberSnapshot || (await tx.room.findUnique({ where: { roomId: room.roomId || 0 } }))?.roomNumber || 'removed'}`));
     const result: any = { action: input.action, reservationId: id, reason, version, roomLabels, roomLabel: roomLabels.join(', '), stayIds: selected.map(room => room.reservationRoomId) };
     const checkDelegation = async (context: any) => {
-      if (!FINANCIAL_ACTIONS.includes(input.action)) return;
+      if (input.action !== 'correct-payment' && !FINANCIAL_ACTIONS.includes(input.action)) return;
       const hotel = input.action === 'correct-payment' ? await tx.property.findUnique({ where: { propertyId: actor.propertyId }, select: { timezone: true } }) : null;
       Object.assign(result, financialDecision(user, input.action, { ...context, timezone: hotel?.timezone }));
       if (!preview && !result.canApply) throw new Error(result.delegationReason);

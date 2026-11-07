@@ -23,7 +23,7 @@ async function record(tx: any, actor: Actor, reservationId: string, action: stri
 }
 export async function correctionAccess(actor: Actor) {
   const user = await staff(prisma, actor);
-  return CORRECTION_ACTIONS.map(item => ({ ...item, canApply: canCorrect(user, item.action), limit: delegationLimit(user, item.action) }));
+  return CORRECTION_ACTIONS.map(item => ({ ...item, canApply: canCorrect(user, item.action), limit: item.action === 'correct-payment' ? null : delegationLimit(user, item.action) }));
 }
 export async function setCorrectionPermissions(actor: Actor, userId: number, input: unknown, financialInput?: unknown, password?: unknown, confirmed?: unknown) {
   validateCorrectionPermissions(input);
@@ -32,7 +32,9 @@ export async function setCorrectionPermissions(actor: Actor, userId: number, inp
     const manager = await staff(tx, actor, true);
     const target = await tx.user.findFirst({ where: { userId, propertyId: actor.propertyId }, include: { role: true } });
     if (!target || target.role.roleName !== 'Receptionist') throw new Error('Choose a receptionist from your hotel.');
-    const financial = validateFinancialDelegation(financialInput === undefined ? target.financialDelegation || {} : financialInput);
+    const saved = { ...(target.financialDelegation || {}) };
+    delete saved['correct-payment'];
+    const financial = validateFinancialDelegation(financialInput === undefined ? saved : financialInput);
     const increased = Object.entries(financial).some(([action, limit]) => limit > Number(target.financialDelegation?.[action] || 0));
     if (increased && (confirmed !== true || typeof password !== 'string' || !await comparePassword(password, manager.passwordHash))) throw new Error('Confirm the delegation warning and enter your manager password to enable or increase financial access.');
     await tx.user.update({ where: { userId }, data: { correctionPermissions: permissions, financialDelegation: financial } });
