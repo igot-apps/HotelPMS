@@ -1,9 +1,10 @@
 import ResponsiveTable from '../components/ui/ResponsiveTable';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Building2, CreditCard, Edit2, MapPin, Plus, Power, Search, ShieldCheck, Trash2, Users } from 'lucide-react';
+import { Building2, CreditCard, Edit2, Globe2, MapPin, Plus, Power, Search, ShieldCheck, Trash2, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PropertyModal from '../components/catalog/PropertyModal';
+import WebsiteDomainsDialog from '../components/catalog/WebsiteDomainsDialog';
 import {
   createPlatformProperty,
   deactivatePlatformProperty,
@@ -17,6 +18,7 @@ export default function PlatformPropertiesPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [editingProperty, setEditingProperty] = useState(null);
+  const [websiteProperty, setWebsiteProperty] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deletingProperty, setDeletingProperty] = useState(null);
   const [confirmationCode, setConfirmationCode] = useState('');
@@ -178,6 +180,7 @@ export default function PlatformPropertiesPage() {
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex justify-end gap-1.5">
+                          <button onClick={() => setWebsiteProperty(property)} title="Hotel website and domains" aria-label={`Website for ${property.propertyName}`} className="rounded-lg p-2 text-primary-600 transition hover:bg-primary-50"><Globe2 size={16} /></button>
                           <button onClick={() => openEdit(property)} title="Edit property" className="rounded-lg p-2 text-primary-600 transition hover:bg-primary-50"><Edit2 size={16} /></button>
                           {isActive && (
                             <button onClick={() => handleDeactivate(property)} disabled={deactivateMutation.isPending} title="Deactivate property" className="rounded-lg p-2 text-danger-600 transition hover:bg-danger-50 disabled:opacity-50"><Power size={16} /></button>
@@ -234,6 +237,7 @@ export default function PlatformPropertiesPage() {
         initialData={editingProperty}
         error={saveMutation.error?.response?.data?.message || (saveMutation.isError ? 'Failed to save property.' : null)}
       />
+      {websiteProperty && <WebsiteDomainsDialog property={websiteProperty} onClose={() => setWebsiteProperty(null)} />}
     </div>
   );
 }

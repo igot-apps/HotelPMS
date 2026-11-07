@@ -2,6 +2,7 @@ import axios from 'axios';
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../../shared/utils/prisma';
 import { getFrontendBaseUrl } from '../../shared/utils/frontend-url';
+import { paymentReturnBaseUrl } from '../property/website-domain.service';
 import { isExpiredOnlineHold } from '../reservation/online-hold.service';
 import { paymentConfiguration, verifyGuestPayment } from './guest-payment.service';
 
@@ -51,10 +52,11 @@ export async function checkGuestPaymentStatus(propertyCode: string, reservationI
       : 'No successful payment is recorded. You can continue payment for this booking.' };
 }
 
-export async function initializeGuestPayment(propertyCode: string, reservationId: string, guest: { guestId: number; email?: string | null }) {
+export async function initializeGuestPayment(propertyCode: string, reservationId: string, guest: { guestId: number; email?: string | null }, siteHostname?: unknown) {
   const checked = await checkGuestPaymentStatus(propertyCode, reservationId, guest.guestId);
   if (['paid', 'released', 'unknown'].includes(checked.status)) return checked;
   const { property, secret } = await paymentConfiguration(propertyCode);
+  const returnBaseUrl = await paymentReturnBaseUrl(siteHostname, property.propertyId, getFrontendBaseUrl());
   const prepared = await prisma.$transaction(async tx => {
     const locked = await tx.$queryRaw<any[]>`SELECT "reservationId" FROM reservations WHERE "reservationId" = ${reservationId} AND "propertyId" = ${property.propertyId} AND "platformGuestId" = ${guest.guestId} FOR UPDATE`;
     if (!locked.length) throw failure('Booking not found.', 404);
@@ -91,7 +93,7 @@ export async function initializeGuestPayment(propertyCode: string, reservationId
     const response = await axios.post('https://api.paystack.co/transaction/initialize', {
       email: guest.email || 'guest@hideout24.com', amount: Math.round(Number(attempt.amount) * 100), reference: attempt.reference,
       currency: attempt.currency, channels: ['mobile_money', 'card'],
-      callback_url: `${getFrontendBaseUrl()}/public/${propertyCode}/booking-success`, metadata: { propertyCode, reservationId },
+      callback_url: `${returnBaseUrl}/public/${encodeURIComponent(propertyCode)}/booking-success`, metadata: { propertyCode, reservationId },
     }, { headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' }, timeout: 15000 });
     const checkoutUrl = response.data?.data?.authorization_url;
     if (typeof checkoutUrl !== 'string' || !checkoutUrl.startsWith('https://')) throw failure('Payment initialization was not confirmed.');

@@ -8,9 +8,17 @@ import { createHotelReservation } from '../reservation/booking-creation.service'
 import { expireOnlineHolds } from '../reservation/online-hold.service';
 import { cancelGuestReservation } from '../reservation/guest-cancellation.service';
 import { publicPhotoReferences } from './public-images.routes';
+import { resolveWebsiteHostname } from '../property/website-domain.service';
 
 
 const router = Router();
+router.get('/website', async (req: any, res: Response) => {
+  try {
+    const site = await resolveWebsiteHostname(String(req.query.hostname || ''));
+    if (!site) return res.status(404).json({ success: false, message: 'This hotel website is not available yet.' });
+    return res.json({ success: true, data: { propertyCode: site.propertyCode, propertyName: site.propertyName, hostname: site.hostname, kind: site.kind } });
+  } catch { return res.status(500).json({ success: false, message: 'Could not load this hotel website.' }); }
+});
 router.use(async (_req, _res, next) => {
   try { await expireOnlineHolds(); next(); } catch (error) { next(error); }
 });
@@ -298,6 +306,8 @@ router.post('/reservations/:reservationId/cancel', requireBookingGuest, async (r
 
 router.get('/reservations', requireBookingGuest, async (req: any, res: Response) => {
   try {
+    const site = req.query.siteHostname ? await resolveWebsiteHostname(String(req.query.siteHostname)) : null;
+    if (req.query.siteHostname && !site) return res.status(404).json({ success: false, message: 'Hotel website unavailable.' });
     // 🌟 1. Extract pagination params
     const { page = '1', limit = '5' } = req.query;
     const pageNum = Math.max(1, parseInt(page as string, 10));
@@ -306,7 +316,8 @@ router.get('/reservations', requireBookingGuest, async (req: any, res: Response)
 
     const whereClause = { 
       platformGuestId: req.bookingGuest.guestId,
-      source: 'Website'
+      source: 'Website',
+      ...(site ? { propertyId: site.propertyId } : {}),
     };
 
     // 🌟 2. Get total count for pagination calculations
@@ -443,7 +454,7 @@ router.post('/:propertyCode/reservations', requireBookingGuest, async (req: any,
 router.post('/:propertyCode/payments/initialize', requireBookingGuest, async (req: any, res: Response) => {
   try {
     if (typeof req.body.reservationId !== 'string') return res.status(400).json({ success: false, message: 'Reservation ID is required.' });
-    return res.json({ success: true, data: await initializeGuestPayment(req.params.propertyCode, req.body.reservationId, req.bookingGuest) });
+    return res.json({ success: true, data: await initializeGuestPayment(req.params.propertyCode, req.body.reservationId, req.bookingGuest, req.body.siteHostname) });
   } catch (error: any) {
     return res.status(error.statusCode || 400).json({ success: false, message: error.message || 'Could not start payment. Check payment status before retrying.' });
   }

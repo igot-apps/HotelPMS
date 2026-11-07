@@ -6,6 +6,7 @@ import api from '../lib/axios';
 import toast from 'react-hot-toast';
 import PublicNavbar from '../components/public/PublicNavbar';
 import BackButton from '../components/ui/BackButton';
+import { currentHotelHostname } from '../lib/hotelWebsite';
 import { reusableCheckoutBooking } from '../lib/checkout-booking.mjs';
 
 export default function PublicCheckoutPage() {
@@ -113,6 +114,7 @@ export default function PublicCheckoutPage() {
       // 2. Initialize Paystack
       const paystackRes = await api.post(`/public/${propertyCode}/payments/initialize`, {
         reservationId,
+        siteHostname: currentHotelHostname(),
         email: guestData.email || 'guest@hideout24.com',
         amount: totalAmount,
       });

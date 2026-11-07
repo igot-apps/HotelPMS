@@ -3,8 +3,11 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Menu, X, User, LogOut, Calendar } from 'lucide-react';
 import PublicAuthModal from "./PublicAuthModal"; // Correct relative path
 import BrandMark from '../ui/BrandMark';
+import { useHotelWebsite } from '../../lib/hotelWebsite';
 
 export default function PublicNavbar() {
+  const hotelWebsite = useHotelWebsite();
+  const homePath = hotelWebsite ? `/public/${hotelWebsite.propertyCode}` : '/discover';
   const [isOpen, setIsOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const navigate = useNavigate();
@@ -41,7 +44,7 @@ export default function PublicNavbar() {
     localStorage.removeItem('guestToken');
     setGuestInfo(null);
     window.dispatchEvent(new Event('guest-session-changed'));
-    navigate('/discover');
+    navigate(homePath);
     setIsOpen(false);
   };
 
@@ -50,14 +53,13 @@ export default function PublicNavbar() {
       <nav className="sticky top-0 z-50 bg-surface/80 backdrop-blur-md border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <Link to="/discover" className="flex items-center gap-2 group">
+            <Link to={homePath} className="flex items-center gap-2 group">
               <BrandMark className="h-9 w-9" />
-              <span className="text-xl font-black text-text tracking-tight">HideOut24</span>
+              <span className="text-xl font-black text-text tracking-tight">{hotelWebsite?.propertyName || 'HideOut24'}</span>
             </Link>
 
             <div className="hidden lg:flex items-center gap-8">
-              <Link to="/discover" className="text-sm font-semibold text-text-muted hover:text-primary-600 transition">Discover Hotels</Link>
-              <Link to="/for-hotels" className="text-sm font-semibold text-text-muted hover:text-primary-600 transition">For Hotels</Link>
+              {hotelWebsite ? <Link to={homePath} className="text-sm font-semibold text-text-muted hover:text-primary-600 transition">Rooms & availability</Link> : <><Link to="/discover" className="text-sm font-semibold text-text-muted hover:text-primary-600 transition">Discover Hotels</Link><Link to="/for-hotels" className="text-sm font-semibold text-text-muted hover:text-primary-600 transition">For Hotels</Link></>}
               
               {isAuthenticated ? (
                 <>
@@ -91,8 +93,7 @@ export default function PublicNavbar() {
         {isOpen && (
           <div id="public-mobile-menu" className="lg:hidden border-t border-border bg-surface shadow-lg">
             <div className="px-4 py-4 space-y-3">
-              <Link to="/discover" onClick={() => setIsOpen(false)} className="block px-3 py-2.5 text-base font-medium text-text hover:bg-secondary-50 rounded-lg transition">Discover Hotels</Link>
-              <Link to="/for-hotels" onClick={() => setIsOpen(false)} className="block px-3 py-2.5 text-base font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition">For Hotels · Manage your property</Link>
+              {hotelWebsite ? <Link to={homePath} onClick={() => setIsOpen(false)} className="block px-3 py-2.5 text-base font-medium text-text hover:bg-secondary-50 rounded-lg transition">Rooms & availability</Link> : <><Link to="/discover" onClick={() => setIsOpen(false)} className="block px-3 py-2.5 text-base font-medium text-text hover:bg-secondary-50 rounded-lg transition">Discover Hotels</Link><Link to="/for-hotels" onClick={() => setIsOpen(false)} className="block px-3 py-2.5 text-base font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition">For Hotels · Manage your property</Link></>}
               
               {isAuthenticated ? (
                 <>

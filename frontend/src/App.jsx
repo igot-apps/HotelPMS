@@ -19,6 +19,7 @@ import PublicCheckoutPage from './pages/PublicCheckoutPage';
 import PublicBookingSuccessPage from './pages/PublicBookingSuccessPage';
 import PublicAuthPage from './pages/PublicAuthPage';
 import PublicReservationsPage from './pages/PublicReservationsPage';
+import HotelWebsiteGate from './components/public/HotelWebsiteGate';
 
 
 // Protected Pages (Staff PMS)
@@ -43,6 +44,7 @@ import SuperAdminPage from './pages/SuperAdminPage';
 function App() {
   return (
     <BrowserRouter>
+      <HotelWebsiteGate>
       {/* Global Toast Container */}
       <Toaster
         position="top-right"
@@ -130,6 +132,7 @@ function App() {
         {/* ========================================== */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </HotelWebsiteGate>
     </BrowserRouter>
   );
 }

@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import PublicNavbar from '../components/public/PublicNavbar';
 import ReasonSelect from '../components/reservations/ReasonSelect';
 import BackButton from '../components/ui/BackButton';
+import { currentHotelHostname, useHotelWebsite } from '../lib/hotelWebsite';
 import {
   Calendar, MapPin, Loader2, Search, Clock,
   CheckCircle2, XCircle, CreditCard, ChevronLeft, ChevronRight,
@@ -77,6 +78,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
 };
 
 export default function PublicReservationsPage() {
+  const hotelWebsite = useHotelWebsite();
   const client = useQueryClient();
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -113,11 +115,11 @@ export default function PublicReservationsPage() {
   }, [navigate]);
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['guestReservations', currentPage],
+    queryKey: ['guestReservations', currentPage, hotelWebsite?.propertyCode],
     queryFn: async () => {
       const res = await api.get('/public/reservations', {
         headers: { Authorization: `Bearer ${token}` },
-        params: { page: currentPage, limit: ITEMS_PER_PAGE }
+        params: { page: currentPage, limit: ITEMS_PER_PAGE, siteHostname: currentHotelHostname() }
       });
       return {
         reservations: res.data.data,
@@ -174,6 +176,7 @@ const retryPaymentMutation = useMutation({
 
     const res = await api.post(`/public/${reservation.property.propertyCode}/payments/initialize`, {
        reservationId: reservation.reservationId,
+       siteHostname: currentHotelHostname(),
        email: reservation.platformGuest?.email || 'guest@hideout24.com',
        amount: amountToPay,
      }, { skipErrorToast: true });

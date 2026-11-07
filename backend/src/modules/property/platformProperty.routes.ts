@@ -1,9 +1,62 @@
 import { Router, Response } from 'express';
 import * as propertyService from './property.service';
 import { authenticate, AuthRequest, requirePlatformAdmin } from '../../shared/middleware/auth.middleware';
+import { prisma } from '../../shared/utils/prisma';
+import { defaultHotelHostname, normalizeWebsiteHostname } from './website-domain.service';
 
 const router = Router();
 router.use(authenticate, requirePlatformAdmin);
+
+router.get('/:id/website-domains', async (req: AuthRequest, res: Response) => {
+  try {
+    const propertyId = parsePropertyId(req.params.id);
+    const property = await prisma.property.findUnique({ where: { propertyId }, select: { propertyCode: true } });
+    if (!property) return res.status(404).json({ success: false, message: 'Hotel not found.' });
+    const domains = await prisma.propertyWebsiteDomain.findMany({ where: { propertyId }, orderBy: { createdAt: 'desc' } });
+    return res.json({ success: true, data: { subdomain: defaultHotelHostname(property.propertyCode), domains } });
+  } catch (error: any) { return res.status(400).json({ success: false, message: error.message }); }
+});
+
+router.post('/:id/website-domains', async (req: AuthRequest, res: Response) => {
+  try {
+    const propertyId = parsePropertyId(req.params.id);
+    const hostname = normalizeWebsiteHostname(req.body?.hostname);
+    if (!hostname) return res.status(400).json({ success: false, message: 'Enter a valid domain name without https:// or a path.' });
+    const property = await prisma.property.findUnique({ where: { propertyId }, select: { propertyCode: true } });
+    if (!property) return res.status(404).json({ success: false, message: 'Hotel not found.' });
+    if (hostname.endsWith('.hideout24.com')) {
+      const slug = hostname.slice(0, -'.hideout24.com'.length);
+      const other = await prisma.property.findFirst({ where: { propertyId: { not: propertyId }, propertyCode: { equals: slug, mode: 'insensitive' } }, select: { propertyId: true } });
+      if (other) return res.status(409).json({ success: false, message: 'This subdomain belongs to another hotel.' });
+    }
+    const domain = await prisma.propertyWebsiteDomain.create({ data: { propertyId, hostname } });
+    return res.status(201).json({ success: true, data: domain });
+  } catch (error: any) {
+    return res.status(error.code === 'P2002' ? 409 : 400).json({ success: false, message: error.code === 'P2002' ? 'This domain is already connected to a hotel.' : error.message });
+  }
+});
+
+router.patch('/:id/website-domains/:domainId', async (req: AuthRequest, res: Response) => {
+  try {
+    const propertyId = parsePropertyId(req.params.id);
+    const domainId = Number(req.params.domainId);
+    if (!Number.isSafeInteger(domainId) || typeof req.body?.isActive !== 'boolean') return res.status(400).json({ success: false, message: 'Choose a valid domain status.' });
+    const result = await prisma.propertyWebsiteDomain.updateMany({ where: { propertyId, domainId }, data: { isActive: req.body.isActive } });
+    if (!result.count) return res.status(404).json({ success: false, message: 'Domain not found.' });
+    return res.json({ success: true });
+  } catch { return res.status(500).json({ success: false, message: 'Could not update domain.' }); }
+});
+
+router.delete('/:id/website-domains/:domainId', async (req: AuthRequest, res: Response) => {
+  try {
+    const propertyId = parsePropertyId(req.params.id);
+    const domainId = Number(req.params.domainId);
+    if (!Number.isSafeInteger(domainId)) return res.status(400).json({ success: false, message: 'Invalid domain.' });
+    const result = await prisma.propertyWebsiteDomain.deleteMany({ where: { propertyId, domainId } });
+    if (!result.count) return res.status(404).json({ success: false, message: 'Domain not found.' });
+    return res.json({ success: true });
+  } catch { return res.status(500).json({ success: false, message: 'Could not remove domain.' }); }
+});
 
 const parsePropertyId = (value: string | string[]) => {
   const propertyId = Number(Array.isArray(value) ? value[0] : value);

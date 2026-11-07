@@ -58,6 +58,7 @@ const isStayDate = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '')
   && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
 const [currentPage, setCurrentPage] = useState(1);
 const [activePhoto, setActivePhoto] = useState(0);
+const hasPickedDates = Boolean(searchParams.get('checkIn') && searchParams.get('checkOut'));
 const hasInvalidDates = !isStayDate(checkIn) || !isStayDate(checkOut) || checkOut <= checkIn;
 const earliestDeparture = isStayDate(checkIn) ? new Date(new Date(`${checkIn}T00:00:00Z`).getTime() + 86400000).toISOString().slice(0, 10) : tomorrow.toISOString().slice(0, 10);
 const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z`).toLocaleDateString('en-GH', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : 'Choose date';
@@ -197,11 +198,12 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
       </section>
 
       {/* 2. Floating Search Bar */}
-      <div className="max-w-5xl mx-auto px-4 -mt-8 relative z-10">
+      <div className="relative z-10 mx-auto -mt-8 max-w-5xl px-4">
         <details key={propertyCode} className="group min-w-0 rounded-2xl border border-border bg-surface shadow-xl">
-          <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-3 rounded-2xl p-4 text-text md:p-5 [&::-webkit-details-marker]:hidden">
-            <span className="flex min-w-0 items-center gap-3"><Calendar size={21} className="shrink-0 text-primary-600" /><span className="min-w-0"><span className="block font-bold">Check availability</span><span className="mt-1 block text-xs text-text-muted">{checkIn && checkOut ? `${formatStayDate(checkIn)} – ${formatStayDate(checkOut)} · Change dates` : 'Choose your stay dates'}</span></span></span>
-            <ChevronDown size={20} className="shrink-0 text-primary-600 transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+          <summary className="flex min-h-20 cursor-pointer list-none flex-wrap items-center gap-3 rounded-2xl px-4 py-4 text-text transition-colors hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-300 sm:flex-nowrap sm:px-5 [&::-webkit-details-marker]:hidden">
+            <Calendar size={22} className="shrink-0 text-primary-600" />
+            <span className="min-w-0 flex-1"><span className="block font-bold">Check availability</span><span className="block text-sm text-text-muted">{hasPickedDates ? `${formatStayDate(checkIn)} – ${formatStayDate(checkOut)}` : 'Pick dates to book'}</span></span>
+            {hasPickedDates ? <ChevronDown size={20} className="shrink-0 text-primary-600 transition-transform motion-reduce:transition-none group-open:rotate-180" /> : <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm"><span className="group-open:hidden">Pick dates</span><span className="hidden group-open:inline">Hide dates</span><ChevronDown size={17} className="transition-transform motion-reduce:transition-none group-open:rotate-180" /></span>}
           </summary>
         <form onSubmit={handleSearch} className="grid min-w-0 grid-cols-1 gap-4 border-t border-border p-4 md:grid-cols-[1fr_1fr_auto] md:items-end md:p-6">
           <div className="min-w-0 w-full">
