@@ -119,6 +119,7 @@ model PropertyWebsiteDomain {
   hostname    String   @unique @db.VarChar(253)
   propertyId  Int
   isActive    Boolean  @default(false)
+  autoActivate Boolean @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   property    Property @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)

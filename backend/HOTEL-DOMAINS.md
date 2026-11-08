@@ -15,6 +15,6 @@ The existing hotel page is reused for every hostname. The backend resolves the h
 
 Hotel codes are validated as URL slugs. Platform registration can derive a unique code from the hotel name. Self registration uses the chosen slug if available. That code becomes `<code>.hideout24.com` without creating a per-hotel Render domain entry. It starts serving the hotel when online booking is enabled and the one-time wildcard setup is live.
 
-In `/superadmin`, open a hotel's website dialog. Add one hotel-owned domain. The backend reserves the hostname and adds it to Render. The owner configures DNS at their provider. Use **Check status**, then **Go live** after Render verification, public DNS, and HTTPS all pass. A failed custom-domain setup does not affect the HideOut24 subdomain.
+In `/superadmin`, open a hotel's website dialog. Add one hotel-owned domain. The backend reserves the hostname and adds it to Render. The owner configures DNS at their provider. Keep **Go live automatically when ready** off to use **Check status** and **Go live** manually. Turn it on to let the backend check every five minutes and activate the domain after Render verification, public DNS, and HTTPS pass. Pausing a live domain also turns automatic activation off. A failed custom-domain setup does not affect the HideOut24 subdomain.
 
 Domain additions are limited to one per hotel and the configured Render allowance. Only authenticated platform administrators can change domain mappings. Render credentials are never returned to the browser.

@@ -25,6 +25,7 @@ import publicRoutes from './modules/public/public.routes';
 import publicImagesRoutes from './modules/public/public-images.routes';
 import publicAuthRoutes from './modules/public/public-auth.routes';
 import { expireOnlineHolds } from './modules/reservation/online-hold.service';
+import { activateReadyWebsiteDomains } from './modules/property/domain-auto-activation.service';
 
 // Load environment variables
 dotenv.config();
@@ -123,6 +124,10 @@ if (require.main === module) {
   const releaseHolds = () => expireOnlineHolds().catch(() => console.error('Could not release expired online booking holds; will retry.'));
   void releaseHolds();
   setInterval(releaseHolds, 30000).unref();
+  void activateReadyWebsiteDomains().catch(error => console.error('Could not check automatic domain activation:', error));
+  setInterval(() => {
+    void activateReadyWebsiteDomains().catch(error => console.error('Could not check automatic domain activation:', error));
+  }, 5 * 60 * 1000).unref();
   app.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}\n`);
     console.log(`📊 Environment: ${process.env.NODE_ENV}\n`);

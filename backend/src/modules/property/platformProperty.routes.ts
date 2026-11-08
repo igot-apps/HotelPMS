@@ -24,6 +24,7 @@ router.post('/:id/website-domains', async (req: AuthRequest, res: Response) => {
     const hostname = normalizeWebsiteHostname(req.body?.hostname);
     if (!hostname) return res.status(400).json({ success: false, message: 'Enter a valid domain name without https:// or a path.' });
     if (hostname.endsWith('.hideout24.com')) return res.status(400).json({ success: false, message: 'HideOut24 subdomains are assigned automatically. Enter a hotel-owned domain.' });
+    if (req.body?.autoActivate !== undefined && typeof req.body.autoActivate !== 'boolean') return res.status(400).json({ success: false, message: 'Choose a valid automatic activation setting.' });
     const property = await prisma.property.findUnique({ where: { propertyId }, select: { propertyCode: true } });
     if (!property) return res.status(404).json({ success: false, message: 'Hotel not found.' });
     if (hostname.endsWith('.hideout24.com')) {
@@ -42,7 +43,7 @@ router.post('/:id/website-domains', async (req: AuthRequest, res: Response) => {
     if (renderDomains.some(item => item.name === hostname)) return res.status(409).json({ success: false, message: 'This domain is already connected in Render.' });
     await addRenderDomain(hostname);
     let domain;
-    try { domain = await prisma.propertyWebsiteDomain.create({ data: { propertyId, hostname } }); }
+    try { domain = await prisma.propertyWebsiteDomain.create({ data: { propertyId, hostname, autoActivate: req.body?.autoActivate === true } }); }
     catch (error) { await removeRenderDomain(hostname).catch(() => undefined); throw error; }
     return res.status(201).json({ success: true, data: domain });
   } catch (error: any) {
@@ -55,7 +56,10 @@ router.post('/:id/website-domains/:domainId/check', async (req: AuthRequest, res
     const domain = await prisma.propertyWebsiteDomain.findFirst({ where: { propertyId: parsePropertyId(req.params.id), domainId: Number(req.params.domainId) } });
     if (!domain) return res.status(404).json({ success: false, message: 'Domain not found for this hotel.' });
     const check = await verifyDomainReadiness(domain.hostname, true);
-    return res.json({ success: true, data: { ...check, isActive: domain.isActive } });
+    if (check.ready && domain.autoActivate && !domain.isActive) {
+      await prisma.propertyWebsiteDomain.updateMany({ where: { domainId: domain.domainId, autoActivate: true, isActive: false }, data: { isActive: true } });
+    }
+    return res.json({ success: true, data: { ...check, isActive: domain.isActive || (check.ready && domain.autoActivate) } });
   } catch (error: any) { return res.status(error instanceof DomainSetupError ? error.status : 503).json({ success: false, message: error.message || 'Could not check domain status.' }); }
 });
 
@@ -63,14 +67,17 @@ router.patch('/:id/website-domains/:domainId', async (req: AuthRequest, res: Res
   try {
     const propertyId = parsePropertyId(req.params.id);
     const domainId = Number(req.params.domainId);
-    if (!Number.isSafeInteger(domainId) || typeof req.body?.isActive !== 'boolean') return res.status(400).json({ success: false, message: 'Choose a valid domain status.' });
+    if (!Number.isSafeInteger(domainId) || (typeof req.body?.isActive !== 'boolean' && typeof req.body?.autoActivate !== 'boolean')) return res.status(400).json({ success: false, message: 'Choose a valid domain setting.' });
     const domain = await prisma.propertyWebsiteDomain.findFirst({ where: { propertyId, domainId } });
     if (!domain) return res.status(404).json({ success: false, message: 'Domain not found.' });
-    if (req.body.isActive) {
+    if (req.body.isActive === true) {
       const check = await verifyDomainReadiness(domain.hostname);
       if (!check.ready) return res.status(409).json({ success: false, message: check.message, status: check.status });
     }
-    const result = await prisma.propertyWebsiteDomain.updateMany({ where: { propertyId, domainId }, data: { isActive: req.body.isActive } });
+    const result = await prisma.propertyWebsiteDomain.updateMany({ where: { propertyId, domainId }, data: {
+      ...(typeof req.body.isActive === 'boolean' ? { isActive: req.body.isActive } : {}),
+      ...(req.body.isActive === false ? { autoActivate: false } : typeof req.body.autoActivate === 'boolean' ? { autoActivate: req.body.autoActivate } : {}),
+    } });
     if (!result.count) return res.status(404).json({ success: false, message: 'Domain not found.' });
     return res.json({ success: true });
   } catch (error: any) { return res.status(error instanceof DomainSetupError ? error.status : 500).json({ success: false, message: error.message || 'Could not update domain.' }); }
