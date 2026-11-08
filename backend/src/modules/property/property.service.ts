@@ -1,11 +1,27 @@
 import * as propertyRepository from './property.repository';
+import { prisma } from '../../shared/utils/prisma';
+import { defaultHotelHostname } from './website-domain.service';
 
 export const createProperty = async (data: any) => {
   // ✅ Removed tenantId check
   if (!data.propertyName) throw new Error('Property name is required');
-  if (!data.propertyCode) throw new Error('Property code is required');
-  
-  return propertyRepository.createProperty(data);
+  const requestedCode = typeof data.propertyCode === 'string' ? data.propertyCode.trim().toLowerCase() : '';
+  if (requestedCode && requestedCode !== data.propertyCode.trim().toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')) throw new Error('Use letters, numbers, and hyphens for the hotel code.');
+  const base = String(requestedCode || data.propertyName).trim().toLowerCase()
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 42).replace(/-$/, '');
+  if (!base) throw new Error('Choose a hotel name that can form a valid website address.');
+  if (requestedCode && !defaultHotelHostname(base)) throw new Error('This hotel code is reserved. Choose another.');
+  let code = defaultHotelHostname(base) ? base : `${base}-hotel`;
+  for (let suffix = 2; suffix < 1000; suffix++) {
+    const [property, domain] = await Promise.all([
+      prisma.property.findFirst({ where: { propertyCode: { equals: code, mode: 'insensitive' } }, select: { propertyId: true } }),
+      prisma.propertyWebsiteDomain.findUnique({ where: { hostname: `${code}.hideout24.com` }, select: { domainId: true } }),
+    ]);
+    if (!property && !domain) return propertyRepository.createProperty({ ...data, propertyCode: code });
+    if (data.propertyCode) throw new Error('This hotel code is already in use. Choose another.');
+    code = `${base}-${suffix}`;
+  }
+  throw new Error('Could not assign a unique hotel website address.');
 };
 
 export const getProperties = async (

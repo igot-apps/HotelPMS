@@ -1,6 +1,7 @@
 import { comparePassword ,hashPassword } from '../../shared/utils/password';
 import { generateAccessToken, generateRefreshToken } from '../../shared/utils/jwt';
 import * as authRepository from './auth.repository';
+import { defaultHotelHostname } from '../property/website-domain.service';
 
 import { PrismaClient } from '../../../src/generated/prisma';
 const prisma = new PrismaClient();
@@ -233,8 +234,11 @@ export const registerNewHotel = async (data: {
   password: string;
 }) => {
   // 1. Check if the URL slug (propertyCode) is already taken
-  const slugExists = await prisma.property.findUnique({ where: { propertyCode: data.slug } });
+  const slug = data.slug.trim().toLowerCase();
+  if (slug !== data.slug.trim() || !defaultHotelHostname(slug)) throw new Error('Use a valid hotel URL with letters, numbers, and hyphens.');
+  const slugExists = await prisma.property.findFirst({ where: { propertyCode: { equals: slug, mode: 'insensitive' } } });
   if (slugExists) throw new Error('This hotel URL is already taken. Please choose another.');
+  if (await prisma.propertyWebsiteDomain.findUnique({ where: { hostname: `${slug}.hideout24.com` } })) throw new Error('This hotel URL is already reserved. Please choose another.');
 
   // 2. Check if owner email is already in use
   const ownerExists = await prisma.user.findFirst({ where: { email: data.ownerEmail } });
@@ -251,7 +255,7 @@ export const registerNewHotel = async (data: {
     const property = await tx.property.create({
       data: {
         propertyName: data.hotelName,
-        propertyCode: data.slug.toLowerCase().replace(/\s+/g, '-'), // URL friendly
+        propertyCode: slug,
         businessName: data.hotelName,
         propertyType: 'Hotel',
         primaryEmail: data.email,
