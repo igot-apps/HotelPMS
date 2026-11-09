@@ -91,6 +91,12 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
   const handleSearch = (e) => {
     e.preventDefault();
     if (hasInvalidDates) return;
+    setSearchParams(current => {
+      const next = new URLSearchParams(current);
+      next.set('checkIn', checkIn);
+      next.set('checkOut', checkOut);
+      return next;
+    }, { replace: true });
     roomResultsRef.current?.scrollIntoView({
       behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
       block: 'start',
@@ -305,7 +311,7 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
         {/* Right Column: Available Room Types */}
         <div ref={roomResultsRef} className="lg:col-span-2 space-y-6 scroll-mt-24">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-            <h2 className="text-2xl font-bold text-text">Available Room Types</h2>
+            <h2 className="text-2xl font-bold text-text">{hasPickedDates ? 'Rooms available for your date' : 'Room types'}</h2>
             <p className="text-sm text-text-muted font-medium bg-secondary-50 px-3 py-1 rounded-full border border-secondary-100 w-fit">
               {pagination.total} {pagination.total === 1 ? 'room type' : 'room types'} available
             </p>
