@@ -333,36 +333,21 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
             </div>
           ) : (
             <>
-          {/* 🌟 COMPACT Room Type Cards */}
+          {/* Room type cards */}
           {rooms.map((room) => (
-            <div key={room.roomTypeId} className="group bg-surface rounded-xl border border-border overflow-hidden hover:shadow-md hover:border-primary-300 transition-all duration-300">
-              <div className="p-5 sm:p-6">
-                {/* Clear "Room Type" Label */}
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[10px] font-bold tracking-widest text-primary-600 uppercase bg-primary-50 px-2 py-0.5 rounded border border-primary-100">
+            <article key={room.roomTypeId} className="group overflow-hidden rounded-2xl border border-primary-100 bg-surface shadow-sm transition-shadow duration-300 hover:shadow-lg">
+              <div className="grid lg:grid-cols-[minmax(0,1.65fr)_minmax(240px,1fr)]">
+                <div className="flex min-w-0 flex-col p-5 sm:p-7">
+                  <span className="mb-4 w-fit rounded-full border border-primary-100 bg-primary-50 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-primary-700">
                     Room Type
                   </span>
-                </div>
-                
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 mb-4">
-                  <div className="flex-1">
-                    <h3 className="text-xl font-bold text-text group-hover:text-primary-600 transition-colors">
-                      {room.typeName}
-                    </h3>
-                    <p className="text-sm text-text-muted mt-1 leading-relaxed line-clamp-2">
-                      {room.description || "A comfortable and well-appointed room designed for your relaxation."}
-                    </p>
-                  </div>
-                  {/* Compact Price Box */}
-                  <div className="text-right sm:text-left bg-secondary-50/50 p-3 rounded-lg border border-secondary-100">
-                    <p className="text-2xl font-black text-primary-600">GH₵ {parseFloat(room.basePrice).toFixed(2)}</p>
-                    <p className="text-[10px] text-text-muted font-medium">per night</p>
-                  </div>
-                </div>
+                  <h3 className="text-2xl font-bold text-text transition-colors group-hover:text-primary-700 sm:text-3xl">{room.typeName}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-text-muted sm:text-base">
+                    {room.description || 'A comfortable and well-appointed room designed for your relaxation.'}
+                  </p>
 
-                {/* Amenities */}
                 {room.amenities?.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mb-4">
+                  <div className="mt-4 flex flex-wrap gap-1.5">
                     {room.amenities.slice(0, 4).map((link) => (
                       <span key={link.amenityId} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-background text-text-muted border border-border">
                         <Tag size={10} className="text-primary-500" /> {link.amenity.name}
@@ -376,34 +361,38 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
                   </div>
                 )}
 
-                {/* Footer: Capacity, Availability & Button */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-4 border-t border-border gap-3">
-                  <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <span className="inline-flex items-center gap-1.5 text-text-muted font-medium text-xs">
-                      <Users size={12} className="text-primary-500" />
-                      Max {room.maxOccupancy} Guests
+                <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-border pt-4 sm:mt-auto sm:pt-5">
+                    <span className="inline-flex items-center gap-1.5 text-sm font-medium text-text-muted">
+                      <Users size={17} className="text-primary-600" />
+                      Max {room.maxOccupancy} {room.maxOccupancy === 1 ? 'guest' : 'guests'}
                     </span>
-                    <span className="w-1 h-1 rounded-full bg-border hidden sm:block" />
-                    {/* Professional Availability Badge */}
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold border bg-rose-50 text-rose-700 border-rose-200">
-                      <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                    <span className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">
+                      <span className="h-2 w-2 rounded-full bg-current" aria-hidden="true" />
                       {room.availableRooms} {room.availableRooms === 1 ? 'room' : 'rooms'} available
                     </span>
-                  </div>
-                  <button 
+                </div>
+              </div>
+              <div className="flex flex-col justify-between gap-6 border-t border-primary-100 bg-primary-50/50 p-5 sm:p-7 lg:border-l lg:border-t-0">
+                <div>
+                  <p className="text-3xl font-black tracking-tight text-primary-700 sm:text-4xl">GH₵ {parseFloat(room.basePrice).toFixed(2)}</p>
+                  <p className="mt-1 text-sm font-medium text-text-muted">per night</p>
+                </div>
+                <div className="border-t border-primary-100 pt-5">
+                  <button
                     onClick={() => handleBookNow(room.roomTypeId)}
                     disabled={room.availableRooms === 0}
-                    className="w-full sm:w-auto px-6 py-2 bg-primary-600 text-text-inverted font-bold rounded-lg hover:bg-primary-700 transition flex items-center justify-center gap-2 shadow-sm shadow-primary-600/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-600 px-6 py-3 font-bold text-text-inverted shadow-sm transition hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {room.availableRooms > 0 ? (
-                      <>Book Now <ChevronRight size={14} /></>
+                      <>Book Now <ChevronRight size={18} /></>
                     ) : (
                       <>Sold Out</>
                     )}
                   </button>
                 </div>
               </div>
-            </div>
+              </div>
+            </article>
           ))}
 
               {/* 🌟 PAGINATION CONTROLS */}
