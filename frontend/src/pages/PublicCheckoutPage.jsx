@@ -11,17 +11,23 @@ import { reusableCheckoutBooking } from '../lib/checkout-booking.mjs';
 
 export default function PublicCheckoutPage() {
   const { propertyCode, roomTypeId } = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
   const savedBooking = useRef(null);
   const paymentBusy = useRef(false);
-  
-  // 🌟 1. Initialize dates from URL, but make them editable state
-  const initialCheckIn = searchParams.get('checkIn');
-  const initialCheckOut = searchParams.get('checkOut');
-  const [checkIn, setCheckIn] = useState(initialCheckIn);
-  const [checkOut, setCheckOut] = useState(initialCheckOut);
+  const arrivedWithoutDates = useRef(!searchParams.get('checkIn') || !searchParams.get('checkOut'));
+
+  // Keep the hotel and review pages on the same selected stay dates.
+  const checkIn = searchParams.get('checkIn') || '';
+  const checkOut = searchParams.get('checkOut') || '';
+  const updateStayDate = (field, value) => {
+    const next = new URLSearchParams(searchParams);
+    if (value) next.set(field, value);
+    else next.delete(field);
+    setSearchParams(next, { replace: true });
+  };
+  const hotelUrl = `/public/${propertyCode}?${searchParams.toString()}`;
 
   // 🌟 2. Check if user is already logged in (from localStorage)
   const [guestInfo, setGuestInfo] = useState(() => {
@@ -51,12 +57,12 @@ export default function PublicCheckoutPage() {
     navigate('/public/auth', { state: { from: { pathname: location.pathname, search: `?${query}` } } });
   };
 
-  // ONLY redirect if initial dates are missing
+  // A direct visit without stay dates returns to the hotel page.
   useEffect(() => {
-    if (!initialCheckIn || !initialCheckOut) {
+    if (arrivedWithoutDates.current) {
       navigate(`/public/${propertyCode}`);
     }
-  }, [initialCheckIn, initialCheckOut, navigate, propertyCode]);
+  }, [navigate, propertyCode]);
 
   // Fetch Property (for tax rate)
   const { data: property, isLoading: isLoadingProp } = useQuery({
@@ -102,7 +108,7 @@ export default function PublicCheckoutPage() {
         guestFullName: guestData.name,
         guestPhone: guestData.phone,
         guestEmail: guestData.email || undefined,
-        platformGuestId: guestData.platformGuestId, 
+        platformGuestId: guestData.platformGuestId,
         agreedPricePerNight: basePrice,
       });
 
@@ -110,7 +116,7 @@ export default function PublicCheckoutPage() {
       try { sessionStorage.setItem(`checkout-booking:${bookingKey}`, JSON.stringify(savedBooking.current)); } catch { /* Keep the in-memory booking ID. */ }
       }
       const reservationId = savedBooking.current.reservationId;
-      
+
       // 2. Initialize Paystack
       const paystackRes = await api.post(`/public/${propertyCode}/payments/initialize`, {
         reservationId,
@@ -118,8 +124,8 @@ export default function PublicCheckoutPage() {
         email: guestData.email || 'guest@hideout24.com',
         amount: totalAmount,
       });
-      
-      return paystackRes.data.data; 
+
+      return paystackRes.data.data;
     },
     onSuccess: (paystackData) => {
       // 3. Redirect to Paystack
@@ -144,7 +150,7 @@ export default function PublicCheckoutPage() {
   const handlePay = (e) => {
     e.preventDefault();
     if (paymentBusy.current) return;
-    
+
     let name, phone, email, platformGuestId;
 
     if (hasGuestSession) {
@@ -181,7 +187,7 @@ export default function PublicCheckoutPage() {
           </div>
           <h1 className="text-2xl font-bold text-text mb-2">Booking Confirmed!</h1>
           <p className="text-text-muted mb-6">Your reservation at {property?.propertyName} has been successfully processed.</p>
-          
+
           <div className="bg-background p-4 rounded-lg border border-border text-left space-y-3 mb-6">
             <div className="flex justify-between text-sm">
               <span className="text-text-muted">Confirmation Code:</span>
@@ -208,8 +214,8 @@ export default function PublicCheckoutPage() {
           </div>
 
           <p className="text-xs text-text-muted mb-6">Please save your confirmation code. You will need it for check-in.</p>
-          
-          <button 
+
+          <button
             onClick={() => navigate(`/public/${propertyCode}`)}
             className="w-full py-3 bg-primary-600 text-text-inverted font-bold rounded-lg hover:bg-primary-700 transition"
           >
@@ -226,22 +232,22 @@ export default function PublicCheckoutPage() {
   return (
     <div className="min-h-screen bg-background">
       <PublicNavbar />
-      
+
       <div className="max-w-4xl mx-auto px-4 py-6 sm:py-10">
-        <BackButton fallback={`/public/${propertyCode}${location.search}`} label="Back to rooms" disabled={initializePaymentMutation.isPending} confirmWhen={checkIn !== initialCheckIn || checkOut !== initialCheckOut} className="mb-6" />
-        
+        <BackButton fallback={hotelUrl} label="Back to rooms" disabled={initializePaymentMutation.isPending} useHistory={false} className="mb-6" />
+
         <form onSubmit={handlePay} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
+
           {/* Left Column: Booking Summary & Guest Details */}
           <div className="lg:col-span-2 space-y-6">
             <h1 className="text-2xl font-bold text-text">Review & Pay</h1>
-            
+
             {/* 🌟 UPDATED: Editable Trip Details */}
             <div className="bg-surface p-6 rounded-xl border border-border">
               <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
                 <Calendar size={20} className="text-primary-600"/> Your Trip
               </h2>
-              <div className="p-4 bg-background rounded-lg border border-border space-y-4">
+              <div className="min-w-0 p-4 bg-background rounded-lg border border-border space-y-4">
                 <div className="flex justify-between items-start">
                   <div>
                     <p className="font-bold text-text">{selectedRoom?.typeName || 'Selected Room'}</p>
@@ -251,27 +257,27 @@ export default function PublicCheckoutPage() {
                     {nights} Night{nights > 1 ? 's' : ''}
                   </p>
                 </div>
-                
+
                 {/* Editable Date Inputs */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-border">
-                  <div>
+                <div className="grid min-w-0 grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-border">
+                  <div className="min-w-0">
                     <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">Check In</label>
-                    <input 
-                      type="date" 
-                      value={checkIn} 
-                      onChange={(e) => setCheckIn(e.target.value)} 
+                    <input
+                      type="date"
+                      value={checkIn}
+                      onChange={(e) => updateStayDate('checkIn', e.target.value)}
                       min={new Date().toISOString().split('T')[0]}
-                      className="w-full px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" 
+                      className="block w-full min-w-0 max-w-full box-border px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
                     />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">Check Out</label>
-                    <input 
-                      type="date" 
-                      value={checkOut} 
-                      onChange={(e) => setCheckOut(e.target.value)} 
+                    <input
+                      type="date"
+                      value={checkOut}
+                      onChange={(e) => updateStayDate('checkOut', e.target.value)}
                       min={checkIn}
-                      className="w-full px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" 
+                      className="block w-full min-w-0 max-w-full box-border px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
                     />
                   </div>
                 </div>
@@ -293,7 +299,7 @@ export default function PublicCheckoutPage() {
               <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
                 <ShieldCheck size={20} className="text-primary-600"/> Guest Details
               </h2>
-              
+
               {hasGuestSession ? (
                 <div className="p-4 bg-background rounded-lg border border-border space-y-1">
                   <p className="text-sm text-text-muted">Booking for:</p>
@@ -330,7 +336,7 @@ export default function PublicCheckoutPage() {
                   <span className="text-primary-600">GH₵ {totalAmount.toFixed(2)}</span>
                 </div>
               </div>
-              
+
               {/*  NEW: Safety Warning Message */}
               <div className="bg-warning-50 border border-warning-200 p-3 rounded-lg mb-4 flex items-start gap-2">
                 <AlertCircle size={16} className="text-warning-700 mt-0.5 shrink-0" />
@@ -339,7 +345,7 @@ export default function PublicCheckoutPage() {
                 </p>
               </div>
 
-              <button 
+              <button
                 type="submit"
                 disabled={initializePaymentMutation.isPending}
                 className="w-full py-3 bg-primary-600 text-text-inverted font-bold rounded-lg hover:bg-primary-700 transition flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-primary-600/20"
@@ -350,7 +356,7 @@ export default function PublicCheckoutPage() {
                   <><CreditCard size={18} /> {hasGuestSession ? 'Continue to secure payment' : 'Sign in to continue'}</>
                 )}
               </button>
-              
+
               <p className="text-[10px] text-text-muted text-center mt-3">
                 Choose Mobile Money or card (Visa/Mastercard) on Paystack's secure checkout.
               </p>
