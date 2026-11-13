@@ -176,7 +176,6 @@ router.get('/discover', async (req: any, res: Response) => {
         area: true,
         city: true,
         region: true,
-        ghanaPostAddress: true,
         country: true,
         publicDescription: true,
         coverImage: true,
@@ -226,7 +225,6 @@ router.get('/discover', async (req: any, res: Response) => {
         area: p.area,
         city: p.city,
         region: p.region,
-        ghanaPostAddress: p.ghanaPostAddress,
         country: p.country,
         description: p.publicDescription,
         coverImage: publicPhotoReferences(p.propertyCode, p.coverImage, p.galleryImages, p.updatedAt, 'card')[0] || null,
@@ -371,7 +369,7 @@ router.get('/:propertyCode', async (req: any, res: Response) => {
         propertyId: true, propertyCode: true, propertyName: true, businessName: true,
         coverImage: true, galleryImages: true, updatedAt: true, publicDescription: true, cancellationPolicy: true,
         houseRules: true, taxPercentage: true, checkInTime: true, checkOutTime: true,
-        address: true, area: true, city: true, region: true, country: true, ghanaPostAddress: true, primaryPhone: true, primaryPhoneWhatsappOnly: true, primaryEmail: true,
+        address: true, area: true, city: true, region: true, country: true, latitude: true, longitude: true, primaryPhone: true, primaryPhoneWhatsappOnly: true, primaryEmail: true,
       }
     });
     if (!property) return res.status(404).json({ success: false, message: 'Property not found.' });

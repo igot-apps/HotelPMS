@@ -6,6 +6,7 @@ import BackButton from '../components/ui/BackButton';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 import { Building2, User, ArrowRight, ArrowLeft, Loader2, CheckCircle2, Sparkles, MapPin } from 'lucide-react';
+import { isWithinGhanaBounds, googleMapsUrl } from '../utils/ghanaCoordinates';
 
 const GHANA_REGIONS = [
   'Ahafo', 'Ashanti', 'Bono', 'Bono East', 'Central', 'Eastern', 'Greater Accra',
@@ -27,7 +28,8 @@ export default function HotelRegistrationWizard() {
     area: '',
     city: '',
     region: '',
-    ghanaPostAddress: '',
+    latitude: '',
+    longitude: '',
     // Step 2: Owner Details
     ownerName: '',
     ownerEmail: '',
@@ -66,14 +68,23 @@ export default function HotelRegistrationWizard() {
 
   const nextStep = (e) => {
     e.preventDefault();
-    if (!formData.ghanaPostAddress.trim()) {
-      toast.error('Enter the hotel’s GhanaPost GPS address.');
+    if (!isWithinGhanaBounds(Number(formData.latitude), Number(formData.longitude)) || !formData.latitude || !formData.longitude) {
+      toast.error('Enter the hotel’s coordinates within Ghana.');
       return;
     }
     setStep(2);
   };
 
   const prevStep = () => setStep(1);
+
+  const captureLocation = () => {
+    if (!navigator.geolocation) return toast.error('Location is unavailable in this browser. Enter coordinates from Google Maps.');
+    navigator.geolocation.getCurrentPosition(({ coords }) => {
+      if (!isWithinGhanaBounds(coords.latitude, coords.longitude)) return toast.error('This location is outside Ghana. Enter the hotel’s coordinates from Google Maps.');
+      setFormData((current) => ({ ...current, latitude: String(coords.latitude), longitude: String(coords.longitude) }));
+      toast.success('Location captured. Check the map pin before continuing.');
+    }, () => toast.error('Location access was unavailable. Enter coordinates from Google Maps.'), { enableHighAccuracy: true, timeout: 12000 });
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -147,7 +158,7 @@ export default function HotelRegistrationWizard() {
                 <div className="border-t border-border pt-5 space-y-4">
                   <div>
                     <h2 className="text-sm font-bold text-text flex items-center gap-2"><MapPin size={16} className="text-primary-600" /> Hotel location</h2>
-                    <p className="text-xs text-text-muted mt-1">Enter the GhanaPost GPS address for your hotel premises, even if you are registering from somewhere else.</p>
+                    <p className="text-xs text-text-muted mt-1">Use your current location only while at the hotel. Otherwise, find the hotel on Google Maps, right-click its exact location, and copy the latitude and longitude.</p>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
@@ -166,11 +177,15 @@ export default function HotelRegistrationWizard() {
                       <input type="text" name="area" value={formData.area} onChange={handleChange} required placeholder="e.g. Osu" className="w-full px-4 py-3 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500" />
                     </div>
                   </div>
-                  <div>
-                    <label htmlFor="hotel-ghana-post" className="block text-sm font-semibold text-text mb-1.5">Hotel GhanaPost GPS address *</label>
-                    <input id="hotel-ghana-post" type="text" name="ghanaPostAddress" value={formData.ghanaPostAddress} onChange={handleChange} required placeholder="e.g. GA-123-4567" maxLength={20} className="w-full px-4 py-3 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500" />
-                    <p className="mt-1 text-xs text-text-muted">Use the address assigned to the hotel premises.</p>
+                  <div className="flex flex-wrap gap-3">
+                    <button type="button" onClick={captureLocation} className="rounded-lg border border-primary-200 px-4 py-2 text-sm font-semibold text-primary-700 hover:bg-primary-50">Use my location at the hotel</button>
+                    <a href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer" className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text hover:bg-secondary-50">Find hotel on Google Maps ↗</a>
                   </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div><label htmlFor="hotel-latitude" className="block text-sm font-semibold text mb-1.5">Latitude *</label><input id="hotel-latitude" type="number" step="any" name="latitude" value={formData.latitude} onChange={handleChange} required placeholder="e.g. 5.6037" className="w-full px-4 py-3 bg-background border border-border rounded-lg" /></div>
+                    <div><label htmlFor="hotel-longitude" className="block text-sm font-semibold text mb-1.5">Longitude *</label><input id="hotel-longitude" type="number" step="any" name="longitude" value={formData.longitude} onChange={handleChange} required placeholder="e.g. -0.1870" className="w-full px-4 py-3 bg-background border border-border rounded-lg" /></div>
+                  </div>
+                  {formData.latitude && formData.longitude && isWithinGhanaBounds(Number(formData.latitude), Number(formData.longitude)) && <a href={googleMapsUrl(formData.latitude, formData.longitude)} target="_blank" rel="noopener noreferrer" className="inline-block text-sm font-semibold text-primary-700 underline">Check this hotel pin on Google Maps ↗</a>}
                 </div>
 
                 <button type="submit" className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 text-text-inverted font-semibold rounded-lg hover:bg-primary-700 transition shadow-md mt-6">

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Loader2, Globe, Save, Smartphone, MapPin, LocateFixed, ImagePlus, Star, Trash2, MessageCircle, Clock3, Upload } from 'lucide-react';
+import { isWithinGhanaBounds, googleMapsUrl } from '../../utils/ghanaCoordinates';
 
 const MAX_GALLERY_IMAGES = 3;
 const MAX_COMPRESSED_IMAGE_BYTES = 350 * 1024;
@@ -64,7 +65,7 @@ function compressPropertyImage(file) {
 export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, initialData }) {
   const [formData, setFormData] = useState({
     propertyName: '', propertyCode: '', businessName: '', legalName: '', propertyType: 'Hotel', address: '', area: '', city: '', region: '', country: 'Ghana',
-    ghanaPostAddress: '', latitude: '', longitude: '', checkInTime: '14:00', checkOutTime: '11:00',
+    latitude: '', longitude: '', checkInTime: '14:00', checkOutTime: '11:00',
     primaryEmail: '', primaryPhone: '', primaryPhoneWhatsappOnly: false, coverImage: '', galleryImages: [], publicDescription: '',
     cancellationPolicy: '', houseRules: '', taxPercentage: 0.00, isOnlineBookingEnabled: false,
     paystackSecretKey: '',
@@ -89,7 +90,6 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
         city: initialData.city || '',
         region: initialData.region || '',
         country: initialData.country || 'Ghana',
-        ghanaPostAddress: initialData.ghanaPostAddress || '',
         latitude: initialData.latitude ?? '',
         longitude: initialData.longitude ?? '',
         checkInTime: initialData.checkInTime || '14:00',
@@ -109,7 +109,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
     } else {
       setFormData({
         propertyName: '', propertyCode: '', businessName: '', legalName: '', propertyType: 'Hotel', address: '', area: '', city: '', region: '', country: 'Ghana',
-        ghanaPostAddress: '', latitude: '', longitude: '', checkInTime: '14:00', checkOutTime: '11:00',
+        latitude: '', longitude: '', checkInTime: '14:00', checkOutTime: '11:00',
         primaryEmail: '', primaryPhone: '', primaryPhoneWhatsappOnly: false, coverImage: '', galleryImages: [], publicDescription: '',
         cancellationPolicy: '', houseRules: '', taxPercentage: 0.00, isOnlineBookingEnabled: false,
         paystackSecretKey: '',
@@ -161,6 +161,11 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
     setLocationError('');
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
+        if (!isWithinGhanaBounds(coords.latitude, coords.longitude)) {
+          setLocationError('This location is outside Ghana. Select the hotel’s location on Google Maps.');
+          setLocationLoading(false);
+          return;
+        }
         setFormData((current) => ({ ...current, latitude: coords.latitude, longitude: coords.longitude }));
         setLocationLoading(false);
       },
@@ -174,6 +179,11 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if ((formData.latitude !== '' || formData.longitude !== '' || !initialData) && (formData.latitude === '' || formData.longitude === '' || !isWithinGhanaBounds(Number(formData.latitude), Number(formData.longitude)))) {
+      setLocationError('Enter both hotel coordinates within Ghana, then check the pin on Google Maps.');
+      return;
+    }
+    setLocationError('');
     const galleryArray = formData.galleryImages.filter((image) => image !== formData.coverImage);
 
     // 🌟 CRITICAL: Only send the Paystack key if it's a NEW value (not the masked version)
@@ -255,19 +265,19 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
                   {GHANA_REGIONS.map((region) => <option key={region} value={region}>{region}</option>)}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-text mb-1.5">GhanaPost GPS address</label>
-                <input type="text" name="ghanaPostAddress" value={formData.ghanaPostAddress} onChange={handleChange} placeholder="e.g. GA-123-4567" className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
-              </div>
               <div className="md:col-span-2 rounded-lg border border-border bg-background p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-text flex items-center gap-2"><MapPin size={16} className="text-primary-600" /> Map location</p>
-                    <p className="text-xs text-text-muted mt-1">Capture the hotel’s location while on the premises to show distance to guests.</p>
-                    {formData.latitude && formData.longitude && <p className="text-xs text-text-muted mt-1">Location saved</p>}
+                    <p className="text-xs text-text-muted mt-1">At the hotel, capture your location. Elsewhere, find the exact hotel pin on Google Maps and enter its coordinates.</p>
                   </div>
                   <button type="button" onClick={captureLocation} disabled={locationLoading} className="inline-flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-secondary-50 disabled:opacity-60"><LocateFixed size={16} />{locationLoading ? 'Getting location…' : 'Use current location'}</button>
                 </div>
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div><label htmlFor="property-latitude" className="block text-xs font-semibold text-text mb-1">Latitude</label><input id="property-latitude" type="number" step="any" name="latitude" value={formData.latitude} onChange={handleChange} placeholder="e.g. 5.6037" className="w-full rounded-lg border border-border bg-surface px-3 py-2.5" /></div>
+                  <div><label htmlFor="property-longitude" className="block text-xs font-semibold text-text mb-1">Longitude</label><input id="property-longitude" type="number" step="any" name="longitude" value={formData.longitude} onChange={handleChange} placeholder="e.g. -0.1870" className="w-full rounded-lg border border-border bg-surface px-3 py-2.5" /></div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-3 text-sm"><a href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer" className="font-semibold text-primary-700 underline">Find hotel on Google Maps ↗</a>{formData.latitude && formData.longitude && isWithinGhanaBounds(Number(formData.latitude), Number(formData.longitude)) && <a href={googleMapsUrl(formData.latitude, formData.longitude)} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary-700 underline">Check saved pin ↗</a>}</div>
                 {locationError && <p role="alert" className="text-xs text-danger-600 mt-2">{locationError}</p>}
               </div>
               <div>

@@ -226,9 +226,8 @@ export const registerNewHotel = async (data: {
   area: string;
   city: string;
   region: string;
-  ghanaPostAddress?: string;
-  latitude?: number | null;
-  longitude?: number | null;
+  latitude: number;
+  longitude: number;
   ownerName: string;
   ownerEmail: string;
   password: string;
@@ -263,9 +262,8 @@ export const registerNewHotel = async (data: {
         area: data.area,
         city: data.city,
         region: data.region,
-        ghanaPostAddress: data.ghanaPostAddress || null,
-        latitude: data.latitude ?? null,
-        longitude: data.longitude ?? null,
+        latitude: data.latitude,
+        longitude: data.longitude,
         country: 'Ghana', 
         currency: 'GHS',
         timezone: 'Africa/Accra',

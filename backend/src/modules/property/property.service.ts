@@ -1,10 +1,15 @@
 import * as propertyRepository from './property.repository';
 import { prisma } from '../../shared/utils/prisma';
 import { defaultHotelHostname } from './website-domain.service';
+import { isWithinGhanaBounds } from '../../shared/utils/ghana-coordinates';
 
 export const createProperty = async (data: any) => {
   // ✅ Removed tenantId check
   if (!data.propertyName) throw new Error('Property name is required');
+  if (data.country && String(data.country).toLowerCase() !== 'ghana') throw new Error('Hotels must be located in Ghana.');
+  if (data.latitude === '' || data.longitude === '' || data.latitude == null || data.longitude == null || !isWithinGhanaBounds(Number(data.latitude), Number(data.longitude))) {
+    throw new Error('Choose the property’s Google Maps coordinates within Ghana.');
+  }
   const requestedCode = typeof data.propertyCode === 'string' ? data.propertyCode.trim().toLowerCase() : '';
   if (requestedCode && requestedCode !== data.propertyCode.trim().toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')) throw new Error('Use letters, numbers, and hyphens for the hotel code.');
   const base = String(requestedCode || data.propertyName).trim().toLowerCase()
@@ -17,7 +22,7 @@ export const createProperty = async (data: any) => {
       prisma.property.findFirst({ where: { propertyCode: { equals: code, mode: 'insensitive' } }, select: { propertyId: true } }),
       prisma.propertyWebsiteDomain.findUnique({ where: { hostname: `${code}.hideout24.com` }, select: { domainId: true } }),
     ]);
-    if (!property && !domain) return propertyRepository.createProperty({ ...data, propertyCode: code });
+    if (!property && !domain) return propertyRepository.createProperty({ ...data, country: 'Ghana', latitude: Number(data.latitude), longitude: Number(data.longitude), propertyCode: code });
     if (data.propertyCode) throw new Error('This hotel code is already in use. Choose another.');
     code = `${base}-${suffix}`;
   }
@@ -59,7 +64,7 @@ export const updateProperty = async (propertyId: number, data: any) => {
 
   const allowedFields = [
     'propertyName', 'businessName', 'legalName', 'propertyType', 'address', 'area', 'city', 'region',
-    'country', 'ghanaPostAddress', 'latitude', 'longitude', 'primaryEmail', 'primaryPhone', 'primaryPhoneWhatsappOnly', 'coverImage',
+    'country', 'latitude', 'longitude', 'primaryEmail', 'primaryPhone', 'primaryPhoneWhatsappOnly', 'coverImage',
     'galleryImages', 'publicDescription', 'cancellationPolicy', 'houseRules', 'taxPercentage',
     'isOnlineBookingEnabled', 'checkInTime', 'checkOutTime',
   ] as const;
@@ -68,6 +73,7 @@ export const updateProperty = async (propertyId: number, data: any) => {
   for (const field of allowedFields) {
     if (Object.prototype.hasOwnProperty.call(data, field)) updateData[field] = data[field];
   }
+  if (updateData.country !== undefined && String(updateData.country).toLowerCase() !== 'ghana') throw new Error('Hotels must be located in Ghana.');
 
   if (data.paystackSecretKey !== undefined && data.replacePaystackSecretKey !== true) {
     throw new Error('Choose Replace Paystack key before changing the payment setup.');
@@ -88,14 +94,14 @@ export const updateProperty = async (propertyId: number, data: any) => {
     if (!Number.isFinite(tax) || tax < 0 || tax > 100) throw new Error('Tax percentage must be between 0 and 100.');
     updateData.taxPercentage = tax;
   }
-  for (const field of ['latitude', 'longitude'] as const) {
-    if (updateData[field] !== undefined && updateData[field] !== null) {
-      const coordinate = Number(updateData[field]);
-      if (!Number.isFinite(coordinate) || (field === 'latitude' && (coordinate < -90 || coordinate > 90)) || (field === 'longitude' && (coordinate < -180 || coordinate > 180))) {
-        throw new Error(`Enter a valid ${field === 'latitude' ? 'latitude' : 'longitude'}.`);
-      }
-      updateData[field] = coordinate;
+  if (updateData.latitude !== undefined || updateData.longitude !== undefined) {
+    const latitude = updateData.latitude === undefined ? property.latitude : updateData.latitude;
+    const longitude = updateData.longitude === undefined ? property.longitude : updateData.longitude;
+    if (latitude === '' || longitude === '' || latitude == null || longitude == null || !isWithinGhanaBounds(Number(latitude), Number(longitude))) {
+      throw new Error('Choose the property’s Google Maps coordinates within Ghana.');
     }
+    updateData.latitude = Number(latitude);
+    updateData.longitude = Number(longitude);
   }
 
   if (updateData.isOnlineBookingEnabled === true && !property.paystackSecretKey && !process.env.PAYSTACK_SECRET_KEY && !updateData.paystackSecretKey) {

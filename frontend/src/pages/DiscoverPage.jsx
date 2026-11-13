@@ -527,17 +527,12 @@ export default function DiscoverPage() {
                       <Link to={`/public/${hotel.propertyCode}${checkIn && checkOut ? `?checkIn=${checkIn}&checkOut=${checkOut}` : ''}`} className="text-lg font-bold text-text transition-colors hover:text-primary-600">
                         {hotel.propertyName || 'Unnamed Property'}
                       </Link>
-                      {(hotel.area || hotel.city || hotel.region || hotel.ghanaPostAddress) && (
+                      {(hotel.area || hotel.city || hotel.region) && (
                         <p className="text-sm text-text-muted flex min-w-0 items-center gap-1 mt-1">
                           <MapPin size={14} className="shrink-0" />
                           <span className="min-w-0 truncate" title={[hotel.area, hotel.city, hotel.region, hotel.country].filter(Boolean).join(', ')}>
                             {[hotel.area, hotel.city, hotel.region].filter(Boolean).join(', ')}{hotel.country ? ` · ${hotel.country}` : ''}
                           </span>
-                        </p>
-                      )}
-                      {hotel.ghanaPostAddress && (
-                        <p className="text-xs text-text-muted mt-1 ml-5 truncate" title={`GhanaPost GPS: ${hotel.ghanaPostAddress}`}>
-                          GhanaPost GPS: {hotel.ghanaPostAddress}
                         </p>
                       )}
                     </div>

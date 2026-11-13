@@ -123,7 +123,7 @@ export const logout = async (_req: AuthRequest, res: Response) => {
 export const registerHotel = async (req: Request, res: Response) => {
   try {
     const {
-      hotelName, slug, email, phone, area, city, region, ghanaPostAddress,
+      hotelName, slug, email, phone, area, city, region,
       latitude, longitude, ownerName, ownerEmail, password,
     } = req.body;
 
@@ -135,12 +135,9 @@ export const registerHotel = async (req: Request, res: Response) => {
       });
     }
 
-    const hasGhanaPostAddress = typeof ghanaPostAddress === 'string' && !!ghanaPostAddress.trim();
-    if (!hasGhanaPostAddress) {
-      return res.status(400).json({ success: false, message: 'Enter the hotel’s GhanaPost GPS address.' });
-    }
-    if ((latitude !== undefined && latitude !== null) || (longitude !== undefined && longitude !== null)) {
-      return res.status(400).json({ success: false, message: 'Hotel registration accepts a GhanaPost GPS address only.' });
+    const { isWithinGhanaBounds } = await import('../../shared/utils/ghana-coordinates');
+    if (latitude === '' || longitude === '' || latitude == null || longitude == null || !isWithinGhanaBounds(Number(latitude), Number(longitude))) {
+      return res.status(400).json({ success: false, message: 'Choose the hotel’s Google Maps coordinates within Ghana.' });
     }
 
     const result = await authService.registerNewHotel({
@@ -151,7 +148,8 @@ export const registerHotel = async (req: Request, res: Response) => {
       area: String(area).trim(),
       city: String(city).trim(),
       region: String(region).trim(),
-      ghanaPostAddress: ghanaPostAddress.trim(),
+      latitude: Number(latitude),
+      longitude: Number(longitude),
       ownerName,
       ownerEmail,
       password,
