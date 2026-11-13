@@ -3,19 +3,17 @@ import { createHash, createPublicKey, randomInt, randomUUID, verify as verifySig
 import { prisma } from '../../shared/utils/prisma';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { normalizeGhanaPhoneNumber } from '../../shared/utils/ghanaPhone';
+import { createMoolreReference, isMoolreSmsConfigured, MoolreSmsError, sendMoolreSms } from '../notifications/moolre-sms.service';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key';
 const GOOGLE_ISSUERS = new Set(['accounts.google.com', 'https://accounts.google.com']);
-const simulatedPhone = process.env.GUEST_PHONE_AUTH_MODE !== 'off';
-
-function normalizePhone(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const digits = value.replace(/[\s()-]/g, '');
-  if (/^0[235][0-9]{8}$/.test(digits)) return '+233' + digits.slice(1);
-  if (/^233[235][0-9]{8}$/.test(digits)) return '+' + digits;
-  if (/^\+233[235][0-9]{8}$/.test(digits)) return digits;
-  return null;
+function phoneAuthMode(): 'off' | 'simulation' | 'moolre' {
+  const configured = process.env.GUEST_PHONE_AUTH_MODE?.trim().toLowerCase();
+  if (configured === 'off') return 'off';
+  if (configured === 'simulation') return 'simulation';
+  return isMoolreSmsConfigured() ? 'moolre' : 'simulation';
 }
 
 function phoneVariants(phone: string): string[] {
@@ -65,7 +63,10 @@ async function verifyGoogleCredential(credential: string): Promise<GoogleIdentit
   return { sub: claims.sub, email: claims.email.toLowerCase(), name: (claims.name || 'Guest').slice(0, 200) };
 }
 
-router.get('/methods', (_req, res) => res.json({ success: true, data: { googleEnabled: false, phoneEnabled: simulatedPhone, simulatedPhone } }));
+router.get('/methods', (_req, res) => {
+  const mode = phoneAuthMode();
+  res.json({ success: true, data: { googleEnabled: false, phoneEnabled: mode !== 'off', simulatedPhone: mode === 'simulation' } });
+});
 
 router.post('/google', async (req: any, res: Response) => {
   try {
@@ -92,7 +93,7 @@ router.post('/google/complete', async (req: any, res: Response) => {
   try {
     const setup = jwt.verify(String(req.body?.setupToken || ''), JWT_SECRET) as jwt.JwtPayload;
     if (setup.type !== 'google_guest_setup' || !setup.sub || !setup.email) throw new Error('Google sign-in expired. Please start again.');
-    const phone = normalizePhone(req.body?.phone);
+    const phone = normalizeGhanaPhoneNumber(req.body?.phone);
     if (!phone) return res.status(400).json({ success: false, message: 'Enter a valid Ghana mobile number' });
     const existing = await findGuestByPhone(phone);
     if (existing) return res.status(409).json({ success: false, message: 'This phone number already has an account. Sign in with its existing password or phone code.' });
@@ -113,9 +114,10 @@ router.post('/google/complete', async (req: any, res: Response) => {
 
 router.post('/phone/request', async (req: any, res: Response) => {
   try {
-    const phone = normalizePhone(req.body?.phone);
+    const phone = normalizeGhanaPhoneNumber(req.body?.phone);
     if (!phone) return res.status(400).json({ success: false, message: 'Enter a valid Ghana mobile number' });
-    if (!simulatedPhone) return res.status(503).json({ success: false, message: 'Phone sign-in is temporarily unavailable.' });
+    const mode = phoneAuthMode();
+    if (mode === 'off') return res.status(503).json({ success: false, message: 'Phone sign-in is temporarily unavailable.' });
 
     let google: GoogleIdentity | null = null;
     if (req.body?.setupToken) {
@@ -129,13 +131,29 @@ router.post('/phone/request', async (req: any, res: Response) => {
     if (hourly >= 5) return res.status(429).json({ success: false, message: 'Too many codes requested. Try again in an hour.' });
     const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
     const id = randomUUID();
+    const smsReference = createMoolreReference(`guest-auth-${id}`);
     await prisma.guestPhoneChallenge.create({ data: {
       id, phone, codeHash: hashCode(id, code), purpose: google ? 'google_link' : 'login',
       googleSub: google?.sub, googleEmail: google?.email, googleName: google?.name,
       expiresAt: new Date(Date.now() + 5 * 60_000),
+      smsProvider: mode === 'moolre' ? 'moolre' : 'simulation', smsReference,
+      smsState: mode === 'moolre' ? 'pending' : 'simulated',
     } });
-    return res.json({ success: true, data: { challengeId: id, phone, expiresInSeconds: 300, ...(simulatedPhone ? { testCode: code } : {}) } });
-  } catch {
+    if (mode === 'moolre') {
+      try {
+        await sendMoolreSms({ recipient: phone, message: `Your HideOut24 sign-in code is ${code}. It expires in 5 minutes.`, reference: smsReference });
+        await prisma.guestPhoneChallenge.update({ where: { id }, data: { smsState: 'accepted', smsAcceptedAt: new Date() } });
+      } catch (error) {
+        const smsError = error instanceof MoolreSmsError ? error : new MoolreSmsError('SMS could not be sent.', smsReference, true);
+        await prisma.guestPhoneChallenge.update({ where: { id }, data: { smsState: smsError.ambiguous ? 'uncertain' : 'failed' } });
+        return res.status(503).json({ success: false, message: smsError.ambiguous
+          ? 'The code delivery status is uncertain. Please wait before requesting another code.'
+          : 'Could not send the sign-in code. Please try again later.' });
+      }
+    }
+    return res.json({ success: true, data: { challengeId: id, phone, expiresInSeconds: 300, ...(mode === 'simulation' ? { testCode: code } : {}) } });
+  } catch (error) {
+    if (error instanceof MoolreSmsError) return res.status(503).json({ success: false, message: 'Could not send the sign-in code. Please try again later.' });
     return res.status(400).json({ success: false, message: 'Could not start phone sign-in. Please try again.' });
   }
 });
@@ -184,7 +202,7 @@ router.post('/phone/verify', async (req: any, res: Response) => {
 router.post('/phone/complete', async (req: any, res: Response) => {
   try {
     const setup = jwt.verify(String(req.body?.setupToken || ''), JWT_SECRET) as jwt.JwtPayload;
-    if (setup.type !== 'phone_guest_setup' || !normalizePhone(setup.phone)) throw new Error('Sign-in expired. Request a new code.');
+    if (setup.type !== 'phone_guest_setup' || !normalizeGhanaPhoneNumber(setup.phone)) throw new Error('Sign-in expired. Request a new code.');
     const fullName = String(req.body?.fullName || '').trim().replace(/\s+/g, ' ');
     if (fullName.length < 2 || fullName.length > 200 || fullName.toLowerCase() === 'guest') {
       return res.status(400).json({ success: false, message: 'Enter your full name to continue.' });

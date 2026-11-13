@@ -1,14 +1,10 @@
 import { prisma } from '../../shared/utils/prisma';
+import { normalizeGhanaPhoneNumber } from '../../shared/utils/ghanaPhone';
+import { createMoolreReference, isMoolreSmsConfigured, MoolreSmsError, sendMoolreSms } from './moolre-sms.service';
 
 export type SmsEvent = 'confirmed' | 'cancelled';
 
-export function normalizeGhanaSmsNumber(value: string | null | undefined): string | null {
-  const raw = value?.trim().replace(/[\s()-]/g, '') || '';
-  const digits = raw.startsWith('+') ? raw.slice(1) : raw;
-  if (/^0[235]\d{8}$/.test(digits)) return `+233${digits.slice(1)}`;
-  if (/^233[235]\d{8}$/.test(digits)) return `+${digits}`;
-  return null;
-}
+export const normalizeGhanaSmsNumber = normalizeGhanaPhoneNumber;
 
 export async function recordSimulatedSms(reservationId: string, event: SmsEvent): Promise<void> {
   try {
@@ -22,17 +18,34 @@ export async function recordSimulatedSms(reservationId: string, event: SmsEvent)
     if (Number(booking.totalAmount) <= 0 || Number(booking.amountPaid) + 0.01 < Number(booking.totalAmount)) return;
     const completedPayments = booking.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
     if (completedPayments + 0.01 < Number(booking.totalAmount)) return;
-    const recipient = normalizeGhanaSmsNumber(booking.guestPhoneSnapshot);
+    const recipient = normalizeGhanaPhoneNumber(booking.guestPhoneSnapshot);
     if (!recipient) return;
     const date = (value: Date) => new Intl.DateTimeFormat('en-GB', { timeZone: booking.property.timezone, day: 'numeric', month: 'short', year: 'numeric' }).format(value);
     const body = event === 'confirmed'
       ? `${booking.property.propertyName}: Your booking ${booking.confirmationCode} is confirmed for ${date(booking.checkInDate)} to ${date(booking.checkOutDate)}. Keep this code for check-in.`
       : `${booking.property.propertyName}: Booking ${booking.confirmationCode} has been cancelled. If a refund is due, the hotel will follow up separately.`;
-    await prisma.simulatedSms.create({ data: {
+    const live = isMoolreSmsConfigured();
+    const providerReference = createMoolreReference(`${event}-${reservationId}`);
+    const message = await prisma.simulatedSms.create({ data: {
       propertyId: booking.propertyId, reservationId, eventKey: `${reservationId}:${event}`,
-      kind: event, recipient, body,
+      kind: event, recipient, body, provider: live ? 'moolre' : 'simulation', providerReference,
+      sendStatus: live ? 'pending' : 'simulated',
     } });
+    if (!live) return;
+    try {
+      const accepted = await sendMoolreSms({ recipient, message: body, reference: providerReference });
+      await prisma.simulatedSms.update({ where: { messageId: message.messageId }, data: {
+        sendStatus: 'accepted', providerCode: accepted.providerCode, acceptedAt: new Date(), failureReason: null,
+      } });
+    } catch (error) {
+      const moolreError = error instanceof MoolreSmsError ? error : new MoolreSmsError('SMS could not be sent.', providerReference, true);
+      await prisma.simulatedSms.update({ where: { messageId: message.messageId }, data: {
+        sendStatus: moolreError.ambiguous ? 'uncertain' : 'failed', providerCode: moolreError.providerCode,
+        failureReason: moolreError.ambiguous ? 'Provider response uncertain' : 'Provider rejected message',
+      } });
+      console.error('SMS send was not accepted', { reservationId, event, reference: providerReference, ambiguous: moolreError.ambiguous });
+    }
   } catch (error: any) {
-    if (error?.code !== 'P2002') console.error('Could not record simulated SMS', { reservationId, event, error });
+    if (error?.code !== 'P2002') console.error('Could not prepare SMS', { reservationId, event, errorCode: error?.code || 'unknown' });
   }
 }

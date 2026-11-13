@@ -139,6 +139,14 @@ model SimulatedSms {
   kind          String   @db.VarChar(40)
   recipient     String   @db.VarChar(20)
   body          String   @db.Text
+    provider      String   @default("simulation") @db.VarChar(20)
+    providerReference String? @unique @db.VarChar(180)
+    sendStatus    String   @default("simulated") @db.VarChar(30)
+    providerCode  String?  @db.VarChar(30)
+    providerDeliveryStatus String? @db.VarChar(30)
+    acceptedAt    DateTime?
+    statusCheckedAt DateTime?
+    failureReason String?  @db.VarChar(100)
   createdAt     DateTime @default(now())
 
   property      Property @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
@@ -279,6 +287,12 @@ model GuestPhoneChallenge {
   googleEmail String?  @db.VarChar(200)
   googleName  String?  @db.VarChar(200)
   attempts    Int      @default(0)
+    smsProvider String   @default("simulation") @db.VarChar(20)
+    smsReference String? @unique @db.VarChar(180)
+    smsState    String   @default("simulated") @db.VarChar(30)
+    smsAcceptedAt DateTime?
+    smsStatusCheckedAt DateTime?
+    smsDeliveryStatus String? @db.VarChar(30)
   expiresAt   DateTime
   consumedAt  DateTime?
   createdAt   DateTime @default(now())
