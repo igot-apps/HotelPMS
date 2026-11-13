@@ -7,7 +7,7 @@ import jwt from 'jsonwebtoken';
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key';
 const GOOGLE_ISSUERS = new Set(['accounts.google.com', 'https://accounts.google.com']);
-const simulatedPhone = process.env.NODE_ENV !== 'production' && process.env.GUEST_PHONE_AUTH_MODE !== 'off';
+const simulatedPhone = process.env.GUEST_PHONE_AUTH_MODE !== 'off';
 
 function normalizePhone(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -65,7 +65,7 @@ async function verifyGoogleCredential(credential: string): Promise<GoogleIdentit
   return { sub: claims.sub, email: claims.email.toLowerCase(), name: (claims.name || 'Guest').slice(0, 200) };
 }
 
-router.get('/methods', (_req, res) => res.json({ success: true, data: { googleEnabled: Boolean(process.env.GOOGLE_CLIENT_ID), phoneEnabled: simulatedPhone, simulatedPhone } }));
+router.get('/methods', (_req, res) => res.json({ success: true, data: { googleEnabled: false, phoneEnabled: simulatedPhone, simulatedPhone } }));
 
 router.post('/google', async (req: any, res: Response) => {
   try {
@@ -115,7 +115,7 @@ router.post('/phone/request', async (req: any, res: Response) => {
   try {
     const phone = normalizePhone(req.body?.phone);
     if (!phone) return res.status(400).json({ success: false, message: 'Enter a valid Ghana mobile number' });
-    if (!simulatedPhone) return res.status(503).json({ success: false, message: 'Phone sign-in is unavailable until SMS delivery is connected. Use Google sign-in.' });
+    if (!simulatedPhone) return res.status(503).json({ success: false, message: 'Phone sign-in is temporarily unavailable.' });
 
     let google: GoogleIdentity | null = null;
     if (req.body?.setupToken) {
@@ -167,14 +167,42 @@ router.post('/phone/verify', async (req: any, res: Response) => {
         ? await prisma.platformGuest.update({ where: { guestId: guest.guestId }, data: { googleSubject: challenge.googleSub, email: challenge.googleEmail, isEmailVerified: true, isPhoneVerified: true } })
         : await prisma.platformGuest.create({ data: { fullName: challenge.googleName || 'Guest', phone: challenge.phone, email: challenge.googleEmail, googleSubject: challenge.googleSub, isEmailVerified: true, isPhoneVerified: true } });
     } else {
-      guest = guest
-        ? await prisma.platformGuest.update({ where: { guestId: guest.guestId }, data: { isPhoneVerified: true } })
-        : await prisma.platformGuest.create({ data: { fullName: String(req.body?.fullName || 'Guest').trim().slice(0, 200) || 'Guest', phone: challenge.phone, isPhoneVerified: true } });
+      if (guest && !guest.isActive) return res.status(403).json({ success: false, message: 'Account is deactivated' });
+      if (!guest || guest.fullName.trim().toLowerCase() === 'guest') {
+        const setupToken = jwt.sign({ type: 'phone_guest_setup', phone: challenge.phone, guestId: guest?.guestId }, JWT_SECRET, { expiresIn: '10m' });
+        return res.json({ success: true, data: { needsName: true, setupToken, phone: challenge.phone } });
+      }
+      guest = await prisma.platformGuest.update({ where: { guestId: guest.guestId }, data: { isPhoneVerified: true } });
     }
     if (!guest.isActive) return res.status(403).json({ success: false, message: 'Account is deactivated' });
     return res.json({ success: true, data: guestResponse(guest) });
   } catch {
     return res.status(500).json({ success: false, message: 'Could not finish sign-in. Please try again.' });
+  }
+});
+
+router.post('/phone/complete', async (req: any, res: Response) => {
+  try {
+    const setup = jwt.verify(String(req.body?.setupToken || ''), JWT_SECRET) as jwt.JwtPayload;
+    if (setup.type !== 'phone_guest_setup' || !normalizePhone(setup.phone)) throw new Error('Sign-in expired. Request a new code.');
+    const fullName = String(req.body?.fullName || '').trim().replace(/\s+/g, ' ');
+    if (fullName.length < 2 || fullName.length > 200 || fullName.toLowerCase() === 'guest') {
+      return res.status(400).json({ success: false, message: 'Enter your full name to continue.' });
+    }
+    const existing = await findGuestByPhone(setup.phone);
+    if (existing && (!setup.guestId || existing.guestId !== setup.guestId)) {
+      return res.status(409).json({ success: false, message: 'This number already belongs to another account.' });
+    }
+    if (existing && !existing.isActive) return res.status(403).json({ success: false, message: 'Account is deactivated' });
+    if (existing && existing.fullName.trim().toLowerCase() !== 'guest') {
+      return res.status(409).json({ success: false, message: 'Name is already set. Request a new code to sign in.' });
+    }
+    const guest = existing
+      ? await prisma.platformGuest.update({ where: { guestId: existing.guestId }, data: { fullName, isPhoneVerified: true } })
+      : await prisma.platformGuest.create({ data: { fullName, phone: setup.phone, isPhoneVerified: true } });
+    return res.json({ success: true, data: guestResponse(guest) });
+  } catch {
+    return res.status(400).json({ success: false, message: 'Sign-in expired. Request a new code.' });
   }
 });
 
