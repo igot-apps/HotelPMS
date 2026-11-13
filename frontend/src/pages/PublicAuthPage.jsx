@@ -1,138 +1,14 @@
-import { useState } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { useMutation } from '@tanstack/react-query';
-import api from '../lib/axios';
-import { Mail, Phone, User, Lock, Loader2 } from 'lucide-react';
-import toast from 'react-hot-toast';
-import { startGuestSession } from '../lib/guestSession';
-import BackButton from '../components/ui/BackButton';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import GuestSignInForm from '../components/public/GuestSignInForm';
 import BrandMark from '../components/ui/BrandMark';
+import BackButton from '../components/ui/BackButton';
 
 export default function PublicAuthPage() {
-  const [isLogin, setIsLogin] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
-  
-  // 🛡️ NO useAuthStore HERE! Strictly isolated.
   const from = location.state?.from || '/discover';
-
-  const [formData, setFormData] = useState({
-    fullName: '', phone: '', email: '', password: '',
-  });
-
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const authMutation = useMutation({
-    mutationFn: async (data) => {
-      if (isLogin) {
-        const res = await api.post('/public/auth/login', {
-          phone: data.phone,
-          password: data.password,
-        });
-        return res.data;
-      } else {
-        const res = await api.post('/public/auth/register', {
-          fullName: data.fullName,
-          phone: data.phone,
-          email: data.email || undefined,
-          password: data.password,
-        });
-        return res.data;
-      }
-    },
-    onSuccess: (data) => {
-      if (data.success && data.data) {
-        const guestData = data.data.guest;
-        const token = data.data.token;
-        
-        if (guestData && token) {
-          startGuestSession(guestData, token);
-          
-          toast.success(isLogin ? 'Welcome back!' : 'Account created successfully!');
-          navigate(from, { replace: true });
-        }
-      } else {
-        toast.error(data.message || 'Authentication failed');
-      }
-    },
-    onError: (err) => {
-      toast.error(err.response?.data?.message || 'An error occurred. Please check your details.');
-    },
-  });
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (isLogin) {
-      if (!formData.password || !formData.phone) return toast.error('Please enter your phone and password');
-    } else {
-      if (!formData.fullName || !formData.phone || !formData.password) return toast.error('Please fill in all required fields');
-    }
-    authMutation.mutate(formData);
-  };
-
-  return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <div className="w-full border-b border-border bg-surface/80 backdrop-blur-md sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link to="/discover" className="flex items-center gap-2 group">
-            <BrandMark className="h-8 w-8" />
-            <span className="text-lg font-black text-text tracking-tight">HideOut24</span>
-          </Link>
-          <BackButton fallback="/discover" label="Back" confirmWhen={Object.values(formData).some(Boolean)} disabled={authMutation.isPending} />
-        </div>
-      </div>
-
-      <div className="flex-1 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-surface border border-border rounded-2xl shadow-xl p-4 sm:p-8">
-          <div className="flex p-1 bg-secondary-100 rounded-lg mb-6">
-            <button onClick={() => setIsLogin(true)} className={`flex-1 py-2 text-sm font-semibold rounded-md transition ${isLogin ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text'}`}>Sign In</button>
-            <button onClick={() => setIsLogin(false)} className={`flex-1 py-2 text-sm font-semibold rounded-md transition ${!isLogin ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text'}`}>Create Account</button>
-          </div>
-
-          <h2 className="text-2xl font-bold text-text mb-1">{isLogin ? 'Welcome back!' : 'Create your account'}</h2>
-          <p className="text-sm text-text-muted mb-6">{isLogin ? 'Enter your details to access your reservations.' : 'Join us to book stays and manage your trips easily.'}</p>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {!isLogin && (
-              <div>
-                <label className="block text-xs font-bold text-text-muted mb-1">Full Name</label>
-                <div className="relative">
-                  <User size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-                  <input type="text" name="fullName" value={formData.fullName} onChange={handleChange} placeholder="Kwame Mensah" className="w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-lg text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
-                </div>
-              </div>
-            )}
-            <div>
-              <label className="block text-xs font-bold text-text-muted mb-1">Phone Number</label>
-              <div className="relative">
-                <Phone size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-                <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="024XXXXXXX" className="w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-lg text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
-              </div>
-            </div>
-            {!isLogin && (
-              <div>
-                <label className="block text-xs font-bold text-text-muted mb-1">Email (Optional)</label>
-                <div className="relative">
-                  <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-                  <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="kwame@example.com" className="w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-lg text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
-                </div>
-              </div>
-            )}
-            <div>
-              <label className="block text-xs font-bold text-text-muted mb-1">Password</label>
-              <div className="relative">
-                <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-                <input type="password" name="password" value={formData.password} onChange={handleChange} placeholder="••••••••" className="w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-lg text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition" />
-              </div>
-            </div>
-            <button type="submit" disabled={authMutation.isPending} className="w-full py-3 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-lg transition flex items-center justify-center gap-2 shadow-lg shadow-primary-600/30 disabled:opacity-50 disabled:cursor-not-allowed">
-              {authMutation.isPending ? (<><Loader2 className="animate-spin" size={18} /> Processing...</>) : (isLogin ? 'Sign In' : 'Create Account')}
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
+  return <div className="flex min-h-screen flex-col bg-background">
+    <header className="border-b border-border bg-surface"><div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4"><Link to="/discover" className="flex items-center gap-2"><BrandMark className="h-8 w-8" /><span className="font-black text-text">HideOut24</span></Link><BackButton fallback="/discover" label="Back" /></div></header>
+    <main className="flex flex-1 items-center justify-center px-4 py-8"><section className="w-full max-w-md min-w-0 rounded-2xl border border-border bg-surface p-5 shadow-xl sm:p-8"><GuestSignInForm onSuccess={() => navigate(from, { replace: true })} /></section></main>
+  </div>;
 }

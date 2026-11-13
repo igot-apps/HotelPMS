@@ -254,6 +254,7 @@ model PlatformGuest {
   fullName          String    @db.VarChar(200)
   phone             String    @unique @db.VarChar(50)
   email             String?   @unique @db.VarChar(200)
+  googleSubject     String?   @unique @db.VarChar(255)
   passwordHash      String?    @db.Text
   isPhoneVerified   Boolean   @default(false)
   isEmailVerified   Boolean   @default(false)
@@ -262,10 +263,30 @@ model PlatformGuest {
   updatedAt         DateTime  @updatedAt
 
   reservations      Reservation[]
+  phoneChallenges   GuestPhoneChallenge[]
 
   @@index([phone])
   @@index([email])
   @@map("platform_guests")
+}
+
+model GuestPhoneChallenge {
+  id          String   @id @default(uuid()) @db.Uuid
+  phone       String   @db.VarChar(50)
+  codeHash    String   @db.VarChar(64)
+  purpose     String   @db.VarChar(20)
+  googleSub   String?  @db.VarChar(255)
+  googleEmail String?  @db.VarChar(200)
+  googleName  String?  @db.VarChar(200)
+  attempts    Int      @default(0)
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime @default(now())
+  guestId     Int?
+  guest       PlatformGuest? @relation(fields: [guestId], references: [guestId], onDelete: SetNull)
+
+  @@index([phone, createdAt])
+  @@map("guest_phone_challenges")
 }
 
 // ============================================================
