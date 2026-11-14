@@ -126,9 +126,23 @@ router.post('/phone/request', async (req: any, res: Response) => {
       google = { sub: String(setup.sub), email: String(setup.email), name: String(setup.name || 'Guest') };
     }
     const recent = await prisma.guestPhoneChallenge.findFirst({ where: { phone, createdAt: { gt: new Date(Date.now() - 60_000) } }, orderBy: { createdAt: 'desc' } });
-    if (recent) return res.status(429).json({ success: false, message: 'Wait one minute before requesting another code' });
+    if (recent) {
+      const retryAfterSeconds = Math.max(1, Math.ceil((recent.createdAt.getTime() + 60_000 - Date.now()) / 1000));
+      res.setHeader('Retry-After', String(retryAfterSeconds));
+      return res.status(429).json({ success: false, message: 'Please wait before requesting another code.', data: { retryAfterSeconds } });
+    }
     const hourly = await prisma.guestPhoneChallenge.count({ where: { phone, createdAt: { gt: new Date(Date.now() - 60 * 60_000) } } });
-    if (hourly >= 5) return res.status(429).json({ success: false, message: 'Too many codes requested. Try again in an hour.' });
+    if (hourly >= 5) {
+      const newestFive = await prisma.guestPhoneChallenge.findMany({
+        where: { phone, createdAt: { gt: new Date(Date.now() - 60 * 60_000) } },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      });
+      const thresholdAttempt = newestFive[4];
+      const retryAfterSeconds = Math.max(1, Math.ceil(((thresholdAttempt?.createdAt.getTime() || Date.now()) + 60 * 60_000 - Date.now()) / 1000));
+      res.setHeader('Retry-After', String(retryAfterSeconds));
+      return res.status(429).json({ success: false, message: 'Too many codes requested. Please wait before trying again.', data: { retryAfterSeconds } });
+    }
     const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
     const id = randomUUID();
     const smsReference = createMoolreReference(`guest-auth-${id}`);

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Loader2, Phone } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowLeft, Loader2, Phone, RotateCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../lib/axios';
 import { startGuestSession } from '../../lib/guestSession';
@@ -11,6 +11,23 @@ export default function GuestSignInForm({ onSuccess }) {
   const [challenge, setChallenge] = useState(null);
   const [nameSetup, setNameSetup] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [retrySeconds, setRetrySeconds] = useState(0);
+
+  useEffect(() => {
+    if (retrySeconds <= 0) return undefined;
+    const timer = window.setTimeout(() => setRetrySeconds(value => Math.max(0, value - 1)), 1000);
+    return () => window.clearTimeout(timer);
+  }, [retrySeconds]);
+
+  const retryLabel = retrySeconds >= 60
+    ? `${Math.floor(retrySeconds / 60)}:${String(retrySeconds % 60).padStart(2, '0')}`
+    : `0:${String(retrySeconds).padStart(2, '0')}`;
+
+  function changePhoneNumber() {
+    setChallenge(null);
+    setCode('');
+    setRetrySeconds(0);
+  }
 
   async function requestCode(event) {
     event.preventDefault();
@@ -19,7 +36,10 @@ export default function GuestSignInForm({ onSuccess }) {
       const response = await api.post('/public/auth/phone/request', { phone }, { skipErrorToast: true });
       setChallenge(response.data.data);
       setCode('');
+      setRetrySeconds(60);
     } catch (error) {
+      const wait = Number(error.response?.data?.data?.retryAfterSeconds || error.response?.headers?.['retry-after'] || 0);
+      if (Number.isFinite(wait) && wait > 0) setRetrySeconds(Math.ceil(wait));
       toast.error(error.response?.data?.message || 'Could not create a code');
     } finally { setBusy(false); }
   }
@@ -75,13 +95,19 @@ export default function GuestSignInForm({ onSuccess }) {
           {challenge.testCode && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center"><p className="text-xs font-semibold uppercase text-amber-800">Simulated SMS · no message sent</p><p className="mt-1 font-mono text-3xl font-bold tracking-widest text-text">{challenge.testCode}</p><p className="mt-1 text-xs text-amber-900">Use this code below to continue.</p></div>}
           <div><label htmlFor="guest-code" className="mb-1 block text-sm font-semibold text-text">Verification code</label><input id="guest-code" className={inputClass} inputMode="numeric" autoComplete="one-time-code" maxLength={6} pattern="[0-9]{6}" value={code} onChange={event => setCode(event.target.value.replace(/\D/g, ''))} required /></div>
           <button className={buttonClass} disabled={busy}>{busy && <Loader2 size={18} className="animate-spin" />} Verify and continue</button>
-          <button type="button" className="w-full text-sm font-semibold text-primary-700 hover:underline" onClick={() => setChallenge(null)}>Change phone number</button>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button type="button" className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-primary-700 transition hover:border-primary-300 hover:bg-primary-50" onClick={changePhoneNumber}><ArrowLeft size={17} /> Change number</button>
+            <button type="button" className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-primary-700 transition hover:border-primary-300 hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-60" disabled={busy || retrySeconds > 0} onClick={requestCode}>
+              <RotateCw size={16} /> {retrySeconds > 0 ? `Resend in ${retryLabel}` : 'Resend code'}
+            </button>
+          </div>
         </form>
       ) : (
         <form onSubmit={requestCode} className="mt-5 space-y-4">
-          <div><label htmlFor="guest-phone" className="mb-1 block text-sm font-semibold text-text">Ghana mobile number</label><input id="guest-phone" className={inputClass} type="tel" inputMode="tel" autoComplete="tel" placeholder="024 123 4567" value={phone} onChange={event => setPhone(event.target.value)} required /></div>
-          <button className={buttonClass} disabled={busy}>{busy ? <Loader2 size={18} className="animate-spin" /> : <Phone size={18} />} Get code</button>
-          <p className="text-center text-xs text-text-muted">For now, the code appears here instead of arriving by SMS.</p>
+          <div><label htmlFor="guest-phone" className="mb-1 block text-sm font-semibold text-text">Ghana mobile number</label><input id="guest-phone" className={inputClass} type="tel" inputMode="tel" autoComplete="tel" placeholder="024 123 4567" value={phone} onChange={event => { setPhone(event.target.value); if (retrySeconds > 0) setRetrySeconds(0); }} required /></div>
+          <button className={buttonClass} disabled={busy || retrySeconds > 0}>{busy ? <Loader2 size={18} className="animate-spin" /> : <Phone size={18} />} {retrySeconds > 0 ? `Try again in ${retryLabel}` : 'Get code'}</button>
+          {retrySeconds > 0 && <p className="rounded-xl bg-amber-50 px-3 py-2 text-center text-sm font-medium text-amber-800" role="status">You can request another code in {retryLabel}. You can correct the number above now.</p>}
+          <p className="text-center text-xs text-text-muted">We’ll send a six-digit verification code by SMS.</p>
         </form>
       )}
     </div>
