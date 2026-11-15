@@ -1,5 +1,4 @@
 import { prisma } from '../../shared/utils/prisma';
-import { Prisma } from '../../generated/prisma';
 import { recordSimulatedSms } from '../notifications/simulated-sms.service';
 
 export async function cancelGuestReservation(reservationId: string, guestId: number, suppliedReason: unknown, propertyId?: number | null) {
@@ -7,8 +6,12 @@ export async function cancelGuestReservation(reservationId: string, guestId: num
   const reason = suppliedReason.trim();
   let wasConfirmed = false;
   const result = await prisma.$transaction(async tx => {
-    const propertyFilter = propertyId ? Prisma.sql`AND "propertyId" = ${propertyId}` : Prisma.empty;
-    const rows = await tx.$queryRaw<any[]>`SELECT "reservationId" FROM reservations WHERE "reservationId" = ${reservationId} AND "platformGuestId" = ${guestId} AND source = 'Website' ${propertyFilter} FOR UPDATE`;
+    const scopedPropertyId = propertyId ?? null;
+    const rows = await tx.$queryRaw<{ reservationId: string }[]>`
+      SELECT "reservationId" FROM reservations
+      WHERE "reservationId" = ${reservationId} AND "platformGuestId" = ${guestId} AND source = 'Website'
+        AND (${scopedPropertyId}::integer IS NULL OR "propertyId" = ${scopedPropertyId}::integer)
+      FOR UPDATE`;
     if (!rows.length) throw Object.assign(new Error('Reservation not found.'), { statusCode: 404 });
     const booking = await tx.reservation.findUniqueOrThrow({ where: { reservationId }, include: { reservationRooms: true, payments: true } });
     if (booking.status === 'Cancelled') return { reservationId, status: 'Cancelled', refundDue: Number(booking.refundDue) };
