@@ -35,7 +35,6 @@ const codeLifetimeMs = 5 * 60_000;
 
 function simulatedEmail(req: Request): boolean {
   return process.env.NODE_ENV === 'development'
-    && ['localhost', '127.0.0.1', '[::1]'].includes(req.hostname)
     && ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress || '');
 }
 
@@ -209,8 +208,8 @@ router.post('/hotel/complete', async (req, res) => {
   }
   const email: string = setup.email;
   const password = req.body?.password;
-  if (typeof password !== 'string' || password.length < 10 || Buffer.byteLength(password) > 72) {
-    return res.status(400).json({ success: false, message: 'Use a password with at least 10 characters and at most 72 bytes.' });
+  if (typeof password !== 'string' || password.length < 6 || password.length > 15) {
+    return res.status(400).json({ success: false, message: 'Use a password between 6 and 15 characters.' });
   }
   const fullName = String(req.body?.fullName || '').trim().replace(/\s+/g, ' ');
   const phone = normalizeGhanaPhoneNumber(req.body?.phone);

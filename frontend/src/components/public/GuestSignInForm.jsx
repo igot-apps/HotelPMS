@@ -125,8 +125,8 @@ export default function GuestSignInForm({ onSuccess }) {
           </div>
           </>}
           {nameSetup.needsPassword && <>
-            <div><label htmlFor="guest-new-password" className="mb-1 block text-sm font-semibold text-text">New password</label><input id="guest-new-password" className={inputClass} type="password" autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} minLength={10} required /></div>
-            <div><label htmlFor="guest-confirm-password" className="mb-1 block text-sm font-semibold text-text">Confirm password</label><input id="guest-confirm-password" className={inputClass} type="password" autoComplete="new-password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} required /></div>
+            <div><label htmlFor="guest-new-password" className="mb-1 block text-sm font-semibold text-text">New password</label><input id="guest-new-password" className={inputClass} type="password" autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} minLength={6} maxLength={15} aria-describedby="guest-password-help" required /><p id="guest-password-help" className="mt-1 text-xs text-text-muted">Use 6–15 characters.</p></div>
+            <div><label htmlFor="guest-confirm-password" className="mb-1 block text-sm font-semibold text-text">Confirm password</label><input id="guest-confirm-password" className={inputClass} type="password" autoComplete="new-password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} minLength={6} maxLength={15} required /></div>
           </>}
           <button className={buttonClass} disabled={busy}>{busy && <Loader2 size={18} className="animate-spin" />} Continue</button>
           <button type="button" className="w-full text-sm font-semibold text-primary-700 hover:underline" disabled={busy} onClick={() => { setNameSetup(null); changeEmail(); }}>Start again</button>

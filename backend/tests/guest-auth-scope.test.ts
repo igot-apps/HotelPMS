@@ -124,6 +124,26 @@ function guestRequest(method: 'get' | 'post', path: string, token: string, origi
 }
 
 describe('guest authentication by website', () => {
+  it('simulates codes for a hotel hostname served over a local development connection', async () => {
+    const previousEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    try {
+      const local = (path: string, data: object) => request(app).post(`/public/auth/email/${path}`)
+        .set('Host', 'hotel-one.example').set('Origin', hotelOne).send(data);
+      const requested = await local('request', { email });
+      expect(requested.status).toBe(200);
+      const { challengeId, testCode } = requested.body.data;
+      expect(testCode).toMatch(/^\d{6}$/);
+      expect(mockSend).not.toHaveBeenCalled();
+      const verified = await local('verify', { challengeId, code: testCode });
+      expect(verified.status).toBe(200);
+      expect(verified.body.data.needsPassword).toBe(true);
+    } finally {
+      if (previousEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previousEnv;
+    }
+  });
+
   it('keeps marketplace email sign-in and uses the same guest ID to book either hotel', async () => {
     const verified = await authPost('email/verify', central, await getCode(central));
     expect(verified.status).toBe(200);
@@ -143,20 +163,23 @@ describe('guest authentication by website', () => {
     const challenge = await getCode(hotelOne);
     expect((await authPost('email/verify', hotelTwo, challenge)).status).toBe(400);
     const verified = await authPost('email/verify', hotelOne, challenge);
-    const setup = { setupToken: verified.body.data.setupToken, password: 'Hotel one secret' };
+    const setup = { setupToken: verified.body.data.setupToken, password: 'Pass01' };
     expect((await authPost('hotel/complete', hotelTwo, setup)).status).toBe(401);
+    for (const password of ['x'.repeat(5), 'x'.repeat(16)]) {
+      expect((await authPost('hotel/complete', hotelOne, { ...setup, password })).status).toBe(400);
+    }
     const first = await authPost('hotel/complete', hotelOne, setup);
     expect(first.status).toBe(200);
     expect((await authPost('hotel/complete', hotelOne, setup)).status).toBe(409);
-    await hotelSetup(hotelTwo, 'Hotel two secret');
+    await hotelSetup(hotelTwo, 'HotelTwoPass123');
     expect((await authPost('hotel/login', hotelTwo, { email, password: setup.password })).status).toBe(401);
-    expect((await authPost('hotel/login', hotelTwo, { email, password: 'Hotel two secret' })).status).toBe(200);
+    expect((await authPost('hotel/login', hotelTwo, { email, password: 'HotelTwoPass123' })).status).toBe(200);
     expect((await authPost('hotel/login', hotelOne, { email, password: setup.password })).status).toBe(200);
-    await hotelSetup(hotelOne, 'New hotel one secret');
+    await hotelSetup(hotelOne, 'NewPass01');
     expect((await guestRequest('get', '/reservations', first.body.data.token, hotelOne)).status).toBe(401);
     expect((await authPost('hotel/login', hotelOne, { email, password: setup.password })).status).toBe(401);
-    expect((await authPost('hotel/login', hotelOne, { email, password: 'New hotel one secret' })).status).toBe(200);
-    expect((await authPost('hotel/login', hotelTwo, { email, password: 'Hotel two secret' })).status).toBe(200);
+    expect((await authPost('hotel/login', hotelOne, { email, password: 'NewPass01' })).status).toBe(200);
+    expect((await authPost('hotel/login', hotelTwo, { email, password: 'HotelTwoPass123' })).status).toBe(200);
   });
 
   it('hosts new guest registration only after email proof', async () => {
@@ -164,7 +187,7 @@ describe('guest authentication by website', () => {
     mockDb.platformGuest.create.mockResolvedValue(profile);
     const verified = await authPost('email/verify', hotelOne, await getCode(hotelOne));
     expect(verified.body.data.needsName).toBe(true);
-    const setup = { setupToken: verified.body.data.setupToken, password: 'Hotel one secret' };
+    const setup = { setupToken: verified.body.data.setupToken, password: 'Pass01' };
     expect((await authPost('hotel/complete', hotelOne, setup)).status).toBe(400);
     expect((await authPost('hotel/complete', hotelOne, { ...setup, fullName: profile.fullName, phone: profile.phone })).status).toBe(200);
     expect(mockDb.platformGuest.create).toHaveBeenCalledWith({ data: { email, fullName: profile.fullName, phone: profile.phone, isEmailVerified: true } });
@@ -188,7 +211,7 @@ describe('guest authentication by website', () => {
   });
 
   it('scopes reservation lists, booking creation, cancellation and every browser payment endpoint', async () => {
-    const { token } = await hotelSetup(hotelOne, 'Hotel one secret');
+    const { token } = await hotelSetup(hotelOne, 'Pass01');
     expect((await guestRequest('get', '/reservations', token)).status).toBe(200);
     expect(mockDb.reservation.findMany.mock.lastCall?.[0].where).toEqual({ propertyId: 1, platformGuestId: 7, source: 'Website' });
     expect((await guestRequest('get', '/reservations?siteHostname=hotel-two.example', token)).status).toBe(404);
