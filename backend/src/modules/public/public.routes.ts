@@ -9,6 +9,7 @@ import { expireOnlineHolds } from '../reservation/online-hold.service';
 import { cancelGuestReservation } from '../reservation/guest-cancellation.service';
 import { publicPhotoReferences } from './public-images.routes';
 import { resolveWebsiteHostname } from '../property/website-domain.service';
+import { guestJwtSecret, guestWebsiteScope } from './guest-website-scope';
 
 
 const router = Router();
@@ -27,19 +28,31 @@ const requireBookingGuest = async (req: any, res: Response, next: import('expres
   try {
     const header = req.headers.authorization;
     if (!header?.startsWith('Bearer ')) throw new Error();
-    let payload: any;
-    try {
-      payload = jwt.verify(header.slice(7), process.env.JWT_SECRET || 'your-secret-key');
-    } catch (error) {
-      if (process.env.JWT_SECRET) throw error;
-      payload = jwt.verify(header.slice(7), 'your-super-secret-key');
-    }
-    const guestId = payload.type === 'platform_guest' ? payload.guestId
-      : payload.type === 'guest' ? payload.platformGuestId : null;
+    const payload = jwt.verify(header.slice(7), guestJwtSecret()) as jwt.JwtPayload;
+    const guestId = ['central_guest', 'hotel_guest'].includes(payload.type) ? payload.platformGuestId : null;
     if (!Number.isSafeInteger(guestId)) throw new Error();
+    const scope = await guestWebsiteScope(req);
+    const propertyId = payload.type === 'hotel_guest' ? payload.propertyId : null;
+    if (scope.origin && scope.propertyId !== propertyId) throw new Error();
     const guest = await prisma.platformGuest.findUnique({ where: { guestId } });
     if (!guest?.isActive) throw new Error();
+    if (payload.type === 'hotel_guest') {
+      if (!Number.isSafeInteger(propertyId) || typeof payload.email !== 'string') throw new Error();
+      const account = await prisma.hotelGuestAccount.findUnique({
+        where: { propertyId_email: { propertyId, email: payload.email } },
+        include: { property: { select: { propertyCode: true, isActive: true, status: true, isOnlineBookingEnabled: true } } },
+      });
+      if (!account || account.platformGuestId !== guestId || account.sessionVersion !== payload.sessionVersion
+        || !guest.isEmailVerified || guest.email?.trim().toLowerCase() !== account.email
+        || !account.property.isActive || account.property.status !== 'Active' || !account.property.isOnlineBookingEnabled) throw new Error();
+      if (req.params.propertyCode && req.params.propertyCode !== account.property.propertyCode) {
+        res.status(404).json({ success: false, message: 'Booking or hotel not found.' });
+        return;
+      }
+    }
     req.bookingGuest = guest;
+    req.guestPropertyId = propertyId;
+    req.guestOrigin = scope.origin;
     next();
   } catch {
     res.status(401).json({ success: false, message: 'Please sign in as a guest to book and pay.' });
@@ -295,7 +308,7 @@ const checkOnlineBookingEnabled = async (propertyCode: string) => {
 // ============================================================
 router.post('/reservations/:reservationId/cancel', requireBookingGuest, async (req: any, res: Response) => {
   try {
-    const data = await cancelGuestReservation(req.params.reservationId, req.bookingGuest.guestId, req.body.reason);
+    const data = await cancelGuestReservation(req.params.reservationId, req.bookingGuest.guestId, req.body.reason, req.guestPropertyId);
     return res.json({ success: true, data });
   } catch (error: any) {
     return res.status(error.statusCode || 400).json({ success: false, message: error.message });
@@ -306,6 +319,10 @@ router.get('/reservations', requireBookingGuest, async (req: any, res: Response)
   try {
     const site = req.query.siteHostname ? await resolveWebsiteHostname(String(req.query.siteHostname)) : null;
     if (req.query.siteHostname && !site) return res.status(404).json({ success: false, message: 'Hotel website unavailable.' });
+    if (req.guestPropertyId && site && req.guestPropertyId !== site.propertyId) {
+      return res.status(404).json({ success: false, message: 'Hotel website unavailable.' });
+    }
+    const propertyId = req.guestPropertyId ?? site?.propertyId;
     // 🌟 1. Extract pagination params
     const { page = '1', limit = '5' } = req.query;
     const pageNum = Math.max(1, parseInt(page as string, 10));
@@ -315,7 +332,7 @@ router.get('/reservations', requireBookingGuest, async (req: any, res: Response)
     const whereClause = { 
       platformGuestId: req.bookingGuest.guestId,
       source: 'Website',
-      ...(site ? { propertyId: site.propertyId } : {}),
+      ...(propertyId ? { propertyId } : {}),
     };
 
     // 🌟 2. Get total count for pagination calculations
@@ -452,7 +469,11 @@ router.post('/:propertyCode/reservations', requireBookingGuest, async (req: any,
 router.post('/:propertyCode/payments/initialize', requireBookingGuest, async (req: any, res: Response) => {
   try {
     if (typeof req.body.reservationId !== 'string') return res.status(400).json({ success: false, message: 'Reservation ID is required.' });
-    return res.json({ success: true, data: await initializeGuestPayment(req.params.propertyCode, req.body.reservationId, req.bookingGuest, req.body.siteHostname) });
+    const origin = req.guestOrigin;
+    const siteHostname = origin ? (req.guestPropertyId ? new URL(origin).hostname : undefined) : req.body.siteHostname;
+    return res.json({ success: true, data: await initializeGuestPayment(
+      req.params.propertyCode, req.body.reservationId, req.bookingGuest, siteHostname, req.guestPropertyId ? undefined : origin,
+    ) });
   } catch (error: any) {
     return res.status(error.statusCode || 400).json({ success: false, message: error.message || 'Could not start payment. Check payment status before retrying.' });
   }
@@ -469,9 +490,18 @@ router.get('/:propertyCode/reservations/:reservationId/payment-status', requireB
 // ============================================================
 // 5. VERIFY GUEST PAYMENT
 // ============================================================
-router.get('/:propertyCode/payments/verify/:reference', async (req: any, res: Response) => {
+router.get('/:propertyCode/payments/verify/:reference', requireBookingGuest, async (req: any, res: Response) => {
   try {
-    return res.json(await verifyGuestPayment(req.params.propertyCode, req.params.reference));
+    const { propertyCode, reference } = req.params;
+    const reservationId = /^RES-([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})-/i.exec(reference)?.[1];
+    const owned = reservationId && await prisma.reservation.findFirst({
+      where: { reservationId, platformGuestId: req.bookingGuest.guestId, source: 'Website', property: { propertyCode } },
+      select: { reservationId: true },
+    });
+    if (!owned) return res.status(404).json({ success: false, message: 'Payment not found.' });
+    const payment = await verifyGuestPayment(propertyCode, reference);
+    const { amount, channel, confirmationCode, bookingStatus, requiresRefundReview } = payment.data;
+    return res.json({ success: true, status: payment.status, data: { amount, channel, confirmationCode, bookingStatus, requiresRefundReview } });
   } catch (error: any) {
     console.error('Paystack Verify Error:', error.message);
     return res.status(error.statusCode || 500).json({ success: false, message: 'Could not verify guest payment. Please try again.' });

@@ -29,6 +29,11 @@ export default function PublicBookingSuccessPage() {
     queryFn: async () => { checks.current++; return (await api.get(`/public/${propertyCode}/payments/verify/${encodeURIComponent(reference)}`)).data; },
     refetchInterval: query => checks.current < 6 && !['success', 'failed', 'reversed'].includes(query.state.data?.status) ? 5000 : false,
   });
+  useEffect(() => {
+    if (!reference || verification.error?.response?.status !== 401) return;
+    const query = new URLSearchParams({ reference });
+    navigate('/public/auth', { replace: true, state: { from: { pathname: `/public/${propertyCode}/booking-success`, search: `?${query}` } } });
+  }, [navigate, propertyCode, reference, verification.error]);
   const transactionData = verification.data?.data;
   const verificationStatus = verification.data?.status === 'success' ? 'success' : reference && verification.isPending ? 'loading' : 'unconfirmed';
   const confirmedFailure = ['failed', 'reversed'].includes(verification.data?.status);

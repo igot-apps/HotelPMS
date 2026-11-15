@@ -110,6 +110,7 @@ model Property {
   refunds                Refund[]
   simulatedSms           SimulatedSms[]
   websiteDomains         PropertyWebsiteDomain[]
+  hotelGuestAccounts     HotelGuestAccount[]
 
   @@map("properties")
 }
@@ -272,19 +273,36 @@ model PlatformGuest {
 
   reservations      Reservation[]
   phoneChallenges   GuestPhoneChallenge[]
+  hotelAccounts     HotelGuestAccount[]
 
   @@index([phone])
   @@index([email])
   @@map("platform_guests")
 }
 
+model HotelGuestAccount {
+  propertyId      Int
+  email           String @db.VarChar(200)
+  platformGuestId Int
+  passwordHash    String @db.Text
+  sessionVersion  Int    @default(1)
+  property        Property @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
+  platformGuest   PlatformGuest @relation(fields: [platformGuestId], references: [guestId], onDelete: Cascade)
+
+  @@id([propertyId, email])
+  @@index([platformGuestId])
+  @@map("hotel_guest_accounts")
+}
+
 model GuestEmailChallenge {
   id         String   @id @default(uuid()) @db.Uuid
   email      String   @db.VarChar(200)
+  propertyId Int?
   codeHash   String   @db.VarChar(64)
   attempts   Int      @default(0)
   expiresAt  DateTime
   consumedAt DateTime?
+  setupUsedAt DateTime?
   createdAt  DateTime @default(now())
 
   @@index([email, createdAt])

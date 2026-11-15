@@ -52,11 +52,11 @@ export async function checkGuestPaymentStatus(propertyCode: string, reservationI
       : 'No successful payment is recorded. You can continue payment for this booking.' };
 }
 
-export async function initializeGuestPayment(propertyCode: string, reservationId: string, guest: { guestId: number; email?: string | null }, siteHostname?: unknown) {
+export async function initializeGuestPayment(propertyCode: string, reservationId: string, guest: { guestId: number; email?: string | null }, siteHostname?: unknown, centralOrigin?: string) {
   const checked = await checkGuestPaymentStatus(propertyCode, reservationId, guest.guestId);
   if (['paid', 'released', 'unknown'].includes(checked.status)) return checked;
   const { property, secret } = await paymentConfiguration(propertyCode);
-  const returnBaseUrl = await paymentReturnBaseUrl(siteHostname, property.propertyId, getFrontendBaseUrl());
+  const returnBaseUrl = await paymentReturnBaseUrl(siteHostname, property.propertyId, centralOrigin || getFrontendBaseUrl());
   const prepared = await prisma.$transaction(async tx => {
     const locked = await tx.$queryRaw<any[]>`SELECT "reservationId" FROM reservations WHERE "reservationId" = ${reservationId} AND "propertyId" = ${property.propertyId} AND "platformGuestId" = ${guest.guestId} FOR UPDATE`;
     if (!locked.length) throw failure('Booking not found.', 404);

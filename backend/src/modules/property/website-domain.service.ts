@@ -4,6 +4,10 @@ const centralHosts = new Set(['hideout24.com', 'www.hideout24.com', 'app.hideout
 const reservedSubdomains = new Set(['www', 'app', 'api', 'mail', 'send', 'rsend', 'resend', 'admin']);
 const hostnamePattern = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 
+export function isCentralWebsiteHost(hostname: string): boolean {
+  return centralHosts.has(hostname);
+}
+
 export function normalizeWebsiteHostname(input: unknown): string | null {
   if (typeof input !== 'string') return null;
   const hostname = input.trim().toLowerCase().replace(/\.$/, '');
