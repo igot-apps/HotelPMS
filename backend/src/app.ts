@@ -97,8 +97,8 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/amenities', amenityRoutes);
 app.use('/api/paystack', paystackRoutes); // 🌟 Mount Paystack Routes
 app.use('/api/public/images', publicImagesRoutes);
-app.use('/api/public', publicRoutes); // 🌟 Mount Public Routes
 app.use('/api/public/auth', publicAuthRoutes); // 🌟 Mount Public Auth Routes
+app.use('/api/public', publicRoutes); // 🌟 Mount Public Routes
 
 // 404 handler
 app.use((_req: Request, res: Response) => {

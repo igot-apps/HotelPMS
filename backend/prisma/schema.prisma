@@ -278,6 +278,19 @@ model PlatformGuest {
   @@map("platform_guests")
 }
 
+model GuestEmailChallenge {
+  id         String   @id @default(uuid()) @db.Uuid
+  email      String   @db.VarChar(200)
+  codeHash   String   @db.VarChar(64)
+  attempts   Int      @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([email, createdAt])
+  @@map("guest_email_challenges")
+}
+
 model GuestPhoneChallenge {
   id          String   @id @default(uuid()) @db.Uuid
   phone       String   @db.VarChar(50)
