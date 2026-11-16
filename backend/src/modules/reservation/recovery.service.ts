@@ -120,7 +120,7 @@ export async function transitionStay(stayId: number, status: string, actor: Acto
       const room = await availableInventory(tx, stay.roomId, actor.propertyId);
       if (!['Clean', 'Inspected'].includes(room.housekeepingStatus)) {
         if (details.uncleanRoomConfirmed !== true) {
-          throw Object.assign(new Error(`Room ${room.roomNumber} is marked ${room.housekeepingStatus}. Confirm to check the guest in anyway.`), {
+          throw Object.assign(new Error(`Room ${room.roomNumber} ${room.housekeepingStatus === 'Dirty' ? 'needs cleaning' : 'is not ready yet'}. Confirm to check the guest in anyway.`), {
             statusCode: 409, code: 'ROOM_NOT_CLEAN', details: { roomNumber: room.roomNumber, housekeepingStatus: room.housekeepingStatus },
           });
         }
@@ -253,7 +253,7 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
       if (!room || room.operationalStatus !== 'Occupied') throw new Error('Room occupancy has changed. Reconcile the room before undoing check-in.');
       await noConflict(tx, stay.roomId, stay.reservationRoomId, stay.checkInDate, stay.checkOutDate, true);
       }
-      result.message = `Return ${selected.length} selected room stay(s) to reserved and clear their mistaken arrival records. Rooms become available and dirty until housekeeping checks them. Booking dates, charges and payments remain unchanged.`;
+      result.message = `Return ${selected.length} selected room stay(s) to reserved and clear their mistaken arrival records. Rooms become available and marked as needing cleaning until housekeeping checks them. Booking dates, charges and payments remain unchanged.`;
       if (preview) return result;
       for (const stay of selected) {
       await releaseOccupiedRoom(tx, stay);
@@ -310,7 +310,7 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
       if (target.operationalStatus !== 'Available') throw new Error('Target room is not available.');
       if (res.reservationRooms.some((r: any) => r.roomId === targetId)) throw new Error('This room is already assigned to this reservation.');
       await noConflict(tx, targetId, stay.reservationRoomId, stay.checkInDate, stay.checkOutDate, true);
-      result.message = `Move to Room ${target.roomNumber}. Keep the agreed nightly price. The original assignment is preserved in correction history; the old room becomes dirty.`;
+      result.message = `Move to Room ${target.roomNumber}. Keep the agreed nightly price. The original assignment is preserved in correction history; the old room is marked as needing cleaning.`;
       result.targetRoomLabel = `Room ${target.roomNumber}`;
       if (preview) return result;
       await releaseOccupiedRoom(tx, stay);

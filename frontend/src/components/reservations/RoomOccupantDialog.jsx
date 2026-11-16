@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
 
 const localPhone = value => {
   const digits = String(value || '').replace(/\D/g, '');
@@ -14,7 +14,6 @@ export default function RoomOccupantDialog({ room, reservation, mode, onSubmit, 
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState('');
   const [serverUnclean, setServerUnclean] = useState(null);
-  const [uncleanConfirmed, setUncleanConfirmed] = useState(false);
   const panel = useRef(null);
   const nameInput = useRef(null);
   const warningPanel = useRef(null);
@@ -43,13 +42,14 @@ export default function RoomOccupantDialog({ room, reservation, mode, onSubmit, 
   const resetWarning = () => { setWarning(null); setConfirmed(false); setError(''); };
   const submit = async event => {
     event.preventDefault();
-    if (busy || flight.current || (warning && !confirmed) || (uncleanStatus && !uncleanConfirmed)) return;
+    if (busy || flight.current || (warning && !confirmed)) return;
     flight.current = true; setError('');
-    try { await onSubmit({ occupantName: name.trim(), occupantPhone: phone.trim(), ...(warning && confirmed ? { duplicateOccupantConfirmation: warning.confirmation } : {}), ...(uncleanStatus && uncleanConfirmed ? { uncleanRoomConfirmed: true } : {}) }); }
+    // Pressing "Check in anyway" while the room warning is shown is the confirmation.
+    try { await onSubmit({ occupantName: name.trim(), occupantPhone: phone.trim(), ...(warning && confirmed ? { duplicateOccupantConfirmation: warning.confirmation } : {}), ...(uncleanStatus ? { uncleanRoomConfirmed: true } : {}) }); }
     catch (err) {
       const response = err.response?.data;
       if (response?.code === 'OCCUPANT_ALREADY_CHECKED_IN') { setWarning(response.details); setConfirmed(false); }
-      else if (response?.code === 'ROOM_NOT_CLEAN') { setServerUnclean(response.details?.housekeepingStatus || 'Dirty'); setUncleanConfirmed(false); }
+      else if (response?.code === 'ROOM_NOT_CLEAN') setServerUnclean(response.details?.housekeepingStatus || 'Dirty');
       else setError(response?.message || 'Could not save occupant details. Your entries are still here; try again.');
     } finally { flight.current = false; }
   };
@@ -65,9 +65,9 @@ export default function RoomOccupantDialog({ room, reservation, mode, onSubmit, 
         <label className="block text-sm font-semibold text-text" htmlFor="room-occupant-phone">Occupant phone (optional)<input id="room-occupant-phone" type="tel" inputMode="numeric" pattern="[0-9]{10}" maxLength={10} autoComplete="off" value={phone} disabled={busy} onChange={e => { setPhone(e.target.value.replace(/\D/g, '').slice(0, 10)); setUseBookingGuest(false); resetWarning(); }} className={inputClass} /></label>
         {phone && !/^\d{10}$/.test(phone) && <p className="text-sm text-danger-700">Enter exactly 10 digits.</p>}
         {warning && <div ref={warningPanel} tabIndex={-1} role="alert" className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p className="font-semibold">This occupant is already checked in elsewhere.</p><ul className="list-inside list-disc break-words">{warning.conflicts.map((conflict, index) => <li key={index}>Room {conflict.roomNumber} · {conflict.confirmationCode}</li>)}</ul><p>Check the name and phone. If this is intentional, confirm below.</p><label className="flex min-h-11 cursor-pointer items-center gap-3"><input type="checkbox" checked={confirmed} disabled={busy} onChange={e => setConfirmed(e.target.checked)} />I confirm these occupant details are correct for this room.</label></div>}
-        {uncleanStatus && <div role="alert" className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p><strong>Room {number} is marked {uncleanStatus.toLowerCase()}.</strong> It has not been cleaned since the last guest.</p><label className="flex min-h-11 cursor-pointer items-center gap-3"><input type="checkbox" checked={uncleanConfirmed} disabled={busy} onChange={e => setUncleanConfirmed(e.target.checked)} />Check the guest in anyway</label></div>}
+        {uncleanStatus && <div role="alert" className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><AlertTriangle size={18} className="mt-0.5 shrink-0" /><div><p className="font-semibold">Room {number} {uncleanStatus === 'Dirty' ? 'needs cleaning' : 'is not ready yet'}</p><p className="mt-1">Housekeeping has not marked this room ready. You can still check the guest in — press <strong>Check in anyway</strong> to continue.</p></div></div>}
         {error && <p role="alert" className="rounded-lg bg-danger-50 p-3 text-sm text-danger-700">{error}</p>}
-        <div className="flex flex-wrap justify-end gap-2"><button type="button" disabled={busy} onClick={() => dismiss.current()} className="min-h-11 rounded-lg border border-border px-4 py-2 text-sm text-text">Cancel</button><button disabled={busy || !name.trim() || (phone && !/^\d{10}$/.test(phone)) || (warning && !confirmed) || (uncleanStatus && !uncleanConfirmed)} className="min-h-11 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? 'Saving…' : mode === 'checkin' ? warning ? 'Confirm occupant and check in' : 'Check in room' : warning ? 'Confirm and save occupant' : 'Save occupant'}</button></div>
+        <div className="flex flex-wrap justify-end gap-2"><button type="button" disabled={busy} onClick={() => dismiss.current()} className="min-h-11 rounded-lg border border-border px-4 py-2 text-sm text-text">Cancel</button><button disabled={busy || !name.trim() || (phone && !/^\d{10}$/.test(phone)) || (warning && !confirmed)} className={`min-h-11 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${uncleanStatus ? 'bg-amber-600 hover:bg-amber-700' : 'bg-primary-600'}`}>{busy ? 'Saving…' : mode === 'checkin' ? warning ? 'Confirm occupant and check in' : uncleanStatus ? 'Check in anyway' : 'Check in room' : warning ? 'Confirm and save occupant' : 'Save occupant'}</button></div>
       </form>
     </section>
   </div>;
