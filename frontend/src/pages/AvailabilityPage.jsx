@@ -64,6 +64,36 @@ export default function AvailabilityPage() {
 
   const availableRooms = data || [];
 
+  // Room type filter and sort (client-side; selections are kept across filters)
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('type');
+  const roomTypeOptions = useMemo(() => {
+    const types = new Map();
+    for (const room of availableRooms) {
+      const key = String(room.roomType?.roomTypeId ?? room.roomTypeId ?? 'other');
+      const entry = types.get(key) || { key, name: room.roomType?.typeName || 'Other', count: 0 };
+      entry.count += 1;
+      types.set(key, entry);
+    }
+    return [...types.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [availableRooms]);
+  useEffect(() => {
+    if (typeFilter !== 'all' && !roomTypeOptions.some((option) => option.key === typeFilter)) setTypeFilter('all');
+  }, [roomTypeOptions, typeFilter]);
+  const visibleRooms = useMemo(() => {
+    const byNumber = (a, b) => String(a.roomNumber).localeCompare(String(b.roomNumber), undefined, { numeric: true });
+    const price = (room) => parseFloat(room.roomType?.basePrice || 0);
+    const sorters = {
+      type: (a, b) => (a.roomType?.typeName || '').localeCompare(b.roomType?.typeName || '') || byNumber(a, b),
+      room: byNumber,
+      'price-low': (a, b) => price(a) - price(b) || byNumber(a, b),
+      'price-high': (a, b) => price(b) - price(a) || byNumber(a, b),
+    };
+    return availableRooms
+      .filter((room) => typeFilter === 'all' || String(room.roomType?.roomTypeId ?? room.roomTypeId ?? 'other') === typeFilter)
+      .sort(sorters[sortBy]);
+  }, [availableRooms, typeFilter, sortBy]);
+
   // Calculate nights for price estimation
   const nights = Math.max(1, Math.ceil((new Date(checkOutDate) - new Date(checkInDate)) / (1000 * 60 * 60 * 24)));
 
@@ -219,13 +249,43 @@ export default function AvailabilityPage() {
             </div>
           ) : (
             <>
-              <p className="text-sm font-semibold text-text-muted">
-                Found <span className="text-primary-600 font-bold">{availableRooms.length}</span> available room{availableRooms.length !== 1 ? 's' : ''} for {nights} night{nights !== 1 ? 's' : ''}.
-              </p>
-              
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <p className="text-sm font-semibold text-text-muted">
+                  Found <span className="text-primary-600 font-bold">{availableRooms.length}</span> available room{availableRooms.length !== 1 ? 's' : ''} for {nights} night{nights !== 1 ? 's' : ''}.
+                  {typeFilter !== 'all' && <> Showing <span className="text-text font-bold">{visibleRooms.length}</span>.</>}
+                </p>
+                <label className="flex items-center gap-2 text-sm text-text-muted">
+                  Sort by
+                  <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-text outline-none focus:border-primary-500">
+                    <option value="type">Room type</option>
+                    <option value="room">Room number</option>
+                    <option value="price-low">Price: low to high</option>
+                    <option value="price-high">Price: high to low</option>
+                  </select>
+                </label>
+              </div>
+
+              {/* Room type filter */}
+              {roomTypeOptions.length > 1 && (
+                <div role="group" aria-label="Filter by room type" className="flex flex-wrap gap-2">
+                  {[{ key: 'all', name: 'All types', count: availableRooms.length }, ...roomTypeOptions].map((option) => (
+                    <button
+                      key={option.key}
+                      type="button"
+                      aria-pressed={typeFilter === option.key}
+                      onClick={() => setTypeFilter(option.key)}
+                      className={`inline-flex min-h-10 items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-semibold transition ${typeFilter === option.key ? 'border-primary-600 bg-primary-600 text-white' : 'border-border bg-surface text-text hover:bg-secondary-50'}`}
+                    >
+                      {option.name}
+                      <span className={`rounded-full px-2 text-xs ${typeFilter === option.key ? 'bg-white/20' : 'bg-secondary-100 text-text-muted'}`}>{option.count}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {/* Room Cards Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {availableRooms.map((room) => {
+                {visibleRooms.map((room) => {
                   const basePrice = parseFloat(room.roomType?.basePrice || 0);
                   const roomTotal = basePrice * nights;
                   const isSelected = selectedRooms.includes(room.roomId);
