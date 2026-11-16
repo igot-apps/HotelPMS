@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { initializeSubscriptionPayment, verifyPayment, fetchSubscriptionStatus } from '../api/billing';
-import { CreditCard, Smartphone, Calendar, CheckCircle2, AlertTriangle, Loader2, Tag, ShieldCheck } from 'lucide-react';
+import { CreditCard, Smartphone, Calendar, CheckCircle2, AlertTriangle, Loader2, Tag, ShieldCheck, Gift } from 'lucide-react';
+import { currentFreeAccess, describeFreeAccess } from '../lib/freeAccess';
 import toast from 'react-hot-toast';
 
 export default function BillingPage() {
@@ -212,6 +213,11 @@ export default function BillingPage() {
                     ? '⚠️ Your subscription has expired. Please upgrade below to restore full access.' 
                     : `Enjoy full access to the PMS. Your free trial will end on ${subInfo.endDate || 'soon'}.`}
               </p>
+              {currentFreeAccess(freshData?.freeAccess).map((grant) => (
+                <p key={`${grant.startsAt}-${grant.endsAt}`} className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-success-50 px-3 py-1 text-xs font-bold text-success-700 ring-1 ring-success-600/20">
+                  <Gift size={14} /> {describeFreeAccess(grant)}
+                </p>
+              ))}
             </div>
           </div>
         </div>

@@ -9,6 +9,8 @@ export const checkWebsiteDomain = (id, domainId) => api.post(`/platform/properti
 export const setWebsiteDomainActive = (id, domainId, isActive) => api.patch(`/platform/properties/${id}/website-domains/${domainId}`, { isActive });
 export const setWebsiteDomainAutoActivate = (id, domainId, autoActivate) => api.patch(`/platform/properties/${id}/website-domains/${domainId}`, { autoActivate });
 export const removeWebsiteDomain = (id, domainId) => api.delete(`/platform/properties/${id}/website-domains/${domainId}`);
+export const getFreeAccess = (id) => api.get(`/platform/properties/${id}/free-access`);
+export const grantFreeAccess = (id, data) => api.post(`/platform/properties/${id}/free-access`, data);
 export const deactivatePlatformProperty = (id) => api.delete(`/platform/properties/${id}`);
 export const permanentlyDeletePlatformProperty = ({ id, confirmationCode }) =>
   api.delete(`/platform/properties/${id}/permanent`, { data: { confirmationCode } });
