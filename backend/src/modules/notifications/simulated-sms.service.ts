@@ -22,7 +22,7 @@ export async function recordSimulatedSms(reservationId: string, event: SmsEvent)
     if (!recipient) return;
     const date = (value: Date) => new Intl.DateTimeFormat('en-GB', { timeZone: booking.property.timezone, day: 'numeric', month: 'short', year: 'numeric' }).format(value);
     const body = event === 'confirmed'
-      ? `${booking.property.propertyName}: Your booking ${booking.confirmationCode} is confirmed for ${date(booking.checkInDate)} to ${date(booking.checkOutDate)}. Keep this code for check-in.`
+      ? `${booking.property.propertyName}: Payment of GHS ${completedPayments.toFixed(2)} received. Your booking ${booking.confirmationCode} is confirmed for ${date(booking.checkInDate)} to ${date(booking.checkOutDate)}. Keep this code for check-in.`
       : `${booking.property.propertyName}: Booking ${booking.confirmationCode} has been cancelled. If a refund is due, the hotel will follow up separately.`;
     const live = isMoolreSmsConfigured();
     const providerReference = createMoolreReference(`${event}-${reservationId}`);
