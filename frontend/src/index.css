@@ -21,6 +21,16 @@ input, select, textarea { max-width: 100%; }
   -webkit-appearance: none;
   appearance: none;
 }
+/* iOS Safari ignores width on native date inputs and overflows their container. */
+input[type="date"], input[type="datetime-local"], input[type="time"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+  min-height: 2.5rem;
+}
+input[type="date"]::-webkit-date-and-time-value,
+input[type="datetime-local"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value { min-width: 0; text-align: left; }
 .responsive-date-input::-webkit-date-and-time-value { min-width: 0; text-align: left; }
 .responsive-date-input::-webkit-datetime-edit { min-width: 0; padding: 0; }
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
