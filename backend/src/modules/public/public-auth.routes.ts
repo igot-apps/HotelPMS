@@ -18,7 +18,7 @@ function hashCode(id: string, code: string): string {
   return createHash('sha256').update(id + ':' + code + ':' + guestJwtSecret()).digest('hex');
 }
 
-function guestResponse(guest: { guestId: number; fullName: string; phone: string; email: string | null; centralPasswordHash: string | null },
+export function guestResponse(guest: { guestId: number; fullName: string; phone: string; email: string | null; centralPasswordHash: string | null },
   account?: { propertyId: number; email: string; sessionVersion: number }) {
   const claims = account
     ? { type: 'hotel_guest', platformGuestId: guest.guestId, propertyId: account.propertyId, email: account.email, sessionVersion: account.sessionVersion }

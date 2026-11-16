@@ -41,7 +41,7 @@ export default function HotelWebsiteGate({ children }) {
   const hotelPath = `/public/${website.propertyCode}`;
   const allowed = location.pathname === hotelPath
     || location.pathname.startsWith(`${hotelPath}/`)
-    || ['/public/auth', '/public/reservations'].includes(location.pathname);
+    || ['/public/auth', '/public/reservations', '/public/profile'].includes(location.pathname);
   if (!allowed) return <Navigate to={`${hotelPath}${location.pathname === '/' ? location.search : ''}`} replace />;
   return <HotelWebsiteContext.Provider value={website}>{children}<StaffLoginFooter website={website} /></HotelWebsiteContext.Provider>;
 }

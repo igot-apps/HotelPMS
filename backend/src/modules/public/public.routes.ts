@@ -11,6 +11,7 @@ import { publicPhotoReferences } from './public-images.routes';
 import { resolveWebsiteHostname } from '../property/website-domain.service';
 import { canBookOnline, OnlineBookingPausedError, publicBookingFields } from '../reservation/public-booking-policy';
 import { centralGuestSessionVersion, guestJwtSecret, guestWebsiteScope } from './guest-website-scope';
+import { changeGuestPassword, guestProfile, updateGuestProfile } from './guest-profile.service';
 
 
 const router = Router();
@@ -328,6 +329,21 @@ router.post('/reservations/:reservationId/cancel', requireBookingGuest, async (r
   } catch (error: any) {
     return res.status(error.statusCode || 400).json({ success: false, message: error.message });
   }
+});
+
+const profileError = (res: Response, error: any, fallback: string) => {
+  if (error?.status) return res.status(error.status).json({ success: false, message: error.message });
+  if (error?.code === 'P2002') return res.status(409).json({ success: false, message: 'This number is already linked to another guest account.' });
+  return res.status(500).json({ success: false, message: fallback });
+};
+router.get('/profile', requireBookingGuest, (req: any, res: Response) => res.json({ success: true, data: guestProfile(req.bookingGuest) }));
+router.patch('/profile', requireBookingGuest, async (req: any, res: Response) => {
+  try { return res.json({ success: true, data: await updateGuestProfile(req.bookingGuest, req.body || {}) }); }
+  catch (error) { return profileError(res, error, 'Could not update your profile. Please try again.'); }
+});
+router.post('/profile/password', requireBookingGuest, async (req: any, res: Response) => {
+  try { return res.json({ success: true, data: await changeGuestPassword(req.bookingGuest, req.guestPropertyId, req.body || {}) }); }
+  catch (error) { return profileError(res, error, 'Could not change your password. Please try again.'); }
 });
 
 router.get('/reservations', requireBookingGuest, async (req: any, res: Response) => {

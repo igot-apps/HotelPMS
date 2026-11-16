@@ -40,6 +40,7 @@ import AvailabilityPage from './pages/AvailabilityPage';
 import RoomManagementPage from './pages/RoomManagementPage';
 import UsersPage from './pages/UsersPage';
 import BillingPage from './pages/BillingPage';
+import GuestProfilePage from './pages/GuestProfilePage';
 import SuperAdminPage from './pages/SuperAdminPage';
 
 function App() {
@@ -97,6 +98,7 @@ function App() {
         <Route path="/platform/properties" element={<Navigate to="/superadmin" replace />} />
         <Route path="/register-your-hotel" element={<HotelRegistrationWizard />} />
         <Route path="/public/reservations" element={<GuestProtectedRoute><PublicReservationsPage /></GuestProtectedRoute>} />
+        <Route path="/public/profile" element={<GuestProtectedRoute><GuestProfilePage /></GuestProtectedRoute>} />
         
         {/* 🌟 Guest Booking Flow */}
         <Route path="/public/:propertyCode" element={<PublicHotelPage />} />

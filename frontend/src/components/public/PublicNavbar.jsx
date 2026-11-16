@@ -68,11 +68,11 @@ export default function PublicNavbar() {
                     <Calendar size={16} /> My Reservations
                   </Link>
                   <div className="flex items-center gap-3 pl-4 border-l border-border">
-                    <div className="flex items-center gap-2 text-sm font-medium text-text">
+                    <Link to="/public/profile" title="My profile" className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-text transition hover:bg-secondary-50 hover:text-primary-600">
                       <User size={16} className="text-primary-600" />
                       {/* 🛡️ Display public guest name */}
                       <span>{guestInfo?.fullName || guestInfo?.phone || 'Guest'}</span>
-                    </div>
+                    </Link>
                     <button onClick={handleLogout} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-danger-600 bg-danger-50 hover:bg-danger-100 rounded-lg transition">
                       <LogOut size={16} /> Logout
                     </button>
@@ -102,10 +102,10 @@ export default function PublicNavbar() {
                     <Calendar size={18} className="text-primary-600" /> My Reservations
                   </Link>
                   <div className="pt-3 border-t border-border">
-                    <div className="px-3 py-2 text-sm font-medium text-text-muted flex items-center gap-2">
-                      <User size={16} className="text-primary-600" />
-                      {guestInfo?.fullName || guestInfo?.phone || 'Guest'}
-                    </div>
+                    <Link to="/public/profile" onClick={() => setIsOpen(false)} className="px-3 py-2.5 text-base font-medium text-text hover:bg-secondary-50 rounded-lg transition flex items-center gap-2">
+                      <User size={18} className="text-primary-600" />
+                      My profile · {guestInfo?.fullName || guestInfo?.phone || 'Guest'}
+                    </Link>
                     <button onClick={handleLogout} className="w-full mt-2 flex items-center justify-center gap-2 px-3 py-2.5 text-base font-semibold text-danger-600 bg-danger-50 hover:bg-danger-100 rounded-lg transition">
                       <LogOut size={18} /> Logout
                     </button>
