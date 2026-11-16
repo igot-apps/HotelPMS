@@ -62,28 +62,40 @@ export async function refundPreviewInTransaction(tx: any, actor: Actor, id: stri
   return preview(tx, actor, id, input, requestId);
 }
 export async function requestRefund(actor: Actor, id: string, input: any) {
+  const details = input.preview !== true && input.recordDirectly === true && input.mode !== 'SimulatedMoMo' ? completionDetails(input) : null;
   return atomic(async tx => {
     const user = await staff(tx, actor);
-    const result = await preview(tx, actor, id, input);
-    if (input.preview === true) return result;
-    if (input.expectedVersion !== result.version) throw fail('The booking changed. Preview the refund again.');
     const manager = user.role.roleName === 'Manager';
-    if (manager && input.approveDirectly !== true) throw fail('Refresh the page and use Approve refund.');
-    if (!manager && input.approveDirectly === true) throw fail('Only a hotel manager can approve a refund.', 403);
+    const result = await preview(tx, actor, id, input);
+    if (input.preview === true) {
+      if (!manager) return result;
+      return { ...result, message: result.mode === 'SimulatedMoMo'
+        ? `Record a TEST MoMo refund of GHS ${result.amount.toFixed(2)} to ${result.recipientPhone}. No real money is transferred.`
+        : `Record GHS ${result.amount.toFixed(2)} returned from payment #${result.paymentId}. Only record this after the guest has received the money.` };
+    }
+    if (input.expectedVersion !== result.version) throw fail('The booking changed. Preview the refund again.');
+    if (manager && input.recordDirectly !== true) throw fail('Refresh the page and use Record refund.');
+    if (!manager && input.recordDirectly === true) throw fail('Only a hotel manager can record a refund directly.', 403);
     const refundInput = { paymentId: result.paymentId, amount: result.amount, reason: result.reason, mode: result.mode, recipientPhone: result.recipientPhone };
     let request = await tx.correctionRequest.create({ data: {
       propertyId: actor.propertyId, reservationId: id, requestedBy: actor.userId,
       action: 'refund', expectedVersion: result.version, input: refundInput,
       ...(manager ? { status: 'Approved', reviewedBy: actor.userId, reviewedAt: new Date() } : {}),
     } });
-    if (manager && result.mode === 'SimulatedMoMo') {
+    if (!manager) {
+      await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Reservation', action: 'RefundRequested', newData: { reservationId: id, requestId: request.requestId, amount: result.amount, paymentId: result.paymentId, reason: result.reason } } });
+      return request;
+    }
+    if (result.mode === 'SimulatedMoMo') {
       const simulation = await simulateRefundInTransaction(tx, actor, request, result);
       request = await tx.correctionRequest.update({ where: { requestId: request.requestId }, data: { status: 'Simulated', input: { ...refundInput, simulation } } });
+      await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Reservation', action: 'CorrectionRequestSimulated', newData: { reservationId: id, requestId: request.requestId, amount: result.amount, paymentId: result.paymentId, reason: result.reason } } });
+      return request;
     }
-    const action = manager ? `CorrectionRequest${request.status}` : 'RefundRequested';
-    await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Reservation', action, newData: { reservationId: id, requestId: request.requestId, amount: result.amount, paymentId: result.paymentId, reason: result.reason } } });
-    return request;
-  });
+    const res = await locked(tx, actor, id);
+    await recordReturn(tx, actor, user, res, request, result, details!);
+    return { ...request, status: 'Completed' };
+  }).catch((error: any) => { if (error.code === 'P2002') throw fail('This refund or reference was already recorded. Refresh and check the return history.'); throw error; });
 }
 export async function refundOverview(actor: Actor, id: string) {
   await staff(prisma, actor);
@@ -95,7 +107,7 @@ export async function refundOverview(actor: Actor, id: string) {
   const held = open.reduce((sum, r) => sum + cents((r.input as any).amount), 0);
   return { simulatedReturnedTotal: res.refunds.filter(r => r.isSimulated).reduce((sum,r) => sum+cents(r.amount),0)/100, actualReturnedTotal: res.refunds.filter(r => !r.isSimulated).reduce((sum,r) => sum+cents(r.amount),0)/100, simulationRecipientPhone: momoPhone(res.guestPhoneSnapshot || res.propertyGuest?.phone || res.platformGuest?.phone), refundable: Math.max(0, totals.eligible - held) / 100, totalRefundable: totals.eligible / 100, returnedTotal: res.refunds.reduce((sum, r) => sum + cents(r.amount), 0) / 100, requests, refunds: res.refunds, payments: res.payments.filter(p => p.status === 'Completed').map(p => ({ paymentId: p.paymentId, amount: Number(p.amount), method: p.paymentMethod, available: Math.max(0, Math.min(totals.eligible - held, cents(p.amount) - res.refunds.filter(r => r.paymentId === p.paymentId).reduce((sum, r) => sum + cents(r.amount), 0) - open.filter(r => Number((r.input as any).paymentId) === p.paymentId).reduce((sum, r) => sum + cents((r.input as any).amount), 0))) / 100 })) };
 }
-export async function completeRefund(actor: Actor, requestId: number, input: any) {
+function completionDetails(input: any) {
   if (input.moneyReturned !== true || !methods.includes(input.method)) throw fail('Confirm that the money was returned, and enter a return method.');
   if (input.reference != null && typeof input.reference !== 'string') throw fail('Enter a valid refund reference or leave it blank.');
   const reference = typeof input.reference === 'string' ? input.reference.trim() || null : null;
@@ -103,6 +115,24 @@ export async function completeRefund(actor: Actor, requestId: number, input: any
   if (input.method === 'Paystack' && input.providerConfirmed !== true) throw fail('Confirm that Paystack reports the refund as successful before recording it.');
   const returnedAt = input.returnedAt ? new Date(input.returnedAt) : new Date();
   if (!Number.isFinite(returnedAt.getTime()) || returnedAt.getTime() > Date.now() + 300000) throw fail('Choose a valid return date that is not in the future.');
+  return { method: input.method as string, reference, returnedAt };
+}
+async function recordReturn(tx: any, actor: Actor, user: any, res: any, request: any, result: any, details: ReturnType<typeof completionDetails>) {
+  const { method, reference, returnedAt } = details;
+  if (reference && await tx.refund.findFirst({ where: { propertyId: actor.propertyId, method, reference } })) throw fail('That refund reference is already recorded. Check the existing return before continuing.');
+  const payment = res.payments.find((p: any) => p.paymentId === result.paymentId);
+  if (returnedAt < payment.paymentDate) throw fail('The return date cannot be before the original payment.');
+  const totals = balance(res);
+  const remaining = Math.max(0, totals.eligible - cents(result.amount));
+  const refund = await tx.refund.create({ data: { requestId: request.requestId, propertyId: actor.propertyId, reservationId: request.reservationId, paymentId: result.paymentId, amount: result.amount, method, reference, returnedBy: actor.userId, returnedByName: user.fullName, returnedAt } });
+  await tx.reservation.update({ where: { reservationId: request.reservationId }, data: { amountPaid: (totals.net - cents(result.amount)) / 100, refundDue: remaining / 100, refundStatus: remaining ? 'Pending' : 'Processed' } });
+  await tx.correctionRequest.update({ where: { requestId: request.requestId }, data: { status: 'Completed' } });
+  await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Reservation', action: 'RefundCompleted', newData: { reservationId: request.reservationId, requestId: request.requestId, refundId: refund.refundId, amount: result.amount, method: refund.method, reference: refund.reference, returnedAt: returnedAt.toISOString(), reason: result.reason } } });
+  return refund;
+}
+export async function completeRefund(actor: Actor, requestId: number, input: any) {
+  const details = completionDetails(input);
+  const { reference } = details;
   return atomic(async tx => {
     const user = await staff(tx, actor);
     const request = await tx.correctionRequest.findFirst({ where: { requestId, propertyId: actor.propertyId, action: 'refund' } });
@@ -115,16 +145,7 @@ export async function completeRefund(actor: Actor, requestId: number, input: any
       return existing;
     }
     if (request.status !== 'Approved') throw fail('A manager must approve this refund before completion.');
-    if (reference && await tx.refund.findFirst({ where: { propertyId: actor.propertyId, method: input.method, reference } })) throw fail('That refund reference is already recorded. Check the existing return before continuing.');
     const result = await preview(tx, actor, request.reservationId, request.input, requestId);
-    const payment = res.payments.find((p: any) => p.paymentId === result.paymentId);
-    if (returnedAt < payment.paymentDate) throw fail('The return date cannot be before the original payment.');
-    const totals = balance(res);
-    const remaining = Math.max(0, totals.eligible - cents(result.amount));
-    const refund = await tx.refund.create({ data: { requestId, propertyId: actor.propertyId, reservationId: request.reservationId, paymentId: result.paymentId, amount: result.amount, method: input.method, reference, returnedBy: actor.userId, returnedByName: user.fullName, returnedAt } });
-    await tx.reservation.update({ where: { reservationId: request.reservationId }, data: { amountPaid: (totals.net - cents(result.amount)) / 100, refundDue: remaining / 100, refundStatus: remaining ? 'Pending' : 'Processed' } });
-    await tx.correctionRequest.update({ where: { requestId }, data: { status: 'Completed' } });
-    await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Reservation', action: 'RefundCompleted', newData: { reservationId: request.reservationId, requestId, refundId: refund.refundId, amount: result.amount, method: refund.method, reference: refund.reference, returnedAt: returnedAt.toISOString(), reason: (request.input as any).reason } } });
-    return refund;
+    return recordReturn(tx, actor, user, res, request, result, details);
   }).catch((error: any) => { if (error.code === 'P2002') throw fail('This refund or reference was already recorded. Refresh and check the return history.'); throw error; });
 }
