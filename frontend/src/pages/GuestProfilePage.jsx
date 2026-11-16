@@ -21,6 +21,8 @@ export default function GuestProfilePage() {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [showPassword, setShowPassword] = useState(false);
+  const closePassword = () => { setShowPassword(false); setPasswords({ currentPassword: '', newPassword: '', confirmPassword: '' }); };
 
   useEffect(() => {
     if (!profile.data) return;
@@ -41,7 +43,7 @@ export default function GuestProfilePage() {
     mutationFn: async () => (await api.post('/public/profile/password', { currentPassword: passwords.currentPassword, newPassword: passwords.newPassword })).data.data,
     onSuccess: (data) => {
       saveGuestSession(data.guest, data.token);
-      setPasswords({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      closePassword();
       toast.success('Password changed.');
     },
   });
@@ -88,11 +90,20 @@ export default function GuestProfilePage() {
               </button>
             </form>
 
+            {!showPassword ? (
+              <section className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                <div>
+                  <h2 className="flex items-center gap-2 text-lg font-bold text-text"><KeyRound size={19} className="text-primary-600" /> Password</h2>
+                  <p className="mt-1 text-sm text-text-muted">Set a new password for signing in to this hotel's website.</p>
+                </div>
+                <button type="button" onClick={() => setShowPassword(true)} className="min-h-11 shrink-0 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-primary-700 transition hover:bg-primary-50">Set password</button>
+              </section>
+            ) : (
             <form
               onSubmit={(event) => { event.preventDefault(); if (!changePassword.isPending && passwordReady) changePassword.mutate(); }}
               className="space-y-4 rounded-xl border border-border bg-surface p-5 shadow-sm sm:p-6"
             >
-              <h2 className="flex items-center gap-2 text-lg font-bold text-text"><KeyRound size={19} className="text-primary-600" /> Change password</h2>
+              <h2 className="flex items-center gap-2 text-lg font-bold text-text"><KeyRound size={19} className="text-primary-600" /> Set password</h2>
               <label className="block text-sm font-medium text-text">Current password
                 <input required type="password" autoComplete="current-password" value={passwords.currentPassword} onChange={setPassword('currentPassword')} disabled={changePassword.isPending} className={field} />
               </label>
@@ -104,10 +115,14 @@ export default function GuestProfilePage() {
                 <input required type="password" autoComplete="new-password" maxLength={15} value={passwords.confirmPassword} onChange={setPassword('confirmPassword')} disabled={changePassword.isPending} className={field} />
               </label>
               {passwordMismatch && <p className="text-sm text-danger-700">The new passwords don't match.</p>}
-              <button disabled={changePassword.isPending || !passwordReady} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50">
-                {changePassword.isPending && <Loader2 size={16} className="animate-spin" />} Change password
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button disabled={changePassword.isPending || !passwordReady} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50">
+                  {changePassword.isPending && <Loader2 size={16} className="animate-spin" />} Save password
+                </button>
+                <button type="button" disabled={changePassword.isPending} onClick={closePassword} className="min-h-11 rounded-lg border border-border px-4 py-2 text-sm text-text disabled:opacity-50">Cancel</button>
+              </div>
             </form>
+            )}
           </>
         )}
       </main>
