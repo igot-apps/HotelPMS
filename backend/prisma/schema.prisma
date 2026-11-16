@@ -61,6 +61,8 @@ model Property {
   subscriptionStatus     SubscriptionStatus @default(Trial)
   trialEndsAt            DateTime?
   subscriptionEndsAt     DateTime?
+  subscriptionReminderFor DateTime?
+  subscriptionExpiryNoticeFor DateTime?
   currency               String    @default("GHS") @db.VarChar(10)
   timezone               String    @default("Africa/Accra") @db.VarChar(50)
   logo                   String?   @db.Text

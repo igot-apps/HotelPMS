@@ -9,6 +9,7 @@ import { expireOnlineHolds } from '../reservation/online-hold.service';
 import { cancelGuestReservation } from '../reservation/guest-cancellation.service';
 import { publicPhotoReferences } from './public-images.routes';
 import { resolveWebsiteHostname } from '../property/website-domain.service';
+import { canBookOnline, OnlineBookingPausedError, publicBookingFields } from '../reservation/public-booking-policy';
 import { centralGuestSessionVersion, guestJwtSecret, guestWebsiteScope } from './guest-website-scope';
 
 
@@ -145,8 +146,16 @@ router.get('/discover', async (req: any, res: Response) => {
       where.roomTypes = { some: roomTypeFilter };
     }
     const availableRoomTypes = { some: { ...roomTypeFilter, rooms: { some: availableRoomFilter } } };
-    if (availability === 'available') where.roomTypes = availableRoomTypes;
-    if (availability === 'unavailable') where.NOT = { roomTypes: availableRoomTypes };
+    const now = new Date();
+    const bookable = {
+      isActive: true, status: 'Active', roomTypes: availableRoomTypes,
+      OR: [
+        { subscriptionStatus: 'Trial', OR: [{ trialEndsAt: null }, { trialEndsAt: { gt: now } }] },
+        { subscriptionStatus: 'Active', OR: [{ subscriptionEndsAt: null }, { subscriptionEndsAt: { gt: now } }] },
+      ],
+    };
+    if (availability === 'available') where.AND = [bookable];
+    if (availability === 'unavailable') where.NOT = bookable;
 
     if (search && String(search).trim() !== '') {
       const searchTerm = String(search).trim();
@@ -185,6 +194,7 @@ router.get('/discover', async (req: any, res: Response) => {
       take: limitNum,
       orderBy: { propertyId: 'asc' },
       select: {
+        ...publicBookingFields,
         propertyId: true,
         propertyCode: true,
         propertyName: true,
@@ -224,13 +234,14 @@ router.get('/discover', async (req: any, res: Response) => {
         distanceText = km < 1 ? `${Math.round(km * 1000)} m away` : `${km.toFixed(1)} km away`;
       }
 
-      const availableRooms = await prisma.room.count({
+      const onlineBookingAvailable = canBookOnline(p, now);
+      const availableRooms = onlineBookingAvailable ? await prisma.room.count({
           where: {
             propertyId: p.propertyId,
             roomType: roomTypeFilter,
             ...availableRoomFilter,
           }
-        });
+        }) : 0;
 
       const bookableTypes = p.roomTypes.filter(type => type.rooms?.length > 0);
       const displayTypes = bookableTypes.length ? bookableTypes : p.roomTypes;
@@ -249,6 +260,7 @@ router.get('/discover', async (req: any, res: Response) => {
         primaryPhoneWhatsappOnly: p.primaryPhoneWhatsappOnly,
         minPrice: displayTypes.length > 0 ? Number(displayTypes[0].basePrice) : null,
         availableRooms,
+        onlineBookingAvailable,
         availabilityStatus: availableRooms > 0 ? 'available' : 'unavailable',
         availabilityCheckIn: availabilityFrom.toISOString().slice(0, 10),
         availabilityCheckOut: availabilityTo.toISOString().slice(0, 10),
@@ -386,6 +398,7 @@ router.get('/:propertyCode', async (req: any, res: Response) => {
     const property = await prisma.property.findUnique({
       where: { propertyCode },
       select: {
+        ...publicBookingFields,
         propertyId: true, propertyCode: true, propertyName: true, businessName: true,
         coverImage: true, galleryImages: true, updatedAt: true, publicDescription: true, cancellationPolicy: true,
         houseRules: true, taxPercentage: true, checkInTime: true, checkOutTime: true,
@@ -394,7 +407,9 @@ router.get('/:propertyCode', async (req: any, res: Response) => {
     });
     if (!property) return res.status(404).json({ success: false, message: 'Property not found.' });
     const photos = publicPhotoReferences(property.propertyCode, property.coverImage, property.galleryImages, property.updatedAt, 'full');
-    return res.json({ success: true, data: { ...property, coverImage: photos[0] || null, galleryImages: photos.slice(1) } });
+    const { isActive, status, isOnlineBookingEnabled, subscriptionStatus, trialEndsAt, subscriptionEndsAt, ...profile } = property;
+    const onlineBookingAvailable = canBookOnline({ isActive, status, isOnlineBookingEnabled, subscriptionStatus, trialEndsAt, subscriptionEndsAt });
+    return res.json({ success: true, data: { ...profile, onlineBookingAvailable, coverImage: photos[0] || null, galleryImages: photos.slice(1) } });
   } catch (error: any) {
     if (error.message.includes('disabled') || error.message.includes('not found')) {
       return res.status(404).json({ success: false, message: error.message });
@@ -463,7 +478,10 @@ router.post('/:propertyCode/reservations', requireBookingGuest, async (req: any,
     const property = await checkOnlineBookingEnabled(req.params.propertyCode);
     const reservation = await createHotelReservation({ propertyId: property.propertyId, platformGuestId: req.bookingGuest.guestId, roomTypeId: req.body.roomTypeId, checkInDate: req.body.checkInDate, checkOutDate: req.body.checkOutDate, notes: req.body.notes, source: 'Website' }, true);
     return res.status(201).json({ success: true, data: { reservationId: reservation.reservationId, confirmationCode: reservation.confirmationCode, totalAmount: reservation.totalAmount, guestName: req.bookingGuest.fullName } });
-  } catch (error: any) { return res.status(400).json({ success: false, message: error.message }); }
+  } catch (error: any) {
+    if (error instanceof OnlineBookingPausedError) return res.status(409).json({ success: false, code: error.code, message: error.message });
+    return res.status(400).json({ success: false, message: error.message });
+  }
 });
 
 // ============================================================
@@ -478,7 +496,7 @@ router.post('/:propertyCode/payments/initialize', requireBookingGuest, async (re
       req.params.propertyCode, req.body.reservationId, req.bookingGuest, siteHostname, req.guestPropertyId ? undefined : origin,
     ) });
   } catch (error: any) {
-    return res.status(error.statusCode || 400).json({ success: false, message: error.message || 'Could not start payment. Check payment status before retrying.' });
+    return res.status(error.statusCode || 400).json({ success: false, code: error instanceof OnlineBookingPausedError ? error.code : undefined, message: error.message || 'Could not start payment. Check payment status before retrying.' });
   }
 });
 

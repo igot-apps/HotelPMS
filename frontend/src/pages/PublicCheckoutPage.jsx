@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Calendar, Tag, Loader2, CheckCircle2, CreditCard, ShieldCheck, AlertCircle } from 'lucide-react';
 import api from '../lib/axios';
@@ -110,7 +110,7 @@ export default function PublicCheckoutPage() {
         guestEmail: guestData.email || undefined,
         platformGuestId: guestData.platformGuestId,
         agreedPricePerNight: basePrice,
-      });
+      }, { skipErrorToast: true });
 
       savedBooking.current = { key: bookingKey, reservationId: resData.data.data.reservationId };
       try { sessionStorage.setItem(`checkout-booking:${bookingKey}`, JSON.stringify(savedBooking.current)); } catch { /* Keep the in-memory booking ID. */ }
@@ -123,7 +123,7 @@ export default function PublicCheckoutPage() {
         siteHostname: currentHotelHostname(),
         email: guestData.email || 'guest@hideout24.com',
         amount: totalAmount,
-      });
+      }, { skipErrorToast: true });
 
       return paystackRes.data.data;
     },
@@ -139,17 +139,21 @@ export default function PublicCheckoutPage() {
       }
     },
     onError: (err) => {
-      toast.error(err.response?.data?.message || 'Failed to initialize payment.');
+      if (err.response?.data?.code !== 'ONLINE_BOOKING_PAUSED') {
+        toast.error(err.response?.data?.message || 'Failed to initialize payment.');
+      }
     },
     onSettled: () => { paymentBusy.current = false; },
   });
+  const bookingPaused = property?.onlineBookingAvailable === false
+    || initializePaymentMutation.error?.response?.data?.code === 'ONLINE_BOOKING_PAUSED';
 
   const [confirmationData, setConfirmationData] = useState(null);
 
   // 🌟 Handle Pay (Smart logic for logged-in vs guest)
   const handlePay = (e) => {
     e.preventDefault();
-    if (paymentBusy.current) return;
+    if (paymentBusy.current || bookingPaused) return;
 
     let name, phone, email, platformGuestId;
 
@@ -337,7 +341,12 @@ export default function PublicCheckoutPage() {
                 </div>
               </div>
 
-              {/*  NEW: Safety Warning Message */}
+              {bookingPaused ? (
+                <div role="status" className="rounded-lg border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800">
+                  <p className="font-semibold">This hotel is temporarily unable to accept online bookings.</p>
+                  <p className="mt-1">If you already started a payment, check <Link to="/public/reservations" className="font-semibold underline">My Reservations</Link> for its status.</p>
+                </div>
+              ) : <>
               <div className="bg-warning-50 border border-warning-200 p-3 rounded-lg mb-4 flex items-start gap-2">
                 <AlertCircle size={16} className="text-warning-700 mt-0.5 shrink-0" />
                 <p className="text-xs text-warning-800 font-medium">
@@ -360,6 +369,7 @@ export default function PublicCheckoutPage() {
               <p className="text-[10px] text-text-muted text-center mt-3">
                 Choose Mobile Money or card (Visa/Mastercard) on Paystack's secure checkout.
               </p>
+              </>}
             </div>
           </div>
         </form>

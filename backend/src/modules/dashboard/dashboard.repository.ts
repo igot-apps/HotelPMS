@@ -1,9 +1,11 @@
 import { prisma } from '../../shared/utils/prisma';
 import { hotelDate } from '../reports/daily-overview.service';
 
+import { getSubscriptionState, subscriptionFields } from '../payment/subscription-state';
+
 export const getOperationalOverview = async (propertyId: number) => {
   return prisma.$transaction(async tx => {
-    const property = await tx.property.findUnique({ where: { propertyId }, select: { timezone: true } });
+    const property = await tx.property.findUnique({ where: { propertyId }, select: { timezone: true, ...subscriptionFields } });
     if (!property) throw new Error('Hotel not found.');
     const timeZone = property.timezone || 'Africa/Accra';
     const now = new Date();
@@ -50,6 +52,7 @@ export const getOperationalOverview = async (propertyId: number) => {
     const ready = rooms.filter(r => r.operationalStatus === 'Available' && !r.reservationRooms.length && r.roomType.isActive && ['Clean', 'Inspected'].includes(r.housekeepingStatus));
     const alerts = rooms.filter(r => r.housekeepingStatus === 'Dirty' || r.operationalStatus === 'Maintenance').map(r => ({ roomId: r.roomId, roomNumber: r.roomNumber, operationalStatus: r.operationalStatus, housekeepingStatus: r.housekeepingStatus }));
     return {
+      subscription: getSubscriptionState(property),
       date, timeZone, generatedAt: now,
       arrivals: group('Reserved'), departures: group('CheckedIn'),
       taskCounts: {

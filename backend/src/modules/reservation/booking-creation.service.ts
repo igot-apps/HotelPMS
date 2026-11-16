@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../../shared/utils/prisma';
 import { expireOnlineHolds } from './online-hold.service';
+import { canBookOnline, OnlineBookingPausedError } from './public-booking-policy';
 
 // Allocation shares SERIALIZABLE transactions and room locks with recovery actions.
 export async function createHotelReservation(input: any, online = false): Promise<any> {
@@ -14,6 +15,7 @@ export async function createHotelReservation(input: any, online = false): Promis
     try {
       const reservation = await prisma.$transaction(async tx => {
         const property = await tx.property.findUnique({ where: { propertyId: Number(input.propertyId) } });
+        if (online && property && !canBookOnline(property)) throw new OnlineBookingPausedError();
         if (!property || !property.isActive || property.status !== 'Active') throw new Error('Hotel is not active.');
         const guest = input.propertyGuestId
           ? await tx.propertyGuest.findFirst({ where: { guestId: Number(input.propertyGuestId), propertyId: property.propertyId, isActive: true } })

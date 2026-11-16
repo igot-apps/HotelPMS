@@ -463,7 +463,7 @@ export default function DiscoverPage() {
             <select id="discovery-availability" value={availability} onChange={event => changeAvailability(event.target.value)} className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500 sm:min-w-56">
               <option value="all">All hotels</option>
               <option value="available">Rooms available</option>
-              <option value="unavailable">No rooms available</option>
+              <option value="unavailable">Unavailable to book</option>
             </select>
           </div>
         </div>
@@ -516,7 +516,9 @@ export default function DiscoverPage() {
                     {typeof hotel.availableRooms === 'number' && (
                       <div className={`absolute left-3 right-3 top-3 w-fit max-w-[calc(100%-1.5rem)] inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-bold shadow-sm ${hotel.availableRooms > 0 ? 'border-success-100 bg-success-50/95 text-success-700' : 'border-amber-200 bg-amber-50/95 text-amber-800'}`}>
                         {hotel.availableRooms > 0 ? <CheckCircle2 size={14} className="shrink-0" /> : <X size={14} className="shrink-0" />}
-                        {hotel.availableRooms > 0 ? `${hotel.availableRooms} ${hotel.availableRooms === 1 ? 'room' : 'rooms'} available` : 'No rooms available'}{!(checkIn && checkOut) ? ' tonight' : ''}
+                        {hotel.onlineBookingAvailable === false ? 'Online booking temporarily unavailable' : (
+                          <>{hotel.availableRooms > 0 ? `${hotel.availableRooms} ${hotel.availableRooms === 1 ? 'room' : 'rooms'} available` : 'No rooms available'}{!(checkIn && checkOut) ? ' tonight' : ''}</>
+                        )}
                       </div>
                     )}
                   </Link>
@@ -562,7 +564,9 @@ export default function DiscoverPage() {
                         </span>
                       )}
                     </div>
-                    {hotel.availableRooms === 0 ? (
+                    {hotel.onlineBookingAvailable === false ? (
+                      <Link to={`/public/${hotel.propertyCode}`} className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-primary-700 hover:underline">View hotel details</Link>
+                    ) : hotel.availableRooms === 0 ? (
                       <Link to={`/public/${hotel.propertyCode}${checkIn && checkOut ? `?checkIn=${checkIn}&checkOut=${checkOut}` : ''}`} className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-primary-700 hover:underline">View hotel & try other dates <span aria-hidden="true" className="ml-1">→</span></Link>
                     ) : checkIn && checkOut ? (
                       <Link to={`/public/${hotel.propertyCode}?checkIn=${checkIn}&checkOut=${checkOut}`} className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-primary-700 hover:underline">View rooms & book <span aria-hidden="true" className="ml-1">→</span></Link>

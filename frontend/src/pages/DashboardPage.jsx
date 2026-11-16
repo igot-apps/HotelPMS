@@ -95,6 +95,14 @@ export default function DashboardPage() {
   const tasks = data?.taskCounts || {};
   const stats = data?.roomStats || {};
   const propertyName = user?.propertyName || properties.find(p => p.propertyId === Number(propertyId))?.propertyName;
+  const subscription = data?.subscription;
+  const isManager = user?.role === 'Manager';
+  const expiryDate = subscription?.endsAt ? new Date(subscription.endsAt) : null;
+  const expiresSoon = expiryDate && expiryDate.getTime() - Date.now() <= 7 * 86400000;
+  const showSubscriptionNotice = subscription && (
+    (isManager && (subscription.expired || expiresSoon)) ||
+    (user?.role === 'Receptionist' && subscription.expired)
+  );
   return <div className="space-y-6">
     <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0"><p className="mb-1 text-sm font-semibold text-primary-700">{propertyName || 'Hotel dashboard'}</p><h1 className="text-2xl font-bold text-text">{greeting}, {user?.fullName?.split(' ')[0] || 'Team'}</h1><p className="mt-2 text-sm text-text-muted">{today} · {timeZone} · Your front desk at a glance</p></div>
@@ -103,6 +111,24 @@ export default function DashboardPage() {
         <button disabled={isFetching || !propertyId} onClick={() => refetch()} className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-text disabled:opacity-50"><RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />Refresh</button>
       </div>
     </header>
+    {showSubscriptionNotice && (
+      <section aria-label="Subscription notice" className="flex flex-wrap items-center gap-3 rounded-xl border border-warning-200 bg-warning-50 p-4 text-warning-800">
+        <AlertTriangle size={20} className="shrink-0" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold">
+            {subscription.expired
+              ? isManager && !subscription.cancelled ? 'Subscription expired · New online bookings are paused' : 'New online bookings are paused'
+              : `${subscription.isTrial ? 'Trial' : 'Subscription'} expires on ${expiryDate.toLocaleDateString('en-GH', { dateStyle: 'long', timeZone: 'Africa/Accra' })}`}
+          </p>
+          <p className="mt-1 text-sm">
+            {subscription.expired
+              ? isManager ? 'Renew to reopen online bookings. Confirmed reservations remain valid.' : 'Confirmed reservations remain valid. Contact your manager if a guest needs help booking.'
+              : 'Renew to keep online bookings open.'}
+          </p>
+        </div>
+        {isManager && <Link to="/billing" className="rounded-lg bg-primary-700 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-800">Renew subscription</Link>}
+      </section>
+    )}
     {user?.role === 'Receptionist' && <RefundSummary />}
     {user?.propertyId && (user.role === 'Manager' ? <ApprovalSummary /> : <CorrectionRequests />)}
 

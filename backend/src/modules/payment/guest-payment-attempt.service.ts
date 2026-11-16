@@ -4,6 +4,7 @@ import { prisma } from '../../shared/utils/prisma';
 import { getFrontendBaseUrl } from '../../shared/utils/frontend-url';
 import { paymentReturnBaseUrl } from '../property/website-domain.service';
 import { isExpiredOnlineHold } from '../reservation/online-hold.service';
+import { canBookOnline, OnlineBookingPausedError, publicBookingFields } from '../reservation/public-booking-policy';
 import { paymentConfiguration, verifyGuestPayment } from './guest-payment.service';
 
 const failure = (message: string, statusCode = 400) => Object.assign(new Error(message), { statusCode });
@@ -65,10 +66,13 @@ export async function initializeGuestPayment(propertyCode: string, reservationId
     const amount = Math.round((Number(booking.totalAmount || 0) - Number(booking.amountPaid || 0)) * 100) / 100;
     if (amount <= 0) return { status: 'paid' as const };
     const existing = await tx.guestPaymentAttempt.findFirst({ where: { reservationId, status: { in: activeStatuses } }, orderBy: { attemptId: 'desc' } });
+    const currentProperty = await tx.property.findUniqueOrThrow({ where: { propertyId: property.propertyId }, select: publicBookingFields });
+    const bookingOpen = canBookOnline(currentProperty);
     if (existing) {
       const changedBalance = Number(existing.amount) !== amount;
       if (checked.status === 'retryable' && checked.checkedReference === existing.reference && ['Initializing', 'Unknown'].includes(existing.status) && !existing.checkoutUrl && Date.now() - existing.updatedAt.getTime() >= recoveryDelayMs) {
         // Reuse the reference: never create a second charge opportunity after an uncertain initialize.
+        if (!bookingOpen) throw new OnlineBookingPausedError();
         const attempt = await tx.guestPaymentAttempt.update({ where: { attemptId: existing.attemptId }, data: { status: 'Initializing', amount, currency: property.currency } });
         return { status: 'new' as const, attempt };
       } else if (changedBalance && checked.checkedReference === existing.reference && checked.providerStatus === 'abandoned') {
@@ -84,6 +88,7 @@ export async function initializeGuestPayment(propertyCode: string, reservationId
       }
     }
     // Commit the reference BEFORE contacting Paystack, so a lost response cannot create a second attempt.
+    if (!bookingOpen) throw new OnlineBookingPausedError();
     const attempt = await tx.guestPaymentAttempt.create({ data: { reservationId, reference: `RES-${reservationId}-${randomUUID()}`, amount, currency: property.currency } });
     return { status: 'new' as const, attempt };
   });

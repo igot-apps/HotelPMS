@@ -26,6 +26,7 @@ import publicImagesRoutes from './modules/public/public-images.routes';
 import publicAuthRoutes from './modules/public/public-auth.routes';
 import { expireOnlineHolds } from './modules/reservation/online-hold.service';
 import { activateReadyWebsiteDomains } from './modules/property/domain-auto-activation.service';
+import { sendSubscriptionReminders } from './modules/payment/subscription-reminder.service';
 
 // Load environment variables
 dotenv.config();
@@ -124,6 +125,9 @@ if (require.main === module) {
   const releaseHolds = () => expireOnlineHolds().catch(() => console.error('Could not release expired online booking holds; will retry.'));
   void releaseHolds();
   setInterval(releaseHolds, 30000).unref();
+  const remindManagers = () => sendSubscriptionReminders().catch(() => console.warn('Could not check subscription reminders.'));
+  void remindManagers();
+  setInterval(remindManagers, 30 * 60 * 1000).unref();
   void activateReadyWebsiteDomains().catch(error => console.error('Could not check automatic domain activation:', error));
   setInterval(() => {
     void activateReadyWebsiteDomains().catch(error => console.error('Could not check automatic domain activation:', error));

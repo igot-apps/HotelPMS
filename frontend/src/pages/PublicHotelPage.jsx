@@ -82,7 +82,7 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
   const { data: roomsResponse, isLoading: isLoadingRooms } = useQuery({
     queryKey: ['publicRooms', propertyCode, checkIn, checkOut, currentPage],
     queryFn: () => fetchRooms({ propertyCode, checkIn, checkOut, page: currentPage }),
-    enabled: !!property && !hasInvalidDates,
+    enabled: !!property && property.onlineBookingAvailable !== false && !hasInvalidDates,
   });
 
   const rooms = roomsResponse?.data || [];
@@ -204,7 +204,12 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
 
       {/* 2. Floating Search Bar */}
       <div className="relative z-10 mx-auto -mt-8 max-w-5xl px-4">
-        <details key={propertyCode} className="group min-w-0 rounded-2xl border border-border bg-surface shadow-xl">
+        {property.onlineBookingAvailable === false ? (
+          <div className="rounded-2xl border border-warning-200 bg-warning-50 p-5 text-warning-800" role="status">
+            <p className="font-bold">Online booking temporarily unavailable</p>
+            {contactHref && <a href={contactHref} className="mt-2 inline-block font-semibold underline">{contactLabel}</a>}
+          </div>
+        ) : <details key={propertyCode} className="group min-w-0 rounded-2xl border border-border bg-surface shadow-xl">
           <summary className="flex min-h-20 cursor-pointer list-none flex-wrap items-center gap-3 rounded-2xl px-4 py-4 text-text transition-colors hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-300 sm:flex-nowrap sm:px-5 [&::-webkit-details-marker]:hidden">
             <Calendar size={22} className="shrink-0 text-primary-600" />
             <span className="min-w-0 flex-1"><span className="block font-bold">Check availability</span><span className="block text-sm text-text-muted">{hasPickedDates ? `${formatStayDate(checkIn)} – ${formatStayDate(checkOut)}` : 'Pick dates to book'}</span></span>
@@ -246,7 +251,7 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
           </button>
           {hasInvalidDates && <p id="hotel-date-error" role="alert" className="text-sm text-danger-600 md:col-span-3">Choose check-in and check-out dates. Check-out must be after check-in.</p>}
         </form>
-        </details>
+        </details>}
       </div>
 
       {/* 3. Main Content */}
@@ -308,7 +313,7 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
         </div>
 
         {/* Right Column: Available Room Types */}
-        <div ref={roomResultsRef} className="lg:col-span-2 space-y-6 scroll-mt-24">
+        {property.onlineBookingAvailable !== false && <div ref={roomResultsRef} className="lg:col-span-2 space-y-6 scroll-mt-24">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
             <h2 className="text-2xl font-bold text-text">{hasPickedDates ? 'Rooms available for your date' : 'Room types'}</h2>
             <p className="text-sm text-text-muted font-medium bg-secondary-50 px-3 py-1 rounded-full border border-secondary-100 w-fit">
@@ -418,7 +423,7 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
               )}
             </>
           )}
-        </div>
+        </div>}
       </div>
     </div>
   );

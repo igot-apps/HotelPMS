@@ -79,6 +79,10 @@ export default function BillingPage() {
 
   // 🌟 UPGRADED: Resets clock to midnight so the countdown drops at the start of the day
   const getSubscriptionStatus = () => {
+    if (user?.subscriptionStatus === 'Expired' || user?.subscriptionStatus === 'Cancelled') {
+      return { status: user.subscriptionStatus, daysLeft: 0, isExpired: true, endDate: null };
+    }
+
     // 🚨 CRITICAL: Reset today to midnight (00:00:00)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
