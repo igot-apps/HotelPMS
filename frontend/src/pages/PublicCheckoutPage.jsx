@@ -236,24 +236,24 @@ export default function PublicCheckoutPage() {
       <div className="max-w-4xl mx-auto px-4 py-6 sm:py-10">
         <BackButton fallback={hotelUrl} label="Back to rooms" disabled={initializePaymentMutation.isPending} useHistory={false} className="mb-6" />
 
-        <form onSubmit={handlePay} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <form onSubmit={handlePay} className="grid min-w-0 grid-cols-1 lg:grid-cols-3 gap-8">
 
           {/* Left Column: Booking Summary & Guest Details */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="min-w-0 lg:col-span-2 space-y-6">
             <h1 className="text-2xl font-bold text-text">Review & Pay</h1>
 
             {/* 🌟 UPDATED: Editable Trip Details */}
-            <div className="bg-surface p-6 rounded-xl border border-border">
+            <div className="min-w-0 max-w-full overflow-hidden bg-surface p-4 sm:p-6 rounded-xl border border-border">
               <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
                 <Calendar size={20} className="text-primary-600"/> Your Trip
               </h2>
-              <div className="min-w-0 p-4 bg-background rounded-lg border border-border space-y-4">
-                <div className="flex justify-between items-start">
-                  <div>
+              <div className="min-w-0 max-w-full overflow-hidden p-4 bg-background rounded-lg border border-border space-y-4">
+                <div className="flex min-w-0 justify-between items-start gap-3">
+                  <div className="min-w-0">
                     <p className="font-bold text-text">{selectedRoom?.typeName || 'Selected Room'}</p>
                     <p className="text-sm text-text-muted">{property?.propertyName} • {property?.city}</p>
                   </div>
-                  <p className="text-xs font-bold text-primary-600 bg-primary-50 px-2 py-1 rounded-md border border-primary-100">
+                  <p className="shrink-0 text-xs font-bold text-primary-600 bg-primary-50 px-2 py-1 rounded-md border border-primary-100">
                     {nights} Night{nights > 1 ? 's' : ''}
                   </p>
                 </div>
@@ -267,7 +267,7 @@ export default function PublicCheckoutPage() {
                       value={checkIn}
                       onChange={(e) => updateStayDate('checkIn', e.target.value)}
                       min={new Date().toISOString().split('T')[0]}
-                      className="block w-full min-w-0 max-w-full box-border px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
+                      className="block w-full min-w-0 max-w-full [min-inline-size:0] box-border px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
                     />
                   </div>
                   <div className="min-w-0">
@@ -277,7 +277,7 @@ export default function PublicCheckoutPage() {
                       value={checkOut}
                       onChange={(e) => updateStayDate('checkOut', e.target.value)}
                       min={checkIn}
-                      className="block w-full min-w-0 max-w-full box-border px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
+                      className="block w-full min-w-0 max-w-full [min-inline-size:0] box-border px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
                     />
                   </div>
                 </div>

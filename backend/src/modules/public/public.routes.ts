@@ -9,7 +9,7 @@ import { expireOnlineHolds } from '../reservation/online-hold.service';
 import { cancelGuestReservation } from '../reservation/guest-cancellation.service';
 import { publicPhotoReferences } from './public-images.routes';
 import { resolveWebsiteHostname } from '../property/website-domain.service';
-import { guestJwtSecret, guestWebsiteScope } from './guest-website-scope';
+import { centralGuestSessionVersion, guestJwtSecret, guestWebsiteScope } from './guest-website-scope';
 
 
 const router = Router();
@@ -49,6 +49,9 @@ const requireBookingGuest = async (req: any, res: Response, next: import('expres
         res.status(404).json({ success: false, message: 'Booking or hotel not found.' });
         return;
       }
+    } else if (!guest.isEmailVerified || !guest.centralPasswordHash
+      || payload.sessionVersion !== centralGuestSessionVersion(guest.centralPasswordHash)) {
+      throw new Error();
     }
     req.bookingGuest = guest;
     req.guestPropertyId = propertyId;

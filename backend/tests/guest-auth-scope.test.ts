@@ -66,7 +66,12 @@ beforeEach(() => {
   mockDb.property.findUnique.mockImplementation(({ where }) => hotel(where.propertyCode === 'hotel-one' ? 1 : 2));
   mockDb.platformGuest.findMany.mockResolvedValue([profile]);
   mockDb.platformGuest.findUnique.mockResolvedValue(profile);
-  mockDb.platformGuest.update.mockResolvedValue(profile);
+  mockDb.platformGuest.update.mockImplementation(({ data }) => {
+    const updated = { ...profile, ...data };
+    mockDb.platformGuest.findUnique.mockResolvedValue(updated);
+    mockDb.platformGuest.findMany.mockResolvedValue([updated]);
+    return updated;
+  });
   mockDb.guestEmailChallenge.findMany.mockResolvedValue([]);
   mockDb.guestEmailChallenge.create.mockImplementation(({ data }) => challenges.set(data.id, { ...data, attempts: 0 }));
   mockDb.guestEmailChallenge.findUnique.mockImplementation(({ where }) => challenges.get(where.id));
@@ -99,8 +104,8 @@ beforeEach(() => {
 const authPost = (path: string, origin: string, data: object) =>
   request(app).post(`/public/auth/${path}`).set('Origin', origin).send(data);
 
-async function getCode(origin: string) {
-  const result = await authPost('email/request', origin, { email: ' GUEST@EXAMPLE.COM ' });
+async function getCode(origin: string, intent?: 'continue') {
+  const result = await authPost('email/request', origin, { email: ' GUEST@EXAMPLE.COM ', intent });
   expect(result.status).toBe(200);
   expect(result.body.data.testCode).toBeUndefined();
   const message = mockSend.mock.lastCall?.[0];
@@ -144,10 +149,20 @@ describe('guest authentication by website', () => {
     }
   });
 
-  it('keeps marketplace email sign-in and uses the same guest ID to book either hotel', async () => {
-    const verified = await authPost('email/verify', central, await getCode(central));
+  it('requires a marketplace password after verification and lets returning guests book without another code', async () => {
+    const verified = await authPost('email/verify', central, await getCode(central, 'continue'));
     expect(verified.status).toBe(200);
-    const token = verified.body.data.token;
+    expect(verified.body.data.needsPassword).toBe(true);
+    expect(verified.body.data.token).toBeUndefined();
+    const setup = await authPost('email/complete', central, { setupToken: verified.body.data.setupToken, password: 'Central01' });
+    expect(setup.status).toBe(200);
+    const decision = await authPost('email/request', central, { email, intent: 'continue' });
+    expect(decision.body.data).toEqual({ needsPassword: true, email });
+    expect(mockSend).toHaveBeenCalledTimes(1);
+    const signedIn = await authPost('email/login', central, { email, password: 'Central01' });
+    expect(signedIn.status).toBe(200);
+    expect(mockSend).toHaveBeenCalledTimes(1);
+    const token = signedIn.body.data.token;
     expect(jwt.decode(token)).toMatchObject({ type: 'central_guest', platformGuestId: 7 });
     mockCreateBooking.mockResolvedValue({ reservationId });
     for (const path of ['hotel-one', 'hotel-two']) {
@@ -157,6 +172,11 @@ describe('guest authentication by website', () => {
     expect((await guestRequest('get', '/reservations', token, hotelOne)).status).toBe(401);
     expect((await guestRequest('get', '/reservations', token, central)).status).toBe(200);
     expect(mockDb.reservation.findMany.mock.lastCall?.[0].where).toEqual({ platformGuestId: 7, source: 'Website' });
+    const reset = await authPost('email/verify', central, await getCode(central));
+    expect((await authPost('email/complete', central, { setupToken: reset.body.data.setupToken, password: 'Central02' })).status).toBe(200);
+    expect((await guestRequest('get', '/reservations', token, central)).status).toBe(401);
+    expect((await authPost('email/login', central, { email, password: 'Central01' })).status).toBe(401);
+    expect((await authPost('email/login', central, { email, password: 'Central02' })).status).toBe(200);
   });
 
   it('requires the right hotel for OTPs and maintains independent passwords and reset sessions', async () => {
@@ -170,6 +190,9 @@ describe('guest authentication by website', () => {
     }
     const first = await authPost('hotel/complete', hotelOne, setup);
     expect(first.status).toBe(200);
+    const decision = await authPost('email/request', hotelOne, { email, intent: 'continue' });
+    expect(decision.body.data).toEqual({ needsPassword: true, email });
+    expect(mockSend).toHaveBeenCalledTimes(1);
     expect((await authPost('hotel/complete', hotelOne, setup)).status).toBe(409);
     await hotelSetup(hotelTwo, 'HotelTwoPass123');
     expect((await authPost('hotel/login', hotelTwo, { email, password: setup.password })).status).toBe(401);
@@ -202,10 +225,11 @@ describe('guest authentication by website', () => {
     const verified = await authPost('email/verify', central, challenge);
     expect(verified.body.data.needsName).toBe(true);
     expect((await authPost('email/verify', central, challenge)).status).toBe(400);
-    const setup = { setupToken: verified.body.data.setupToken, fullName: profile.fullName, phone: profile.phone };
+    const setup = { setupToken: verified.body.data.setupToken, fullName: profile.fullName, phone: profile.phone, password: 'Central01' };
     expect((await authPost('email/complete', hotelOne, setup)).status).toBe(401);
     const complete = await authPost('email/complete', central, setup);
-    expect(complete.status).toBe(201);
+    expect(complete.status).toBe(200);
+    expect((await authPost('email/complete', central, setup)).status).toBe(409);
     expect(jwt.decode(complete.body.data.token)).toMatchObject({ type: 'central_guest', platformGuestId: 7 });
     expect(mockDb.hotelGuestAccount.upsert).not.toHaveBeenCalled();
   });

@@ -1,4 +1,5 @@
 import type { Request } from 'express';
+import { createHmac } from 'node:crypto';
 import { isCentralWebsiteHost, resolveWebsiteHostname } from '../property/website-domain.service';
 
 export function guestJwtSecret(): string {
@@ -6,6 +7,10 @@ export function guestJwtSecret(): string {
   if (secret) return secret;
   if (process.env.NODE_ENV === 'development') return 'your-super-secret-key';
   throw new Error('Guest authentication is not configured.');
+}
+
+export function centralGuestSessionVersion(passwordHash: string): string {
+  return createHmac('sha256', guestJwtSecret()).update('central-guest:' + passwordHash).digest('hex');
 }
 
 export async function guestWebsiteScope(req: Request) {

@@ -265,6 +265,7 @@ model PlatformGuest {
   email             String?   @unique @db.VarChar(200)
   googleSubject     String?   @unique @db.VarChar(255)
   passwordHash      String?    @db.Text
+  centralPasswordHash String? @db.Text
   isPhoneVerified   Boolean   @default(false)
   isEmailVerified   Boolean   @default(false)
   isActive          Boolean   @default(true)

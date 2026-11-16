@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { Resend } from 'resend';
 import { normalizeGhanaPhoneNumber } from '../../shared/utils/ghanaPhone';
-import { guestJwtSecret, guestWebsiteScope } from './guest-website-scope';
+import { centralGuestSessionVersion, guestJwtSecret, guestWebsiteScope } from './guest-website-scope';
 
 const router = Router();
 
@@ -18,17 +18,13 @@ function hashCode(id: string, code: string): string {
   return createHash('sha256').update(id + ':' + code + ':' + guestJwtSecret()).digest('hex');
 }
 
-function guestResponse(guest: { guestId: number; fullName: string; phone: string; email: string | null },
+function guestResponse(guest: { guestId: number; fullName: string; phone: string; email: string | null; centralPasswordHash: string | null },
   account?: { propertyId: number; email: string; sessionVersion: number }) {
   const claims = account
     ? { type: 'hotel_guest', platformGuestId: guest.guestId, propertyId: account.propertyId, email: account.email, sessionVersion: account.sessionVersion }
-    : { type: 'central_guest', platformGuestId: guest.guestId };
+    : { type: 'central_guest', platformGuestId: guest.guestId, sessionVersion: centralGuestSessionVersion(guest.centralPasswordHash!) };
   const token = jwt.sign(claims, guestJwtSecret(), { expiresIn: '7d' });
   return { guest: { guestId: guest.guestId, fullName: guest.fullName, phone: guest.phone, email: guest.email }, token };
-}
-
-async function findGuestByPhone(phone: string) {
-  return prisma.platformGuest.findFirst({ where: { phone: { in: phoneVariants(phone) } } });
 }
 
 const codeLifetimeMs = 5 * 60_000;
@@ -65,12 +61,26 @@ function normalizedEmail(value: unknown): string | null {
 const passwordAttempts = new Map<string, { count: number; expires: number }>();
 const dummyHash = bcrypt.hashSync(randomUUID(), 12);
 
-router.post('/hotel/login', async (req, res) => {
+async function guestPasswordAccount(propertyId: number | null, email: string) {
+  const account = propertyId ? await prisma.hotelGuestAccount.findUnique({
+    where: { propertyId_email: { propertyId, email } },
+    include: { platformGuest: true },
+  }) : null;
+  const centralMatches = propertyId ? [] : await prisma.platformGuest.findMany({
+    where: { email: { equals: email, mode: 'insensitive' } }, take: 2,
+  });
+  const guest = account?.platformGuest ?? (centralMatches.length === 1 ? centralMatches[0] : undefined);
+  const hash = propertyId ? account?.passwordHash : guest?.centralPasswordHash;
+  const passwordHash = guest?.isActive && guest.isEmailVerified && guest.email?.trim().toLowerCase() === email ? hash : null;
+  return { account, guest, passwordHash };
+}
+
+router.post(['/hotel/login', '/email/login'], async (req, res) => {
   const propertyId: number | null = res.locals.propertyId;
   const email = normalizedEmail(req.body?.email);
   const password = req.body?.password;
-  if (!propertyId || !email || typeof password !== 'string' || !password || Buffer.byteLength(password) > 72) {
-    return res.status(400).json({ success: false, message: 'Enter a valid email and password on your hotel website.' });
+  if (req.path.startsWith('/hotel/') !== Boolean(propertyId) || !email || typeof password !== 'string' || !password || Buffer.byteLength(password) > 72) {
+    return res.status(400).json({ success: false, message: 'Enter a valid email and password.' });
   }
   const now = Date.now();
   for (const [key, entry] of passwordAttempts) {
@@ -84,16 +94,13 @@ router.post('/hotel/login', async (req, res) => {
   attempt.count++;
   passwordAttempts.set(attemptKey, attempt);
   try {
-    const account = await prisma.hotelGuestAccount.findUnique({
-      where: { propertyId_email: { propertyId, email } },
-      include: { platformGuest: true },
-    });
-    const matches = await bcrypt.compare(password, account?.passwordHash ?? dummyHash);
-    if (!matches || !account?.platformGuest.isActive || account.platformGuest.email?.trim().toLowerCase() !== email) {
+    const { account, guest, passwordHash } = await guestPasswordAccount(propertyId, email);
+    const matches = await bcrypt.compare(password, passwordHash ?? dummyHash);
+    if (!matches || !passwordHash || !guest) {
       return res.status(401).json({ success: false, message: 'Email or password is incorrect.' });
     }
     passwordAttempts.delete(attemptKey);
-    return res.json({ success: true, data: guestResponse(account.platformGuest, account) });
+    return res.json({ success: true, data: guestResponse(guest, account ?? undefined) });
   } catch {
     return res.status(500).json({ success: false, message: 'Could not sign in. Please try again.' });
   }
@@ -104,6 +111,14 @@ router.post('/email/request', async (req, res) => {
   const email = normalizedEmail(req.body?.email);
   if (!email) {
     return res.status(400).json({ success: false, message: 'Enter a valid email address.' });
+  }
+  if (req.body?.intent === 'continue') {
+    try {
+      const { passwordHash } = await guestPasswordAccount(propertyId, email);
+      if (passwordHash) return res.json({ success: true, data: { needsPassword: true, email } });
+    } catch {
+      return res.status(503).json({ success: false, message: 'Could not continue. Please try again shortly.' });
+    }
   }
   const simulated = simulatedEmail(req);
   const key = process.env.RESEND_API_KEY?.trim();
@@ -175,36 +190,26 @@ router.post('/email/verify', async (req, res) => {
     if (matches.length > 1) return res.status(409).json({ success: false, message: 'Contact support to resolve duplicate accounts for this email.' });
     const existing = matches[0];
     if (existing && !existing.isActive) return res.status(403).json({ success: false, message: 'Account is deactivated.' });
-    if (propertyId) {
-      const needsName = !existing?.fullName.trim() || existing.fullName.trim().toLowerCase() === 'guest';
-      const setupToken = jwt.sign({
-        type: 'hotel_guest_setup', propertyId, email: challenge.email, challengeId: id, simulated: simulatedEmail(req),
-      }, guestJwtSecret(), { expiresIn: '10m' });
-      return res.json({ success: true, data: { needsPassword: true, needsName, setupToken } });
-    }
-    if (existing && existing.fullName.trim() && existing.fullName.trim().toLowerCase() !== 'guest') {
-      const guest = await prisma.platformGuest.update({
-        where: { guestId: existing.guestId }, data: { isEmailVerified: true },
-      });
-      return res.json({ success: true, data: guestResponse(guest) });
-    }
-    const setupToken = jwt.sign({ type: 'email_guest_setup', email: challenge.email, guestId: existing?.guestId, simulated: simulatedEmail(req) }, guestJwtSecret(), { expiresIn: '10m' });
-    return res.json({ success: true, data: { needsName: true, setupToken } });
+    const needsName = !existing?.fullName.trim() || existing.fullName.trim().toLowerCase() === 'guest';
+    const setupToken = jwt.sign({
+      type: 'guest_password_setup', propertyId, email: challenge.email, challengeId: id, simulated: simulatedEmail(req),
+    }, guestJwtSecret(), { expiresIn: '10m' });
+    return res.json({ success: true, data: { needsPassword: true, needsName, setupToken } });
   } catch {
     return res.status(500).json({ success: false, message: 'Could not finish sign-in. Please try again.' });
   }
 });
 
-router.post('/hotel/complete', async (req, res) => {
+router.post(['/hotel/complete', '/email/complete'], async (req, res) => {
   const propertyId: number | null = res.locals.propertyId;
   let setup: jwt.JwtPayload;
   try {
     setup = jwt.verify(String(req.body?.setupToken || ''), guestJwtSecret()) as jwt.JwtPayload;
-    if (!propertyId || setup.type !== 'hotel_guest_setup' || setup.propertyId !== propertyId
+    if (req.path.startsWith('/hotel/') !== Boolean(propertyId) || setup.type !== 'guest_password_setup' || setup.propertyId !== propertyId
       || typeof setup.email !== 'string' || typeof setup.challengeId !== 'string'
       || setup.simulated !== simulatedEmail(req)) throw new Error();
   } catch {
-    return res.status(401).json({ success: false, message: 'Verification expired. Request a new code on this hotel website.' });
+    return res.status(401).json({ success: false, message: 'Verification expired. Request a new code on this website.' });
   }
   const email: string = setup.email;
   const password = req.body?.password;
@@ -215,7 +220,7 @@ router.post('/hotel/complete', async (req, res) => {
   const phone = normalizeGhanaPhoneNumber(req.body?.phone);
   try {
     const passwordHash = await bcrypt.hash(password, 12);
-    const account = await prisma.$transaction(async tx => {
+    const result = await prisma.$transaction(async tx => {
       await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${'guest-email:' + email}, 0))`;
       const matches = await tx.platformGuest.findMany({ where: { email: { equals: email, mode: 'insensitive' } }, take: 2 });
       if (matches.length > 1) throw Object.assign(new Error('Contact support to resolve duplicate accounts for this email.'), { status: 409 });
@@ -242,64 +247,27 @@ router.post('/hotel/complete', async (req, res) => {
         data: { setupUsedAt: new Date() },
       });
       if (!claimed.count) throw Object.assign(new Error('Request a new verification code.'), { status: 409 });
-      return tx.hotelGuestAccount.upsert({
+      if (!propertyId) {
+        const platformGuest = await tx.platformGuest.update({
+          where: { guestId: guest.guestId }, data: { centralPasswordHash: passwordHash },
+        });
+        return guestResponse(platformGuest);
+      }
+      const account = await tx.hotelGuestAccount.upsert({
         where: { propertyId_email: { propertyId, email } },
         create: { propertyId, email, platformGuestId: guest.guestId, passwordHash },
         update: { platformGuestId: guest.guestId, passwordHash, sessionVersion: { increment: 1 } },
         include: { platformGuest: true },
       });
+      return guestResponse(account.platformGuest, account);
     });
     passwordAttempts.delete(`${propertyId}:${email}`);
-    return res.json({ success: true, data: guestResponse(account.platformGuest, account) });
+    return res.json({ success: true, data: result });
   } catch (error) {
     const failure = error as { status?: number; message?: string; code?: string };
     if (failure.status) return res.status(failure.status).json({ success: false, message: failure.message });
     if (failure.code === 'P2002') return res.status(409).json({ success: false, message: 'This profile conflicts with an existing account. Try again or contact support.' });
-    return res.status(500).json({ success: false, message: 'Could not save your hotel account. Please try again.' });
-  }
-});
-
-router.post('/email/complete', async (req, res) => {
-  let setup: jwt.JwtPayload;
-  try {
-    setup = jwt.verify(String(req.body?.setupToken || ''), guestJwtSecret()) as jwt.JwtPayload;
-    if (res.locals.propertyId || setup.type !== 'email_guest_setup' || typeof setup.email !== 'string' || setup.simulated !== simulatedEmail(req)) throw new Error();
-  } catch {
-    return res.status(401).json({ success: false, message: 'Sign-in expired. Request a new code.' });
-  }
-  const fullName = String(req.body?.fullName || '').trim().replace(/\s+/g, ' ');
-  const phone = normalizeGhanaPhoneNumber(req.body?.phone);
-  if (fullName.length < 2 || fullName.length > 200 || fullName.toLowerCase() === 'guest') {
-    return res.status(400).json({ success: false, message: 'Enter your full name to continue.' });
-  }
-  if (!phone) return res.status(400).json({ success: false, message: 'Enter a valid Ghana mobile number.' });
-  try {
-    const existingPhone = await findGuestByPhone(phone);
-    if (existingPhone && existingPhone.guestId !== setup.guestId) {
-      return res.status(409).json({ success: false, message: 'This number is already linked to a guest account. Contact support to recover access.' });
-    }
-    if (setup.guestId) {
-      const existing = await prisma.platformGuest.findUnique({ where: { guestId: setup.guestId } });
-      if (!existing?.isActive || existing.email?.toLowerCase() !== setup.email
-        || (existing.fullName.trim() && existing.fullName.trim().toLowerCase() !== 'guest')) {
-        return res.status(409).json({ success: false, message: 'Request a new code to sign in.' });
-      }
-      const updated = await prisma.platformGuest.updateMany({
-        where: { guestId: existing.guestId, fullName: existing.fullName, email: existing.email, isActive: true },
-        data: { fullName, phone, isEmailVerified: true, isPhoneVerified: false },
-      });
-      if (!updated.count) return res.status(409).json({ success: false, message: 'Request a new code to sign in.' });
-      return res.json({ success: true, data: guestResponse({ ...existing, fullName, phone }) });
-    }
-    const guest = await prisma.platformGuest.create({
-      data: { email: setup.email, fullName, phone, isEmailVerified: true, isPhoneVerified: false },
-    });
-    return res.status(201).json({ success: true, data: guestResponse(guest) });
-  } catch (error) {
-    if ((error as { code?: string }).code === 'P2002') {
-      return res.status(409).json({ success: false, message: 'This email or phone is already linked to an account. Start again or contact support.' });
-    }
-    return res.status(500).json({ success: false, message: 'Could not save your profile. Please try again.' });
+    return res.status(500).json({ success: false, message: 'Could not save your account. Please try again.' });
   }
 });
 

@@ -7,7 +7,7 @@ import { useHotelWebsite } from '../../lib/hotelWebsite';
 
 export default function GuestSignInForm({ onSuccess }) {
   const hotel = useHotelWebsite();
-  const [useCode, setUseCode] = useState(false);
+  const [step, setStep] = useState('email');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [email, setEmail] = useState('');
@@ -30,6 +30,9 @@ export default function GuestSignInForm({ onSuccess }) {
     : `0:${String(retrySeconds).padStart(2, '0')}`;
 
   function changeEmail() {
+    setStep('email');
+    setPassword('');
+    setConfirmPassword('');
     setChallenge(null);
     setCode('');
     setRetrySeconds(0);
@@ -45,7 +48,7 @@ export default function GuestSignInForm({ onSuccess }) {
     event.preventDefault();
     setBusy(true);
     try {
-      const response = await api.post('/public/auth/hotel/login', { email, password }, { skipErrorToast: true });
+      const response = await api.post(hotel ? '/public/auth/hotel/login' : '/public/auth/email/login', { email, password }, { skipErrorToast: true });
       finishSignIn(response.data.data);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Could not sign in');
@@ -56,8 +59,16 @@ export default function GuestSignInForm({ onSuccess }) {
     event.preventDefault();
     setBusy(true);
     try {
-      const response = await api.post('/public/auth/email/request', { email }, { skipErrorToast: true });
-      setChallenge(response.data.data);
+      const intent = step === 'email' && !challenge ? 'continue' : undefined;
+      const response = await api.post('/public/auth/email/request', { email, intent }, { skipErrorToast: true });
+      const payload = response.data.data;
+      if (payload.needsPassword) {
+        setEmail(payload.email);
+        setStep('password');
+        setRetrySeconds(0);
+        return;
+      }
+      setChallenge(payload);
       setCode('');
       setRetrySeconds(60);
     } catch (error) {
@@ -94,7 +105,7 @@ export default function GuestSignInForm({ onSuccess }) {
     }
     setBusy(true);
     try {
-      const endpoint = nameSetup.needsPassword ? '/public/auth/hotel/complete' : '/public/auth/email/complete';
+      const endpoint = hotel ? '/public/auth/hotel/complete' : '/public/auth/email/complete';
       const response = await api.post(endpoint, { setupToken: nameSetup.setupToken, fullName, phone, password: nameSetup.needsPassword ? password : undefined }, { skipErrorToast: true });
       finishSignIn(response.data.data);
     } catch (error) {
@@ -104,16 +115,11 @@ export default function GuestSignInForm({ onSuccess }) {
 
   const inputClass = 'w-full min-w-0 rounded-xl border border-border bg-background px-4 py-3 text-text outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20';
   const buttonClass = 'flex w-full items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 py-3 font-bold text-white transition hover:bg-primary-700 disabled:opacity-50';
-  const passwordLogin = hotel && !useCode;
-  const switchMode = () => {
-    setUseCode(value => !value);
-    setPassword('');
-    changeEmail();
-  };
+  const passwordLogin = step === 'password';
   return (
     <div className="w-full min-w-0">
-      <h1 className="text-2xl font-bold text-text">{nameSetup?.needsPassword ? 'Set your hotel password' : nameSetup ? 'Finish setting up your account' : 'Sign in to book'}</h1>
-      <p className="mt-1 text-sm text-text-muted">{nameSetup?.needsPassword ? `Your email is verified. Set a password for ${hotel.propertyName}.` : nameSetup ? 'Your email is verified. Add your name and contact number.' : hotel && useCode ? 'Verify your email to set or reset your hotel password and access your reservations.' : 'Use your email to book or manage your reservations.'}</p>
+      <h1 className="text-2xl font-bold text-text">{nameSetup ? 'Set your password' : step === 'reset' ? 'Reset your password' : step === 'email' && !challenge ? 'Sign in or register' : challenge ? 'Verify your email' : 'Sign in to book'}</h1>
+      <p className="mt-1 text-sm text-text-muted">{nameSetup ? `Your email is verified. Set a password for ${hotel?.propertyName || 'HideOut24'}.` : !challenge && (step === 'reset' ? 'We’ll email you a code to reset your password.' : passwordLogin ? 'Enter your password to continue.' : 'Enter your email to sign in or create an account.')}</p>
       {nameSetup ? (
         <form onSubmit={completeProfile} className="mt-5 space-y-4">
           {nameSetup.needsName && <>
@@ -146,10 +152,13 @@ export default function GuestSignInForm({ onSuccess }) {
         </form>
       ) : (
         <form onSubmit={passwordLogin ? signInWithPassword : requestCode} className="mt-5 space-y-4">
-          <div><label htmlFor="guest-email" className="mb-1 block text-sm font-semibold text-text">Email address</label><input id="guest-email" className={inputClass} type="email" autoComplete="email" maxLength={200} placeholder="you@example.com" value={email} disabled={busy} onChange={event => { setEmail(event.target.value); if (retrySeconds > 0) setRetrySeconds(0); }} required /></div>
+          <div><label htmlFor="guest-email" className="mb-1 block text-sm font-semibold text-text">Email address</label><input id="guest-email" className={inputClass} type="email" autoComplete="email" maxLength={200} placeholder="you@example.com" value={email} disabled={busy} readOnly={passwordLogin} onChange={event => { setEmail(event.target.value); if (retrySeconds > 0) setRetrySeconds(0); }} required /></div>
           {passwordLogin && <div><label htmlFor="guest-password" className="mb-1 block text-sm font-semibold text-text">Password</label><input id="guest-password" className={inputClass} type="password" autoComplete="current-password" value={password} disabled={busy} onChange={event => setPassword(event.target.value)} required /></div>}
-          <button className={buttonClass} disabled={busy || retrySeconds > 0}>{busy ? <Loader2 size={18} className="animate-spin" /> : !passwordLogin && <Mail size={18} />} {passwordLogin ? 'Sign in' : retrySeconds > 0 ? `Try again in ${retryLabel}` : 'Email me a code'}</button>
-          {hotel && <button type="button" disabled={busy} className="w-full text-sm font-semibold text-primary-700 hover:underline" onClick={switchMode}>{passwordLogin ? 'Create an account or reset password' : 'Sign in with password'}</button>}
+          <button className={buttonClass} disabled={busy || retrySeconds > 0}>{busy ? <Loader2 size={18} className="animate-spin" /> : step === 'reset' && <Mail size={18} />} {passwordLogin ? 'Sign in' : retrySeconds > 0 ? `Try again in ${retryLabel}` : step === 'reset' ? 'Email me a code' : 'Continue'}</button>
+          {step !== 'email' && <div className="flex flex-wrap justify-between gap-3 text-sm font-semibold text-primary-700">
+            <button type="button" disabled={busy} className="hover:underline" onClick={changeEmail}>Change email</button>
+            {passwordLogin && <button type="button" disabled={busy} className="hover:underline" onClick={() => { setPassword(''); setStep('reset'); }}>Forgot password?</button>}
+          </div>}
         </form>
       )}
     </div>
