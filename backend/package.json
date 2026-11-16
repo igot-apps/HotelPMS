@@ -11,6 +11,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
+    "studio:local": "prisma studio --port 5555",
+    "studio:online": "node scripts/prismaStudioOnline.js",
     "prisma:seed-demo": "ts-node --transpile-only prisma/seed-demo-hotels.ts",
     "prisma:seed-render-demo": "node prisma/seed-render-demo.js",
     "prisma:bootstrap-platform-admin": "ts-node --transpile-only scripts/bootstrapPlatformAdmin.ts",

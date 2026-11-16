@@ -3,3 +3,6 @@ node_modules
 .env
 
 /src/generated/prisma
+
+# Online (Render) database connection for Prisma Studio
+.env.online
