@@ -49,10 +49,13 @@ export default function RoomOccupantDialog({ room, reservation, mode, onSubmit, 
     } finally { flight.current = false; }
   };
   const number = room.room?.roomNumber || room.roomNumberSnapshot || 'Removed';
+  const housekeeping = room.room?.housekeepingStatus;
+  const notClean = mode === 'checkin' && housekeeping && !['Clean', 'Inspected'].includes(housekeeping);
   return <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="room-occupant-title" aria-describedby="room-occupant-description">
     <section ref={panel} className="max-h-[90dvh] w-full min-w-0 max-w-lg space-y-4 overflow-y-auto rounded-xl border border-border bg-surface p-4 shadow-xl sm:p-6">
       <div className="flex items-start justify-between gap-3"><h2 id="room-occupant-title" className="text-lg font-bold text-text">{mode === 'checkin' ? 'Check in' : 'Edit occupant'} · Room {number}</h2><button type="button" aria-label="Close occupant form" disabled={busy} onClick={() => dismiss.current()} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border text-text"><X size={18} /></button></div>
       <p id="room-occupant-description" className="text-sm text-text-muted">Enter the main guest staying in this room.</p>
+      {notClean && <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><strong>Room {number} is marked {housekeeping === 'Dirty' ? 'dirty' : housekeeping.toLowerCase()}.</strong> You can still check the guest in, but make sure housekeeping prepares the room.</p>}
       <div className="rounded-lg border border-border bg-background p-3 text-sm"><p className="text-text-muted">Booking contact</p><p className="break-words font-semibold text-text">{guestName || 'Not provided'}</p></div>
       <form onSubmit={submit} className="space-y-4">
         {guestName && <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-border p-3 text-sm text-text"><input type="checkbox" checked={useBookingGuest} disabled={busy} onChange={e => { resetWarning(); setUseBookingGuest(e.target.checked); setName(e.target.checked ? guestName : ''); setPhone(e.target.checked ? localPhone(guestPhone) : ''); }} />Booking guest is staying in this room</label>}

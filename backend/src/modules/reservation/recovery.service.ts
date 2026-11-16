@@ -117,7 +117,7 @@ export async function transitionStay(stayId: number, status: string, actor: Acto
     if (status === 'CheckedIn' && stay.status === 'Reserved') {
       const occupant = occupantDetails(details.occupantName, details.occupantPhone);
       occupantConfirmation = await confirmOccupant(tx, actor.propertyId, stay, occupant, details.duplicateOccupantConfirmation, true);
-      await availableInventory(tx, stay.roomId, actor.propertyId, true);
+      await availableInventory(tx, stay.roomId, actor.propertyId);
       await noConflict(tx, stay.roomId, stayId, stay.checkInDate, stay.checkOutDate, true);
       data = { status, actualCheckIn: new Date(), actualCheckOut: null, ...occupant,
         guestPresenceStatus: 'InRoom', guestOutAt: null, expectedReturnAt: null };
@@ -162,7 +162,7 @@ export async function checkinBooking(id: string, actor: Actor) {
       if (!stay.occupantName?.trim()) throw new Error('Confirm the actual occupant for each room. Open the room assignments and check in each room separately.');
       const occupant = occupantDetails(stay.occupantName, stay.occupantPhone);
       await confirmOccupant(tx, actor.propertyId, stay, occupant, undefined, true);
-      await availableInventory(tx, stay.roomId, actor.propertyId, true);
+      await availableInventory(tx, stay.roomId, actor.propertyId);
       await noConflict(tx, stay.roomId, stay.reservationRoomId, stay.checkInDate, stay.checkOutDate, true);
       await tx.reservationRoom.update({ where: { reservationRoomId: stay.reservationRoomId }, data: { status: 'CheckedIn', actualCheckIn: new Date(), actualCheckOut: null, ...occupant } });
       await tx.room.update({ where: { roomId: stay.roomId }, data: { operationalStatus: 'Occupied' } });
