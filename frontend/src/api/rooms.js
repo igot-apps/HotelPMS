@@ -88,3 +88,6 @@ export const hardDeleteRoomType = (id) => {
 export const hardDeleteRoom = (id) => {
   return api.delete(`/rooms/${id}/hard`);
 };
+// Hide or show a room on the hotel website (managers, or receptionists a manager allowed)
+export const getOnlineRoomAccess = () => api.get('/rooms/online-access');
+export const setRoomOnlineBooking = (id, enabled) => api.patch(`/rooms/${id}/online-booking`, { enabled });

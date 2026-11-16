@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { authenticate, requirePermission } from '../../shared/middleware/auth.middleware';
+import { authenticate, requirePermission, AuthRequest } from '../../shared/middleware/auth.middleware';
+import { onlineRoomAccess, setRoomOnlineBooking } from './room-online.service';
 
 // Import all controllers
 import * as roomTypeController from './room-type.controller';
@@ -41,6 +42,15 @@ router.delete('/rate-plans/:id', requirePermission('CanManageRates'), ratePlanCo
 router.post('/', requirePermission('CanCreateRoom'), roomController.createRoom);
 router.get('/', roomController.getRooms); // Open to all authenticated staff
 router.get('/available', roomController.getAvailableRooms); // Open to all authenticated staff
+// Hide or show a room on the hotel website (managers, or receptionists a manager has allowed)
+router.get('/online-access', async (req: AuthRequest, res) => {
+  try { return res.json({ success: true, data: await onlineRoomAccess(req.user!) }); }
+  catch (error: any) { return res.status(error.statusCode || 400).json({ success: false, message: error.message }); }
+});
+router.patch('/:id/online-booking', async (req: AuthRequest, res) => {
+  try { return res.json({ success: true, data: await setRoomOnlineBooking(req.user!, Number(req.params.id), req.body?.enabled) }); }
+  catch (error: any) { return res.status(error.statusCode || 400).json({ success: false, message: error.message }); }
+});
 router.get('/:id', roomController.getRoomById);
 
 // 🌟 NEW: Hard delete route (MUST be before the generic /:id delete route)

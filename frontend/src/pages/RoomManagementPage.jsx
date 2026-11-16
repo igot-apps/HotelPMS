@@ -9,6 +9,7 @@ import {
 import RequirePermission from '../components/RequirePermission';
 import RoomTypeModal from '../components/catalog/RoomTypeModal';
 import AmenityManagementModal from '../components/catalog/AmenityManagementModal';
+import { MaintenanceReasonField, isValidMaintenanceReason } from '../components/rooms/MaintenanceReason';
 import toast from 'react-hot-toast';
 import {
   BedDouble, Layers, Plus, Edit2, Trash2, Loader2, Sparkles, AlertCircle, X, Tag
@@ -395,15 +396,20 @@ function RoomModal({ room, roomTypes, propertyId, onClose, onSave, isLoading }) 
     housekeepingStatus: room?.housekeepingStatus || 'Clean',
   });
 
+  const [maintenanceReason, setMaintenanceReason] = useState('');
+  const needsReason = formData.operationalStatus === 'Maintenance' && room?.operationalStatus !== 'Maintenance';
+
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (needsReason && !isValidMaintenanceReason(maintenanceReason)) return;
     onSave({
       propertyId,
       ...formData,
       roomTypeId: parseInt(formData.roomTypeId),
       floor: parseInt(formData.floor),
+      ...(needsReason ? { maintenanceReason: maintenanceReason.trim() } : {}),
     });
   };
 
@@ -448,9 +454,13 @@ function RoomModal({ room, roomTypes, propertyId, onClose, onSave, isLoading }) 
               </select>
             </div>
           </div>
+          {needsReason && <MaintenanceReasonField onChange={setMaintenanceReason} disabled={isLoading} />}
+          {room?.operationalStatus === 'Maintenance' && formData.operationalStatus === 'Maintenance' && room.maintenanceReason && (
+            <p className="rounded-lg bg-danger-50 px-3 py-2 text-sm text-danger-700"><strong>Maintenance reason:</strong> {room.maintenanceReason}</p>
+          )}
           <div className="flex justify-end gap-3 pt-4 border-t border-border">
             <button type="button" onClick={onClose} className="px-5 py-2.5 text-sm font-semibold text-text bg-surface border border-border rounded-lg hover:bg-secondary-50">Cancel</button>
-            <button type="submit" disabled={isLoading} className="px-5 py-2.5 text-sm font-semibold text-text-inverted bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2">
+            <button type="submit" disabled={isLoading || (needsReason && !isValidMaintenanceReason(maintenanceReason))} className="px-5 py-2.5 text-sm font-semibold text-text-inverted bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2">
               {isLoading && <Loader2 className="animate-spin" size={16} />} {room ? 'Update Room' : 'Create Room'}
             </button>
           </div>

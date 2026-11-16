@@ -78,6 +78,7 @@ const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): 
 };
 
 const availableRoomsForStay = (checkInDate: Date, checkOutDate: Date): Prisma.RoomWhereInput => ({
+  isOnlineBookable: true,
   operationalStatus: 'Available',
   reservationRooms: {
     none: {
@@ -450,7 +451,7 @@ router.get('/:propertyCode/room-types', async (req: any, res: Response) => {
       orderBy: { basePrice: 'asc' },
       include: {
         amenities: { include: { amenity: { select: { name: true, icon: true } } } },
-        _count: { select: { rooms: { where: { operationalStatus: 'Available', housekeepingStatus: 'Clean' } } } }
+        _count: { select: { rooms: { where: { operationalStatus: 'Available', housekeepingStatus: 'Clean', isOnlineBookable: true } } } }
       }
     });
 

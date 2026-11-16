@@ -25,7 +25,7 @@ export async function createHotelReservation(input: any, online = false): Promis
         let selections = input.rooms;
         if (online) {
           if (!property.isOnlineBookingEnabled) throw new Error('Online booking is disabled.');
-          const candidate = await tx.room.findFirst({ where: { propertyId: property.propertyId, roomTypeId: Number(input.roomTypeId), roomType: { isActive: true }, operationalStatus: 'Available', reservationRooms: { none: overlapping } }, orderBy: { roomId: 'asc' }, include: { roomType: true } });
+          const candidate = await tx.room.findFirst({ where: { propertyId: property.propertyId, roomTypeId: Number(input.roomTypeId), roomType: { isActive: true }, operationalStatus: 'Available', isOnlineBookable: true, reservationRooms: { none: overlapping } }, orderBy: { roomId: 'asc' }, include: { roomType: true } });
           if (!candidate) throw new Error('No room is available for the selected dates.');
           selections = [{ roomId: candidate.roomId, roomTypeId: candidate.roomTypeId, agreedPricePerNight: Number(candidate.roomType.basePrice) }];
         }

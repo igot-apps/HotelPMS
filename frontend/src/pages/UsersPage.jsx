@@ -7,6 +7,7 @@ import { getProperties, setHousekeepingEnabled } from '../api/properties';
 import { useAuthStore } from '../store/authStore'; // ✅ ADDED: To get the current user's propertyId
 import UserModal from '../components/users/UserModal';
 import CorrectionPermissions from '../components/users/CorrectionPermissions';
+import OnlineRoomPermission from '../components/users/OnlineRoomPermission';
 import RequirePermission from '../components/RequirePermission';
 import toast from 'react-hot-toast';
 import { Shield, Plus, Edit2, Trash2, Search, Building2, Sparkles } from 'lucide-react';
@@ -120,6 +121,7 @@ export default function UsersPage() {
         </section>
       )}
 
+      {permissionUser && <OnlineRoomPermission key={`online-${permissionUser.userId}`} user={permissionUser} />}
       {permissionUser && <CorrectionPermissions key={permissionUser.userId} user={permissionUser} onClose={() => setPermissionUser(null)} />}
       <div className="bg-surface border border-border rounded-xl shadow-sm overflow-hidden">
         <div className="p-4 border-b border-border">

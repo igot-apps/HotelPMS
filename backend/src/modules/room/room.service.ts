@@ -61,17 +61,31 @@ export const updateRoom = async (roomId: number, data: any) => {
   
   const room = await roomRepository.findRoomById(roomId);
   if (!room) throw new Error('Room not found');
-  
-  return roomRepository.updateRoom(roomId, data);
+  const { maintenanceReason, isOnlineBookable: _ignored, ...fields } = data;
+  Object.assign(fields, maintenanceReasonUpdate(room.operationalStatus, fields.operationalStatus, maintenanceReason));
+
+  return roomRepository.updateRoom(roomId, fields);
+};
+
+// Entering maintenance needs a reason; leaving it clears the reason.
+export const maintenanceReasonUpdate = (currentStatus: string, nextStatus: string | undefined, reason: unknown) => {
+  if (!nextStatus) return {};
+  if (nextStatus !== 'Maintenance') return currentStatus === 'Maintenance' ? { maintenanceReason: null } : {};
+  if (currentStatus === 'Maintenance' && reason === undefined) return {};
+  const text = typeof reason === 'string' ? reason.trim().replace(/\s+/g, ' ') : '';
+  if (text.length < 3 || text.length > 200) throw new Error('Choose or enter a maintenance reason (3 to 200 characters).');
+  return { maintenanceReason: text };
 };
 
 export const updateRoomStatus = async (
   roomId: number,
   operationalStatus: string,
-  housekeepingStatus?: string
+  housekeepingStatus?: string,
+  maintenanceReason?: unknown,
 ) => {
   const room = await roomRepository.findRoomById(roomId);
   if (!room) throw new Error('Room not found');
+  const reasonUpdate = maintenanceReasonUpdate(room.operationalStatus, operationalStatus, maintenanceReason);
 
   if (operationalStatus === 'Maintenance') {
     const checkedInStay = await roomRepository.findActiveCheckedInReservationRoom(roomId);
@@ -85,7 +99,7 @@ export const updateRoomStatus = async (
     }
   }
   
-  return roomRepository.updateRoomStatus(roomId, operationalStatus, housekeepingStatus);
+  return roomRepository.updateRoomStatus(roomId, operationalStatus, housekeepingStatus, reasonUpdate);
 };
 
 // 🌟 SOFT DELETE: Deactivates the room

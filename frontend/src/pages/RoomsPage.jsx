@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getRooms, updateRoomStatus } from '../api/rooms';
+import { getRooms, updateRoomStatus, getOnlineRoomAccess, setRoomOnlineBooking } from '../api/rooms';
+import { MaintenanceReasonDialog } from '../components/rooms/MaintenanceReason';
 import { useAuthStore } from '../store/authStore';
 import RoomCard from '../components/rooms/RoomCard';
 import { BedDouble, AlertCircle, CheckCircle2, Wrench, Sparkles, LayoutGrid } from 'lucide-react';
@@ -13,6 +14,22 @@ export default function RoomsPage() {
   const queryClient = useQueryClient();
   
   const [filter, setFilter] = useState('all');
+  const [maintenanceRoom, setMaintenanceRoom] = useState(null);
+
+  const { data: onlineAccess } = useQuery({
+    queryKey: ['onlineRoomAccess', user?.userId],
+    queryFn: () => getOnlineRoomAccess().then(res => res.data.data),
+    enabled: !!propertyId,
+  });
+  const onlineMutation = useMutation({
+    mutationFn: ({ roomId, enabled }) => setRoomOnlineBooking(roomId, enabled),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['rooms', propertyId] });
+      const room = response.data.data;
+      toast.success(room.isOnlineBookable ? `Room ${room.roomNumber} can be booked online again.` : `Room ${room.roomNumber} is hidden from online booking.`);
+    },
+    onError: (error) => toast.error(error.response?.data?.message || 'Could not change online booking for this room.'),
+  });
 
   // 1. Fetch Rooms
   const { data: roomsData, isLoading, error } = useQuery({
@@ -50,24 +67,16 @@ export default function RoomsPage() {
   };
 
   const handleToggleOperational = (room) => {
-    const newStatus = room.operationalStatus?.toUpperCase() === 'MAINTENANCE' ? 'Available' : 'Maintenance';
-    
-    // 🚨 WARNING CONFIRMATION FOR MAINTENANCE
-    if (newStatus === 'Maintenance') {
-      const isConfirmed = window.confirm(
-        `⚠️ Set Room ${room.roomNumber} to Maintenance?\n\nThis room will be hidden from availability and cannot be booked for new reservations until it is marked as Available again.\n\nDo you want to proceed?`
-      );
-      if (!isConfirmed) return; // User clicked "Cancel", so we stop the mutation
-    }
+    // Entering maintenance asks for a reason first.
+    if (room.operationalStatus?.toUpperCase() !== 'MAINTENANCE') { setMaintenanceRoom(room); return; }
+    statusMutation.mutate({ roomId: room.roomId, payload: { operationalStatus: 'Available', housekeepingStatus: room.housekeepingStatus } });
+  };
 
-    // If setting to Available, or if user confirmed Maintenance, proceed with the update
-    statusMutation.mutate({ 
-      roomId: room.roomId, 
-      payload: { 
-        operationalStatus: newStatus, 
-        housekeepingStatus: room.housekeepingStatus 
-      } 
-    });
+  const confirmMaintenance = (reason) => {
+    statusMutation.mutate(
+      { roomId: maintenanceRoom.roomId, payload: { operationalStatus: 'Maintenance', housekeepingStatus: maintenanceRoom.housekeepingStatus, maintenanceReason: reason } },
+      { onSuccess: () => { setMaintenanceRoom(null); toast.success(`Room ${maintenanceRoom.roomNumber} set to maintenance.`); } },
+    );
   };
 
   // 4. Data Processing
@@ -162,7 +171,10 @@ export default function RoomsPage() {
               room={room}
               onToggleHousekeeping={handleToggleHousekeeping}
               onToggleOperational={handleToggleOperational}
-              isUpdating={statusMutation.isLoading}
+              isUpdating={statusMutation.isPending}
+              canManageOnline={Boolean(onlineAccess?.canManageOnlineRooms)}
+              isOnlineUpdating={onlineMutation.isPending && onlineMutation.variables?.roomId === room.roomId}
+              onToggleOnline={(target) => onlineMutation.mutate({ roomId: target.roomId, enabled: !target.isOnlineBookable })}
               isPresenceUpdating={guestPresenceMutation.isPending && guestPresenceMutation.variables?.reservationRoomId === room.reservationRooms?.[0]?.reservationRoomId}
               onSetGuestPresence={(reservationRoomId, action, expectedReturnAt) =>
                 guestPresenceMutation.mutate({ reservationRoomId, action, expectedReturnAt })
@@ -171,6 +183,7 @@ export default function RoomsPage() {
           ))}
         </div>
       )}
+      {maintenanceRoom && <MaintenanceReasonDialog room={maintenanceRoom} busy={statusMutation.isPending} onConfirm={confirmMaintenance} onClose={() => setMaintenanceRoom(null)} />}
     </div>
   );
 }

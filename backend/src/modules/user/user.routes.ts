@@ -5,6 +5,7 @@ import { PERMISSIONS } from '../../shared/constants/permissions';
 import * as userController from './user.controller';
 import * as invitations from './invitation.service';
 import { setCorrectionPermissions } from '../reservation/correction-approval.service';
+import { setOnlineRoomPermission } from '../room/room-online.service';
 
 const router = Router();
 const setupAttempts = new Map<string, { count: number; resetAt: number }>();
@@ -47,6 +48,10 @@ router.post('/:id/resend-invitation', async (req: import('../../shared/middlewar
 
 // 🚨 GET ROLES MUST BE BEFORE /:id
 router.get('/roles', userController.getRoles);
+router.put('/:id/online-room-permission', async (req: import('../../shared/middleware/auth.middleware').AuthRequest, res) => {
+  try { return res.json({ success: true, data: await setOnlineRoomPermission(req.user!, Number(req.params.id), req.body?.enabled) }); }
+  catch (error: any) { return res.status(error.statusCode || 400).json({ success: false, message: error.message }); }
+});
 router.put('/:id/correction-permissions', async (req: import('../../shared/middleware/auth.middleware').AuthRequest, res) => {
   if (req.body.confirmDelegation === true || req.body.managerPassword) {
     const now = Date.now();

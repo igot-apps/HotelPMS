@@ -207,6 +207,7 @@ export const updateRoom = async (
     operationalStatus: any; // 🌟 Changed to 'any'
     housekeepingStatus: any; // 🌟 Changed to 'any'
     notes: string;
+    maintenanceReason: string | null;
   }>
 ) => {
   return prisma.room.update({
@@ -221,9 +222,10 @@ export const updateRoom = async (
 export const updateRoomStatus = async (
   roomId: number,
   operationalStatus: any,
-  housekeepingStatus?: any
+  housekeepingStatus?: any,
+  extra: { maintenanceReason?: string | null } = {},
 ) => {
-  const data: any = { operationalStatus };
+  const data: any = { operationalStatus, ...extra };
   if (housekeepingStatus) data.housekeepingStatus = housekeepingStatus;
   
   return prisma.room.update({
@@ -236,7 +238,7 @@ export const updateRoomStatus = async (
 export const deleteRoom = async (roomId: number) => {
   return prisma.room.update({
     where: { roomId },
-    data: { operationalStatus: 'Maintenance' },
+    data: { operationalStatus: 'Maintenance', maintenanceReason: 'Room deactivated' },
   });
 };
 

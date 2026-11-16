@@ -131,7 +131,7 @@ export const updateRoom = async (req: AuthRequest, res: Response) => {
 export const updateRoomStatus = async (req: AuthRequest, res: Response) => {
   try {
     const roomId = getParamId(req);
-    const { operationalStatus, housekeepingStatus } = req.body;
+    const { operationalStatus, housekeepingStatus, maintenanceReason } = req.body;
 
     if (!operationalStatus) {
       return res.status(400).json({ success: false, message: 'Operational status is required' });
@@ -144,7 +144,7 @@ export const updateRoomStatus = async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ success: false, message: 'You do not have access to this room' });
     }
 
-    const updated = await roomService.updateRoomStatus(roomId, operationalStatus, housekeepingStatus);
+    const updated = await roomService.updateRoomStatus(roomId, operationalStatus, housekeepingStatus, maintenanceReason);
     return res.status(200).json({ success: true, data: updated });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });

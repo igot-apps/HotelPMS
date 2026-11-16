@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { BedDouble, Users, Sparkles, AlertTriangle, Wrench, ArrowRightLeft, Phone, UserRound, Clock, LogIn, LogOut, Loader2 } from 'lucide-react';
+import { BedDouble, Users, Sparkles, AlertTriangle, Wrench, ArrowRightLeft, Phone, UserRound, Clock, LogIn, LogOut, Loader2, Globe, GlobeLock } from 'lucide-react';
 
-export default function RoomCard({ room, onToggleHousekeeping, onToggleOperational, isUpdating, isPresenceUpdating, onSetGuestPresence }) {
+export default function RoomCard({ room, onToggleHousekeeping, onToggleOperational, isUpdating, isPresenceUpdating, onSetGuestPresence, canManageOnline, isOnlineUpdating, onToggleOnline }) {
   const [isMarkingOut, setIsMarkingOut] = useState(false);
   const [expectedReturnInput, setExpectedReturnInput] = useState('');
   const opStatus = room.operationalStatus?.toUpperCase();
@@ -88,6 +88,18 @@ export default function RoomCard({ room, onToggleHousekeeping, onToggleOperation
           {hkIcon}
           <span className="text-xs font-semibold">{hkLabel}</span>
         </div>
+
+        {opStatus === 'MAINTENANCE' && room.maintenanceReason && (
+          <p className="mt-2 flex items-start gap-2 rounded-lg bg-danger-50 px-3 py-2 text-xs text-danger-700">
+            <Wrench size={13} className="mt-0.5 shrink-0" /> <span><strong>Reason:</strong> {room.maintenanceReason}</span>
+          </p>
+        )}
+
+        {room.isOnlineBookable === false && (
+          <p className="mt-2 flex items-center gap-2 rounded-lg bg-secondary-100 px-3 py-2 text-xs font-semibold text-secondary-700">
+            <GlobeLock size={13} className="shrink-0" /> Hidden from online booking
+          </p>
+        )}
 
         {opStatus === 'OCCUPIED' && (
           <div className="mt-3 rounded-lg border border-primary-100 bg-primary-50/60 px-3 py-2.5">
@@ -214,6 +226,19 @@ export default function RoomCard({ room, onToggleHousekeeping, onToggleOperation
           <ArrowRightLeft size={14} /> {opBtnText}
         </button>
       </div>
+      {canManageOnline && (
+        <div className="px-5 pb-4 bg-secondary-50/50">
+          <button
+            type="button"
+            onClick={() => onToggleOnline(room)}
+            disabled={isOnlineUpdating}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-surface border border-border text-text hover:bg-secondary-100 transition disabled:opacity-40"
+          >
+            {isOnlineUpdating ? <Loader2 size={14} className="animate-spin" /> : room.isOnlineBookable === false ? <Globe size={14} /> : <GlobeLock size={14} />}
+            {room.isOnlineBookable === false ? 'Show on website' : 'Hide from website'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
