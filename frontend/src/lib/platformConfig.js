@@ -1,5 +1,5 @@
-// Discover stays hidden until VITE_SHOW_DISCOVER=true is set on the frontend build.
-export const SHOW_DISCOVER = import.meta.env.VITE_SHOW_DISCOVER === 'true';
+// Discover is shown unless VITE_SHOW_DISCOVER=false is set on the frontend build.
+export const SHOW_DISCOVER = import.meta.env.VITE_SHOW_DISCOVER !== 'false';
 
 // Staff always sign in on the central app, never on a hotel's own domain.
 export const STAFF_APP_URL = (import.meta.env.VITE_STAFF_APP_URL || 'https://hotelpms-frontend.onrender.com').replace(/\/+$/, '');
