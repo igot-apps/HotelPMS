@@ -2,6 +2,7 @@ import axios from 'axios';
 import { randomUUID } from 'crypto';
 import { prisma } from '../../shared/utils/prisma';
 import { getFrontendBaseUrl } from '../../shared/utils/frontend-url';
+import { listFreeAccess } from './free-access.service';
 
 const PLAN_PRICES: Record<number, number> = {
   1: 200,
@@ -40,7 +41,8 @@ export const getSubscriptionStatus = async (propertyId: number) => {
     },
   });
   if (!property) throw new Error('Property not found');
-  return property;
+  const freeAccess = (await listFreeAccess(propertyId)).map(entry => entry.newData);
+  return { ...property, freeAccess };
 };
 
 export const initializeSubscriptionPayment = async (
@@ -149,6 +151,7 @@ export const verifySubscriptionPayment = async (reference: string, propertyId: n
       throw new Error('This payment is already being processed. Refresh the billing page shortly.');
     }
 
+    await tx.$queryRaw`SELECT "propertyId" FROM "properties" WHERE "propertyId" = ${propertyId} FOR UPDATE`;
     const property = await tx.property.findUnique({
       where: { propertyId },
       select: { subscriptionStatus: true, subscriptionEndsAt: true, trialEndsAt: true },
@@ -171,6 +174,7 @@ export const verifySubscriptionPayment = async (reference: string, propertyId: n
         subscriptionStatus: 'Active',
         subscriptionEndsAt,
       },
+      select: { propertyId: true },
     });
     await tx.subscriptionPayment.update({
       where: { subscriptionPaymentId: payment.subscriptionPaymentId },

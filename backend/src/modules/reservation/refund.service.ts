@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { prisma } from '../../shared/utils/prisma';
 import type { Actor } from './recovery.service';
-import { simulationRecipient, momoPhone } from './refund-simulation.service';
+import { simulationRecipient, momoPhone, simulateRefundInTransaction } from './refund-simulation.service';
 const cents = (value: any) => Math.round(Number(value || 0) * 100);
 const fail = (message: string, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 export const refundVersion = (res: any) => createHash('sha256').update(JSON.stringify([res.updatedAt, res.status, res.totalAmount, res.amountPaid, res.payments.map((p: any) => [p.paymentId, p.amount, p.status, p.updatedAt]).sort(), res.refunds.map((r: any) => r.refundId).sort()])).digest('hex');
@@ -63,12 +63,25 @@ export async function refundPreviewInTransaction(tx: any, actor: Actor, id: stri
 }
 export async function requestRefund(actor: Actor, id: string, input: any) {
   return atomic(async tx => {
-    await staff(tx, actor);
+    const user = await staff(tx, actor);
     const result = await preview(tx, actor, id, input);
     if (input.preview === true) return result;
     if (input.expectedVersion !== result.version) throw fail('The booking changed. Preview the refund again.');
-    const request = await tx.correctionRequest.create({ data: { propertyId: actor.propertyId, reservationId: id, requestedBy: actor.userId, action: 'refund', expectedVersion: result.version, input: { paymentId: result.paymentId, amount: result.amount, reason: result.reason, mode: result.mode, recipientPhone: result.recipientPhone } } });
-    await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Reservation', action: 'RefundRequested', newData: { reservationId: id, requestId: request.requestId, amount: result.amount, paymentId: result.paymentId, reason: result.reason } } });
+    const manager = user.role.roleName === 'Manager';
+    if (manager && input.approveDirectly !== true) throw fail('Refresh the page and use Approve refund.');
+    if (!manager && input.approveDirectly === true) throw fail('Only a hotel manager can approve a refund.', 403);
+    const refundInput = { paymentId: result.paymentId, amount: result.amount, reason: result.reason, mode: result.mode, recipientPhone: result.recipientPhone };
+    let request = await tx.correctionRequest.create({ data: {
+      propertyId: actor.propertyId, reservationId: id, requestedBy: actor.userId,
+      action: 'refund', expectedVersion: result.version, input: refundInput,
+      ...(manager ? { status: 'Approved', reviewedBy: actor.userId, reviewedAt: new Date() } : {}),
+    } });
+    if (manager && result.mode === 'SimulatedMoMo') {
+      const simulation = await simulateRefundInTransaction(tx, actor, request, result);
+      request = await tx.correctionRequest.update({ where: { requestId: request.requestId }, data: { status: 'Simulated', input: { ...refundInput, simulation } } });
+    }
+    const action = manager ? `CorrectionRequest${request.status}` : 'RefundRequested';
+    await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Reservation', action, newData: { reservationId: id, requestId: request.requestId, amount: result.amount, paymentId: result.paymentId, reason: result.reason } } });
     return request;
   });
 }

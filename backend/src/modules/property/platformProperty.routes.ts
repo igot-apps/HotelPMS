@@ -2,11 +2,29 @@ import { Router, Response } from 'express';
 import * as propertyService from './property.service';
 import { authenticate, AuthRequest, requirePlatformAdmin } from '../../shared/middleware/auth.middleware';
 import { prisma } from '../../shared/utils/prisma';
+import { grantFreeAccess, listFreeAccess } from '../payment/free-access.service';
 import { defaultHotelHostname, normalizeWebsiteHostname } from './website-domain.service';
 import { addRenderDomain, DomainSetupError, frontendHost, listRenderDomains, removeRenderDomain, verifyDomainReadiness } from './render-domain.service';
 
 const router = Router();
 router.use(authenticate, requirePlatformAdmin);
+
+router.get('/:id/free-access', async (req: AuthRequest, res: Response) => {
+  try {
+    return res.json({ success: true, data: await listFreeAccess(parsePropertyId(req.params.id)) });
+  } catch {
+    return res.status(400).json({ success: false, message: 'Could not load free access history.' });
+  }
+});
+
+router.post('/:id/free-access', async (req: AuthRequest, res: Response) => {
+  try {
+    const data = await grantFreeAccess(parsePropertyId(req.params.id), req.user!.userId, req.body || {});
+    return res.json({ success: true, data });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error.code ? 'Could not save free access. Try again.' : error.message });
+  }
+});
 
 router.get('/:id/website-domains', async (req: AuthRequest, res: Response) => {
   try {
