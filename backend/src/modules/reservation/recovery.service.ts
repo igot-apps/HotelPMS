@@ -117,7 +117,15 @@ export async function transitionStay(stayId: number, status: string, actor: Acto
     if (status === 'CheckedIn' && stay.status === 'Reserved') {
       const occupant = occupantDetails(details.occupantName, details.occupantPhone);
       occupantConfirmation = await confirmOccupant(tx, actor.propertyId, stay, occupant, details.duplicateOccupantConfirmation, true);
-      await availableInventory(tx, stay.roomId, actor.propertyId);
+      const room = await availableInventory(tx, stay.roomId, actor.propertyId);
+      if (!['Clean', 'Inspected'].includes(room.housekeepingStatus)) {
+        if (details.uncleanRoomConfirmed !== true) {
+          throw Object.assign(new Error(`Room ${room.roomNumber} is marked ${room.housekeepingStatus}. Confirm to check the guest in anyway.`), {
+            statusCode: 409, code: 'ROOM_NOT_CLEAN', details: { roomNumber: room.roomNumber, housekeepingStatus: room.housekeepingStatus },
+          });
+        }
+        occupantConfirmation = { ...occupantConfirmation, uncleanRoomConfirmed: room.housekeepingStatus };
+      }
       await noConflict(tx, stay.roomId, stayId, stay.checkInDate, stay.checkOutDate, true);
       data = { status, actualCheckIn: new Date(), actualCheckOut: null, ...occupant,
         guestPresenceStatus: 'InRoom', guestOutAt: null, expectedReturnAt: null };

@@ -13,6 +13,8 @@ export default function RoomOccupantDialog({ room, reservation, mode, onSubmit, 
   const [warning, setWarning] = useState(null);
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState('');
+  const [serverUnclean, setServerUnclean] = useState(null);
+  const [uncleanConfirmed, setUncleanConfirmed] = useState(false);
   const panel = useRef(null);
   const nameInput = useRef(null);
   const warningPanel = useRef(null);
@@ -36,26 +38,26 @@ export default function RoomOccupantDialog({ room, reservation, mode, onSubmit, 
   }, []);
   const guestName = reservation.guestNameSnapshot || reservation.platformGuest?.fullName || reservation.propertyGuest?.fullName || '';
   const guestPhone = reservation.guestPhoneSnapshot || reservation.platformGuest?.phone || reservation.propertyGuest?.phone || '';
+  const housekeeping = room.room?.housekeepingStatus;
+  const uncleanStatus = mode !== 'checkin' ? null : serverUnclean || (housekeeping && !['Clean', 'Inspected'].includes(housekeeping) ? housekeeping : null);
   const resetWarning = () => { setWarning(null); setConfirmed(false); setError(''); };
   const submit = async event => {
     event.preventDefault();
-    if (busy || flight.current || (warning && !confirmed)) return;
+    if (busy || flight.current || (warning && !confirmed) || (uncleanStatus && !uncleanConfirmed)) return;
     flight.current = true; setError('');
-    try { await onSubmit({ occupantName: name.trim(), occupantPhone: phone.trim(), ...(warning && confirmed ? { duplicateOccupantConfirmation: warning.confirmation } : {}) }); }
+    try { await onSubmit({ occupantName: name.trim(), occupantPhone: phone.trim(), ...(warning && confirmed ? { duplicateOccupantConfirmation: warning.confirmation } : {}), ...(uncleanStatus && uncleanConfirmed ? { uncleanRoomConfirmed: true } : {}) }); }
     catch (err) {
       const response = err.response?.data;
       if (response?.code === 'OCCUPANT_ALREADY_CHECKED_IN') { setWarning(response.details); setConfirmed(false); }
+      else if (response?.code === 'ROOM_NOT_CLEAN') { setServerUnclean(response.details?.housekeepingStatus || 'Dirty'); setUncleanConfirmed(false); }
       else setError(response?.message || 'Could not save occupant details. Your entries are still here; try again.');
     } finally { flight.current = false; }
   };
   const number = room.room?.roomNumber || room.roomNumberSnapshot || 'Removed';
-  const housekeeping = room.room?.housekeepingStatus;
-  const notClean = mode === 'checkin' && housekeeping && !['Clean', 'Inspected'].includes(housekeeping);
   return <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="room-occupant-title" aria-describedby="room-occupant-description">
     <section ref={panel} className="max-h-[90dvh] w-full min-w-0 max-w-lg space-y-4 overflow-y-auto rounded-xl border border-border bg-surface p-4 shadow-xl sm:p-6">
       <div className="flex items-start justify-between gap-3"><h2 id="room-occupant-title" className="text-lg font-bold text-text">{mode === 'checkin' ? 'Check in' : 'Edit occupant'} · Room {number}</h2><button type="button" aria-label="Close occupant form" disabled={busy} onClick={() => dismiss.current()} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border text-text"><X size={18} /></button></div>
       <p id="room-occupant-description" className="text-sm text-text-muted">Enter the main guest staying in this room.</p>
-      {notClean && <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><strong>Room {number} is marked {housekeeping === 'Dirty' ? 'dirty' : housekeeping.toLowerCase()}.</strong> You can still check the guest in, but make sure housekeeping prepares the room.</p>}
       <div className="rounded-lg border border-border bg-background p-3 text-sm"><p className="text-text-muted">Booking contact</p><p className="break-words font-semibold text-text">{guestName || 'Not provided'}</p></div>
       <form onSubmit={submit} className="space-y-4">
         {guestName && <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-border p-3 text-sm text-text"><input type="checkbox" checked={useBookingGuest} disabled={busy} onChange={e => { resetWarning(); setUseBookingGuest(e.target.checked); setName(e.target.checked ? guestName : ''); setPhone(e.target.checked ? localPhone(guestPhone) : ''); }} />Booking guest is staying in this room</label>}
@@ -63,8 +65,9 @@ export default function RoomOccupantDialog({ room, reservation, mode, onSubmit, 
         <label className="block text-sm font-semibold text-text" htmlFor="room-occupant-phone">Occupant phone (optional)<input id="room-occupant-phone" type="tel" inputMode="numeric" pattern="[0-9]{10}" maxLength={10} autoComplete="off" value={phone} disabled={busy} onChange={e => { setPhone(e.target.value.replace(/\D/g, '').slice(0, 10)); setUseBookingGuest(false); resetWarning(); }} className={inputClass} /></label>
         {phone && !/^\d{10}$/.test(phone) && <p className="text-sm text-danger-700">Enter exactly 10 digits.</p>}
         {warning && <div ref={warningPanel} tabIndex={-1} role="alert" className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p className="font-semibold">This occupant is already checked in elsewhere.</p><ul className="list-inside list-disc break-words">{warning.conflicts.map((conflict, index) => <li key={index}>Room {conflict.roomNumber} · {conflict.confirmationCode}</li>)}</ul><p>Check the name and phone. If this is intentional, confirm below.</p><label className="flex min-h-11 cursor-pointer items-center gap-3"><input type="checkbox" checked={confirmed} disabled={busy} onChange={e => setConfirmed(e.target.checked)} />I confirm these occupant details are correct for this room.</label></div>}
+        {uncleanStatus && <div role="alert" className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p><strong>Room {number} is marked {uncleanStatus.toLowerCase()}.</strong> It has not been cleaned since the last guest.</p><label className="flex min-h-11 cursor-pointer items-center gap-3"><input type="checkbox" checked={uncleanConfirmed} disabled={busy} onChange={e => setUncleanConfirmed(e.target.checked)} />Check the guest in anyway</label></div>}
         {error && <p role="alert" className="rounded-lg bg-danger-50 p-3 text-sm text-danger-700">{error}</p>}
-        <div className="flex flex-wrap justify-end gap-2"><button type="button" disabled={busy} onClick={() => dismiss.current()} className="min-h-11 rounded-lg border border-border px-4 py-2 text-sm text-text">Cancel</button><button disabled={busy || !name.trim() || (phone && !/^\d{10}$/.test(phone)) || (warning && !confirmed)} className="min-h-11 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? 'Saving…' : mode === 'checkin' ? warning ? 'Confirm occupant and check in' : 'Check in room' : warning ? 'Confirm and save occupant' : 'Save occupant'}</button></div>
+        <div className="flex flex-wrap justify-end gap-2"><button type="button" disabled={busy} onClick={() => dismiss.current()} className="min-h-11 rounded-lg border border-border px-4 py-2 text-sm text-text">Cancel</button><button disabled={busy || !name.trim() || (phone && !/^\d{10}$/.test(phone)) || (warning && !confirmed) || (uncleanStatus && !uncleanConfirmed)} className="min-h-11 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? 'Saving…' : mode === 'checkin' ? warning ? 'Confirm occupant and check in' : 'Check in room' : warning ? 'Confirm and save occupant' : 'Save occupant'}</button></div>
       </form>
     </section>
   </div>;

@@ -44,8 +44,8 @@ export const getReservationsByDateRange = (fromDate, toDate, propertyId) => {
   return api.get('/reservations/date-range', { params: { fromDate, toDate, propertyId } });
 };
 
-   export const updateReservationRoomStatus = (reservationRoomId, data) => 
-     api.patch(`/reservations/rooms/${reservationRoomId}/status`, data);
+   export const updateReservationRoomStatus = (reservationRoomId, data, config) =>
+     api.patch(`/reservations/rooms/${reservationRoomId}/status`, data, config);
 
    export const extendReservationRoom = (reservationRoomId, newCheckOutDate) => 
   api.patch(`/reservations/rooms/${reservationRoomId}/extend`, { newCheckOutDate });

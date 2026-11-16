@@ -169,12 +169,14 @@ export default function ReservationsPage() {
 
   // 🌟 Room action mutation
   const roomActionMutation = useMutation({
-    mutationFn: ({ id, status, occupantName, occupantPhone, duplicateOccupantConfirmation }) => {
+    mutationFn: ({ id, status, occupantName, occupantPhone, duplicateOccupantConfirmation, uncleanRoomConfirmed }) => {
       const data = { status };
       if (occupantName !== undefined) data.occupantName = occupantName;
       if (occupantPhone !== undefined) data.occupantPhone = occupantPhone;
       if (duplicateOccupantConfirmation !== undefined) data.duplicateOccupantConfirmation = duplicateOccupantConfirmation;
-      return updateReservationRoomStatus(id, data);
+      if (uncleanRoomConfirmed) data.uncleanRoomConfirmed = true;
+      // The occupant dialog shows its own errors and warnings inline.
+      return updateReservationRoomStatus(id, data, occupantDialog ? { skipErrorToast: true } : undefined);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reservations'] });

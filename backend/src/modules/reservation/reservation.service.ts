@@ -98,8 +98,8 @@ export const updateReservationFinancials = async (
 
 export const updateReservationRoomStatus = (
   reservationRoomId: number, status: string, occupantName: string | undefined,
-  occupantPhone: string | undefined, actor: recovery.Actor, overrideReason?: unknown, duplicateOccupantConfirmation?: unknown,
-) => recovery.transitionStay(reservationRoomId, status, actor, { occupantName, occupantPhone, overrideReason, duplicateOccupantConfirmation });
+  occupantPhone: string | undefined, actor: recovery.Actor, overrideReason?: unknown, duplicateOccupantConfirmation?: unknown, uncleanRoomConfirmed?: unknown,
+) => recovery.transitionStay(reservationRoomId, status, actor, { occupantName, occupantPhone, overrideReason, duplicateOccupantConfirmation, uncleanRoomConfirmed });
 
 export const extendReservationRoom = async (reservationRoomId: number, newCheckOutDate: string, actor: recovery.Actor) => {
   const stay = await reservationRepository.findReservationRoomById(reservationRoomId);
