@@ -4,6 +4,7 @@ import { Menu, X, User, LogOut, Calendar } from 'lucide-react';
 import PublicAuthModal from "./PublicAuthModal"; // Correct relative path
 import BrandMark from '../ui/BrandMark';
 import { useHotelWebsite } from '../../lib/hotelWebsite';
+import { SHOW_DISCOVER } from '../../lib/platformConfig';
 
 export default function PublicNavbar() {
   const hotelWebsite = useHotelWebsite();
@@ -59,7 +60,7 @@ export default function PublicNavbar() {
             </Link>
 
             <div className="hidden lg:flex items-center gap-8">
-              {hotelWebsite ? <Link to={homePath} className="text-sm font-semibold text-text-muted hover:text-primary-600 transition">Rooms & availability</Link> : <><Link to="/discover" className="text-sm font-semibold text-text-muted hover:text-primary-600 transition">Discover Hotels</Link><Link to="/for-hotels" className="text-sm font-semibold text-text-muted hover:text-primary-600 transition">For Hotels</Link></>}
+              {hotelWebsite ? <Link to={homePath} className="text-sm font-semibold text-text-muted hover:text-primary-600 transition">Rooms & availability</Link> : <>{SHOW_DISCOVER && <Link to="/discover" className="text-sm font-semibold text-text-muted hover:text-primary-600 transition">Discover Hotels</Link>}<Link to="/for-hotels" className="text-sm font-semibold text-text-muted hover:text-primary-600 transition">For Hotels</Link></>}
               
               {isAuthenticated ? (
                 <>
@@ -93,7 +94,7 @@ export default function PublicNavbar() {
         {isOpen && (
           <div id="public-mobile-menu" className="lg:hidden border-t border-border bg-surface shadow-lg">
             <div className="px-4 py-4 space-y-3">
-              {hotelWebsite ? <Link to={homePath} onClick={() => setIsOpen(false)} className="block px-3 py-2.5 text-base font-medium text-text hover:bg-secondary-50 rounded-lg transition">Rooms & availability</Link> : <><Link to="/discover" onClick={() => setIsOpen(false)} className="block px-3 py-2.5 text-base font-medium text-text hover:bg-secondary-50 rounded-lg transition">Discover Hotels</Link><Link to="/for-hotels" onClick={() => setIsOpen(false)} className="block px-3 py-2.5 text-base font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition">For Hotels · Manage your property</Link></>}
+              {hotelWebsite ? <Link to={homePath} onClick={() => setIsOpen(false)} className="block px-3 py-2.5 text-base font-medium text-text hover:bg-secondary-50 rounded-lg transition">Rooms & availability</Link> : <>{SHOW_DISCOVER && <Link to="/discover" onClick={() => setIsOpen(false)} className="block px-3 py-2.5 text-base font-medium text-text hover:bg-secondary-50 rounded-lg transition">Discover Hotels</Link>}<Link to="/for-hotels" onClick={() => setIsOpen(false)} className="block px-3 py-2.5 text-base font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition">For Hotels · Manage your property</Link></>}
               
               {isAuthenticated ? (
                 <>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { SHOW_DISCOVER } from '../lib/platformConfig';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -138,9 +139,11 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
         </div>
         <h1 className="text-2xl font-bold text-text mb-2">Hotel Not Found</h1>
         <p className="text-text-muted max-w-md mb-6">This hotel may not exist, has been removed, or has temporarily disabled online bookings.</p>
-        <button onClick={() => navigate('/discover')} className="px-6 py-2.5 bg-primary-600 text-text-inverted font-semibold rounded-lg hover:bg-primary-700 transition">
-          Discover Other Hotels
-        </button>
+        {SHOW_DISCOVER && (
+          <button onClick={() => navigate('/discover')} className="px-6 py-2.5 bg-primary-600 text-text-inverted font-semibold rounded-lg hover:bg-primary-700 transition">
+            Discover Other Hotels
+          </button>
+        )}
       </div>
     );
   }

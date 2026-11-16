@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { SHOW_DISCOVER } from '../lib/platformConfig';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/axios';
@@ -276,9 +277,11 @@ const retryPaymentMutation = useMutation({
               <Search size={32} className="text-text-muted" />
             </div>
             <h3 className="text-xl font-bold text-text mb-2">No reservations yet</h3>
-            <Link to="/discover" className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition">
-              <Calendar size={18} /> Discover Hotels
-            </Link>
+            {SHOW_DISCOVER && (
+              <Link to="/discover" className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition">
+                <Calendar size={18} /> Discover Hotels
+              </Link>
+            )}
           </div>
         )}
 

@@ -1,7 +1,8 @@
 //pms login
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { SHOW_DISCOVER } from '../lib/platformConfig';
 import { useAuthStore } from '../store/authStore';
 import { loginUser } from '../api/auth'; // Ensure this matches your API file
 import toast from 'react-hot-toast';
@@ -14,6 +15,8 @@ import BrandMark from '../components/ui/BrandMark';
 export default function LoginPage() {
   const navigate = useNavigate();
   const login = useAuthStore((state) => state.login);
+  const [searchParams] = useSearchParams();
+  const hotelName = searchParams.get('hotel')?.trim().slice(0, 120);
   
   const [formData, setFormData] = useState({ username: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
@@ -118,6 +121,11 @@ export default function LoginPage() {
           <div>
             <h2 className="text-3xl font-bold text-text tracking-tight">Welcome back</h2>
             <p className="text-text-muted mt-2">Sign in to your hotel's management dashboard.</p>
+            {hotelName && (
+              <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-primary-50 px-3 py-1.5 text-sm font-semibold text-primary-700 ring-1 ring-primary-600/20">
+                <Building2 size={15} /> Staff sign-in for {hotelName}
+              </p>
+            )}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -186,12 +194,14 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-          <Link
-            to="/"
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-3 font-semibold text-primary-700 transition hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-          >
-            <Building2 size={18} /> Discover Hotels
-          </Link>
+          {SHOW_DISCOVER && (
+            <Link
+              to="/"
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-3 font-semibold text-primary-700 transition hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            >
+              <Building2 size={18} /> Discover Hotels
+            </Link>
+          )}
 
           {/* Mobile Registration Link */}
           <div className="lg:hidden text-center pt-6 border-t border-border">

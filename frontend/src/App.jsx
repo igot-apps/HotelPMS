@@ -20,6 +20,7 @@ import PublicBookingSuccessPage from './pages/PublicBookingSuccessPage';
 import PublicAuthPage from './pages/PublicAuthPage';
 import PublicReservationsPage from './pages/PublicReservationsPage';
 import HotelWebsiteGate from './components/public/HotelWebsiteGate';
+import { SHOW_DISCOVER } from './lib/platformConfig';
 
 
 // Protected Pages (Staff PMS)
@@ -85,8 +86,9 @@ function App() {
         {/* ========================================== */}
         {/* 🌟 PUBLIC ROUTES (No login required)       */}
         {/* ========================================== */}
-        <Route path="/" element={<DiscoverPage />} /> {/* 🌟 NEW: Main Public Homepage */}
+        <Route path="/" element={SHOW_DISCOVER ? <DiscoverPage /> : <Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/staff" element={<Navigate to="/login" replace />} />
         <Route path="/staff/setup" element={<StaffSetupPage />} />
         <Route path="/staff/reset-password" element={<StaffPasswordResetPage />} />
         <Route path="/hotel/login" element={<LoginPage />} />
