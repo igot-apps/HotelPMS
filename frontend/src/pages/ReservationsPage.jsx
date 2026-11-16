@@ -20,6 +20,10 @@ import BookingPaymentNotice from '../components/reservations/BookingPaymentNotic
 import { createWalkInBooking } from '../lib/createWalkInBooking';
 import RoomCard from '../components/reservations/RoomCard'; // 🌟 NEW: Extracted component
 import RoomOccupantDialog from '../components/reservations/RoomOccupantDialog';
+import EarlyCheckoutDialog from '../components/reservations/EarlyCheckoutDialog';
+
+// The hotel's calendar day as YYYY-MM-DD, using the browser's local time.
+const localToday = () => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
 import {
   Search, Plus, CalendarDays, AlertCircle, XCircle,
   ChevronLeft, ChevronRight, Eye, X, Check,
@@ -111,6 +115,7 @@ export default function ReservationsPage() {
   const [paymentRecoveryReservation, setPaymentRecoveryReservation] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [pendingConfirm, setPendingConfirm] = useState(null);
+  const [earlyCheckout, setEarlyCheckout] = useState(null);
   const [occupantDialog, setOccupantDialog] = useState(null);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
@@ -176,7 +181,7 @@ export default function ReservationsPage() {
       if (duplicateOccupantConfirmation !== undefined) data.duplicateOccupantConfirmation = duplicateOccupantConfirmation;
       if (uncleanRoomConfirmed) data.uncleanRoomConfirmed = true;
       // The occupant dialog shows its own errors and warnings inline.
-      return updateReservationRoomStatus(id, data, occupantDialog ? { skipErrorToast: true } : undefined);
+      return updateReservationRoomStatus(id, data, occupantDialog || earlyCheckout ? { skipErrorToast: true } : undefined);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
@@ -188,7 +193,7 @@ export default function ReservationsPage() {
       for (const key of ['reservation', 'reservationCorrections', 'operationalOverview']) queryClient.invalidateQueries({ queryKey: [key] });
     },
     onError: (err) => {
-      if (occupantDialog) return;
+      if (occupantDialog || earlyCheckout) return; // these dialogs show the error inline
       toast.dismiss();
       toast.error(err.response?.data?.message || 'Failed to update room status');
       setPendingConfirm(null);
@@ -356,6 +361,9 @@ export default function ReservationsPage() {
             isUpdatingOccupant={updatingOccupantId === rr.reservationRoomId}
             onCheckIn={room => setOccupantDialog({ room, reservation: res, mode: 'checkin' })}
             onCheckOut={(room) => {
+              // Before the scheduled departure date, ask how to handle the remaining nights.
+              const today = localToday();
+              if (today < String(room.checkOutDate).slice(0, 10)) { setEarlyCheckout({ room, reservation: res, today }); return; }
               const occupant = room.occupantName || 'Not assigned';
               askRoomAction(
                 room.reservationRoomId,
@@ -818,6 +826,17 @@ export default function ReservationsPage() {
       />
 
       {occupantDialog && <RoomOccupantDialog key={`${occupantDialog.room.reservationRoomId}-${occupantDialog.mode}`} {...occupantDialog} busy={roomActionMutation.isPending || updateOccupantMutation.isPending} onClose={() => setOccupantDialog(null)} onSubmit={details => occupantDialog.mode === 'checkin' ? roomActionMutation.mutateAsync({ id: occupantDialog.room.reservationRoomId, status: 'CheckedIn', ...details }) : updateOccupantMutation.mutateAsync({ id: occupantDialog.room.reservationRoomId, ...details })} />}
+      {earlyCheckout && (
+        <EarlyCheckoutDialog
+          key={earlyCheckout.room.reservationRoomId}
+          {...earlyCheckout}
+          onClose={() => setEarlyCheckout(null)}
+          onCheckOut={async () => {
+            await roomActionMutation.mutateAsync({ id: earlyCheckout.room.reservationRoomId, status: 'CheckedOut' });
+            setEarlyCheckout(null);
+          }}
+        />
+      )}
       <ConfirmDialog
         open={!!pendingConfirm}
         title={pendingConfirm?.title}

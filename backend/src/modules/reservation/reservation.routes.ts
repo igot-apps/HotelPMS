@@ -104,7 +104,8 @@ router.post('/:id/check-out', requirePermission('CanCheckOutGuest'), reservation
 
 // 🌟 Individual Reservation Room Status Update
 router.patch('/rooms/:reservationRoomId/status', (req, res, next) => requirePermission(req.body.status === 'CheckedIn' ? 'CanCheckInGuest' : 'CanCheckOutGuest')(req, res, next), reservationController.updateReservationRoomStatus);
-router.patch('/rooms/:reservationRoomId/extend', requirePermission('CanManageRates'), reservationController.extendReservationRoom);
+// Who may extend is decided by the correction policy (managers; receptionists at the agreed rate).
+router.patch('/rooms/:reservationRoomId/extend', reservationController.extendReservationRoom);
 router.patch('/rooms/:reservationRoomId/occupant', requirePermission('CanCheckInGuest'), reservationController.updateOccupantName);
 router.patch('/rooms/:reservationRoomId/presence', reservationController.updateGuestPresence);
 router.patch('/:id/no-show', reservationController.markAsNoShow);
