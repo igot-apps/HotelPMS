@@ -9,6 +9,7 @@ export const CORRECTION_ACTIONS = [
   { action: 'correct-date', label: 'Correct departure date and charges', delegatable: false },
   { action: 'correct-payment', label: 'Correct or void a manual payment', delegatable: false },
   { action: 'credit-checkout', label: 'Checkout with outstanding balance', delegatable: false },
+  { action: 'record-departure', label: 'Record actual departure (forgotten checkout)', delegatable: false },
 ];
 export function canCorrect(user: any, action: string) {
   const policy = CORRECTION_ACTIONS.find(item => item.action === action);

@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import RequirePermission from '../RequirePermission'; 
 import useApprovalCount from '../../hooks/useApprovalCount';
 import useRefundCount from '../../hooks/useRefundCount';
+import useCheckoutAlerts from '../../hooks/useCheckoutAlerts';
 import BrandMark from '../ui/BrandMark';
 
 const operationItems = [
@@ -42,6 +43,8 @@ export default function Sidebar({ isOpen, onClose }) {
   const navigate = useNavigate();
   const approvals = useApprovalCount();
   const refunds = useRefundCount();
+  const checkoutAlerts = useCheckoutAlerts();
+  const overdueCheckouts = checkoutAlerts.data?.counts?.overdue || 0;
 
   const handleLogout = () => {
     logout();
@@ -77,6 +80,7 @@ export default function Sidebar({ isOpen, onClose }) {
           >
             <item.icon size={20} />
             <span className="flex-1">{item.label}</span>
+            {item.to === '/dashboard' && overdueCheckouts > 0 && <span aria-label={`${overdueCheckouts} overdue checkouts`} title="Overdue checkouts" className="rounded-full bg-danger-100 px-2 py-0.5 text-xs font-bold text-danger-800">{overdueCheckouts > 99 ? '99+' : overdueCheckouts}</span>}
             {item.to === '/refunds' && (refunds.isError ? <span title="Could not refresh refunds" className="rounded bg-amber-100 px-2 text-xs text-amber-900">!</span> : refunds.data?.ready > 0 && <span aria-label={`${refunds.data.ready} approved refunds ready to return`} className="rounded-full bg-primary-100 px-2 py-0.5 text-xs font-bold text-primary-900">{refunds.data.ready > 99 ? '99+' : refunds.data.ready}</span>)}
             {item.to === '/approvals' && (approvals.isError ? <span title="Could not refresh approvals" className="rounded bg-amber-100 px-2 text-xs text-amber-900">!</span> : (approvals.data?.actionRequired ?? approvals.data?.pending) > 0 && <span aria-label={`${(approvals.data.actionRequired ?? approvals.data.pending)} requests needing attention`} className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">{(approvals.data.actionRequired ?? approvals.data.pending) > 99 ? '99+' : (approvals.data.actionRequired ?? approvals.data.pending)}</span>)}
             

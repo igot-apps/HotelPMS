@@ -48,7 +48,7 @@ export async function listRequests(actor: Actor, reservationId?: string) {
 }
 export async function createRequest(actor: Actor, reservationId: string, body: any) {
   // Keep only known fields. Client-supplied status, reviewer and preview flags are ignored.
-  const input = Object.fromEntries(['action', 'stayId', 'stayIds', 'targetRoomId', 'paymentId', 'newAmount', 'newCheckOutDate', 'reason'].filter(key => body[key] !== undefined).map(key => [key, body[key]]));
+  const input = Object.fromEntries(['action', 'stayId', 'stayIds', 'targetRoomId', 'paymentId', 'newAmount', 'newCheckOutDate', 'reason', 'departedAt', 'evidenceType', 'evidenceNote', 'contradictionNote'].filter(key => body[key] !== undefined).map(key => [key, body[key]]));
   return atomic(async tx => {
     const user = await staff(tx, actor);
     if (user.role.roleName !== 'Receptionist') throw new Error('Managers can apply corrections directly.');

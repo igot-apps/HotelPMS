@@ -1,5 +1,6 @@
 import { PrismaClient } from '../../../src/generated/prisma';
 import { expireOnlineHolds } from '../reservation/online-hold.service';
+import { overdueOccupancyClause } from '../reservation/stay-timing';
 
 const prisma = new PrismaClient();
 
@@ -169,6 +170,8 @@ export const findAvailableRooms = async (
   roomTypeId?: number
 ) => {
   await expireOnlineHolds(propertyId);
+  const property = await prisma.property.findUnique({ where: { propertyId }, select: { timezone: true } });
+  const overdue = overdueOccupancyClause(checkInDate, property?.timezone || 'Africa/Accra');
   return prisma.room.findMany({
     where: {
       propertyId,
@@ -178,17 +181,15 @@ export const findAvailableRooms = async (
       ...(roomTypeId && { roomTypeId }),
       reservationRooms: {
         none: {
-          reservation: {
-            status: {
-              in: ['Pending', 'Confirmed', 'InHouse']
+          OR: [
+            {
+              reservation: { status: { in: ['Pending', 'Confirmed', 'InHouse'] } },
+              checkInDate: { lt: checkOutDate },
+              checkOutDate: { gt: checkInDate },
             },
-          },
-          checkInDate: {
-            lt: checkOutDate,
-          },
-          checkOutDate: {
-            gt: checkInDate,
-          },
+            // A guest still checked in after their departure date keeps the room until resolved.
+            ...(overdue ? [overdue] : []),
+          ],
         },
       },
     },

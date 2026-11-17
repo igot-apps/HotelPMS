@@ -202,6 +202,7 @@ export const updateReservationRoomStatus = async (req: AuthRequest, res: Respons
       req.body.overrideReason,
       req.body.duplicateOccupantConfirmation,
       req.body.uncleanRoomConfirmed,
+      req.body.departureNote,
     );
 
     return res.status(200).json({ success: true, data: updatedRoom, message: `Room status updated to ${status}` });

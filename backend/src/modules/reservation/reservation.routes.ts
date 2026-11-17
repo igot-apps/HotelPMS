@@ -7,6 +7,7 @@ import * as inbox from './approval-inbox.service';
 import * as refunds from './refund.service';
 import * as refundQueue from './refund-inbox.service';
 import * as simulation from './refund-simulation.service';
+import * as checkoutAlertsService from './checkout-alerts.service';
 import { AuthRequest } from '../../shared/middleware/auth.middleware';
 
 const router = Router();
@@ -15,6 +16,15 @@ const router = Router();
 router.use(authenticate);
 
 const actor = (req: AuthRequest) => ({ userId: req.user!.userId, propertyId: req.user!.propertyId });
+// Checkout reminders (due soon / due / overdue) and departure verification
+router.get('/checkout-alerts', async (req: AuthRequest, res) => {
+  try { return res.json({ success: true, data: await checkoutAlertsService.checkoutAlerts(actor(req)) }); }
+  catch (error: any) { return res.status(error.statusCode || 400).json({ success: false, message: error.message }); }
+});
+router.post('/rooms/:reservationRoomId/verify-departure', async (req: AuthRequest, res) => {
+  try { return res.json({ success: true, data: await checkoutAlertsService.verifyDeparture(actor(req), Number(req.params.reservationRoomId), req.body || {}) }); }
+  catch (error: any) { return res.status(error.statusCode || 400).json({ success: false, message: error.message }); }
+});
 router.get('/refund-simulation/settings', async (req: AuthRequest, res) => {
   try { return res.json({ success: true, data: await simulation.refundSimulationSettings(actor(req)) }); }
   catch (error: any) { return res.status(error.statusCode || 400).json({ success: false, message: error.message }); }

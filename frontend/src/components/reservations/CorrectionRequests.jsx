@@ -40,6 +40,9 @@ export function RequestCard({ request, manager, onReviewed, onBusyChange }) {
     <p className="break-words">{request.input.reason}</p>
     {(request.roomLabel || request.input.roomLabel || request.input.stayId) && <p>{request.roomLabel || request.input.roomLabel || `Room stay #${request.input.stayId}`}{request.input.targetRoomLabel && ` → ${request.input.targetRoomLabel}`}</p>}
     {request.input.newCheckOutDate && <p>Requested departure: {request.input.newCheckOutDate}</p>}
+    {request.input.departedAt && <p>Guest actually left: {new Date(request.input.departedAt).toLocaleString()}</p>}
+    {request.input.evidenceType && <p className="break-words">Evidence: {request.input.evidenceType.replace(/-/g, ' ')} — {request.input.evidenceNote}</p>}
+    {request.input.contradictionNote && <p className="break-words text-danger-700">Explanation for conflicting records: {request.input.contradictionNote}</p>}
     {request.action === 'correct-payment' && <p>Payment #{request.input.paymentId} → GHS {Number(request.input.newAmount).toFixed(2)}</p>}
     {request.reviewer && <p className="text-text-muted">{request.status === 'Withdrawn' ? 'Withdrawn' : 'Reviewed'} by {request.reviewer.fullName} · {new Date(request.reviewedAt).toLocaleString()}</p>}
     {request.reviewReason && <p>Reason: {request.reviewReason}</p>}

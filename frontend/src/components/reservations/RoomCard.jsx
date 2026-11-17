@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { LogIn, LogOut, Loader2, Clock, Pencil } from 'lucide-react';
+import { LogIn, LogOut, Loader2, Clock, Pencil, History } from 'lucide-react';
+import { expectedCheckoutAt, formatDuration, formatTime } from '../../lib/stayTiming';
 
 export default function RoomCard({ 
   rr, 
@@ -9,7 +10,8 @@ export default function RoomCard({
   onCheckIn, 
   onCheckOut, 
   onExtend,
-  onEditOccupant
+  onEditOccupant,
+  onRecordDeparture,
 }) {
   const roomStatus = rr.status || 'Reserved';
   // 🌟 Check if room lifecycle is complete (CheckedOut)
@@ -47,6 +49,16 @@ export default function RoomCard({
           >
             <Clock size={14} /> Extend
           </button>
+          {onRecordDeparture && (
+            <button
+              disabled={isThisRoomBusy}
+              onClick={() => onRecordDeparture(rr)}
+              title="Use when the guest left earlier but checkout was not recorded"
+              className="inline-flex min-h-11 flex-1 sm:flex-initial items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-border text-text hover:bg-secondary-50 transition disabled:opacity-50"
+            >
+              <History size={14} /> Record departure
+            </button>
+          )}
         </div>
       );
     }
@@ -134,12 +146,26 @@ export default function RoomCard({
         </div>
       )}
 
-      {/* Extended Stay Indicator */}
+      {/* Elapsed / actual stay time and late departure (display only — nights are charged by calendar date) */}
+      {rr.actualCheckIn && (() => {
+        const start = new Date(rr.actualCheckIn);
+        const end = rr.actualCheckOut ? new Date(rr.actualCheckOut) : new Date();
+        const due = expectedCheckoutAt(rr.checkOutDate, res.property?.checkOutTime);
+        const late = rr.actualCheckOut && end > due ? end - due : 0;
+        return (
+          <div className="mt-2 space-y-1 text-xs">
+            <p className="text-text-muted">{rr.actualCheckOut ? 'Stayed' : 'In room for'} <strong className="text-text">{formatDuration(end - start)}</strong></p>
+            {late >= 60000 && <p className="font-semibold text-warning-700">Departed {formatDuration(late)} after the {formatTime(due)} checkout time</p>}
+          </div>
+        );
+      })()}
+
+      {/* Departure changed indicator */}
       {rr.originalCheckOutDate && (
         <div className="flex items-start gap-2 p-2.5 bg-primary-50 border border-primary-200 rounded-lg mt-3 mb-3">
           <Clock size={14} className="text-primary-600 mt-0.5 flex-shrink-0" />
           <div className="flex-1">
-            <p className="text-xs font-bold text-primary-700">Stay Extended</p>
+            <p className="text-xs font-bold text-primary-700">{new Date(rr.checkOutDate) > new Date(rr.originalCheckOutDate) ? 'Stay Extended' : 'Departure Changed'}</p>
             <p className="text-xs text-primary-600">
               Original: {new Date(rr.originalCheckOutDate).toLocaleDateString()} 
               <span className="mx-1">→</span> 

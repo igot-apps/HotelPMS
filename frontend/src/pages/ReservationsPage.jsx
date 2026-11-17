@@ -21,6 +21,8 @@ import { createWalkInBooking } from '../lib/createWalkInBooking';
 import RoomCard from '../components/reservations/RoomCard'; // 🌟 NEW: Extracted component
 import RoomOccupantDialog from '../components/reservations/RoomOccupantDialog';
 import EarlyCheckoutDialog from '../components/reservations/EarlyCheckoutDialog';
+import RecordDepartureDialog from '../components/reservations/RecordDepartureDialog';
+import { expectedCheckoutAt, formatDuration, formatTime } from '../lib/stayTiming';
 
 // The hotel's calendar day as YYYY-MM-DD, using the browser's local time.
 const localToday = () => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
@@ -116,6 +118,7 @@ export default function ReservationsPage() {
   const [expandedId, setExpandedId] = useState(null);
   const [pendingConfirm, setPendingConfirm] = useState(null);
   const [earlyCheckout, setEarlyCheckout] = useState(null);
+  const [recordingDeparture, setRecordingDeparture] = useState(null);
   const [occupantDialog, setOccupantDialog] = useState(null);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
@@ -174,8 +177,9 @@ export default function ReservationsPage() {
 
   // 🌟 Room action mutation
   const roomActionMutation = useMutation({
-    mutationFn: ({ id, status, occupantName, occupantPhone, duplicateOccupantConfirmation, uncleanRoomConfirmed }) => {
+    mutationFn: ({ id, status, occupantName, occupantPhone, duplicateOccupantConfirmation, uncleanRoomConfirmed, departureNote }) => {
       const data = { status };
+      if (departureNote) data.departureNote = departureNote;
       if (occupantName !== undefined) data.occupantName = occupantName;
       if (occupantPhone !== undefined) data.occupantPhone = occupantPhone;
       if (duplicateOccupantConfirmation !== undefined) data.duplicateOccupantConfirmation = duplicateOccupantConfirmation;
@@ -323,6 +327,10 @@ export default function ReservationsPage() {
         }
       }
       
+      if (pendingConfirm.status === 'CheckedOut' && pendingConfirm.inputValue?.trim()) {
+        payload.departureNote = pendingConfirm.inputValue.trim().slice(0, 300);
+      }
+
       if (pendingConfirm.status === 'extend' && pendingConfirm.newCheckOutDate) {
         extendStayMutation.mutate({ 
           id: pendingConfirm.id, 
@@ -365,13 +373,22 @@ export default function ReservationsPage() {
               const today = localToday();
               if (today < String(room.checkOutDate).slice(0, 10)) { setEarlyCheckout({ room, reservation: res, today }); return; }
               const occupant = room.occupantName || 'Not assigned';
+              // Past the hotel's checkout time: show how late and allow a note (no extra charge).
+              const due = expectedCheckoutAt(room.checkOutDate, res.property?.checkOutTime);
+              const late = Date.now() - due.getTime();
               askRoomAction(
                 room.reservationRoomId,
                 'CheckedOut',
                 'Confirm Check-out',
-                `You are about to check out Room ${room.room?.roomNumber}.\n\nOccupant: ${occupant}\n\nPlease verify this is the correct guest before proceeding.`,
+                `You are about to check out Room ${room.room?.roomNumber}.\n\nOccupant: ${occupant}${late >= 60000 ? `\n\nLate departure: ${formatDuration(late)} after the ${formatTime(due)} checkout time. No extra night is charged.` : ''}\n\nPlease verify this is the correct guest before proceeding.`,
+                late >= 60000 ? { inputLabel: 'Late departure note (optional)', inputValue: '' } : {},
               );
             }}
+            onRecordDeparture={(room) => setRecordingDeparture({
+              reservationRoomId: room.reservationRoomId, reservationId: res.reservationId,
+              roomNumber: room.room?.roomNumber || room.roomNumberSnapshot,
+              guestName: room.occupantName || res.guestNameSnapshot || res.platformGuest?.fullName || res.propertyGuest?.fullName || 'Guest',
+            })}
             onExtend={(room) => {
               const currentCheckOut = new Date(room.checkOutDate).toISOString().split('T')[0];
               const newDate = prompt(
@@ -826,6 +843,7 @@ export default function ReservationsPage() {
       />
 
       {occupantDialog && <RoomOccupantDialog key={`${occupantDialog.room.reservationRoomId}-${occupantDialog.mode}`} {...occupantDialog} busy={roomActionMutation.isPending || updateOccupantMutation.isPending} onClose={() => setOccupantDialog(null)} onSubmit={details => occupantDialog.mode === 'checkin' ? roomActionMutation.mutateAsync({ id: occupantDialog.room.reservationRoomId, status: 'CheckedIn', ...details }) : updateOccupantMutation.mutateAsync({ id: occupantDialog.room.reservationRoomId, ...details })} />}
+      {recordingDeparture && <RecordDepartureDialog stay={recordingDeparture} onClose={() => setRecordingDeparture(null)} />}
       {earlyCheckout && (
         <EarlyCheckoutDialog
           key={earlyCheckout.room.reservationRoomId}

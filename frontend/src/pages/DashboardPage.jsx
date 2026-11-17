@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import CorrectionRequests from '../components/reservations/CorrectionRequests';
+import CheckoutAlerts from '../components/reservations/CheckoutAlerts';
 import ApprovalSummary from '../components/reservations/ApprovalSummary';
 import RefundSummary from '../components/reservations/RefundSummary';
 import RequirePermission from '../components/RequirePermission';
@@ -145,6 +146,7 @@ export default function DashboardPage() {
     {error && <div role="alert" className="rounded-xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-700">Could not refresh the dashboard. {data ? 'The figures below are from the last successful update.' : 'Use Refresh to try again.'}</div>}
     {!propertyId && <p className="rounded-xl border border-border bg-surface p-6 text-text-muted">Select a hotel to view its operations.</p>}
     {isLoading && <p role="status" className="flex items-center justify-center gap-3 rounded-xl border border-border bg-surface p-10 text-text-muted"><Loader2 className="animate-spin" size={24} /> Loading front desk overview…</p>}
+    {propertyId && <CheckoutAlerts />}
     {data && <>
       {data.totalRooms === 0 && <SetupChecklist />}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { prisma } from '../../shared/utils/prisma';
 import { expireOnlineHolds } from './online-hold.service';
 import { canBookOnline, OnlineBookingPausedError } from './public-booking-policy';
+import { overdueOccupancyClause } from './stay-timing';
 
 // Allocation shares SERIALIZABLE transactions and room locks with recovery actions.
 export async function createHotelReservation(input: any, online = false): Promise<any> {
@@ -33,7 +34,10 @@ export async function createHotelReservation(input: any, online = false): Promis
         const allocations: any[] = [];
         for (const selected of [...selections].sort((a, b) => a.roomId - b.roomId)) {
           await tx.$queryRaw`SELECT "roomId" FROM rooms WHERE "roomId" = ${Number(selected.roomId)} FOR UPDATE`;
-          const room = await tx.room.findFirst({ where: { roomId: Number(selected.roomId), propertyId: property.propertyId, roomTypeId: Number(selected.roomTypeId), roomType: { isActive: true }, operationalStatus: { not: 'Maintenance' }, reservationRooms: { none: overlapping } }, include: { roomType: true } });
+          // Staff bookings also respect a guest still checked in past departure (online already requires an Available room).
+          const overdue = online ? null : overdueOccupancyClause(from, property.timezone || 'Africa/Accra');
+          const room = await tx.room.findFirst({ where: { roomId: Number(selected.roomId), propertyId: property.propertyId, roomTypeId: Number(selected.roomTypeId), roomType: { isActive: true }, operationalStatus: { not: 'Maintenance' }, reservationRooms: { none: overdue ? { OR: [overlapping, overdue] } : overlapping } }, include: { roomType: true } });
+          if (!room && overdue && await tx.reservationRoom.findFirst({ where: { roomId: Number(selected.roomId), ...overdue } })) throw new Error('This room still has a checked-in guest past their departure date. Check them out or verify their departure first.');
           if (!room) throw new Error('A selected room is no longer available. Refresh availability.');
           const rate = Number(selected.agreedPricePerNight);
           if (!Number.isFinite(rate) || rate <= 0 || Math.round(rate * 100) / 100 !== rate) throw new Error('Room price must be a positive amount with at most two decimal places.');
