@@ -1,42 +1,36 @@
 import { test, expect } from '@jest/globals';
 import { validateFinancialDelegation, financialDecision } from '../src/modules/reservation/financial-delegation';
 import { canCorrect } from '../src/modules/reservation/correction-policy';
-const user = { userId: 2, isActive: true, role: { roleName: 'Receptionist' }, financialDelegation: { 'correct-date': 100, 'correct-payment': 100, 'credit-checkout': 100 } };
-const now = new Date('2026-11-04T01:00:00Z');
-test('manual payment corrections can be previewed by default and refunds cannot be delegated', () => {
-  expect(canCorrect({ ...user, financialDelegation: {} }, 'correct-payment')).toBe(true);
-  expect(canCorrect({ ...user, financialDelegation: { refund: 100 } }, 'refund')).toBe(false);
-  expect(() => validateFinancialDelegation({ refund: 100 })).toThrow();
-  expect(() => validateFinancialDelegation({ 'correct-payment': 500 })).toThrow();
-  for (const bad of [null, [], { 'correct-date': 0 }, { 'correct-date': '100' }, { 'correct-date': -1 }, { 'correct-date': Infinity }, { 'correct-date': 1.001 }]) expect(() => validateFinancialDelegation(bad)).toThrow();
+
+const receptionist = { userId: 2, isActive: true, role: { roleName: 'Receptionist' }, financialDelegation: {} };
+const manager = { userId: 1, isActive: true, role: { roleName: 'Manager' } };
+
+test('only refunds and recorded departures need a manager', () => {
+  expect(canCorrect(receptionist, 'refund')).toBe(false);
+  expect(canCorrect(receptionist, 'record-departure')).toBe(false);
+  for (const action of ['correct-date', 'credit-checkout', 'correct-payment', 'undo-checkin', 'undo-checkout', 'restore', 'transfer']) expect(canCorrect(receptionist, action)).toBe(true);
+  expect(canCorrect(manager, 'record-departure')).toBe(true);
 });
-test('charge reductions and booking debt use inclusive cent-accurate limits', () => {
-  expect(financialDecision(user, 'correct-date', { oldTotal: 200, newTotal: 100 }).canApply).toBe(true);
-  expect(financialDecision(user, 'correct-date', { oldTotal: 200, newTotal: 99.99 }).canApply).toBe(false);
-  expect(financialDecision(user, 'correct-date', { oldTotal: 200, newTotal: 500 }).canApply).toBe(true);
-  expect(financialDecision(user, 'credit-checkout', { balance: 100 }).canApply).toBe(true);
-  expect(financialDecision(user, 'credit-checkout', { balance: 100.01 }).canApply).toBe(false);
-});
-test('an extension at the agreed rate is direct without financial delegation', () => {
-  const receptionist = { ...user, financialDelegation: {} };
+
+test('receptionists extend, shorten and check out with a balance without limits', () => {
   expect(financialDecision(receptionist, 'correct-date', { oldTotal: 200, newTotal: 400, isExtension: true }).canApply).toBe(true);
-  expect(financialDecision(receptionist, 'correct-date', { oldTotal: 200, newTotal: 100, isExtension: false }).canApply).toBe(false);
-  expect(financialDecision(receptionist, 'correct-date', { oldTotal: 200, newTotal: 100, isExtension: true }).canApply).toBe(false);
-  expect(financialDecision({ ...receptionist, isActive: false }, 'correct-date', { oldTotal: 200, newTotal: 400, isExtension: true }).canApply).toBe(false);
+  expect(financialDecision(receptionist, 'correct-date', { oldTotal: 500, newTotal: 100, isExtension: false }).canApply).toBe(true);
+  expect(financialDecision(receptionist, 'credit-checkout', { balance: 5000 }).canApply).toBe(true);
 });
-test('small manual payment corrections are direct; voids and larger changes need approval', () => {
-  const payment = { receivedBy: 2, paymentDate: now, amount: 100 };
-  const receptionist = { ...user, financialDelegation: {} };
-  const context = { payment, newAmount: 50, timezone: 'America/New_York' };
-  expect(financialDecision(receptionist, 'correct-payment', context, now).canApply).toBe(true);
-  for (const change of [{ receivedBy: 3 }, { amount: 100.01 }, { gatewayReference: 'RES-booking' }, { gatewayReference: 'provider-123' }, { paymentDate: new Date('2026-11-03T01:00Z') }]) expect(financialDecision(receptionist, 'correct-payment', { ...context, payment: { ...payment, ...change } }, now).canApply).toBe(false);
-  expect(financialDecision(receptionist, 'correct-payment', { ...context, newAmount: 0 }, now).canApply).toBe(false);
-  expect(financialDecision(receptionist, 'correct-payment', { ...context, newAmount: 100.01 }, now).canApply).toBe(false);
-  expect(financialDecision(user, 'correct-payment', { ...context, newAmount: 0 }, now).canApply).toBe(false);
-  expect(financialDecision({ ...user, financialDelegation: { 'correct-payment': 500 } }, 'correct-payment', { ...context, newAmount: 101 }, now).canApply).toBe(false);
-  expect(financialDecision(user, 'correct-payment', { ...context, payment: { ...payment, paymentDate: new Date('2026-11-03T23:00Z') } }, now).canApply).toBe(true);
+
+test('receptionists correct manual payments; online payments stay with a manager', () => {
+  const payment = { receivedBy: 3, paymentDate: new Date('2026-10-01T10:00:00Z'), amount: 900 };
+  expect(financialDecision(receptionist, 'correct-payment', { payment, newAmount: 0 }).canApply).toBe(true);
+  expect(financialDecision(receptionist, 'correct-payment', { payment: { ...payment, gatewayReference: 'RES-1' }, newAmount: 0 }).canApply).toBe(false);
+  expect(financialDecision(manager, 'correct-payment', { payment: { ...payment, gatewayReference: 'RES-1' }, newAmount: 0 }).canApply).toBe(true);
 });
-test('revoked and deactivated access is rejected even with a previous preview', () => {
-  expect(financialDecision({ ...user, financialDelegation: {} }, 'credit-checkout', { balance: 1 }).canApply).toBe(false);
-  expect(financialDecision({ ...user, isActive: false }, 'credit-checkout', { balance: 1 }).canApply).toBe(false);
+
+test('inactive staff and other roles cannot apply financial corrections', () => {
+  expect(financialDecision({ ...receptionist, isActive: false }, 'credit-checkout', { balance: 1 }).canApply).toBe(false);
+  expect(financialDecision({ ...receptionist, role: { roleName: 'Housekeeper' } }, 'correct-date', { oldTotal: 1, newTotal: 2 }).canApply).toBe(false);
+});
+
+test('delegation settings still validate for older clients', () => {
+  expect(() => validateFinancialDelegation({ refund: 100 })).toThrow();
+  expect(validateFinancialDelegation({ 'correct-date': 100 })).toEqual({ 'correct-date': 100 });
 });

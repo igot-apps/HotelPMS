@@ -3,7 +3,7 @@ import { canCorrect, validateCorrectionPermissions, CORRECTION_ACTIONS, DEFAULT_
 
 test('default receptionist access allows room corrections and departure previews', () => {
   const user = { isActive: true, role: { roleName: 'Receptionist' }, correctionPermissions: DEFAULT_RECEPTIONIST_CORRECTIONS };
-  for (const item of CORRECTION_ACTIONS) expect(canCorrect(user, item.action)).toBe(item.delegatable || item.action === 'correct-date' || item.action === 'correct-payment');
+  for (const item of CORRECTION_ACTIONS) expect(canCorrect(user, item.action)).toBe(!['refund', 'record-departure'].includes(item.action));
   expect(canCorrect({ ...user, correctionPermissions: [] }, 'restore')).toBe(true);
 });
 test('active receptionists can preview payment corrections, while other financial actions need delegation', () => {
@@ -11,7 +11,8 @@ test('active receptionists can preview payment corrections, while other financia
   expect(canCorrect(user, 'undo-checkin')).toBe(true);
   expect(canCorrect(user, 'undo-checkout')).toBe(true);
   expect(canCorrect(user, 'correct-payment')).toBe(true);
-  expect(canCorrect(user, 'credit-checkout')).toBe(false);
+  expect(canCorrect(user, 'credit-checkout')).toBe(true);
+  expect(canCorrect(user, 'record-departure')).toBe(false);
   expect(canCorrect({ ...user, correctionPermissions: [] }, 'undo-checkin')).toBe(true);
 });
 test('deactivated staff and unknown roles cannot correct; managers can perform known actions', () => {

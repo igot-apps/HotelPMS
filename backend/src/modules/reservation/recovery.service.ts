@@ -33,9 +33,6 @@ async function booking(tx: any, id: string, actor: Actor) {
   const res = await tx.reservation.findUniqueOrThrow({ where: { reservationId: id }, include: { reservationRooms: true, payments: true } });
   return { res, user };
 }
-function requireManager(user: any) {
-  if (user.role.roleName !== 'Manager') throw new Error('A hotel manager must approve this correction.');
-}
 async function audit(tx: any, actor: Actor, id: string, action: string, reason: string, before: unknown, after: unknown) {
   await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Reservation', action,
     oldData: snapshot({ reservationId: id, value: before }),
@@ -116,8 +113,9 @@ async function releaseOccupiedRoom(tx: any, stay: any) {
 function balanceApproval(res: any, user: any, overrideReason?: unknown) {
   if (res.totalAmount === null || !Number.isFinite(Number(res.totalAmount)) || Number(res.totalAmount) < 0) throw new Error('The reservation total must be reconciled before checkout.');
   if (money(res.totalAmount) - money(res.amountPaid) <= 0.01) return '';
-  if (!overrideReason) throw new Error(`Outstanding balance: GHS ${money(money(res.totalAmount) - money(res.amountPaid)).toFixed(2)}. Record payment or ask a manager to approve credit checkout with a reason.`);
-  requireManager(user);
+  if (!overrideReason) throw new Error(`Outstanding balance: GHS ${money(money(res.totalAmount) - money(res.amountPaid)).toFixed(2)}. Record the payment, or check out with the balance owing and give a reason.`);
+  // Front desk staff may check out with a balance owing; the debt stays on the booking and is audited.
+  if (!['Manager', 'Receptionist'].includes(user.role.roleName)) throw new Error('Front desk staff required.');
   return reasonText(overrideReason);
 }
 
@@ -273,7 +271,7 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
       if (!preview && !result.canApply) throw new Error(result.delegationReason);
     };
     if (input.action === 'restore') {
-      if (res.status !== 'Cancelled') throw new Error('Only cancelled reservations can be restored.');
+      if (!['Cancelled', 'NoShow'].includes(res.status)) throw new Error('Only cancelled or no-show reservations can be restored.');
       if (res.payments.some((p: any) => p.status === 'Refunded') || res.refundStatus === 'Processed' || await tx.refund.count({ where: { reservationId: id } })) throw new Error('Payments have already been refunded. Create a new booking instead.');
       const recordedPaid = res.payments.filter((p: any) => p.status === 'Completed').reduce((sum: number, p: any) => sum + Number(p.amount), 0);
       if (Math.abs(recordedPaid - Number(res.amountPaid)) > 0.01) throw new Error('Payment history and balance differ. Reconcile before restoring.');
@@ -328,7 +326,19 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
       if (selected.some(stay => !['Reserved', 'CheckedIn'].includes(stay.status)) || !['Confirmed', 'InHouse'].includes(res.status)) throw new Error('Only active reserved or checked-in stays can have their departure date corrected.');
       const date = new Date(`${input.newCheckOutDate}T00:00:00.000Z`);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(input.newCheckOutDate || '') || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== input.newCheckOutDate || selected.some(stay => date <= stay.checkInDate)) throw new Error('Choose a valid departure date after every selected room arrival.');
-      if (date.getTime() < Date.now() - 86400000) throw new Error('Departure cannot be corrected to a past day.');
+      // Consumed nights can't be removed: a checked-in guest has used every night before today
+      // (hotel calendar), so the earliest departure is today — and never before the first night.
+      const hotelTz = (await tx.property.findUnique({ where: { propertyId: actor.propertyId }, select: { timezone: true } }))?.timezone || 'Africa/Accra';
+      const today = new Date(`${hotelDate(new Date(), hotelTz)}T00:00:00.000Z`);
+      for (const stay of selected) {
+        const earliest = new Date(Math.max(today.getTime(), stay.checkInDate.getTime() + 86400000));
+        if (date >= earliest) continue;
+        const used = Math.max(0, Math.round((earliest.getTime() - stay.checkInDate.getTime()) / 86400000));
+        const label = `Room ${stay.roomNumberSnapshot || ''}`.trim();
+        throw new Error(stay.status === 'CheckedIn'
+          ? `${label}: ${used} night${used === 1 ? ' has' : 's have'} already been used. The earliest departure is ${earliest.toISOString().slice(0, 10)}.`
+          : `${label}: departure cannot be moved to a past day. The earliest departure is ${earliest.toISOString().slice(0, 10)}.`);
+      }
       await lockRooms(tx, selected.map(room => room.roomId).filter(roomId => roomId !== null));
       for (const stay of selected) {
       await availableInventory(tx, stay.roomId, actor.propertyId);

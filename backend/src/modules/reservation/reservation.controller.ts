@@ -307,7 +307,9 @@ export const markAsNoShow = async (req: AuthRequest, res: Response) => {
     
     const updated = await reservationService.markAsNoShow(
       reservationId,
-      req.user?.propertyId
+      req.user?.propertyId,
+      req.user?.userId,
+      req.body?.reason,
     );
 
     return res.status(200).json({

@@ -21,21 +21,28 @@ afterEach(() => { jest.useRealTimers(); });
 describe('no-show arrival-date guard', () => {
   it('rejects future arrivals without updating the reservation', async () => {
     (repository.findReservationById as any).mockResolvedValue(fixture());
-    await expect(markAsNoShow('booking', 1)).rejects.toThrow('before the arrival date (2026-11-02)');
+    await expect(markAsNoShow('booking', 1)).rejects.toThrow('from 20:00 on 2026-11-02');
     expect(repository.markReservationAsNoShow).not.toHaveBeenCalled();
   });
-  it.each(['2026-11-01', '2026-10-31'])('allows arrival on or before today: %s', async date => {
-    (repository.findReservationById as any).mockResolvedValue(fixture({ checkInDate: new Date(date) }));
-    await markAsNoShow('booking', 1);
-    expect(repository.markReservationAsNoShow).toHaveBeenCalledWith('booking');
+  it('waits until check-in time plus grace on the arrival day (14:00 + 6 h)', async () => {
+    (repository.findReservationById as any).mockResolvedValue(fixture({ checkInDate: new Date('2026-11-01'), property: { timezone: 'Africa/Accra', checkInTime: '14:00' } }));
+    await expect(markAsNoShow('booking', 1)).rejects.toThrow('The guest can still arrive');
+    jest.setSystemTime(new Date('2026-11-01T20:00:00Z'));
+    await markAsNoShow('booking', 1, 7, '  Phone   unreachable ');
+    expect(repository.markReservationAsNoShow).toHaveBeenCalledWith('booking', 7, 'Phone unreachable');
   });
-  it('uses the hotel calendar day across midnight instead of the server day', async () => {
-    jest.setSystemTime(new Date('2026-11-01T23:30:00Z'));
+  it('allows any time after the arrival day', async () => {
+    (repository.findReservationById as any).mockResolvedValue(fixture({ checkInDate: new Date('2026-10-31') }));
+    await markAsNoShow('booking', 1);
+    expect(repository.markReservationAsNoShow).toHaveBeenCalledWith('booking', undefined, '');
+  });
+  it('uses the hotel time zone instead of the server clock', async () => {
+    jest.setSystemTime(new Date('2026-11-02T11:30:00Z')); // 20:30 in Tokyo on 2 November
     (repository.findReservationById as any).mockResolvedValue(fixture({ property: { timezone: 'Asia/Tokyo' } }));
     await markAsNoShow('booking', 1);
-    expect(repository.markReservationAsNoShow).toHaveBeenCalledWith('booking');
+    expect(repository.markReservationAsNoShow).toHaveBeenCalled();
     (repository.findReservationById as any).mockResolvedValue(fixture());
-    await expect(markAsNoShow('booking', 1)).rejects.toThrow('before the arrival date');
+    await expect(markAsNoShow('booking', 1)).rejects.toThrow('The guest can still arrive');
   });
   it('retains ownership, confirmed-status, and checked-in-room protections', async () => {
     for (const reservation of [fixture({ propertyId: 2 }), fixture({ status: 'Cancelled' }),

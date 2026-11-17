@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import CorrectionRequests from '../components/reservations/CorrectionRequests';
 import CheckoutAlerts from '../components/reservations/CheckoutAlerts';
+import TodayAtAGlance from '../components/dashboard/TodayAtAGlance';
 import ApprovalSummary from '../components/reservations/ApprovalSummary';
 import RefundSummary from '../components/reservations/RefundSummary';
 import RequirePermission from '../components/RequirePermission';
@@ -98,6 +99,7 @@ export default function DashboardPage() {
   const propertyName = user?.propertyName || properties.find(p => p.propertyId === Number(propertyId))?.propertyName;
   const subscription = data?.subscription;
   const isManager = user?.role === 'Manager';
+  const frontDesk = Boolean(user?.propertyId) && ['Manager', 'Receptionist'].includes(user?.role);
   const expiryDate = subscription?.endsAt ? new Date(subscription.endsAt) : null;
   const expiresSoon = expiryDate && expiryDate.getTime() - Date.now() <= 7 * 86400000;
   const showSubscriptionNotice = subscription && (
@@ -130,6 +132,7 @@ export default function DashboardPage() {
         {isManager && <Link to="/billing" className="rounded-lg bg-primary-700 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-800">Renew subscription</Link>}
       </section>
     )}
+    {frontDesk && <TodayAtAGlance />}
     {user?.role === 'Receptionist' && <RefundSummary />}
     {user?.propertyId && (user.role === 'Manager' ? <ApprovalSummary /> : <CorrectionRequests />)}
 
@@ -146,9 +149,9 @@ export default function DashboardPage() {
     {error && <div role="alert" className="rounded-xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-700">Could not refresh the dashboard. {data ? 'The figures below are from the last successful update.' : 'Use Refresh to try again.'}</div>}
     {!propertyId && <p className="rounded-xl border border-border bg-surface p-6 text-text-muted">Select a hotel to view its operations.</p>}
     {isLoading && <p role="status" className="flex items-center justify-center gap-3 rounded-xl border border-border bg-surface p-10 text-text-muted"><Loader2 className="animate-spin" size={24} /> Loading front desk overview…</p>}
+    {data?.totalRooms === 0 && <SetupChecklist />}
     {propertyId && <CheckoutAlerts />}
-    {data && <>
-      {data.totalRooms === 0 && <SetupChecklist />}
+    {data && !frontDesk && <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <OpCard icon={UserPlus} label="Awaiting check-in" value={tasks.arrivals || 0} subtext={`Rooms due today or earlier · ${tasks.overdueArrivals || 0} overdue`} color="primary" />
         <OpCard icon={UserMinus} label="Awaiting checkout" value={tasks.departures || 0} subtext={`In-house rooms due today or earlier · ${tasks.overdueDepartures || 0} overdue`} color="warning" />

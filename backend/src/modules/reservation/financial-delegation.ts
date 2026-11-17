@@ -1,4 +1,3 @@
-import { hotelDate } from '../reports/daily-overview.service';
 export const FINANCIAL_ACTIONS = ['correct-date', 'credit-checkout'];
 export const DEFAULT_MANUAL_PAYMENT_CORRECTION_LIMIT = 100;
 export function validateFinancialDelegation(input: unknown): Record<string, number> {
@@ -14,16 +13,14 @@ export function delegationLimit(user: any, action: string): number | null {
   const value = user.financialDelegation?.[action];
   return FINANCIAL_ACTIONS.includes(action) && typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
 }
-export function financialDecision(user: any, action: string, context: { oldTotal?: number; newTotal?: number; isExtension?: boolean; balance?: number; payment?: any; newAmount?: number; timezone?: string }, now = new Date()) {
-  if (user.isActive && user.role?.roleName === 'Manager') return { canApply: true, delegationReason: '' };
-  if (user.isActive && user.role?.roleName === 'Receptionist' && action === 'correct-date' && context.isExtension && Number.isFinite(context.oldTotal) && Number.isFinite(context.newTotal) && context.newTotal! >= context.oldTotal!) return { canApply: true, delegationReason: 'Stay extended at the agreed room rate.' };
-  const limit = action === 'correct-payment' ? DEFAULT_MANUAL_PAYMENT_CORRECTION_LIMIT : delegationLimit(user, action);
-  let allowed = user.isActive && user.role?.roleName === 'Receptionist' && limit !== null;
-  if (allowed && action === 'correct-date') allowed = Number.isFinite(context.oldTotal) && Number.isFinite(context.newTotal) && Math.round(Math.max(0, context.oldTotal! - context.newTotal!) * 100) <= Math.round(limit! * 100);
-  if (allowed && action === 'credit-checkout') allowed = Number.isFinite(context.balance) && context.balance! >= 0 && Math.round(context.balance! * 100) <= Math.round(limit! * 100);
-  if (allowed && action === 'correct-payment') {
-    const p = context.payment;
-    allowed = Boolean(p && p.receivedBy === user.userId && !p.gatewayReference && hotelDate(new Date(p.paymentDate), context.timezone || 'Africa/Accra') === hotelDate(now, context.timezone || 'Africa/Accra') && Number.isFinite(context.newAmount) && context.newAmount! > 0 && Math.max(Number(p.amount), context.newAmount!) <= limit!);
-  }
-  return { canApply: Boolean(allowed), delegationReason: allowed ? `Within your direct correction limit of GHS ${limit!.toFixed(2)}.` : action === 'correct-payment' ? 'Manager approval required for voids, older or online payments, another staff member’s payment, or amounts above GHS 100.' : 'Manager approval required: this correction is outside your delegated limit.' };
+// Front desk rule: receptionists handle stay dates (unused nights only — enforced in the
+// correction itself), checkout with a balance owing and manual payment corrections directly.
+// Only refunds and recorded (backdated) departures need a manager, plus corrections to online
+// gateway payments, whose records must match the payment provider.
+export function financialDecision(user: any, action: string, context: { oldTotal?: number; newTotal?: number; isExtension?: boolean; balance?: number; payment?: any; newAmount?: number; timezone?: string }, _now = new Date()) {
+  if (!user.isActive) return { canApply: false, delegationReason: 'An active staff account is required.' };
+  if (user.role?.roleName === 'Manager') return { canApply: true, delegationReason: '' };
+  if (user.role?.roleName !== 'Receptionist') return { canApply: false, delegationReason: 'Front desk staff required.' };
+  if (action === 'correct-payment' && context.payment?.gatewayReference) return { canApply: false, delegationReason: 'Online payments must match the payment provider, so a manager corrects them.' };
+  return { canApply: FINANCIAL_ACTIONS.includes(action) || action === 'correct-payment', delegationReason: '' };
 }

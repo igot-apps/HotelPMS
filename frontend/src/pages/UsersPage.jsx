@@ -6,7 +6,6 @@ import { getUsers, inviteStaff, resendStaffInvitation, updateUser, deactivateUse
 import { getProperties, setHousekeepingEnabled } from '../api/properties';
 import { useAuthStore } from '../store/authStore'; // ✅ ADDED: To get the current user's propertyId
 import UserModal from '../components/users/UserModal';
-import CorrectionPermissions from '../components/users/CorrectionPermissions';
 import OnlineRoomPermission from '../components/users/OnlineRoomPermission';
 import RequirePermission from '../components/RequirePermission';
 import toast from 'react-hot-toast';
@@ -122,7 +121,7 @@ export default function UsersPage() {
       )}
 
       {permissionUser && <OnlineRoomPermission key={`online-${permissionUser.userId}`} user={permissionUser} />}
-      {permissionUser && <CorrectionPermissions key={permissionUser.userId} user={permissionUser} onClose={() => setPermissionUser(null)} />}
+      {permissionUser && <section className="space-y-2 rounded-xl border border-primary-200 bg-surface p-4 text-sm"><div className="flex items-start justify-between gap-3"><h2 className="font-bold text-text">What {permissionUser.fullName} can do</h2><button type="button" onClick={() => setPermissionUser(null)} className="min-h-10 rounded-lg border border-border px-3 text-xs font-semibold text-text">Close</button></div><p className="text-text-muted">Receptionists extend and shorten stays (unused nights only), check guests out with a balance owing, correct manual payments, undo mistaken check-ins and checkouts, restore bookings and transfer rooms. Everything is audited.</p><p className="text-text-muted"><strong className="text-text">A manager approves:</strong> refunds and recording an earlier departure for a forgotten checkout.</p></section>}
       <div className="bg-surface border border-border rounded-xl shadow-sm overflow-hidden">
         <div className="p-4 border-b border-border">
           <div className="relative max-w-sm">
@@ -168,7 +167,7 @@ export default function UsersPage() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex flex-wrap items-center justify-end gap-2">
-                        {user.role?.roleName === 'Receptionist' && <button onClick={() => setPermissionUser(user)} className="min-h-11 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-primary-700">Approval requirements</button>}
+                        {user.role?.roleName === 'Receptionist' && <button onClick={() => setPermissionUser(user)} className="min-h-11 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-primary-700">Permissions</button>}
                         {user.invitationPending && <button disabled={resendMutation.isPending} onClick={() => resendMutation.mutate(user.userId)} className="text-xs font-semibold text-primary-600 disabled:opacity-50">Resend invite</button>}
                         <RequirePermission permission="CanManageStaffAndRoles">
                           <button disabled={!['Receptionist', 'Housekeeper'].includes(user.role?.roleName)} onClick={() => { setEditingUser(user); setIsModalOpen(true); }} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition disabled:opacity-30" title="Edit User">

@@ -176,3 +176,16 @@ describe('checkout reminders and verification', () => {
     await expect(verifyDeparture(actor, 5, { result: 'present' })).rejects.toMatchObject({ statusCode: 403 });
   });
 });
+
+describe('shortening only removes unused nights', () => {
+  test('booked 5 nights, used 3: a receptionist can shorten to today but not to 2 nights', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-12T10:00:00Z'), doNotFake: ['nextTick', 'setImmediate'] });
+    const { tx } = fixture({ user: receptionist, stay: { checkOutDate: day('2026-11-14') }, res: { totalAmount: 500, amountPaid: 500 } });
+    tx.room.findFirst = mock().mockResolvedValue({ roomId: 9, operationalStatus: 'Occupied', housekeepingStatus: 'Clean', roomType: { isActive: true } });
+    const shorten = (newCheckOutDate: string) => ({ action: 'correct-date', stayIds: [5], newCheckOutDate, reason: 'Guest is leaving early.' });
+    await expect(correctBookingInTransaction(tx, 'R1', actor, { ...shorten('2026-11-11'), preview: true })).rejects.toThrow('3 nights have already been used. The earliest departure is 2026-11-12.');
+    const preview = await correctBookingInTransaction(tx, 'R1', actor, { ...shorten('2026-11-12'), preview: true });
+    expect(preview).toMatchObject({ newTotal: 300, credit: 200, canApply: true });
+    await expect(correctBookingInTransaction(tx, 'R1', actor, { ...shorten('2026-11-12'), expectedVersion: preview.version })).resolves.toMatchObject({ applied: true });
+  });
+});

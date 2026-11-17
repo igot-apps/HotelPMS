@@ -150,7 +150,7 @@ export const findReservationById = async (reservationId: string) => {
   return prisma.reservation.findUnique({
     where: { reservationId },
     include: {
-      property: { select: { propertyId: true, propertyName: true, propertyCode: true, timezone: true, checkOutTime: true } },
+      property: { select: { propertyId: true, propertyName: true, propertyCode: true, timezone: true, checkOutTime: true, checkInTime: true } },
       propertyGuest: { select: { guestId: true, fullName: true, phone: true } },
       platformGuest: { select: { guestId: true, fullName: true, phone: true, email: true } },
       staff: { select: { userId: true, fullName: true } },
@@ -437,8 +437,10 @@ export const deriveReservationStatus = async (reservationId: string) => {
 // ============================================================
 // 🌟 PHASE 2: MARK RESERVATION AS NO-SHOW
 // ============================================================
-export const markReservationAsNoShow = async (reservationId: string) => {
-  return prisma.reservation.update({
+export const markReservationAsNoShow = async (reservationId: string, actorUserId?: number, reason = '') => {
+  return prisma.$transaction(async tx => {
+  const before = await tx.reservation.findUnique({ where: { reservationId }, select: { status: true, amountPaid: true, checkInDate: true, checkOutDate: true } });
+  const updated = await tx.reservation.update({
     where: { reservationId },
     data: {
       status: 'NoShow',
@@ -457,5 +459,13 @@ export const markReservationAsNoShow = async (reservationId: string) => {
         include: { room: true },
       },
     },
+  });
+  // Every no-show is audited: who, when, why, and what was paid (payments are kept).
+  await tx.auditLog.create({ data: {
+    userId: actorUserId ?? null, entityType: 'Reservation', action: 'ReservationNoShow',
+    oldData: { reservationId, status: before?.status, amountPaid: Number(before?.amountPaid || 0) },
+    newData: { reservationId, status: 'NoShow', reason: reason || null, arrivalDate: before?.checkInDate, departureDate: before?.checkOutDate },
+  } });
+  return updated;
   });
 };
