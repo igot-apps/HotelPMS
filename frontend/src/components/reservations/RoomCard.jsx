@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { LogIn, LogOut, Loader2, Clock, Pencil, History } from 'lucide-react';
+import { LogIn, LogOut, Loader2, Clock, Pencil, History, CalendarMinus } from 'lucide-react';
 import { expectedCheckoutAt, formatDuration, formatTime } from '../../lib/stayTiming';
 
 export default function RoomCard({ 
@@ -12,6 +12,7 @@ export default function RoomCard({
   onExtend,
   onEditOccupant,
   onRecordDeparture,
+  onShorten,
 }) {
   const roomStatus = rr.status || 'Reserved';
   // 🌟 Check if room lifecycle is complete (CheckedOut)
@@ -49,6 +50,16 @@ export default function RoomCard({
           >
             <Clock size={14} /> Extend
           </button>
+          {onShorten && (
+            <button
+              disabled={isThisRoomBusy}
+              onClick={() => onShorten(rr)}
+              title="Remove nights the guest won't use"
+              className="inline-flex min-h-11 flex-1 sm:flex-initial items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-warning-300 text-warning-800 hover:bg-warning-50 transition disabled:opacity-50"
+            >
+              <CalendarMinus size={14} /> Shorten
+            </button>
+          )}
           {onRecordDeparture && (
             <button
               disabled={isThisRoomBusy}

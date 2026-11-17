@@ -21,8 +21,8 @@ import { createWalkInBooking } from '../lib/createWalkInBooking';
 import RoomCard from '../components/reservations/RoomCard'; // 🌟 NEW: Extracted component
 import RoomOccupantDialog from '../components/reservations/RoomOccupantDialog';
 import EarlyCheckoutDialog from '../components/reservations/EarlyCheckoutDialog';
-import RecordDepartureDialog from '../components/reservations/RecordDepartureDialog';
 import ExtendStayDialog from '../components/reservations/ExtendStayDialog';
+import ShortenStayDialog from '../components/reservations/ShortenStayDialog';
 import { expectedCheckoutAt, formatDuration, formatTime } from '../lib/stayTiming';
 
 // The hotel's calendar day as YYYY-MM-DD, using the browser's local time.
@@ -119,8 +119,8 @@ export default function ReservationsPage() {
   const [expandedId, setExpandedId] = useState(null);
   const [pendingConfirm, setPendingConfirm] = useState(null);
   const [earlyCheckout, setEarlyCheckout] = useState(null);
-  const [recordingDeparture, setRecordingDeparture] = useState(null);
   const [extendRoom, setExtendRoom] = useState(null);
+  const [shortenStay, setShortenStay] = useState(null);
   const [occupantDialog, setOccupantDialog] = useState(null);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
@@ -386,12 +386,8 @@ export default function ReservationsPage() {
                 late >= 60000 ? { inputLabel: 'Late departure note (optional)', inputValue: '' } : {},
               );
             }}
-            onRecordDeparture={(room) => setRecordingDeparture({
-              reservationRoomId: room.reservationRoomId, reservationId: res.reservationId,
-              roomNumber: room.room?.roomNumber || room.roomNumberSnapshot,
-              guestName: room.occupantName || res.guestNameSnapshot || res.platformGuest?.fullName || res.propertyGuest?.fullName || 'Guest',
-            })}
             onExtend={(room) => setExtendRoom(room)}
+            onShorten={(room) => setShortenStay({ room, reservationId: res.reservationId })}
             onEditOccupant={room => setOccupantDialog({ room, reservation: res, mode: 'edit' })}
           />
         ))}
@@ -828,6 +824,7 @@ export default function ReservationsPage() {
       />
 
       {occupantDialog && <RoomOccupantDialog key={`${occupantDialog.room.reservationRoomId}-${occupantDialog.mode}`} {...occupantDialog} busy={roomActionMutation.isPending || updateOccupantMutation.isPending} onClose={() => setOccupantDialog(null)} onSubmit={details => occupantDialog.mode === 'checkin' ? roomActionMutation.mutateAsync({ id: occupantDialog.room.reservationRoomId, status: 'CheckedIn', ...details }) : updateOccupantMutation.mutateAsync({ id: occupantDialog.room.reservationRoomId, ...details })} />}
+      {shortenStay && <ShortenStayDialog key={shortenStay.room.reservationRoomId} {...shortenStay} onClose={() => setShortenStay(null)} />}
       {extendRoom && (
         <ExtendStayDialog
           room={extendRoom}
@@ -839,7 +836,6 @@ export default function ReservationsPage() {
           }}
         />
       )}
-      {recordingDeparture && <RecordDepartureDialog stay={recordingDeparture} onClose={() => setRecordingDeparture(null)} />}
       {earlyCheckout && (
         <EarlyCheckoutDialog
           key={earlyCheckout.room.reservationRoomId}
