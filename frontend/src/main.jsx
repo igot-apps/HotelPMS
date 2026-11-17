@@ -3,6 +3,9 @@ import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App.jsx';
 import './index.css';
+import { enableDatePickers } from './lib/datePickers';
+
+enableDatePickers();
 
 // Create a React Query client with Caching DISABLED
 const queryClient = new QueryClient({

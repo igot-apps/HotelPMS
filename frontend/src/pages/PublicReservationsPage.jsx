@@ -308,7 +308,7 @@ const retryPaymentMutation = useMutation({
                 const refundApproved = res.correctionRequests?.some(request => request.status === 'Approved');
 
                 return (
-                  <div key={res.reservationId} className="group bg-surface border border-border rounded-xl p-6 hover:shadow-lg hover:border-primary-200 transition-all duration-300">
+                  <div key={res.reservationId} className="group bg-surface border border-border rounded-2xl p-4 shadow-sm sm:p-6 hover:shadow-lg hover:border-primary-200 transition-all duration-300">
                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2 flex-wrap">
@@ -340,7 +340,15 @@ const retryPaymentMutation = useMutation({
                       </div>
                     </div>
 
-                    {holdEnds !== null && !expired && <p className="mb-3 text-sm text-warning-700">Complete payment: {Math.max(1, Math.ceil((holdEnds - holdNow) / 60000))} minute(s) remaining</p>}
+                    {holdEnds !== null && !expired && (
+                      <div role="status" className="mb-4 flex items-start gap-3 rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800">
+                        <Clock size={18} className="mt-0.5 shrink-0" />
+                        <div>
+                          <p className="font-semibold">Room held for {Math.max(1, Math.ceil((holdEnds - holdNow) / 60000))} more minute{Math.ceil((holdEnds - holdNow) / 60000) === 1 ? '' : 's'}</p>
+                          <p className="mt-0.5">Payment not finished? Tap <strong>Pay</strong> below to complete it before the hold ends. If you were already charged, tap <strong>Check payment status</strong> instead of paying again.</p>
+                        </div>
+                      </div>
+                    )}
                     {feedback && !released && !isFullyPaid && <p role="status" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{feedback.message}</p>}
                     {expired && <p className="mb-3 text-sm text-text-muted">The room hold has been released. {returnedTotal > 0 ? 'Refund details are shown below.' : amountPaid > 0 ? 'Your late payment was recorded; contact the hotel for refund review.' : 'No payment was recorded for this booking.'}</p>}
                     {!released && Number(res.refundDue) > 0 && <p className="mb-3 text-sm text-warning-700">Credit awaiting hotel refund review: GH₵ {Number(res.refundDue).toFixed(2)}. No further payment is needed if your balance is zero.</p>}
@@ -354,7 +362,7 @@ const retryPaymentMutation = useMutation({
                           <span className="text-text-muted">{returnedTotal > 0 ? simulatedReturned > 0 ? ' net paid (test balance)' : ' net paid after refunds' : ' paid'}</span>
                           {!isFullyPaid && !released && (
                             <span className="text-xs font-bold text-danger-600 bg-danger-50 px-2 py-0.5 rounded ml-2 border border-danger-100">
-                              Balance: GH {balanceDue.toFixed(2)}
+                              Balance: GH₵ {balanceDue.toFixed(2)}
                             </span>
                           )}
                           {(isFullyPaid || released) && amountPaid > 0 && (

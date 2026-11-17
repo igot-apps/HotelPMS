@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Calendar, Tag, Loader2, CheckCircle2, CreditCard, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Calendar, Tag, Loader2, CheckCircle2, CreditCard, ShieldCheck, AlertCircle, Clock, Lock } from 'lucide-react';
+import BookingSteps from '../components/public/BookingSteps';
 import api from '../lib/axios';
 import toast from 'react-hot-toast';
 import PublicNavbar from '../components/public/PublicNavbar';
@@ -240,14 +241,19 @@ export default function PublicCheckoutPage() {
       <div className="max-w-4xl mx-auto px-4 py-6 sm:py-10">
         <BackButton fallback={hotelUrl} label="Back to rooms" disabled={initializePaymentMutation.isPending} useHistory={false} className="mb-6" />
 
+        <div className="mb-6 rounded-xl border border-border bg-surface p-4 shadow-sm"><BookingSteps current={1} /></div>
+
         <form onSubmit={handlePay} className="grid min-w-0 grid-cols-1 lg:grid-cols-3 gap-8">
 
           {/* Left Column: Booking Summary & Guest Details */}
           <div className="min-w-0 lg:col-span-2 space-y-6">
-            <h1 className="text-2xl font-bold text-text">Review & Pay</h1>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-text sm:text-3xl">Review & pay</h1>
+              <p className="mt-1 text-sm text-text-muted">Check your stay, then pay securely to confirm your room.</p>
+            </div>
 
             {/* 🌟 UPDATED: Editable Trip Details */}
-            <div className="min-w-0 max-w-full overflow-hidden bg-surface p-4 sm:p-6 rounded-xl border border-border">
+            <div className="min-w-0 max-w-full overflow-hidden bg-surface p-4 sm:p-6 rounded-xl border border-border shadow-sm">
               <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
                 <Calendar size={20} className="text-primary-600"/> Your Trip
               </h2>
@@ -299,7 +305,7 @@ export default function PublicCheckoutPage() {
             </div>
 
             {/* Smart Guest Details Section */}
-            <div className="bg-surface p-6 rounded-xl border border-border">
+            <div className="bg-surface p-4 sm:p-6 rounded-xl border border-border shadow-sm">
               <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
                 <ShieldCheck size={20} className="text-primary-600"/> Guest Details
               </h2>
@@ -322,8 +328,8 @@ export default function PublicCheckoutPage() {
 
           {/* Right Column: Price Breakdown & Pay */}
           <div className="lg:col-span-1">
-            <div className="bg-surface p-4 sm:p-6 rounded-xl border border-border lg:sticky lg:top-20">
-              <h2 className="text-lg font-bold text-text mb-4">Price Details</h2>
+            <div className="bg-surface p-4 sm:p-6 rounded-xl border border-border shadow-sm lg:sticky lg:top-20">
+              <h2 className="text-lg font-bold text-text mb-4">Price details</h2>
               <div className="space-y-3 text-sm mb-6">
                 <div className="flex justify-between text-text">
                   <span>GH₵ {basePrice.toFixed(2)} x {nights} night{nights > 1 ? 's' : ''}</span>
@@ -347,11 +353,10 @@ export default function PublicCheckoutPage() {
                   <p className="mt-1">If you already started a payment, check <Link to="/public/reservations" className="font-semibold underline">My Reservations</Link> for its status.</p>
                 </div>
               ) : <>
-              <div className="bg-warning-50 border border-warning-200 p-3 rounded-lg mb-4 flex items-start gap-2">
-                <AlertCircle size={16} className="text-warning-700 mt-0.5 shrink-0" />
-                <p className="text-xs text-warning-800 font-medium">
-                  Please double-check your dates above. Once payment is processed, changes may require hotel approval.
-                </p>
+              <div className="mb-4 space-y-2 rounded-lg border border-primary-100 bg-primary-50/60 p-3 text-xs text-primary-900">
+                <p className="flex items-start gap-2 font-semibold"><Clock size={14} className="mt-0.5 shrink-0" /> Your room is held for 10 minutes while you pay.</p>
+                <p className="pl-6">If payment doesn't go through, open <strong>My Reservations</strong> and tap <strong>Pay</strong> to try again within that time.</p>
+                <p className="flex items-start gap-2"><AlertCircle size={14} className="mt-0.5 shrink-0" /> Double-check your dates — changes after payment may need the hotel's approval.</p>
               </div>
 
               <button
@@ -366,9 +371,10 @@ export default function PublicCheckoutPage() {
                 )}
               </button>
 
-              <p className="text-[10px] text-text-muted text-center mt-3">
-                Choose Mobile Money or card (Visa/Mastercard) on Paystack's secure checkout.
-              </p>
+              <div className="mt-4 flex items-center justify-center gap-2 text-[11px] text-text-muted">
+                <Lock size={12} className="shrink-0" />
+                <span>Secure checkout by Paystack · Mobile Money · Visa / Mastercard</span>
+              </div>
               </>}
             </div>
           </div>

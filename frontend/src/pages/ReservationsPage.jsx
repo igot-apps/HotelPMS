@@ -22,6 +22,7 @@ import RoomCard from '../components/reservations/RoomCard'; // 🌟 NEW: Extract
 import RoomOccupantDialog from '../components/reservations/RoomOccupantDialog';
 import EarlyCheckoutDialog from '../components/reservations/EarlyCheckoutDialog';
 import RecordDepartureDialog from '../components/reservations/RecordDepartureDialog';
+import ExtendStayDialog from '../components/reservations/ExtendStayDialog';
 import { expectedCheckoutAt, formatDuration, formatTime } from '../lib/stayTiming';
 
 // The hotel's calendar day as YYYY-MM-DD, using the browser's local time.
@@ -119,6 +120,7 @@ export default function ReservationsPage() {
   const [pendingConfirm, setPendingConfirm] = useState(null);
   const [earlyCheckout, setEarlyCheckout] = useState(null);
   const [recordingDeparture, setRecordingDeparture] = useState(null);
+  const [extendRoom, setExtendRoom] = useState(null);
   const [occupantDialog, setOccupantDialog] = useState(null);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
@@ -389,24 +391,7 @@ export default function ReservationsPage() {
               roomNumber: room.room?.roomNumber || room.roomNumberSnapshot,
               guestName: room.occupantName || res.guestNameSnapshot || res.platformGuest?.fullName || res.propertyGuest?.fullName || 'Guest',
             })}
-            onExtend={(room) => {
-              const currentCheckOut = new Date(room.checkOutDate).toISOString().split('T')[0];
-              const newDate = prompt(
-                `Extend stay for Room ${room.room?.roomNumber}\n\nCurrent check-out: ${currentCheckOut}\n\nEnter new check-out date (YYYY-MM-DD):`,
-                currentCheckOut
-              );
-              if (newDate && newDate > currentCheckOut) {
-                askRoomAction(
-                  room.reservationRoomId,
-                  'extend',
-                  'Extend Stay?',
-                  `Extend Room ${room.room?.roomNumber} from ${currentCheckOut} to ${newDate}?`,
-                  { newCheckOutDate: newDate }
-                );
-              } else if (newDate && newDate <= currentCheckOut) {
-                toast.error('New date must be after current check-out date.');
-              }
-            }}
+            onExtend={(room) => setExtendRoom(room)}
             onEditOccupant={room => setOccupantDialog({ room, reservation: res, mode: 'edit' })}
           />
         ))}
@@ -843,6 +828,17 @@ export default function ReservationsPage() {
       />
 
       {occupantDialog && <RoomOccupantDialog key={`${occupantDialog.room.reservationRoomId}-${occupantDialog.mode}`} {...occupantDialog} busy={roomActionMutation.isPending || updateOccupantMutation.isPending} onClose={() => setOccupantDialog(null)} onSubmit={details => occupantDialog.mode === 'checkin' ? roomActionMutation.mutateAsync({ id: occupantDialog.room.reservationRoomId, status: 'CheckedIn', ...details }) : updateOccupantMutation.mutateAsync({ id: occupantDialog.room.reservationRoomId, ...details })} />}
+      {extendRoom && (
+        <ExtendStayDialog
+          room={extendRoom}
+          onClose={() => setExtendRoom(null)}
+          onConfirm={(newDate) => {
+            const currentCheckOut = String(extendRoom.checkOutDate).slice(0, 10);
+            askRoomAction(extendRoom.reservationRoomId, 'extend', 'Extend Stay?', `Extend Room ${extendRoom.room?.roomNumber} from ${currentCheckOut} to ${newDate}?`, { newCheckOutDate: newDate });
+            setExtendRoom(null);
+          }}
+        />
+      )}
       {recordingDeparture && <RecordDepartureDialog stay={recordingDeparture} onClose={() => setRecordingDeparture(null)} />}
       {earlyCheckout && (
         <EarlyCheckoutDialog

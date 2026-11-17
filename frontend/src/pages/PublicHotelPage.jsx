@@ -373,9 +373,9 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
                       <Users size={17} className="text-primary-600" />
                       Max {room.maxOccupancy} {room.maxOccupancy === 1 ? 'guest' : 'guests'}
                     </span>
-                    <span className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">
+                    <span className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-bold ${room.availableRooms === 0 ? 'border-border bg-secondary-50 text-text-muted' : room.availableRooms <= 2 ? 'border-warning-200 bg-warning-50 text-warning-700' : 'border-success-200 bg-success-50 text-success-700'}`}>
                       <span className="h-2 w-2 rounded-full bg-current" aria-hidden="true" />
-                      {room.availableRooms} {room.availableRooms === 1 ? 'room' : 'rooms'} available
+                      {room.availableRooms === 0 ? 'Sold out' : room.availableRooms <= 2 ? `Only ${room.availableRooms} left` : `${room.availableRooms} rooms available`}
                     </span>
                 </div>
               </div>
