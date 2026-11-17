@@ -41,3 +41,24 @@ test('does not record pending, disabled, or uncontactable bookings', async () =>
   }
   expect(db.simulatedSms.create).not.toHaveBeenCalled();
 });
+
+test('with Moolre configured, a paid booking is texted from HideOut24 even if the hotel switch is off', async () => {
+  process.env.MOOLRE_SMS_VAS_KEY = 'test-key-never-sent';
+  const send = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ status: 1, code: 'SMS01' }), { status: 200 }) as any);
+  db.reservation.findUnique.mockResolvedValue({ ...booking, property: { ...booking.property, smsSimulationEnabled: false } });
+  await recordSimulatedSms('res-1', 'confirmed');
+  expect(db.simulatedSms.create).toHaveBeenCalledWith({ data: expect.objectContaining({ provider: 'moolre', sendStatus: 'pending', body: expect.stringContaining('Payment of GHS 200.00 received') }) });
+  const [url, request] = send.mock.calls[0] as any;
+  expect(url).toBe('https://api.moolre.com/open/sms/send');
+  expect(JSON.parse(request.body)).toMatchObject({ type: 1, senderid: 'HideOut24', messages: [{ recipient: '+233244123456' }] });
+  expect(db.simulatedSms.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ sendStatus: 'accepted' }) }));
+  send.mockRestore();
+});
+
+test('cancellation texts still follow the hotel switch', async () => {
+  process.env.MOOLRE_SMS_VAS_KEY = 'test-key-never-sent';
+  db.reservation.findUnique.mockResolvedValue({ ...booking, status: 'Cancelled', property: { ...booking.property, smsSimulationEnabled: false } });
+  await recordSimulatedSms('res-1', 'cancelled');
+  expect(db.simulatedSms.create).not.toHaveBeenCalled();
+  delete process.env.MOOLRE_SMS_VAS_KEY;
+});

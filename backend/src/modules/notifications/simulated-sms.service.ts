@@ -14,7 +14,10 @@ export async function recordSimulatedSms(reservationId: string, event: SmsEvent)
       payments: { where: { status: 'Completed' }, select: { amount: true } },
       property: { select: { propertyName: true, timezone: true, smsSimulationEnabled: true } },
     } });
-    if (!booking?.property.smsSimulationEnabled || booking.source !== 'Website' || booking.status !== (event === 'confirmed' ? 'Confirmed' : 'Cancelled')) return;
+    // Payment confirmations always go out live when Moolre is configured; otherwise (and for
+    // cancellations) the hotel's Guest SMS switch decides.
+    const sendRegardlessOfSwitch = event === 'confirmed' && isMoolreSmsConfigured();
+    if (!booking || (!booking.property.smsSimulationEnabled && !sendRegardlessOfSwitch) || booking.source !== 'Website' || booking.status !== (event === 'confirmed' ? 'Confirmed' : 'Cancelled')) return;
     if (Number(booking.totalAmount) <= 0 || Number(booking.amountPaid) + 0.01 < Number(booking.totalAmount)) return;
     const completedPayments = booking.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
     if (completedPayments + 0.01 < Number(booking.totalAmount)) return;
