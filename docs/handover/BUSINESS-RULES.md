@@ -37,7 +37,7 @@ Change these only when the owner asks. Code locations are given so you can verif
 
 ## Corrections and approvals (`reservation/recovery.service.ts`, `correction-approval.service.ts`)
 - Actions: undo check-in/checkout, restore cancelled, transfer room, correct departure date
-  (extend/shorten), correct payment, checkout with balance owing.
+  (extend/shorten), correct payment, checkout with balance owing, record actual departure.
 - Every correction is previewed, then confirmed with a version check; if the booking changed
   in between, preview again. All corrections are audited.
 - Receptionist outside their limit → creates a **request**; the booking is unchanged until a
@@ -50,6 +50,31 @@ Change these only when the owner asks. Code locations are given so you can verif
   charges (default) or shorten stay and recalculate (uses the rules above).
 - **Checkout with balance owing** is blocked unless a manager approves with a reason (or a
   receptionist within their `credit-checkout` limit). Credit owed to the guest does not block.
+
+## Stays, checkout and consumed nights
+Code: `reservation/stay-timing.ts`, `reservation/checkout-alerts.service.ts`,
+`recovery.service.ts` (`record-departure`, `transitionStay`), tests in `tests/stay-management.test.ts`.
+- **Nights are calendar nights** (stay dates are date-only). Monday 23:00 in → Tuesday 02:00 out
+  = 1 night. Crossing midnight never adds a night. Actual check-in/out timestamps are kept
+  separately and only used for display, lateness and evidence.
+- **Expected checkout** = departure date at the hotel's `checkOutTime` in the hotel's `timezone`.
+- **Late departure**: checking out after checkout time shows how late and accepts an optional
+  note; `lateMinutes` and the note go into the checkout audit. **No fee and no extra night.**
+- **Checkout reminders** (Dashboard panel + red sidebar badge): states `due` (within a day),
+  `dueSoon` (within an hour), `overdue`. Escalated to managers after 3 h overdue or when a guest
+  is marked "cannot be found". Alerts persist until checkout or extension. No SMS.
+- **Verify** (from a reminder): still here / has left / cannot be found (note required).
+  Recorded as audit action `DepartureVerified`; "has left" also sets guest presence to Out.
+- **Forgotten checkout = correction action `record-departure`** ("Record departure" on a
+  checked-in room, or Verify → has left → left earlier). Manager applies; receptionist requests
+  approval. Requires departure time, evidence type and explanation. The stay ends on the
+  departure day (but at least one night, never later than the booked departure), so consumed
+  nights stay charged and nothing is ever added; overpayment → pending refund (existing flow).
+  Only records that put the guest in the room *after* the claimed time (marked Returned, a
+  "still here" verification) are contradictions and need an extra explanation; housekeeping or
+  payments afterwards are information only.
+- **Overdue checked-in guests block the room** in staff search/booking for stays starting today
+  or earlier (`overdueOccupancyClause`); future dates and online booking are unaffected.
 
 ## Rooms
 - **Maintenance needs a reason** (preset list or custom, 3–200 chars), stored as

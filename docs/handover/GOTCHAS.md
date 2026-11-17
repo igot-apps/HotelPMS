@@ -34,5 +34,12 @@
     `to-be-deleted-tenant.middleware.ts` are leftovers; don't import them. Deleting them needs
     the owner's approval.
 
-12. **Root-level scratch files** (`ai-copilot.js`, `gitzen.js`, `temp.js`, `prisma-playground.js`,
+12. **Pending correction requests go stale.** Any change to the booking or its rooms (payment,
+    presence, verification) changes its version, so the manager must reject and the receptionist
+    re-submit. This is intended.
+
+13. **Stay times on screen use the browser clock** (fine in Ghana); reminders and charges use the
+    hotel's time zone on the server.
+
+14. **Root-level scratch files** (`ai-copilot.js`, `gitzen.js`, `temp.js`, `prisma-playground.js`,
     `i-help.md`, `onliine-booking-plan.md`) are the owner's notes/tools, not part of the app.

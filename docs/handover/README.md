@@ -1,7 +1,7 @@
 # HideOut24 / HotelPMS — AI handover
 
 Start here. These notes let a new AI assistant (Claude Code, OpenCode, Cursor, …) work on this
-project without the owner re-explaining it. Last updated: 2026-11-16.
+project without the owner re-explaining it. Last updated: 2026-11-17.
 
 ## What this is
 HideOut24 is a hotel property management system (PMS) for hotels in **Ghana**:
