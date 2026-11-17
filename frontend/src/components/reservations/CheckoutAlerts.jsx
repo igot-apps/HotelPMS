@@ -7,6 +7,7 @@ import api from '../../lib/axios';
 import useCheckoutAlerts from '../../hooks/useCheckoutAlerts';
 import { formatDuration, formatTime } from '../../lib/stayTiming';
 import RecordDepartureDialog from './RecordDepartureDialog';
+import { bookingLink } from '../../lib/bookingLink';
 
 const STATE = {
   overdue: { label: 'Overdue', className: 'bg-danger-50 text-danger-700' },
@@ -47,8 +48,8 @@ export default function CheckoutAlerts() {
               {alert.escalated && <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-danger-700"><ShieldAlert size={13} /> {isManager ? 'Needs manager attention' : 'Escalated to the manager'}</p>}
               {alert.balanceDue > 0 && <p className="mt-1 text-xs font-semibold text-danger-700">Balance due: GHS {alert.balanceDue.toFixed(2)}</p>}
               <div className="mt-3 flex flex-wrap gap-2">
-                <Link to={search} className="min-h-10 rounded-lg bg-primary-600 px-3 py-2 text-xs font-semibold text-white">Check Out</Link>
-                <Link to={search} className="min-h-10 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text">Extend</Link>
+                <Link to={bookingLink(alert, 'checkout')} className="min-h-10 rounded-lg bg-primary-600 px-3 py-2 text-xs font-semibold text-white">Check Out</Link>
+                <Link to={bookingLink(alert, 'extend')} className="min-h-10 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text">Extend</Link>
                 <button type="button" onClick={() => setVerifying(alert)} className="min-h-10 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text">Verify</button>
               </div>
             </li>
@@ -104,7 +105,7 @@ function VerifyDepartureDialog({ alert, onClose, onRecordEarlier }) {
           <div className="space-y-3 text-sm">
             <p className="text-text">Recorded that {alert.guestName} has left. Now close the stay:</p>
             <div className="flex flex-wrap gap-2">
-              <Link to={search} className="min-h-11 rounded-lg bg-primary-600 px-4 py-2 font-semibold text-white">Check out now</Link>
+              <Link to={bookingLink(alert, 'checkout')} className="min-h-11 rounded-lg bg-primary-600 px-4 py-2 font-semibold text-white">Check out now</Link>
               <button type="button" onClick={onRecordEarlier} className="min-h-11 rounded-lg border border-border px-4 py-2 font-semibold text-text">They left earlier — record actual departure</button>
             </div>
           </div>

@@ -177,7 +177,7 @@ export default function AvailabilityPage() {
           <Search size={24} className="text-primary-500" /> Check Availability
         </h1>
         <p className="text-text-muted text-sm mt-1">
-          Search for free rooms by date range. Click on the rooms you want to select them, then proceed to book.
+          See which rooms are free for your dates. Tap rooms to select them, then book — it opens the same New booking form used on Reservations.
         </p>
       </div>
 
@@ -397,7 +397,7 @@ export default function AvailabilityPage() {
                 : 'bg-success-600 text-text-inverted hover:bg-success-700'
             }`}
           >
-            Proceed to Book <ChevronRight size={18} />
+            Book selected rooms <ChevronRight size={18} />
           </button>
         </div>
       )}

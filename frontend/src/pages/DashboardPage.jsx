@@ -12,7 +12,7 @@ import { getProperties } from '../api/properties';
 import { useAuthStore } from '../store/authStore';
 import {
   UserPlus, UserMinus, BedDouble, Sparkles, AlertTriangle,
-  Calendar, Search, RefreshCw, LayoutGrid, ArrowRight,
+  Calendar, Search, RefreshCw, LayoutGrid, ArrowRight, Plus,
   Loader2, Building2, CheckCircle2
 } from 'lucide-react';
 
@@ -139,7 +139,8 @@ export default function DashboardPage() {
     <section aria-labelledby="quick-actions-title" className="rounded-xl border border-border bg-surface p-4 shadow-sm">
       <h2 id="quick-actions-title" className="mb-3 flex items-center gap-2 text-sm font-bold text-text"><LayoutGrid size={17} className="text-primary-600" /> Quick Actions</h2>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <QuickLink to="/availability" icon={Search} label="Check availability / Walk-in" color="primary" />
+        <QuickLink to="/reservations?new=1" icon={Plus} label="New booking (walk-in or reservation)" color="primary" />
+        <QuickLink to="/availability" icon={Search} label="See free rooms by date" color="secondary" />
         <RequirePermission permission="CanCreateReservation"><QuickLink to="/reservations" icon={Calendar} label="Reservations & payments" color="success" /></RequirePermission>
         <QuickLink to="/rooms" icon={BedDouble} label="Rooms & housekeeping" color="warning" />
         {user?.role === 'Manager' && <QuickLink to="/reports" icon={LayoutGrid} label="Daily overview & collections" color="secondary" />}
