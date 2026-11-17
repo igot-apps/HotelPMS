@@ -1,5 +1,7 @@
 # AGENTS.md — Development Rules
 
+> **New to this project?** Read [`docs/handover/README.md`](docs/handover/README.md) first — architecture, running locally, database migrations, Render deployment, business rules and known gotchas.
+
 1. **Speed:** Prioritize fast execution and avoid unnecessary delays.
 2. **Short responses:** Keep explanations brief and direct.
 3. **Simple tasks:** Implement straightforward requests without extensive investigation or planning.
