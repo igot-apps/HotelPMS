@@ -16,7 +16,7 @@ export default function TakePaymentDialog({ reservation, onClose }) {
   const mutation = useMutation({
     mutationFn: () => recordPayment({ reservationId: reservation.reservationId, amount: parseFloat(form.amount), paymentMethod: form.paymentMethod, gatewayReference: form.gatewayReference || null, notes: form.notes || null }),
     onSuccess: () => {
-      for (const key of ['reservations', 'reservation', 'reservationStats', 'payments', 'dashboardGlance', 'checkoutAlerts', 'owedAfterCheckout']) queryClient.invalidateQueries({ queryKey: [key] });
+      for (const key of ['reservations', 'reservation', 'reservationStats', 'payments', 'dashboardGlance', 'checkoutAlerts', 'owedAfterCheckout', 'myDay']) queryClient.invalidateQueries({ queryKey: [key] });
       toast.success(`Payment of GHS ${parseFloat(form.amount).toFixed(2)} recorded.`);
       onClose();
     },

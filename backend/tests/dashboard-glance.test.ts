@@ -55,6 +55,14 @@ test('receptionists do not see the manager approval count', async () => {
   expect(glance.approvalsPending).toBe(0);
 });
 
+test('hotel-wide collections (including online) are hidden from receptionists', async () => {
+  const receptionist = await getDashboardGlance(3, 'Receptionist', new Date('2026-11-16T12:00:00Z'));
+  expect(receptionist.money).toMatchObject({ collectedToday: null, collectedAtDesk: null, collectedOnline: null, payments: [] });
+  const manager = await getDashboardGlance(3, 'Manager', new Date('2026-11-16T12:00:00Z'));
+  expect(manager.money.collectedToday).toBe(120);
+  expect(manager.money.collectedAtDesk! + manager.money.collectedOnline!).toBe(120);
+});
+
 test('a same-day arrival only counts as missed after check-in time plus grace', async () => {
   const evening = await getDashboardGlance(3, 'Manager', new Date('2026-11-16T20:30:00Z'));
   expect(evening.arrivals.missed.map((s: any) => s.reservationId).sort()).toEqual(['C', 'E']);

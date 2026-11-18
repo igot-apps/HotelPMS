@@ -109,6 +109,12 @@ function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', danger 
   );
 }
 
+// No Show only when it applies: confirmed, past the no-show time (check-in time + 6 h) and nobody
+// from the booking has checked in or stayed (same rule as the server, which also re-checks it).
+const canMarkNoShow = (res) => res.status === 'Confirmed'
+  && !(res.reservationRooms || []).some((stay) => ['CheckedIn', 'CheckedOut'].includes(stay.status))
+  && Date.now() >= noShowAllowedFrom(res.checkInDate, res.property?.checkInTime).getTime();
+
 const BACK_LABELS = { overdue: 'Overdue checkouts', arrivals: 'Arrivals to check in', departures: 'Departures to check out', inHouse: 'Guests in house', free: 'Rooms free tonight', collected: 'Collected today', unpaid: 'Owed by guests in house', owedAfter: 'Owed after checkout', attention: 'Needs attention', dashboard: 'the dashboard', booking: 'the booking details' };
 
 export default function ReservationsPage() {
@@ -246,7 +252,7 @@ export default function ReservationsPage() {
       toast.success('Room status updated');
       setPendingConfirm(null);
       setOccupantDialog(null);
-      for (const key of ['reservation', 'reservationCorrections', 'operationalOverview', 'dashboardGlance', 'owedAfterCheckout', 'checkoutAlerts']) queryClient.invalidateQueries({ queryKey: [key] });
+      for (const key of ['reservation', 'reservationCorrections', 'operationalOverview', 'dashboardGlance', 'owedAfterCheckout', 'checkoutAlerts', 'myDay']) queryClient.invalidateQueries({ queryKey: [key] });
     },
     onError: (err, variables) => {
       if (variables?.status === 'CheckedOut' && err.response?.data?.code === 'BALANCE_OWING' && !owingCheckout) {
@@ -517,7 +523,7 @@ export default function ReservationsPage() {
     <div className="space-y-6">
       {backPanel && (
         <Link to={backPanel === 'booking' ? `/reservations/${searchParams.get('open')}` : backPanel === 'dashboard' ? '/dashboard' : `/dashboard?panel=${backPanel}`}
-          className="sticky top-2 z-30 flex min-h-12 items-center gap-2 rounded-xl border border-primary-200 bg-primary-50 px-4 text-sm font-semibold text-primary-700 shadow-sm hover:bg-primary-100">
+          className="flex min-h-11 w-fit max-w-full items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-3 text-sm font-semibold text-primary-700 hover:bg-primary-100">
           <ChevronLeft size={18} /> Back to {BACK_LABELS[backPanel] || 'the dashboard'} {backPanel !== 'booking' && <span className="hidden font-normal text-primary-600 sm:inline">— the list is already updated, continue with the next guest</span>}
         </Link>
       )}
@@ -627,7 +633,7 @@ export default function ReservationsPage() {
           const amountPaid = parseFloat(res.amountPaid || 0);
           const balanceDue = Math.max(0, totalAmount - amountPaid);
           const refundedAmount = (res.refunds || []).filter(refund => !refund.isSimulated).reduce((sum, refund) => sum + Number(refund.amount), 0) + (res.payments || []).filter((payment) => payment.status === 'Refunded').reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
-          const isPastCheckIn = Date.now() >= noShowAllowedFrom(res.checkInDate, res.property?.checkInTime).getTime();
+          const isPastCheckIn = canMarkNoShow(res);
           const cardStatusClass = res.status === 'Confirmed' ? 'bg-primary-50 text-primary-700 ring-1 ring-primary-600/20' : res.status === 'InHouse' ? 'bg-success-50 text-success-700 ring-1 ring-success-600/20' : res.status === 'Cancelled' ? 'bg-danger-50 text-danger-700 ring-1 ring-danger-600/20' : res.status === 'NoShow' ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-600/20' : res.status === 'Expired' ? 'bg-warning-50 text-warning-700 ring-1 ring-warning-600/20' : 'bg-secondary-100 text-secondary-700';
           const cardStatusLabel = res.status === 'InHouse' ? 'In-House' : res.status === 'NoShow' ? 'No Show' : res.status;
 
@@ -774,7 +780,7 @@ export default function ReservationsPage() {
 
                   const isExpanded = expandedId === res.reservationId;
                   // No Show only once the guest can no longer be expected (same rule as the server).
-                  const isPastCheckIn = Date.now() >= noShowAllowedFrom(res.checkInDate, res.property?.checkInTime).getTime();
+                  const isPastCheckIn = canMarkNoShow(res);
 
                   // 🌟 UPDATED: Actions with No Show support
                   let actions = null;
@@ -964,7 +970,7 @@ export default function ReservationsPage() {
           onClose={() => setBulkRooms(null)}
           onTakePayment={() => { setPaymentFor(bulkRooms.reservation); setBulkRooms(null); }}
           onDone={() => {
-            for (const key of ['reservations', 'rooms', 'dashboardActive', 'reservation', 'operationalOverview', 'dashboardGlance', 'owedAfterCheckout', 'checkoutAlerts']) queryClient.invalidateQueries({ queryKey: [key] });
+            for (const key of ['reservations', 'rooms', 'dashboardActive', 'reservation', 'operationalOverview', 'dashboardGlance', 'owedAfterCheckout', 'checkoutAlerts', 'myDay']) queryClient.invalidateQueries({ queryKey: [key] });
           }}
         />
       )}

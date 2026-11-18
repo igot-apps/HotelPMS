@@ -2,11 +2,12 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { AlarmClock, AlertTriangle, BedDouble, ChevronRight, Coins, Hotel, Loader2, LogIn, LogOut, Plus, Receipt, Sparkles, Wallet, X } from 'lucide-react';
+import { AlarmClock, AlertTriangle, BedDouble, ChevronRight, Coins, Eye, Hotel, Loader2, LogIn, LogOut, Plus, Receipt, Sparkles, Wallet, X } from 'lucide-react';
 import api from '../../lib/axios';
 import useCheckoutAlerts from '../../hooks/useCheckoutAlerts';
 import { formatDuration, formatTime } from '../../lib/stayTiming';
 import { bookingLink } from '../../lib/bookingLink';
+import TakePaymentDialog from '../reservations/TakePaymentDialog';
 import { useAuthStore } from '../../store/authStore';
 
 const cash = (value) => `GHS ${Number(value || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -33,6 +34,7 @@ export default function TodayAtAGlance() {
   });
   const [searchParams, setSearchParams] = useSearchParams();
   const [open, setOpen] = useState(() => searchParams.get('panel'));
+  const [sort, setSort] = useState('date');
   // Coming back from the Reservations page: reopen the same list once, then tidy the URL.
   useEffect(() => {
     if (!searchParams.get('panel')) return;
@@ -57,18 +59,27 @@ export default function TodayAtAGlance() {
     byBooking[stay.reservationId] = current ? { ...current, rooms: [...current.rooms, stay.roomNumber] } : { ...stay, rooms: [stay.roomNumber] };
     return byBooking;
   }, {}));
+  // Arrivals are counted per booking (one party at the desk); the room total is shown alongside.
+  const arrivingStays = [...data.arrivals.waiting, ...(data.arrivals.missed || [])];
+  const arrivingBookings = new Set(arrivingStays.map((stay) => stay.reservationId)).size;
+  // Today's arrivals total (bookings): those already checked in today plus those due today still to come.
+  const arrivedTodayBookings = new Set(data.arrivals.arrivedToday.map((stay) => stay.reservationId));
+  const dueTodayBookings = new Set(arrivingStays.filter((stay) => String(stay.checkInDate).slice(0, 10) === data.date).map((stay) => stay.reservationId));
+  const todayArrivalsTotal = new Set([...arrivedTodayBookings, ...dueTodayBookings]).size;
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const attention = data.rooms.needsCleaning.length + data.rooms.maintenance.length + data.approvalsPending;
   const tiles = [
     { key: 'overdue', icon: AlarmClock, tone: overdue.length ? 'danger' : 'neutral', label: 'Overdue checkouts', value: overdue.length, hint: overdue.length ? `Longest: ${formatDuration(Math.max(...overdue.map((a) => a.minutesLate)) * 60000)} late` : `Checkout time ${data.checkOutTime}` },
-    { key: 'arrivals', icon: LogIn, tone: missed.length ? 'warning' : 'primary', label: 'Arrivals to check in', value: data.arrivals.waiting.length, hint: [`${data.arrivals.arrivedToday.length} arrived today`, data.arrivals.unpaidCount ? `${data.arrivals.unpaidCount} unpaid` : '', missed.length ? `${missed.length} missed (no-show?)` : ''].filter(Boolean).join(' · ') },
+    { key: 'arrivals', icon: LogIn, tone: missed.length ? 'warning' : 'primary', label: 'Arrivals to check in', value: arrivingBookings, hint: [`${arrivingBookings === 1 ? 'booking' : 'bookings'} · ${plural(arrivingStays.length, 'room')}`, missed.length ? `${missed.length} past no-show time` : '', `${arrivedTodayBookings.size} of ${todayArrivalsTotal} arrived today`, `${(data.arrivals.upcoming || []).length} in next 7 days`, data.arrivals.unpaidCount ? `${data.arrivals.unpaidCount} unpaid` : ''].filter(Boolean).join(' · ') },
     { key: 'departures', icon: LogOut, tone: 'warning', label: 'Departures to check out', value: data.departures.waiting.length, hint: `${data.departures.departedToday.length} checked out today` },
     { key: 'inHouse', icon: Hotel, tone: 'primary', label: 'Guests in house', value: data.inHouse.length, hint: `${data.rooms.occupiedTonight} of ${data.rooms.total} rooms taken tonight` },
     { key: 'free', icon: BedDouble, tone: 'success', label: 'Rooms free tonight', value: data.rooms.freeTonight.length, hint: `${data.rooms.occupancyPercent}% occupancy` },
-    { key: 'collected', icon: Coins, tone: 'success', label: 'Collected today', value: cash(data.money.collectedToday), hint: `${data.money.payments.length} payment${data.money.payments.length === 1 ? '' : 's'}` },
+    // Hotel-wide takings (desk + online) are for the manager; receptionists see their own in "You today".
+    data.money.collectedToday !== null && { key: 'collected', icon: Coins, tone: 'success', label: 'Collected today', value: cash(data.money.collectedToday), hint: `${cash(data.money.collectedAtDesk)} at the desk · ${cash(data.money.collectedOnline)} online · ${data.money.payments.length} payment${data.money.payments.length === 1 ? '' : 's'}` },
     { key: 'unpaid', icon: Wallet, tone: data.money.unpaidInHouse.length ? 'warning' : 'neutral', label: 'Owed by guests in house', value: cash(data.money.inHouseOutstanding), hint: `${data.money.unpaidInHouse.length} booking${data.money.unpaidInHouse.length === 1 ? '' : 's'}${data.money.refundsPending ? ` · ${data.money.refundsPending} refund${data.money.refundsPending === 1 ? '' : 's'} pending` : ''}` },
     { key: 'owedAfter', icon: Receipt, tone: owedAfter.data?.bookings?.length ? 'danger' : 'neutral', label: 'Owed after checkout', value: owedAfter.isError ? '—' : cash(owedAfter.data?.total), hint: owedAfter.isError ? 'Could not load' : `${owedAfter.data?.bookings?.length || 0} guest${owedAfter.data?.bookings?.length === 1 ? '' : 's'} left owing` },
     { key: 'attention', icon: Sparkles, tone: attention ? 'warning' : 'neutral', label: 'Needs attention', value: attention, hint: `${data.rooms.needsCleaning.length} to clean · ${data.rooms.maintenance.length} maintenance${data.approvalsPending ? ` · ${data.approvalsPending} approvals` : ''}` },
-  ];
+  ].filter(Boolean);
 
   return (
     <section aria-labelledby="glance-title" className="space-y-3">
@@ -82,7 +93,15 @@ export default function TodayAtAGlance() {
       </div>
       {open && (
         <PanelContext.Provider value={open}>
-        <Drawer title={tiles.find((tile) => tile.key === open)?.label || ''} onClose={() => setOpen(null)}>
+        <SortContext.Provider value={sort}>
+        <Drawer title={tiles.find((tile) => tile.key === open)?.label || ''} onClose={() => setOpen(null)}
+          toolbar={SORTABLE.includes(open) && (
+            <label className="flex items-center gap-2 text-sm text-text-muted">Sort by
+              <select value={sort} onChange={(event) => setSort(event.target.value)} className="min-h-10 rounded-lg border border-border bg-background px-2 text-sm text-text">
+                {SORTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+          )}>
           {open === 'overdue' && <OverdueDetail rows={overdue} />}
           {open === 'arrivals' && <ArrivalsDetail data={data} missed={missed} />}
           {open === 'departures' && <DeparturesDetail data={data} />}
@@ -93,6 +112,7 @@ export default function TodayAtAGlance() {
           {open === 'owedAfter' && <OwedAfterCheckoutDetail query={owedAfter} />}
           {open === 'attention' && <AttentionDetail data={data} />}
         </Drawer>
+        </SortContext.Provider>
         </PanelContext.Provider>
       )}
     </section>
@@ -150,7 +170,7 @@ function Tile({ icon: Icon, tone, label, value, hint, onClick }) {
   );
 }
 
-function Drawer({ title, onClose, children }) {
+function Drawer({ title, onClose, children, toolbar }) {
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/30" role="dialog" aria-modal="true" aria-label={title} onClick={onClose}>
       <aside onClick={(event) => event.stopPropagation()} className="flex h-full w-full max-w-md flex-col bg-surface shadow-2xl">
@@ -158,6 +178,7 @@ function Drawer({ title, onClose, children }) {
           <h2 className="text-lg font-bold text-text">{title}</h2>
           <button type="button" aria-label="Close" onClick={onClose} className="flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-border text-text"><X size={18} /></button>
         </div>
+        {toolbar && <div className="border-b border-border px-4 py-2">{toolbar}</div>}
         <div className="flex-1 space-y-4 overflow-y-auto p-4">{children}</div>
       </aside>
     </div>
@@ -178,7 +199,7 @@ const ACTION_TONES = {
   success: 'bg-success-600 text-white hover:bg-success-700',
   warning: 'border border-warning-300 bg-warning-50 text-warning-700 hover:bg-warning-100',
 };
-const ACTION_ICONS = { checkin: LogIn, checkout: LogOut, pay: Wallet, book: Plus };
+const ACTION_ICONS = { view: Eye, book: Plus };
 
 // A row opens the booking; its action buttons jump straight into that step (check in, check out,
 // take payment) on the Reservations page, where the usual confirmations and checks run.
@@ -203,12 +224,26 @@ function Row({ to, title, code, lines = [], badge, badgeTone = 'neutral', action
   );
 }
 
-function OverdueDetail({ rows }) {
+// Sorting for the lists in a pop-up (chosen in the pop-up header).
+const SortContext = createContext('date');
+const SORTS = [['date', 'Date'], ['room', 'Room'], ['guest', 'Guest name']];
+const SORTABLE = ['overdue', 'arrivals', 'departures', 'inHouse', 'unpaid'];
+function useSorted(rows, dateKey) {
+  const sort = useContext(SortContext);
+  const room = (row) => String(row.roomNumber ?? row.rooms?.[0] ?? '');
+  return [...rows].sort((a, b) => (sort === 'room' ? room(a).localeCompare(room(b), undefined, { numeric: true })
+    : sort === 'guest' ? String(a.guestName || '').localeCompare(String(b.guestName || ''))
+    : new Date(a[dateKey] || 0) - new Date(b[dateKey] || 0)));
+}
+const stayDates = (stay) => `${shortDate(stay.checkInDate)} → ${shortDate(stay.checkOutDate)} · ${stay.nightsBooked ?? ''}${stay.nightsBooked ? ` night${stay.nightsBooked === 1 ? '' : 's'}` : ''}`.replace(/ · $/, '');
+
+function OverdueDetail({ rows: unsorted }) {
+  const rows = useSorted(unsorted, 'expectedCheckoutAt');
   return (
     <Group title="Guests past checkout time" count={rows.length} empty="No checkouts are overdue.">
       {rows.map((alert) => (
         <Row key={alert.reservationRoomId} to={reservationLink(alert)}
-          actions={[{ label: 'Check out', to: reservationLink(alert, 'checkout'), icon: 'checkout' }, alert.balanceDue > 0 && { label: 'Take payment', to: reservationLink(alert, 'pay'), tone: 'warning', icon: 'pay' }]}
+          actions={[{ label: 'View reservation', to: reservationLink(alert), icon: 'view' }]}
           title={`Room ${alert.roomNumber || '—'} · ${alert.guestName}`} code={alert.confirmationCode} badge={`${formatDuration(alert.minutesLate * 60000)} late`} badgeTone="danger"
           lines={[
             `Expected out ${formatTime(new Date(alert.expectedCheckoutAt))} on ${new Date(alert.expectedCheckoutAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`,
@@ -221,12 +256,15 @@ function OverdueDetail({ rows }) {
   );
 }
 
-function ArrivalsDetail({ data, missed }) {
-  const [noShow, setNoShow] = useState(null);
+function ArrivalsDetail({ data, missed: missedUnsorted }) {
+  const missed = useSorted(missedUnsorted, 'checkInDate');
+  const today = useSorted(data.arrivals.waiting, 'checkInDate');
+  const upcoming = useSorted(data.arrivals.upcoming || [], 'checkInDate');
+  const arrived = useSorted(data.arrivals.arrivedToday, 'actualCheckIn');
   return (
     <>
       {missed.length > 0 && (
-        <Group title="Missed arrival — guest didn't come" count={missed.length}>
+        <Group title="Still expected — past no-show time" count={missed.length}>
           {missed.map((stay) => (
             <li key={stay.reservationId} className="rounded-lg border border-warning-200 bg-warning-50/40 p-3">
               {stay.confirmationCode && <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{stay.confirmationCode}</p>}
@@ -234,97 +272,64 @@ function ArrivalsDetail({ data, missed }) {
               <p className="mt-0.5 text-sm text-text-muted">Room {stay.rooms.filter(Boolean).join(', ') || 'unassigned'} · arrival {shortDate(stay.checkInDate)} · {stay.nightsLeft} night{stay.nightsLeft === 1 ? '' : 's'} still held</p>
               <p className="text-sm text-text-muted">{stay.amountPaid > 0 ? `Paid ${cash(stay.amountPaid)}` : 'Nothing paid'}{stay.source === 'Website' ? ' · online booking' : ''}</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                <Link to={withBack(reservationLink(stay, 'checkin'), 'arrivals')} className="min-h-10 rounded-lg bg-primary-600 px-3 py-2 text-xs font-semibold text-white">Check in</Link>
-                <button type="button" onClick={() => setNoShow(stay)} className="min-h-10 rounded-lg border border-warning-300 px-3 py-2 text-xs font-semibold text-warning-800">Mark no-show</button>
+                <Link to={withBack(reservationLink(stay), 'arrivals')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white hover:bg-primary-700"><Eye size={16} /> View reservation</Link>
               </div>
             </li>
           ))}
         </Group>
       )}
-      {noShow && <NoShowDialog stay={noShow} onClose={() => setNoShow(null)} />}
-      <Group title="Expected to check in" count={data.arrivals.waiting.length} empty="Everyone expected today has arrived.">
-        {data.arrivals.waiting.map((stay) => (
+      <Group title="Expected today" count={today.length} empty={missed.length ? "No other arrivals due today." : "Everyone expected today has arrived."}>
+        {today.map((stay) => (
           <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || 'unassigned'} · ${stay.guestName}`} code={stay.confirmationCode}
-            actions={[{ label: 'Check in', to: reservationLink(stay, 'checkin'), tone: 'success', icon: 'checkin' }, stay.balanceDue > 0 && { label: 'Take payment', to: reservationLink(stay, 'pay'), tone: 'warning', icon: 'pay' }]}
+            actions={[{ label: 'View reservation', to: reservationLink(stay), icon: 'view' }]}
             badge={stay.late ? `Due ${shortDate(stay.checkInDate)}` : stay.source === 'Website' ? 'Online' : null} badgeTone={stay.late ? 'danger' : 'primary'}
-            lines={[`${stay.nightsBooked} night${stay.nightsBooked === 1 ? '' : 's'} · leaves ${shortDate(stay.checkOutDate)}`, stay.balanceDue > 0 ? `Booking balance: ${cash(stay.balanceDue)}` : 'Paid in full']} />
+            lines={[stayDates(stay), stay.balanceDue > 0 ? `Booking balance: ${cash(stay.balanceDue)}` : 'Paid in full']} />
         ))}
       </Group>
-      <Group title="Arrived today" count={data.arrivals.arrivedToday.length} empty="No check-ins yet today.">
-        {data.arrivals.arrivedToday.map((stay) => <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || '—'} · ${stay.guestName}`} code={stay.confirmationCode} lines={[`Checked in at ${clock(stay.actualCheckIn)}`]} />)}
+      <Group title="Expected in the next 7 days" count={upcoming.length} empty="No arrivals booked for the next 7 days.">
+        {upcoming.map((stay) => (
+          <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || 'unassigned'} · ${stay.guestName}`} code={stay.confirmationCode}
+            badge={`Arrives ${shortDate(stay.checkInDate)}`} badgeTone="primary"
+            actions={[{ label: 'View reservation', to: reservationLink(stay), icon: 'view' }]}
+            lines={[stayDates(stay), stay.balanceDue > 0 ? `Booking balance: ${cash(stay.balanceDue)}` : 'Paid in full']} />
+        ))}
+      </Group>
+      <Group title="Arrived today" count={arrived.length} empty="No check-ins yet today.">
+        {arrived.map((stay) => <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || '—'} · ${stay.guestName}`} code={stay.confirmationCode} lines={[`Checked in at ${clock(stay.actualCheckIn)}`, stayDates(stay)]} />)}
       </Group>
     </>
-  );
-}
-
-// Reuses the existing no-show action; payments stay on the booking (refunds go through Refunds).
-function NoShowDialog({ stay, onClose }) {
-  const queryClient = useQueryClient();
-  const [reason, setReason] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const confirm = async (event) => {
-    event.preventDefault();
-    if (busy) return;
-    setBusy(true);
-    setError('');
-    try {
-      await api.patch(`/reservations/${stay.reservationId}/no-show`, { reason }, { skipErrorToast: true });
-      for (const key of ['dashboardGlance', 'reservations', 'rooms', 'operationalOverview', 'availability']) queryClient.invalidateQueries({ queryKey: [key] });
-      toast.success(`${stay.guestName} marked as a no-show. Rooms released.`);
-      onClose();
-    } catch (err) {
-      setError(err.response?.data?.message || 'Could not mark the no-show.');
-    } finally { setBusy(false); }
-  };
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-3" role="dialog" aria-modal="true" aria-labelledby="no-show-title">
-      <form onSubmit={confirm} className="w-full max-w-md space-y-4 rounded-xl bg-surface p-5 shadow-xl">
-        <h2 id="no-show-title" className="text-lg font-bold text-text">Mark {stay.guestName} as a no-show?</h2>
-        <ul className="list-inside list-disc space-y-1 text-sm text-text-muted">
-          <li>Room {stay.rooms.filter(Boolean).join(', ') || 'unassigned'} is released for the {stay.nightsLeft} remaining night{stay.nightsLeft === 1 ? '' : 's'}.</li>
-          <li>{stay.amountPaid > 0 ? `${cash(stay.amountPaid)} paid stays on the booking. Refund it through Refunds only if your policy allows.` : 'Nothing has been paid.'}</li>
-          <li>If this is a mistake, use Restore on the reservation.</li>
-        </ul>
-        <label className="block text-sm font-medium text-text">Reason (optional)
-          <input maxLength={300} value={reason} disabled={busy} onChange={(event) => setReason(event.target.value)} placeholder="e.g. Phone unreachable, did not arrive" className="mt-1 min-h-11 w-full rounded-lg border border-border bg-background p-2 text-sm text-text" />
-        </label>
-        {error && <p role="alert" className="rounded-lg bg-danger-50 p-3 text-sm text-danger-700">{error}</p>}
-        <div className="flex justify-end gap-2">
-          <button type="button" disabled={busy} onClick={onClose} className="min-h-11 rounded-lg border border-border px-4 py-2 text-sm text-text">Cancel</button>
-          <button disabled={busy} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-warning-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy && <Loader2 size={16} className="animate-spin" />} Mark no-show</button>
-        </div>
-      </form>
-    </div>
   );
 }
 
 function DeparturesDetail({ data }) {
+  const due = useSorted(data.departures.waiting, 'checkOutDate');
+  const left = useSorted(data.departures.departedToday, 'actualCheckOut');
   return (
     <>
-      <Group title="Due to check out" count={data.departures.waiting.length} empty="No one else is due to leave today.">
-        {data.departures.waiting.map((stay) => (
+      <Group title="Due to check out" count={due.length} empty="No one else is due to leave today.">
+        {due.map((stay) => (
           <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || '—'} · ${stay.guestName}`} code={stay.confirmationCode}
-            actions={[{ label: 'Check out', to: reservationLink(stay, 'checkout'), icon: 'checkout' }, stay.balanceDue > 0 && { label: 'Take payment', to: reservationLink(stay, 'pay'), tone: 'warning', icon: 'pay' }]}
+            actions={[{ label: 'View reservation', to: reservationLink(stay), icon: 'view' }]}
             badge={stay.minutesLate > 0 ? `${formatDuration(stay.minutesLate * 60000)} late` : `By ${formatTime(new Date(stay.expectedCheckoutAt))}`} badgeTone={stay.minutesLate > 0 ? 'danger' : 'warning'}
-            lines={[stay.balanceDue > 0 ? `Booking balance: ${cash(stay.balanceDue)}` : 'Paid in full']} />
+            lines={[stayDates(stay), stay.balanceDue > 0 ? `Booking balance: ${cash(stay.balanceDue)}` : 'Paid in full']} />
         ))}
       </Group>
-      <Group title="Checked out today" count={data.departures.departedToday.length} empty="No checkouts yet today.">
-        {data.departures.departedToday.map((stay) => <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || '—'} · ${stay.guestName}`} code={stay.confirmationCode} lines={[`Left at ${clock(stay.actualCheckOut)}`, stay.balanceDue > 0 ? `Booking still owes ${cash(stay.balanceDue)}` : '']} actions={[stay.balanceDue > 0 && { label: 'Take payment', to: reservationLink(stay, 'pay'), tone: 'warning', icon: 'pay' }]} />)}
+      <Group title="Checked out today" count={left.length} empty="No checkouts yet today.">
+        {left.map((stay) => <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || '—'} · ${stay.guestName}`} code={stay.confirmationCode} lines={[`Left at ${clock(stay.actualCheckOut)}`, stay.balanceDue > 0 ? `Booking still owes ${cash(stay.balanceDue)}` : '']} actions={[{ label: 'View reservation', to: reservationLink(stay), icon: 'view' }]} />)}
       </Group>
     </>
   );
 }
 
-function InHouseDetail({ rows }) {
+function InHouseDetail({ rows: unsorted }) {
+  const rows = useSorted(unsorted, 'checkOutDate');
   return (
     <Group title="Checked-in guests" count={rows.length} empty="No guests are checked in.">
       {rows.map((stay) => (
         <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || '—'} · ${stay.guestName}`} code={stay.confirmationCode}
           badge={stay.minutesLate > 0 ? 'Overdue' : null} badgeTone="danger"
-          actions={[{ label: 'Check out', to: reservationLink(stay, 'checkout'), icon: 'checkout' }, stay.balanceDue > 0 && { label: 'Take payment', to: reservationLink(stay, 'pay'), tone: 'warning', icon: 'pay' }]}
-          lines={[`Night ${Math.min(stay.nightsUsed + 1, stay.nightsBooked)} of ${stay.nightsBooked} · leaves ${shortDate(stay.checkOutDate)}`, stay.actualCheckIn ? `In room for ${formatDuration(Date.now() - new Date(stay.actualCheckIn).getTime())}` : '', stay.balanceDue > 0 ? `Booking balance: ${cash(stay.balanceDue)}` : 'Paid in full']} />
+          actions={[{ label: 'View reservation', to: reservationLink(stay), icon: 'view' }]}
+          lines={[`Night ${Math.min(stay.nightsUsed + 1, stay.nightsBooked)} of ${stay.nightsBooked} · ${shortDate(stay.checkInDate)} → ${shortDate(stay.checkOutDate)}`, stay.actualCheckIn ? `In room for ${formatDuration(Date.now() - new Date(stay.actualCheckIn).getTime())}` : '', stay.balanceDue > 0 ? `Booking balance: ${cash(stay.balanceDue)}` : 'Paid in full']} />
       ))}
     </Group>
   );
@@ -356,10 +361,11 @@ function CollectedDetail({ money }) {
 }
 
 function UnpaidDetail({ money }) {
+  const unpaidRows = useSorted(money.unpaidInHouse, 'checkOutDate');
   return (
     <>
       <Group title="In-house guests with a balance" count={money.unpaidInHouse.length} empty="Every in-house booking is paid in full.">
-        {money.unpaidInHouse.map((stay) => <Row key={stay.reservationId} to={reservationLink(stay)} actions={[stay.balanceDue > 0 && { label: 'Take payment', to: reservationLink(stay, 'pay'), tone: 'warning', icon: 'pay' }]} title={`${cash(stay.balanceDue)} · ${stay.guestName}`} code={stay.confirmationCode} lines={[`Room ${stay.roomNumber || '—'} · leaves ${shortDate(stay.checkOutDate)}`]} />)}
+        {unpaidRows.map((stay) => <Row key={stay.reservationId} to={reservationLink(stay)} actions={[{ label: 'View reservation', to: reservationLink(stay), icon: 'view' }]} title={`${cash(stay.balanceDue)} · ${stay.guestName}`} code={stay.confirmationCode} lines={[`Room ${stay.roomNumber || '—'} · leaves ${shortDate(stay.checkOutDate)}`]} />)}
       </Group>
       {money.refundsPending > 0 && <Link to="/refunds" className="block rounded-lg border border-border p-3 text-sm font-semibold text-primary-700 hover:bg-primary-50/40">{money.refundsPending} refund{money.refundsPending === 1 ? '' : 's'} waiting · open Refunds</Link>}
     </>
@@ -369,6 +375,8 @@ function UnpaidDetail({ money }) {
 // Guests who left still owing money. The amount is the booking's own balance, so a payment
 // recorded on the booking removes it from this list.
 function OwedAfterCheckoutDetail({ query }) {
+  // Collecting a debt is a single payment on the booking, so it can be taken right here.
+  const [paying, setPaying] = useState(null);
   if (query.isLoading) return <p className="flex items-center gap-2 text-sm text-text-muted"><Loader2 size={16} className="animate-spin" /> Loading…</p>;
   if (query.isError) return <p className="text-sm text-danger-700">Could not load this list. Please try again.</p>;
   const rows = query.data?.bookings || [];
@@ -382,12 +390,19 @@ function OwedAfterCheckoutDetail({ query }) {
             <span className="mt-0.5 block text-sm text-text-muted">Reason: {row.reason || 'Not recorded'}</span>
             <span className="mt-0.5 block text-sm text-text-muted">Approved by: {row.approvedBy || 'Not recorded'}</span>
           </Link>
-          <div className="mt-2 flex gap-2">
-            <Link to={withBack(reservationLink(row, 'pay'), 'owedAfter')} className="inline-flex min-h-10 items-center rounded-lg bg-primary-600 px-3 text-sm font-semibold text-text-inverted hover:bg-primary-700">Take payment</Link>
-            <Link to={`/reservations/${row.reservationId}`} className="inline-flex min-h-10 items-center rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50">View payments</Link>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button type="button" onClick={() => setPaying(row)} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-text-inverted hover:bg-primary-700"><Wallet size={16} /> Take payment</button>
+            <Link to={withBack(reservationLink(row), 'owedAfter')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50"><Eye size={16} /> View reservation</Link>
           </div>
         </li>
       ))}
+      {paying && (
+        <TakePaymentDialog
+          key={paying.reservationId}
+          reservation={{ reservationId: paying.reservationId, confirmationCode: paying.confirmationCode, guestNameSnapshot: paying.guestName, totalAmount: paying.totalAmount, amountPaid: paying.amountPaid }}
+          onClose={() => setPaying(null)}
+        />
+      )}
     </Group>
   );
 }

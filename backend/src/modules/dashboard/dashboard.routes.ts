@@ -3,6 +3,7 @@
    import { prisma } from '../../shared/utils/prisma';
    import { getDashboardGlance } from './glance.service';
    import { getOwedAfterCheckout } from './owed-after-checkout.service';
+   import { getMyDay } from './my-day.service';
    import * as dashboardController from './dashboard.controller';
 
    // 🚨 TRACKING BEACON
@@ -32,6 +33,18 @@
        return res.json({ success: true, data: await getOwedAfterCheckout(user.propertyId) });
      } catch {
        return res.status(400).json({ success: false, message: 'Could not load guests who still owe money.' });
+     }
+   });
+
+   // What the signed-in staff member handled today (their own figures only).
+   router.get('/my-day', async (req: AuthRequest, res) => {
+     try {
+       const user = req.user as any;
+       const account = await prisma.user.findFirst({ where: { userId: user.userId, propertyId: user.propertyId, isActive: true }, include: { role: true } });
+       if (!account || !['Manager', 'Receptionist'].includes(account.role.roleName)) return res.status(403).json({ success: false, message: 'Front desk staff required.' });
+       return res.json({ success: true, data: await getMyDay(user.userId, user.propertyId) });
+     } catch {
+       return res.status(400).json({ success: false, message: 'Could not load your figures for today.' });
      }
    });
 

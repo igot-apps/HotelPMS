@@ -18,6 +18,7 @@ export async function getDashboardGlance(propertyId: number, role: string, now =
   const date = hotelDate(now, timeZone);
   const today = new Date(`${date}T00:00:00.000Z`);
   const tomorrow = new Date(today.getTime() + DAY);
+  const weekAhead = new Date(today.getTime() + 8 * DAY); // arrivals expected tomorrow up to 7 days ahead
   const { gte: start, lt: end } = dayBounds(date, timeZone);
   const reservationInclude = { reservation: { select: { reservationId: true, confirmationCode: true, guestNameSnapshot: true, totalAmount: true, amountPaid: true, source: true, platformGuest: { select: { fullName: true } }, propertyGuest: { select: { fullName: true } } } }, room: { select: { roomNumber: true } } };
 
@@ -25,7 +26,7 @@ export async function getDashboardGlance(propertyId: number, role: string, now =
     prisma.reservationRoom.findMany({
       where: { reservation: { propertyId, status: { in: ACTIVE } }, OR: [
         { status: 'CheckedIn' },
-        { status: 'Reserved', checkInDate: { lt: tomorrow } },
+        { status: 'Reserved', checkInDate: { lt: weekAhead } }, // today, overdue and the next 7 days
         { status: 'CheckedOut', actualCheckOut: { gte: start, lt: end } },
         { status: 'CheckedIn', actualCheckIn: { gte: start, lt: end } },
       ] },
@@ -51,12 +52,14 @@ export async function getDashboardGlance(propertyId: number, role: string, now =
     const dueAt = checkoutDueAt(stay.checkOutDate, property.checkOutTime, timeZone);
     return { ...row(stay), nightsUsed: Math.min(nights(stay.checkInDate, today), nights(stay.checkInDate, stay.checkOutDate)), expectedCheckoutAt: dueAt, minutesLate: minutesLate(dueAt, now) };
   });
-  const arrivalsWaiting = stays.filter(s => s.status === 'Reserved').map(stay => {
+  const arrivalsWaiting = stays.filter(s => s.status === 'Reserved' && s.checkInDate < tomorrow).map(stay => {
     // Past the no-show cut-off (arrival day after check-in time + grace, or a later day): likely a no-show.
     const noShowFrom = noShowAllowedFrom(stay.checkInDate, property.checkInTime, timeZone);
     return { ...row(stay), late: stay.checkInDate < today, missed: now >= noShowFrom, noShowFrom, amountPaid: money(stay.reservation.amountPaid), daysMissed: nights(stay.checkInDate, today), nightsLeft: nights(stay.checkInDate < today ? today : stay.checkInDate, stay.checkOutDate) };
   });
   const missedArrivals = arrivalsWaiting.filter(stay => stay.missed);
+  // Expected over the next 7 days (not today), soonest first.
+  const upcoming = stays.filter(s => s.status === 'Reserved' && s.checkInDate >= tomorrow).map(row).sort((a, b) => +new Date(a.checkInDate) - +new Date(b.checkInDate));
   const expectedArrivals = arrivalsWaiting.filter(stay => !stay.missed);
   const arrivedToday = stays.filter(s => s.status === 'CheckedIn' && s.actualCheckIn && s.actualCheckIn >= start && s.actualCheckIn < end).map(row);
   const departuresWaiting = inHouse.filter(stay => new Date(stay.checkOutDate) <= today);
@@ -79,7 +82,7 @@ export async function getDashboardGlance(propertyId: number, role: string, now =
 
   return {
     date, timeZone, generatedAt: now, checkOutTime: property.checkOutTime || '11:00',
-    arrivals: { waiting: expectedArrivals, missed: missedArrivals, arrivedToday, unpaidCount: expectedArrivals.filter(stay => stay.balanceDue > 0).length },
+    arrivals: { waiting: expectedArrivals, missed: missedArrivals, arrivedToday, upcoming, unpaidCount: expectedArrivals.filter(stay => stay.balanceDue > 0).length },
     departures: { waiting: departuresWaiting, departedToday },
     inHouse,
     onlineBlocker,
@@ -90,8 +93,11 @@ export async function getDashboardGlance(propertyId: number, role: string, now =
       maintenance: rooms.filter(r => r.operationalStatus === 'Maintenance').map(r => ({ roomId: r.roomId, roomNumber: r.roomNumber, roomType: r.roomType.typeName, maintenanceReason: r.maintenanceReason })),
     },
     money: {
-      collectedToday: money(payments.reduce((sum, p) => sum + Number(p.amount), 0)),
-      payments: payments.map(p => ({ paymentId: p.paymentId, amount: money(p.amount), method: p.paymentMethod, at: p.paymentDate, receivedBy: p.receiver?.fullName || (p.gatewayReference ? 'Online' : null), reservationId: p.reservation.reservationId, confirmationCode: p.reservation.confirmationCode, guestName: p.reservation.guestNameSnapshot || 'Guest' })),
+      // Hotel-wide collections are for the manager only; receptionists see their own takings ("You today").
+      collectedToday: role === 'Manager' ? money(payments.reduce((sum, p) => sum + Number(p.amount), 0)) : null,
+      collectedAtDesk: role === 'Manager' ? money(payments.filter(p => !p.gatewayReference).reduce((sum, p) => sum + Number(p.amount), 0)) : null,
+      collectedOnline: role === 'Manager' ? money(payments.filter(p => p.gatewayReference).reduce((sum, p) => sum + Number(p.amount), 0)) : null,
+      payments: role !== 'Manager' ? [] : payments.map(p => ({ paymentId: p.paymentId, amount: money(p.amount), method: p.paymentMethod, at: p.paymentDate, receivedBy: p.receiver?.fullName || (p.gatewayReference ? 'Online' : null), reservationId: p.reservation.reservationId, confirmationCode: p.reservation.confirmationCode, guestName: p.reservation.guestNameSnapshot || 'Guest' })),
       inHouseOutstanding: money([...unpaid.values()].reduce((sum, stay) => sum + stay.balanceDue, 0)),
       unpaidInHouse: [...unpaid.values()],
       refundsPending,

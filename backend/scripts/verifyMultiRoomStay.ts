@@ -7,6 +7,7 @@ import { prisma } from '../src/shared/utils/prisma';
 import { transitionStay } from '../src/modules/reservation/recovery.service';
 import { recordPayment } from '../src/modules/payment/payment.service';
 import { getOwedAfterCheckout } from '../src/modules/dashboard/owed-after-checkout.service';
+import { getMyDay } from '../src/modules/dashboard/my-day.service';
 
 async function main() {
   assert(['localhost', '127.0.0.1'].includes(new URL(process.env.DATABASE_URL!).hostname), 'Local database only.');
@@ -65,6 +66,14 @@ async function main() {
     assert.equal(owed.bookings[0].balanceDue, 150);
     assert.equal(owed.bookings[0].reason, 'Guest promised to pay later.');
     console.log('3 ok: last room needed payment or a reason; GHS 150 left owing, listed under Owed after checkout');
+
+    // "You today": this receptionist checked in 1 booking (3 rooms), checked it out (3 rooms), took 2 payments.
+    const myDay = await getMyDay(user.userId, hotel.propertyId);
+    assert.deepEqual(myDay.checkIns, { bookings: 1, rooms: 3 });
+    assert.deepEqual(myDay.checkOuts, { bookings: 1, rooms: 3 });
+    assert.deepEqual(myDay.payments, { count: 2, total: 150 });
+    assert.equal(myDay.bookingsMade, 0);
+    console.log('4 ok: "You today" shows 1 booking / 3 rooms checked in and out, 2 payments, GHS 150');
 
     console.log('\nAll multi-room checks passed.');
   } finally {

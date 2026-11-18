@@ -2,6 +2,8 @@ import { useState } from 'react';
 import CorrectionRequests from '../components/reservations/CorrectionRequests';
 import CheckoutAlerts from '../components/reservations/CheckoutAlerts';
 import TodayAtAGlance from '../components/dashboard/TodayAtAGlance';
+import MyDayCard from '../components/dashboard/MyDayCard';
+import BookingSearch from '../components/dashboard/BookingSearch';
 import ManagerDashboard from '../components/dashboard/ManagerDashboard';
 import ApprovalSummary from '../components/reservations/ApprovalSummary';
 import RefundSummary from '../components/reservations/RefundSummary';
@@ -129,6 +131,7 @@ export default function DashboardPage() {
         <button disabled={isFetching || !propertyId} onClick={() => refetch()} className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-text disabled:opacity-50"><RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />Refresh</button>
       </div>
     </header>
+    {user?.propertyId && ['Manager', 'Receptionist'].includes(user?.role) && <BookingSearch />}
     {canSwitchView && (
       <div role="tablist" aria-label="Choose dashboard" className="inline-flex w-full rounded-xl border border-border bg-surface p-1 shadow-sm sm:w-auto">
         {[['frontDesk', 'Front desk'], ['manager', 'Manager']].map(([key, label]) => (
@@ -159,6 +162,7 @@ export default function DashboardPage() {
     )}
     {managerView ? <ManagerDashboard /> : <>
     {frontDesk && <TodayAtAGlance />}
+    {frontDesk && <MyDayCard />}
     {user?.role === 'Receptionist' && <RefundSummary />}
     {user?.propertyId && (user.role === 'Manager' ? <ApprovalSummary /> : <CorrectionRequests />)}
 
