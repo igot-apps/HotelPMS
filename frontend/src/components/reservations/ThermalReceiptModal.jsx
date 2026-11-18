@@ -1,6 +1,7 @@
 import { X, Printer } from 'lucide-react';
 import { formatPaymentMethod } from '../../utils/payment';
 
+const MAX_PAYMENT_LINES = 3;
 export default function ThermalReceiptModal({ isOpen, onClose, reservation, stats }) {
   if (!isOpen || !reservation) return null;
 
@@ -12,6 +13,9 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
   const formatTime = (dateStr) => new Date(dateStr).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const formatCurrency = (val) => parseFloat(val || 0).toFixed(2);
   const receiptReference = reservation.confirmationCode || `#${reservation.reservationId?.slice(0, 8).toUpperCase()}`;
+  // Thermal paper is a short slip: only money that actually moved, newest few lines.
+  const receiptPayments = (reservation.payments || []).filter(p => p.status === 'Completed' || p.status === 'Refunded');
+  const hiddenPayments = Math.max(0, receiptPayments.length - MAX_PAYMENT_LINES);
   const getRoomNights = (room) => Math.max(0, Math.ceil(
     (new Date(room.checkOutDate || reservation.checkOutDate) - new Date(room.checkInDate || reservation.checkInDate))
       / (1000 * 60 * 60 * 24)
@@ -59,8 +63,8 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
             {/* Hotel Header */}
             <div className="text-center mb-2">
               <h1 className="text-base font-bold uppercase tracking-wider">{reservation.property?.propertyName || 'Hotel PMS'}</h1>
-              <p className="text-[10px]">{reservation.property?.address || 'Address'}</p>
-              <p className="text-[10px]">{reservation.property?.primaryPhone || 'Tel: 000-000-000'}</p>
+              {reservation.property?.address && <p className="text-[10px]">{reservation.property.address}</p>}
+              {reservation.property?.primaryPhone && <p className="text-[10px]">Tel: {reservation.property.primaryPhone}</p>}
             </div>
 
             <div className="border-t border-dashed border-black my-2"></div>
@@ -134,13 +138,14 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
             <div className="border-t border-dashed border-black my-2"></div>
 
             {/* Payment Details */}
-            {reservation.payments?.length > 0 && (
+            {receiptPayments.length > 0 && (
               <>
-                <p className="text-[11px] font-bold mb-1">PAYMENT HISTORY:</p>
-                {reservation.payments.map(p => (
+                <p className="text-[11px] font-bold mb-1">PAYMENTS:</p>
+                {hiddenPayments > 0 && <p className="text-[9px] mb-1">+ {hiddenPayments} earlier payment{hiddenPayments === 1 ? '' : 's'} (see full receipt)</p>}
+                {receiptPayments.slice(-MAX_PAYMENT_LINES).map(p => (
                   <div key={p.paymentId} className="text-[11px] mb-1">
                     <div className="flex justify-between">
-                      <span>{formatDate(p.paymentDate)} ({formatPaymentMethod(p.paymentMethod)} · {p.status})</span>
+                      <span>{formatDate(p.paymentDate)} {formatPaymentMethod(p.paymentMethod)}{p.status === 'Refunded' ? ' (refunded)' : ''}</span>
                       <span>{formatCurrency(p.amount)}</span>
                     </div>
                     {p.gatewayReference && <p className="pl-2 text-[9px]">Ref: {p.gatewayReference}</p>}
@@ -151,10 +156,8 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
             )}
 
             {/* Footer */}
-            <div className="text-center text-[10px] mt-4 mb-2">
+            <div className="text-center text-[10px] mt-3 mb-1">
               <p className="font-bold">THANK YOU FOR STAYING WITH US!</p>
-              <p>Please retain this receipt for your records.</p>
-              <p className="mt-2">*** HAVE A GREAT DAY ***</p>
             </div>
           </div>
         </div>

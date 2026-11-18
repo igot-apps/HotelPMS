@@ -143,13 +143,24 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
   // Quick Add Guest Handler
   const handleQuickAddGuest = async (e) => {
     e.preventDefault();
-    if (!newGuestData.fullName.trim()) {
-      toast.error('Full Name is required.');
+    const name = newGuestData.fullName.trim().replace(/s+/g, " ");
+    const phone = newGuestData.phone.trim();
+    const email = newGuestData.email.trim();
+    if (name.length < 2) {
+      toast.error('Enter the guest\x27s full name (at least 2 letters).');
+      return;
+    }
+    if (phone && !/^0d{9}$/.test(phone)) {
+      toast.error('Phone number must be 10 digits starting with 0, or leave it empty.');
+      return;
+    }
+    if (email && !/^[^s@]+@[^s@]+.[^s@]{2,}$/.test(email)) {
+      toast.error('That email address doesn\x27t look right. Fix it or leave it empty.');
       return;
     }
     setIsSavingGuest(true);
     try {
-      const res = await createGuest(newGuestData);
+      const res = await createGuest({ ...newGuestData, fullName: name, phone, email, idNumber: newGuestData.idNumber.trim() });
       const createdGuest = res.data.data;
       setGuests(prev => [createdGuest, ...prev]);
       // 🌟 CHANGED: Set propertyGuestId
@@ -294,6 +305,18 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
   const handleSubmit = (e) => {
     e.preventDefault();
     const exactTotal = parseFloat(totalDue.toFixed(2));
+    if (formData.recordPayment) {
+      const raw = String(formData.amountPaid ?? '').trim();
+      const amount = Number(raw);
+      if (!raw || !/^d+(.d{1,2})?$/.test(raw) || amount <= 0) {
+        toast.error('Enter a payment amount above 0 (up to 2 decimal places), or untick "Record Initial Payment now".');
+        return;
+      }
+      if (amount > exactTotal) {
+        toast.error(`Payment can't be more than the total due (GH₵ ${exactTotal.toFixed(2)}).`);
+        return;
+      }
+    }
     const exactPaid = formData.recordPayment ? parseFloat(parseFloat(formData.amountPaid || 0).toFixed(2)) : 0;
     
     const payload = {
@@ -592,7 +615,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                 </button>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-text mb-1.5">Booking Source</label>
+                <label className="block text-sm font-semibold text-text mb-1.5">Booking Source <span className="font-normal text-text-muted">(optional)</span></label>
                 <select name="source" value={formData.source} onChange={handleChange} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition">
                   <option value="Walk-in">Walk-in</option>
                   <option value="Phone">Phone</option>
@@ -600,8 +623,8 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-text mb-1.5">Notes</label>
-                <textarea name="notes" value={formData.notes} onChange={handleChange} rows="2" className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition resize-none" placeholder="Special requests..." />
+                <label className="block text-sm font-semibold text-text mb-1.5">Notes <span className="font-normal text-text-muted">(optional)</span></label>
+                <textarea name="notes" value={formData.notes} onChange={handleChange} rows="2" maxLength={500} placeholder="e.g. late arrival, extra bed" className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition resize-none" placeholder="Special requests..." />
               </div>
             </div>
           )}
@@ -679,6 +702,10 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                           <input 
                             type="number" 
                             step="0.01" 
+                            min="0.01"
+                            max={totalDue.toFixed(2)}
+                            inputMode="decimal"
+                            onKeyDown={(e) => { if (['-', '+', 'e', 'E'].includes(e.key)) e.preventDefault(); }}
                             name="amountPaid" 
                             value={formData.amountPaid} 
                             onChange={handleChange} 
@@ -706,7 +733,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-text-muted mb-1">Reference (optional)</label>
-                        <input type="text" name="gatewayReference" value={formData.gatewayReference} onChange={handleChange} placeholder="e.g. transaction ID" className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
+                        <input type="text" name="gatewayReference" maxLength={60} value={formData.gatewayReference} onChange={handleChange} placeholder="e.g. transaction ID" className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
                       </div>
                     </div>
                     <div className="flex justify-between items-center p-3 bg-secondary-50 rounded-lg border border-border">
@@ -759,24 +786,24 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
             </div>
             <form onSubmit={handleQuickAddGuest} className="p-5 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-text-muted mb-1">Full Name *</label>
-                <input type="text" value={newGuestData.fullName} onChange={(e) => setNewGuestData({...newGuestData, fullName: e.target.value})} required placeholder="e.g. Kwame Asante"
+                <label className="block text-xs font-semibold text-text-muted mb-1">Full Name <span className="text-danger-600">*</span></label>
+                <input type="text" value={newGuestData.fullName} onChange={(e) => setNewGuestData({...newGuestData, fullName: e.target.value.replace(/[^p{L} .'-]/gu, "")})} maxLength={80} required placeholder="e.g. Kwame Asante"
                   className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-text-muted mb-1">Phone Number <span className="font-normal">(Optional, 10 digits)</span></label>
+                  <label className="block text-xs font-semibold text-text-muted mb-1">Phone Number <span className="font-normal">(optional, 10 digits)</span></label>
                   <input type="tel" inputMode="numeric" maxLength={10} value={newGuestData.phone} onChange={(e) => setNewGuestData({...newGuestData, phone: e.target.value.replace(/\D/g, '').slice(0, 10)})} placeholder="0244123456"
                     className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-text-muted mb-1">ID Number</label>
-                  <input type="text" value={newGuestData.idNumber} onChange={(e) => setNewGuestData({...newGuestData, idNumber: e.target.value})} placeholder="GHA-001"
+                  <label className="block text-xs font-semibold text-text-muted mb-1">ID Number <span className="font-normal">(optional)</span></label>
+                  <input type="text" value={newGuestData.idNumber} maxLength={30} onChange={(e) => setNewGuestData({...newGuestData, idNumber: e.target.value.replace(/[^A-Za-z0-9-]/g, "").toUpperCase()})} placeholder="GHA-001"
                     className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-text-muted mb-1">Email Address</label>
+                <label className="block text-xs font-semibold text-text-muted mb-1">Email Address <span className="font-normal">(optional)</span></label>
                 <input type="email" value={newGuestData.email} onChange={(e) => setNewGuestData({...newGuestData, email: e.target.value})} placeholder="guest@email.com"
                   className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
               </div>

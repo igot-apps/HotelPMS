@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Search, BedDouble, Users, CalendarDays, BarChart3, Sparkles, MessageSquare,
-  LogOut, Settings, Building2, X, Shield, Crown, ClipboardCheck, Undo2
+  LogOut, Settings, Building2, X, Shield, Crown, ClipboardCheck, HandCoins
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
@@ -16,7 +16,7 @@ const operationItems = [
   { to: '/availability', icon: Search, label: 'Check Availability' },
   { to: '/reservations', icon: CalendarDays, label: 'Reservations', permission: 'CanCreateReservation' },
   { to: '/approvals', icon: ClipboardCheck, label: 'Approvals', managerOnly: true },
-  { to: '/refunds', icon: Undo2, label: 'Refunds', staffOnly: true },
+  { to: '/refunds', icon: HandCoins, label: 'Refunds', staffOnly: true },
   { to: '/rooms', icon: BedDouble, label: 'Rooms & Inventory' },
   { to: '/housekeeping', icon: Sparkles, label: 'Housekeeping', housekeeping: true },
   { to: '/notifications', icon: MessageSquare, label: 'Guest messages', permission: 'CanViewRooms' },

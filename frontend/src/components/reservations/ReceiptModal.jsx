@@ -51,7 +51,7 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
             {/* Hotel Header */}
             <div className="text-center border-b-2 border-gray-800 pb-4 mb-6">
               <h1 className="text-2xl font-bold tracking-tight">{reservation.property?.propertyName || 'Hotel PMS'}</h1>
-              <p className="text-sm text-gray-600 mt-1">{reservation.property?.address || 'Address'}</p>
+              <p className="text-sm text-gray-600 mt-1">{reservation.property?.address || ''}</p>
               <p className="text-sm text-gray-600">{reservation.property?.city}, {reservation.property?.country}</p>
             </div>
 
