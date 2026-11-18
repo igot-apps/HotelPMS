@@ -2,6 +2,7 @@ import { useState } from 'react';
 import CorrectionRequests from '../components/reservations/CorrectionRequests';
 import CheckoutAlerts from '../components/reservations/CheckoutAlerts';
 import TodayAtAGlance from '../components/dashboard/TodayAtAGlance';
+import ManagerDashboard from '../components/dashboard/ManagerDashboard';
 import ApprovalSummary from '../components/reservations/ApprovalSummary';
 import RefundSummary from '../components/reservations/RefundSummary';
 import RequirePermission from '../components/RequirePermission';
@@ -79,9 +80,23 @@ const SetupChecklist = () => {
   );
 };
 
+// Managers choose between the front desk view and the manager view; the choice is remembered
+// for this manager on this device and opens by default until they switch again.
+const viewKey = (user) => `dashboardView:${user?.userId || 'me'}`;
+function readSavedView(user) {
+  try { return localStorage.getItem(viewKey(user)) === 'manager' ? 'manager' : 'frontDesk'; } catch { return 'frontDesk'; }
+}
+
 export default function DashboardPage() {
   const user = useAuthStore(state => state.user);
   const [propertyId, setPropertyId] = useState(user?.propertyId || '');
+  const canSwitchView = user?.role === 'Manager' && Boolean(user?.propertyId);
+  const [view, setView] = useState(() => (canSwitchView ? readSavedView(user) : 'frontDesk'));
+  const chooseView = (next) => {
+    setView(next);
+    try { localStorage.setItem(viewKey(user), next); } catch { /* still switches for this visit */ }
+  };
+  const managerView = canSwitchView && view === 'manager';
   const { data: properties = [] } = useQuery({ queryKey: ['properties'], enabled: !user?.propertyId,
     queryFn: async () => (await getProperties()).data.data || [],
   });
@@ -108,12 +123,22 @@ export default function DashboardPage() {
   );
   return <div className="space-y-6">
     <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <div className="min-w-0"><p className="mb-1 text-sm font-semibold text-primary-700">{propertyName || 'Hotel dashboard'}</p><h1 className="text-2xl font-bold text-text">{greeting}, {user?.fullName?.split(' ')[0] || 'Team'}</h1><p className="mt-2 text-sm text-text-muted">{today} · {timeZone} · Your front desk at a glance</p></div>
+      <div className="min-w-0"><p className="mb-1 text-sm font-semibold text-primary-700">{propertyName || 'Hotel dashboard'}</p><h1 className="text-2xl font-bold text-text">{greeting}, {user?.fullName?.split(' ')[0] || 'Team'}</h1><p className="mt-2 text-sm text-text-muted">{today} · {timeZone} · {managerView ? 'How the business is doing' : 'Your front desk at a glance'}</p></div>
       <div className="flex flex-wrap gap-2">
         {!user?.propertyId && <select aria-label="Select hotel" className="min-w-0 rounded-lg border border-border bg-surface p-2 text-text" value={propertyId} onChange={e => setPropertyId(e.target.value)}><option value="">Select a hotel</option>{properties.map(p => <option key={p.propertyId} value={p.propertyId}>{p.propertyName}</option>)}</select>}
         <button disabled={isFetching || !propertyId} onClick={() => refetch()} className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-text disabled:opacity-50"><RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />Refresh</button>
       </div>
     </header>
+    {canSwitchView && (
+      <div role="tablist" aria-label="Choose dashboard" className="inline-flex w-full rounded-xl border border-border bg-surface p-1 shadow-sm sm:w-auto">
+        {[['frontDesk', 'Front desk'], ['manager', 'Manager']].map(([key, label]) => (
+          <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => chooseView(key)}
+            className={`min-h-11 flex-1 rounded-lg px-5 text-sm font-semibold transition sm:flex-none ${view === key ? 'bg-primary-600 text-white shadow-sm' : 'text-text-muted hover:bg-secondary-50'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+    )}
     {showSubscriptionNotice && (
       <section aria-label="Subscription notice" className="flex flex-wrap items-center gap-3 rounded-xl border border-warning-200 bg-warning-50 p-4 text-warning-800">
         <AlertTriangle size={20} className="shrink-0" aria-hidden="true" />
@@ -132,6 +157,7 @@ export default function DashboardPage() {
         {isManager && <Link to="/billing" className="rounded-lg bg-primary-700 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-800">Renew subscription</Link>}
       </section>
     )}
+    {managerView ? <ManagerDashboard /> : <>
     {frontDesk && <TodayAtAGlance />}
     {user?.role === 'Receptionist' && <RefundSummary />}
     {user?.propertyId && (user.role === 'Manager' ? <ApprovalSummary /> : <CorrectionRequests />)}
@@ -169,6 +195,7 @@ export default function DashboardPage() {
         {!data.alerts.length ? <p className="py-4 text-sm text-success-700">No rooms need cleaning or maintenance.</p> : <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{data.alerts.map(room => <Link key={room.roomId} to="/rooms" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-background p-4 hover:border-primary-300"><div><p className="font-bold text-text">Room {room.roomNumber}</p><p className="mt-1 text-xs text-text-muted">{[room.housekeepingStatus === 'Dirty' && 'Needs cleaning', room.operationalStatus === 'Maintenance' && 'Under maintenance'].filter(Boolean).join(' · ')}</p></div><span className="flex items-center gap-1 text-sm font-semibold text-primary-700">Manage <ArrowRight size={15} /></span></Link>)}</div>}
       </section>
       <p className="text-xs text-text-muted">Last updated {new Date(data.generatedAt).toLocaleTimeString('en-GH', { timeZone, hour: '2-digit', minute: '2-digit' })} · Refreshes every minute.</p>
+    </>}
     </>}
   </div>;
 }
