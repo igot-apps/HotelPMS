@@ -1,5 +1,6 @@
-import express, { Express, Request, Response, NextFunction } from 'express';
+import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
+import { finalErrorHandler, safeErrorResponses } from './shared/middleware/safe-errors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
@@ -37,6 +38,8 @@ const app: Express = express();
 // Middleware
 app.use(helmet());
 app.use(cors());
+// Replace internal error text (database, code) with a friendly message before it reaches users.
+app.use(safeErrorResponses);
 
 // ⚠️ CRITICAL: Parse raw body specifically for Paystack Webhooks.
 // 1. Platform SaaS Billing Webhook
@@ -109,18 +112,15 @@ app.use((_req: Request, res: Response) => {
   });
 });
 
-// Error handling middleware
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  console.error(err.stack);
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal Server Error',
-  });
-});
+// Error handling middleware: logs details, never sends internal text to users.
+app.use(finalErrorHandler);
 
 // Start server
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {
+  // Keep failures in background tasks visible in the logs; restart cleanly on a real crash.
+  process.on('unhandledRejection', reason => console.error('[unhandled rejection]', reason));
+  process.on('uncaughtException', error => { console.error('[uncaught exception]', error); process.exit(1); });
   // Request-time checks also release holds when a sleeping Render service wakes up.
   const releaseHolds = () => expireOnlineHolds().catch(() => console.error('Could not release expired online booking holds; will retry.'));
   void releaseHolds();

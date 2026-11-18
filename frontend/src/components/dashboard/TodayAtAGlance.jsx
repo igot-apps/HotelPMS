@@ -80,6 +80,8 @@ export default function TodayAtAGlance() {
 }
 
 const BLOCKERS = {
+  deactivated: { text: 'This hotel has been deactivated by HideOut24, so guests cannot book online.', staffText: ' Please tell your manager.', managerText: ' Contact HideOut24 support to reactivate it.' },
+  'subscription-expired': { text: 'The subscription has ended, so new online bookings are paused.', fix: 'Renew subscription', to: '/billing' },
   'online-off': { text: 'Online booking is switched off for this hotel.', fix: 'Turn it on in Properties', to: '/properties' },
   'no-rooms': { text: 'No rooms have been set up yet, so the hotel is hidden from online booking.', fix: 'Add rooms', to: '/room-management' },
   'all-maintenance': { text: 'Every room is under maintenance, so nothing can be booked online.', fix: 'Review rooms', to: '/rooms' },
@@ -102,8 +104,8 @@ function AvailabilityBanners({ data }) {
       {blocker && (
         <div role="alert" className="flex flex-wrap items-center gap-3 rounded-xl border border-warning-200 bg-warning-50 p-4 text-warning-800">
           <AlertTriangle size={20} className="shrink-0" />
-          <p className="min-w-0 flex-1 text-sm"><strong>Guests can't book online.</strong> {blocker.text}{isManager ? '' : ' Please tell your manager.'}</p>
-          {isManager && <Link to={blocker.to} className="rounded-lg bg-warning-600 px-3 py-2 text-sm font-semibold text-white">{blocker.fix}</Link>}
+          <p className="min-w-0 flex-1 text-sm"><strong>Guests can't book online.</strong> {blocker.text}{isManager ? (blocker.managerText || '') : (blocker.staffText || ' Please tell your manager.')}</p>
+          {isManager && blocker.to && <Link to={blocker.to} className="rounded-lg bg-warning-600 px-3 py-2 text-sm font-semibold text-white">{blocker.fix}</Link>}
         </div>
       )}
     </>

@@ -4,6 +4,8 @@ import { useAuthStore } from '../store/authStore'; // Adjust path if your store 
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000/api',
+  // Never leave a spinner running forever: give up after 60 s and say so.
+  timeout: 60000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -83,14 +85,19 @@ api.interceptors.response.use(
         }
         
       } else if (status === 404) {
-        toastMessage = 'The requested resource was not found.';
+        // Keep the server's reason ("Reservation not found for this hotel.") when it gives one.
+        toastMessage = data?.message && data.message !== 'Route not found' ? data.message : 'That item could not be found. It may have been removed — refresh the page.';
+
+      } else if (status === 429) {
+        toastMessage = backendMessage || 'Too many attempts. Please wait a moment and try again.';
         
       } else if (status === 400) {
         // Backend validation errors (e.g., "Room 1 is not available") are usually already human-friendly
         toastMessage = backendMessage; 
         
       } else if (status >= 500) {
-        toastMessage = 'A server error occurred. Please try again later.';
+        // The server already sends a safe, friendly message for its own errors.
+        toastMessage = data?.message || 'A server error occurred. Please try again later.';
       }
 
       // Public pages present their own auth errors and expired-session state.
@@ -101,7 +108,8 @@ api.interceptors.response.use(
     } else if (error.request) {
       // The request was made but no response was received (Network Error / Offline)
       console.error('[Network Error]:', error.request);
-      if (!error.config?.skipErrorToast) toast.error('Network error. Please check your internet connection.');
+      const timedOut = error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT';
+      if (!error.config?.skipErrorToast) toast.error(timedOut ? 'The server is taking too long to respond. Please try again.' : 'Network error. Please check your internet connection.');
       
     } else {
       // Something happened in setting up the request that triggered an Error

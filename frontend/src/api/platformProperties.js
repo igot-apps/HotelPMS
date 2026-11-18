@@ -14,3 +14,4 @@ export const grantFreeAccess = (id, data) => api.post(`/platform/properties/${id
 export const deactivatePlatformProperty = (id) => api.delete(`/platform/properties/${id}`);
 export const permanentlyDeletePlatformProperty = ({ id, confirmationCode }) =>
   api.delete(`/platform/properties/${id}/permanent`, { data: { confirmationCode } });
+export const reactivatePlatformProperty = (id) => api.post(`/platform/properties/${id}/reactivate`);

@@ -37,8 +37,8 @@ export const getProperties = async (
   return propertyRepository.findProperties(page, limit, propertyId);
 };
 
-export const getPlatformProperties = async (page: number, limit: number, search: string) => {
-  return propertyRepository.findPlatformProperties(page, limit, search);
+export const getPlatformProperties = async (page: number, limit: number, search: string, state = '', sort = 'newest') => {
+  return propertyRepository.findPlatformProperties(page, limit, search, state, sort);
 };
 
 export const getPropertyById = async (propertyId: number) => {
@@ -143,3 +143,9 @@ export const deleteProperty = async (propertyId: number) => {
 
 export const permanentlyDeleteProperty = (propertyId: number, confirmationCode: string) =>
   propertyRepository.permanentlyDeleteProperty(propertyId, confirmationCode);
+
+export const reactivateProperty = async (propertyId: number) => {
+  const property = await propertyRepository.findPropertyById(propertyId);
+  if (!property) throw new Error('Property not found');
+  return propertyRepository.reactivateProperty(propertyId);
+};

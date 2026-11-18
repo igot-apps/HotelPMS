@@ -1,4 +1,5 @@
 import { prisma } from '../../shared/utils/prisma';
+import { getSubscriptionState, subscriptionFields } from '../payment/subscription-state';
 import { dayBounds, hotelDate } from '../reports/daily-overview.service';
 import { checkoutDueAt, minutesLate, noShowAllowedFrom } from '../reservation/stay-timing';
 
@@ -11,7 +12,7 @@ const balanceOf = (res: any) => Math.max(0, money(Number(res.totalAmount || 0) -
 
 // The front desk's key questions for today, each with the rows behind the number.
 export async function getDashboardGlance(propertyId: number, role: string, now = new Date()) {
-  const property = await prisma.property.findUnique({ where: { propertyId }, select: { timezone: true, checkOutTime: true, checkInTime: true, isOnlineBookingEnabled: true } });
+  const property = await prisma.property.findUnique({ where: { propertyId }, select: { timezone: true, checkOutTime: true, checkInTime: true, isOnlineBookingEnabled: true, isActive: true, status: true, ...subscriptionFields } });
   if (!property) throw new Error('Hotel not found.');
   const timeZone = property.timezone || 'Africa/Accra';
   const date = hotelDate(now, timeZone);
@@ -63,7 +64,9 @@ export async function getDashboardGlance(propertyId: number, role: string, now =
 
   const sellable = rooms.filter(room => room.operationalStatus !== 'Maintenance');
   // Why guests might not be able to book online (setup problems, not a busy night).
-  const onlineBlocker = !property.isOnlineBookingEnabled ? 'online-off'
+  const onlineBlocker = (!property.isActive || property.status !== 'Active') ? 'deactivated'
+    : getSubscriptionState(property, now).expired ? 'subscription-expired'
+    : !property.isOnlineBookingEnabled ? 'online-off'
     : !rooms.length ? 'no-rooms'
     : !sellable.length ? 'all-maintenance'
     : !sellable.some(room => room.isOnlineBookable) ? 'all-hidden'

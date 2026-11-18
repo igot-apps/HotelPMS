@@ -17,6 +17,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
   const [currentStep, setCurrentStep] = useState(1);
   const [guests, setGuests] = useState([]);
   const [availableRooms, setAvailableRooms] = useState([]);
+  const [roomTypeFilter, setRoomTypeFilter] = useState('all');
   const [isFetchingRooms, setIsFetchingRooms] = useState(false);
   
   // Receipt States
@@ -128,6 +129,12 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
   };
 
   const nights = calculateNights();
+  // Room types among the available rooms, for the filter chips on the room step.
+  const roomTypeOptions = Object.values(availableRooms.reduce((types, room) => {
+    const key = String(room.roomTypeId);
+    types[key] = { key, name: room.roomType?.typeName || 'Other', count: (types[key]?.count || 0) + 1 };
+    return types;
+  }, {})).sort((a, b) => a.name.localeCompare(b.name));
   const totalDue = formData.selectedRooms.reduce((acc, room) => acc + (parseFloat(room.roomType.basePrice) * nights), 0);
 
   // Quick Add Guest Handler
@@ -251,7 +258,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
     if (currentStep === 1) {
       // 🌟 CHANGED: Check propertyGuestId
       if (!formData.propertyGuestId || !formData.checkInDate || !formData.checkOutDate) {
-        toast.error('Please fill in Guest, Check-in, and Check-out dates.'); 
+        toast.error(!formData.propertyGuestId ? 'Choose the guest first: pick them from the search, or tap "Create guest" to add a new one.' : 'Choose both the check-in and check-out dates.'); 
         return;
       }
       const todayDate = new Date(); 
@@ -572,8 +579,19 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
               ) : availableRooms.length === 0 ? (
                 <div className="p-12 text-center text-warning-700 bg-warning-50 rounded-xl border border-warning-100 flex flex-col items-center gap-2"><AlertCircle size={24} /> <p className="font-semibold">No rooms available.</p></div>
               ) : (
+                <>
+                {/* Tap a room type to show only those rooms (selected rooms stay selected). */}
+                {roomTypeOptions.length > 1 && (
+                  <div role="group" aria-label="Filter by room type" className="flex flex-wrap gap-2">
+                    {[{ key: 'all', name: 'All types', count: availableRooms.length }, ...roomTypeOptions].map(option => (
+                      <button key={option.key} type="button" aria-pressed={roomTypeFilter === option.key} onClick={() => setRoomTypeFilter(option.key)} className={`inline-flex min-h-10 items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-semibold transition ${roomTypeFilter === option.key ? 'border-primary-600 bg-primary-600 text-white' : 'border-border bg-surface text-text hover:bg-secondary-50'}`}>
+                        {option.name}<span className={`rounded-full px-2 text-xs ${roomTypeFilter === option.key ? 'bg-white/20' : 'bg-secondary-100 text-text-muted'}`}>{option.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {availableRooms.map(room => {
+                  {availableRooms.filter(room => roomTypeFilter === 'all' || !roomTypeOptions.some(option => option.key === roomTypeFilter) || String(room.roomTypeId) === roomTypeFilter).map(room => {
                     const isSelected = formData.selectedRooms.some(r => r.roomId === room.roomId);
                     const price = parseFloat(room.roomType.basePrice);
                     return (
@@ -592,6 +610,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                     );
                   })}
                 </div>
+                </>
               )}
             </div>
           )}

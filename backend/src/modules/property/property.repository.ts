@@ -55,10 +55,22 @@ export const findProperties = async (
   return { properties, total, page, limit };
 };
 
-export const findPlatformProperties = async (page = 1, limit = 50, search = '') => {
+// Platform admin list: search, filter by state and sort. Counts always cover every hotel.
+export const PLATFORM_STATES = ['active', 'inactive', 'trial', 'paid', 'expired'] as const;
+export const PLATFORM_SORTS = ['newest', 'name', 'expiry'] as const;
+const stateWhere = (state: string, now: Date): any => ({
+  active: { status: 'Active', isActive: true },
+  inactive: { OR: [{ status: { not: 'Active' } }, { isActive: false }] },
+  trial: { subscriptionStatus: 'Trial', OR: [{ trialEndsAt: null }, { trialEndsAt: { gt: now } }] },
+  paid: { subscriptionStatus: 'Active', OR: [{ subscriptionEndsAt: null }, { subscriptionEndsAt: { gt: now } }] },
+  expired: { OR: [{ subscriptionStatus: { in: ['Expired', 'Cancelled'] } }, { subscriptionStatus: 'Trial', trialEndsAt: { lte: now } }, { subscriptionStatus: 'Active', subscriptionEndsAt: { lte: now } }] },
+} as any)[state] || {};
+
+export const findPlatformProperties = async (page = 1, limit = 50, search = '', state = '', sort = 'newest') => {
   const skip = (page - 1) * limit;
   const term = search.trim();
-  const where = term ? {
+  const now = new Date();
+  const searchWhere = term ? {
     OR: [
       { propertyName: { contains: term, mode: 'insensitive' as const } },
       { propertyCode: { contains: term, mode: 'insensitive' as const } },
@@ -66,22 +78,23 @@ export const findPlatformProperties = async (page = 1, limit = 50, search = '') 
       { country: { contains: term, mode: 'insensitive' as const } },
     ],
   } : {};
+  const where = { AND: [searchWhere, stateWhere(state, now)] };
+  const orderBy: any = sort === 'name' ? { propertyName: 'asc' }
+    : sort === 'expiry' ? [{ subscriptionEndsAt: { sort: 'asc', nulls: 'last' } }, { trialEndsAt: { sort: 'asc', nulls: 'last' } }]
+    : { createdAt: 'desc' };
+  const count = (s: string) => prisma.property.count({ where: stateWhere(s, now) });
 
-  const [properties, total, active, trials] = await Promise.all([
-    prisma.property.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { rooms: true, users: true } } },
-    }),
+  const [properties, total, all, active, inactive, trials, paid, expired] = await Promise.all([
+    prisma.property.findMany({ where, skip, take: limit, orderBy, include: { _count: { select: { rooms: true, users: true } } } }),
     prisma.property.count({ where }),
-    prisma.property.count({ where: { status: 'Active', isActive: true } }),
-    prisma.property.count({ where: { subscriptionStatus: 'Trial' } }),
+    prisma.property.count(),
+    count('active'), count('inactive'), count('trial'), count('paid'), count('expired'),
   ]);
 
-  return { properties, total, active, trials, page, limit };
+  return { properties, total, all, active, inactive, trials, paid, expired, page, limit };
 };
+
+export const reactivateProperty = async (propertyId: number) => prisma.property.update({ where: { propertyId }, data: { status: 'Active', isActive: true } });
 
 export const findPropertyById = async (propertyId: number) => {
   return prisma.property.findUnique({

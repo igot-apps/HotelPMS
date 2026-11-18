@@ -1,7 +1,7 @@
 import ResponsiveTable from '../components/ui/ResponsiveTable';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Building2, CreditCard, Edit2, Gift, Globe2, MapPin, Plus, Power, Search, ShieldCheck, Trash2, Users } from 'lucide-react';
+import { AlertTriangle, Building2, CheckCircle2, CreditCard, Edit2, Gift, Globe2, MapPin, Plus, Power, PowerOff, Search, ShieldCheck, Trash2, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PropertyModal from '../components/catalog/PropertyModal';
 import WebsiteDomainsDialog from '../components/catalog/WebsiteDomainsDialog';
@@ -9,6 +9,7 @@ import FreeAccessDialog from '../components/catalog/FreeAccessDialog';
 import {
   createPlatformProperty,
   deactivatePlatformProperty,
+  reactivatePlatformProperty,
   permanentlyDeletePlatformProperty,
   getPlatformProperties,
   updatePlatformProperty,
@@ -18,6 +19,8 @@ export default function PlatformPropertiesPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [stateFilter, setStateFilter] = useState('');
+  const [sort, setSort] = useState('newest');
   const [editingProperty, setEditingProperty] = useState(null);
   const [websiteProperty, setWebsiteProperty] = useState(null);
   const [freeAccessProperty, setFreeAccessProperty] = useState(null);
@@ -26,8 +29,8 @@ export default function PlatformPropertiesPage() {
   const [confirmationCode, setConfirmationCode] = useState('');
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['platformProperties', page, search],
-    queryFn: () => getPlatformProperties({ page, limit: 25, search }).then((response) => response.data),
+    queryKey: ['platformProperties', page, search, stateFilter, sort],
+    queryFn: () => getPlatformProperties({ page, limit: 25, search, state: stateFilter || undefined, sort }).then((response) => response.data),
   });
   const properties = data?.data || [];
   const pagination = data?.pagination || { page: 1, totalPages: 1, total: 0 };
@@ -44,6 +47,15 @@ export default function PlatformPropertiesPage() {
       toast.success(editingProperty ? 'Property updated.' : 'Property created.');
       closeModal();
     },
+  });
+
+  const reactivateMutation = useMutation({
+    mutationFn: reactivatePlatformProperty,
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['platformProperties'] });
+      toast.success(response.data?.message || 'Property reactivated.');
+    },
+    onError: (error) => toast.error(error.response?.data?.message || 'Could not reactivate property.'),
   });
 
   const deactivateMutation = useMutation({
@@ -110,10 +122,18 @@ export default function PlatformPropertiesPage() {
         </button>
       </header>
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <SummaryCard label="Properties" value={stats.total} icon={Building2} />
-        <SummaryCard label="Active" value={stats.active} icon={Users} />
-        <SummaryCard label="On trial" value={stats.trials} icon={CreditCard} />
+      {/* Click a card to show only those hotels; click again (or All) to clear. */}
+      <section aria-label="Filter hotels" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        {[
+          ['', 'All hotels', stats.total, Building2, 'primary'],
+          ['active', 'Active', stats.active, CheckCircle2, 'success'],
+          ['inactive', 'Deactivated', stats.inactive, PowerOff, 'secondary'],
+          ['trial', 'On trial', stats.trials, CreditCard, 'primary'],
+          ['paid', 'Paid', stats.paid, Users, 'success'],
+          ['expired', 'Expired', stats.expired, AlertTriangle, 'danger'],
+        ].map(([key, label, value, Icon, tone]) => (
+          <FilterCard key={key || 'all'} label={label} value={value ?? 0} icon={Icon} tone={tone} active={stateFilter === key} onClick={() => { setStateFilter(stateFilter === key ? '' : key); setPage(1); }} />
+        ))}
       </section>
 
       <div className="rounded-xl border border-border bg-surface p-3 shadow-sm">
@@ -126,6 +146,13 @@ export default function PlatformPropertiesPage() {
             className="w-full rounded-lg border border-border bg-background py-2.5 pl-10 pr-4 text-sm text-text outline-none transition placeholder:text-text-muted focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
           />
         </div>
+        <label className="mt-3 flex items-center gap-2 text-sm text-text-muted">Sort by
+          <select value={sort} onChange={(event) => { setSort(event.target.value); setPage(1); }} className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-text">
+            <option value="newest">Newest first</option>
+            <option value="name">Name (A–Z)</option>
+            <option value="expiry">Subscription ending soonest</option>
+          </select>
+        </label>
       </div>
 
       <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
@@ -168,7 +195,7 @@ export default function PlatformPropertiesPage() {
                       </td>
                       <td className="px-5 py-4">
                         <span className="block text-sm font-semibold text-text">{property.subscriptionPlan || 'Starter'}</span>
-                        <span className="text-xs text-text-muted">{property.subscriptionStatus || 'Unknown'}</span>
+                        <span className="text-xs text-text-muted">{property.subscriptionStatus || 'Unknown'}{subscriptionEnd(property) ? ` · until ${subscriptionEnd(property)}` : ''}</span>
                       </td>
                       <td className="px-5 py-4 text-sm text-text-muted">
                         <span className="font-semibold text-text">{property._count?.rooms || 0}</span> rooms
@@ -177,7 +204,7 @@ export default function PlatformPropertiesPage() {
                       </td>
                       <td className="px-5 py-4">
                         <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${isActive ? 'bg-success-50 text-success-700' : 'bg-secondary-100 text-secondary-600'}`}>
-                          {isActive ? 'Active' : 'Inactive'}
+                          {isActive ? 'Active' : 'Deactivated'}
                         </span>
                       </td>
                       <td className="px-5 py-4">
@@ -187,6 +214,9 @@ export default function PlatformPropertiesPage() {
                             <button onClick={() => setFreeAccessProperty(property)} title="Grant free access" aria-label={`Grant free access to ${property.propertyName}`} className="rounded-lg p-2 text-success-600 transition hover:bg-success-50"><Gift size={16} /></button>
                           )}
                           <button onClick={() => openEdit(property)} title="Edit property" className="rounded-lg p-2 text-primary-600 transition hover:bg-primary-50"><Edit2 size={16} /></button>
+                          {!isActive && (
+                            <button onClick={() => { if (window.confirm(`Reactivate ${property.propertyName}? Staff access returns and online booking resumes if the subscription is valid.`)) reactivateMutation.mutate(property.propertyId); }} disabled={reactivateMutation.isPending} title="Reactivate property" aria-label={`Reactivate ${property.propertyName}`} className="inline-flex items-center gap-1 rounded-lg border border-success-200 px-2.5 py-1.5 text-xs font-semibold text-success-700 transition hover:bg-success-50 disabled:opacity-50"><Power size={14} /> Reactivate</button>
+                          )}
                           {isActive && (
                             <button onClick={() => handleDeactivate(property)} disabled={deactivateMutation.isPending} title="Deactivate property" className="rounded-lg p-2 text-danger-600 transition hover:bg-danger-50 disabled:opacity-50"><Power size={16} /></button>
                           )}
@@ -245,6 +275,21 @@ export default function PlatformPropertiesPage() {
       {freeAccessProperty && <FreeAccessDialog property={freeAccessProperty} onClose={() => setFreeAccessProperty(null)} />}
       {websiteProperty && <WebsiteDomainsDialog property={websiteProperty} onClose={() => setWebsiteProperty(null)} />}
     </div>
+  );
+}
+
+const subscriptionEnd = (property) => {
+  const end = property.subscriptionStatus === 'Trial' ? property.trialEndsAt : property.subscriptionEndsAt;
+  return end ? new Date(end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+};
+
+const FILTER_TONES = { primary: 'bg-primary-50 text-primary-600', success: 'bg-success-50 text-success-600', secondary: 'bg-secondary-100 text-secondary-600', danger: 'bg-danger-50 text-danger-600' };
+function FilterCard({ label, value, icon: Icon, tone, active, onClick }) {
+  return (
+    <button type="button" onClick={onClick} aria-pressed={active} className={`flex items-center gap-3 rounded-xl border p-4 text-left shadow-sm transition hover:shadow-md ${active ? 'border-primary-500 ring-2 ring-primary-500/30' : 'border-border bg-surface'}`}>
+      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${FILTER_TONES[tone]}`}><Icon size={18} /></span>
+      <span className="min-w-0"><span className="block truncate text-xs text-text-muted">{label}</span><strong className="block text-xl text-text">{value}</strong></span>
+    </button>
   );
 }
 
