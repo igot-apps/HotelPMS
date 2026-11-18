@@ -256,7 +256,7 @@ const retryPaymentMutation = useMutation({
       <PublicNavbar />
       <div className="w-full max-w-[900px] mx-auto px-4 py-12">
         <div className="flex flex-col items-start gap-3 mb-8 sm:flex-row sm:items-center">
-          <BackButton fallback="/discover" label="Back" />
+          {!hotelWebsite && <BackButton fallback="/discover" label="Back" />}
           <div>
             <h1 className="text-2xl font-bold text-text">My Reservations</h1>
             <p className="text-sm text-text-muted">View and manage your upcoming and past stays.</p>

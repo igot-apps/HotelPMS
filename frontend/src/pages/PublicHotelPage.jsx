@@ -9,6 +9,7 @@ import {
 import api from '../lib/axios';
 import PublicNavbar from '../components/public/PublicNavbar';
 import BackButton from '../components/ui/BackButton';
+import { useHotelWebsite } from '../lib/hotelWebsite';
 import { publicImageSrc } from '../lib/publicImages';
 
 // Helper to fetch property data
@@ -34,6 +35,7 @@ const toWhatsAppNumber = (phone) => {
 };
 
 export default function PublicHotelPage() {
+  const hotelWebsite = useHotelWebsite(); // on a hotel's own domain there is no hotel list to go back to
   const { propertyCode } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -174,7 +176,7 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
       <PublicNavbar />
 
       {/* 1. Hero Section with Gradient Overlay */}
-      <div className="mx-auto max-w-7xl px-4 py-3 md:hidden"><BackButton fallback="/discover" label="Back to hotels" /></div>
+      {!hotelWebsite && <div className="mx-auto max-w-7xl px-4 py-3 md:hidden"><BackButton fallback="/discover" label="Back to hotels" /></div>}
       <section className="bg-secondary-900 p-3 sm:p-5">
         <div className={`mx-auto grid max-w-7xl gap-2 overflow-hidden rounded-2xl ${propertyPhotos.length > 1 ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1'}`}>
           <div className={`relative h-[300px] bg-gradient-to-br from-primary-700 to-secondary-900 sm:h-[420px] ${propertyPhotos.length > 1 ? 'md:col-span-2' : ''}`}>
@@ -212,7 +214,7 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
             <p className="font-bold">Online booking temporarily unavailable</p>
             {contactHref && <a href={contactHref} className="mt-2 inline-block font-semibold underline">{contactLabel}</a>}
           </div>
-        ) : <details key={propertyCode} className="group min-w-0 rounded-2xl border border-border bg-surface shadow-xl">
+        ) : <details key={propertyCode} data-dates={propertyCode} className="group min-w-0 rounded-2xl border border-border bg-surface shadow-xl">
           <summary className="flex min-h-20 cursor-pointer list-none flex-wrap items-center gap-3 rounded-2xl px-4 py-4 text-text transition-colors hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-300 sm:flex-nowrap sm:px-5 [&::-webkit-details-marker]:hidden">
             <Calendar size={22} className="shrink-0 text-primary-600" />
             <span className="min-w-0 flex-1"><span className="block font-bold">Check availability</span><span className="block text-sm text-text-muted">{hasPickedDates ? `${formatStayDate(checkIn)} – ${formatStayDate(checkOut)}` : 'Pick dates to book'}</span></span>
@@ -335,8 +337,16 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
               <div className="w-16 h-16 bg-secondary-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Calendar size={32} className="text-text-muted" />
               </div>
-              <p className="text-text font-semibold text-lg mb-1">No room types available for these dates.</p>
-              <p className="text-sm text-text-muted">Please try adjusting your check-in or check-out dates.</p>
+              <p className="text-text font-semibold text-lg mb-1">{hasPickedDates ? "We're fully booked for these dates" : "Online booking isn't available right now"}</p>
+              <p className="text-sm text-text-muted">{hasPickedDates ? 'Try different dates, or contact us — we may have a last-minute opening.' : 'Please contact the hotel to book your stay.'}</p>
+              <div className="mt-5 flex flex-wrap justify-center gap-2">
+                {hasPickedDates && (
+                  <button type="button" onClick={() => { const panel = document.querySelector(`details[data-dates="${propertyCode}"]`); if (panel) { panel.open = true; panel.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }} className="min-h-11 rounded-xl bg-primary-600 px-5 py-2.5 text-sm font-semibold text-text-inverted hover:bg-primary-700">
+                    Change dates
+                  </button>
+                )}
+                {contactHref && <a href={contactHref} target={contactHref.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="min-h-11 rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-text hover:bg-secondary-50">{contactLabel}</a>}
+              </div>
             </div>
           ) : (
             <>

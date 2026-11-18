@@ -11,7 +11,7 @@ const balanceOf = (res: any) => Math.max(0, money(Number(res.totalAmount || 0) -
 
 // The front desk's key questions for today, each with the rows behind the number.
 export async function getDashboardGlance(propertyId: number, role: string, now = new Date()) {
-  const property = await prisma.property.findUnique({ where: { propertyId }, select: { timezone: true, checkOutTime: true, checkInTime: true } });
+  const property = await prisma.property.findUnique({ where: { propertyId }, select: { timezone: true, checkOutTime: true, checkInTime: true, isOnlineBookingEnabled: true } });
   if (!property) throw new Error('Hotel not found.');
   const timeZone = property.timezone || 'Africa/Accra';
   const date = hotelDate(now, timeZone);
@@ -62,6 +62,12 @@ export async function getDashboardGlance(propertyId: number, role: string, now =
   const departedToday = stays.filter(s => s.status === 'CheckedOut').map(row);
 
   const sellable = rooms.filter(room => room.operationalStatus !== 'Maintenance');
+  // Why guests might not be able to book online (setup problems, not a busy night).
+  const onlineBlocker = !property.isOnlineBookingEnabled ? 'online-off'
+    : !rooms.length ? 'no-rooms'
+    : !sellable.length ? 'all-maintenance'
+    : !sellable.some(room => room.isOnlineBookable) ? 'all-hidden'
+    : null;
   const freeTonight = sellable.filter(room => !room.reservationRooms.length).map(room => ({ roomId: room.roomId, roomNumber: room.roomNumber, roomType: room.roomType.typeName, housekeepingStatus: room.housekeepingStatus, isOnlineBookable: room.isOnlineBookable }));
   const occupiedTonight = sellable.length - freeTonight.length;
 
@@ -73,8 +79,9 @@ export async function getDashboardGlance(propertyId: number, role: string, now =
     arrivals: { waiting: expectedArrivals, missed: missedArrivals, arrivedToday, unpaidCount: expectedArrivals.filter(stay => stay.balanceDue > 0).length },
     departures: { waiting: departuresWaiting, departedToday },
     inHouse,
+    onlineBlocker,
     rooms: {
-      total: sellable.length, occupiedTonight, freeTonight,
+      total: sellable.length, roomsSetUp: rooms.length, fullyBookedTonight: sellable.length > 0 && freeTonight.length === 0, occupiedTonight, freeTonight,
       occupancyPercent: sellable.length ? Math.round((occupiedTonight / sellable.length) * 100) : 0,
       needsCleaning: rooms.filter(r => r.housekeepingStatus === 'Dirty').map(r => ({ roomId: r.roomId, roomNumber: r.roomNumber, roomType: r.roomType.typeName, operationalStatus: r.operationalStatus })),
       maintenance: rooms.filter(r => r.operationalStatus === 'Maintenance').map(r => ({ roomId: r.roomId, roomNumber: r.roomNumber, roomType: r.roomType.typeName, maintenanceReason: r.maintenanceReason })),

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
+import BackButton from '../ui/BackButton';
 import api from '../../lib/axios';
 import { useAuthStore } from '../../store/authStore';
 
@@ -19,6 +20,9 @@ export default function AppLayout() {
     return () => { window.removeEventListener('keydown', escape); desktop.removeEventListener('change', resized); };
   }, [isSidebarOpen]);
   const accessToken = useAuthStore((state) => state.accessToken);
+  const role = useAuthStore((state) => state.user?.role);
+  const home = role === 'Housekeeper' ? '/housekeeping' : '/dashboard';
+  const showBack = location.pathname !== home && !/^\/reservations\/[^/]+$/.test(location.pathname);
 
   useEffect(() => {
     let isCurrent = true;
@@ -54,6 +58,8 @@ export default function AppLayout() {
       <div className="min-h-0 min-w-0 flex-1 flex flex-col overflow-hidden ml-0 md:ml-64">
         <Topbar onMenuClick={toggleSidebar} isMenuOpen={isSidebarOpen} />
         <main id="main-content" className="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:p-4 md:p-8" inert={isSidebarOpen ? true : undefined}>
+          {/* Mobile back button on every page except the home page (and pages that have their own). */}
+          {showBack && <div className="mb-3 md:hidden"><BackButton mobileOnly fallback={home} label="Back" /></div>}
           <Outlet />
         </main>
       </div>

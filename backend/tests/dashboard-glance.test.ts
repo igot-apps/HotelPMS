@@ -14,7 +14,7 @@ const stay = (id: number, status: string, checkIn: string, checkOut: string, res
 
 beforeEach(() => {
   jest.clearAllMocks();
-  db.property.findUnique.mockResolvedValue({ timezone: 'Africa/Accra', checkOutTime: '11:00', checkInTime: '14:00' });
+  db.property.findUnique.mockResolvedValue({ timezone: 'Africa/Accra', checkOutTime: '11:00', checkInTime: '14:00', isOnlineBookingEnabled: true });
   db.reservationRoom.findMany.mockResolvedValue([
     stay(1, 'CheckedIn', '2026-11-13', '2026-11-16', reservation('A', 300, 100), { actualCheckIn: new Date('2026-11-13T15:00:00Z') }),
     stay(2, 'CheckedIn', '2026-11-15', '2026-11-18', reservation('B', 300, 300), { actualCheckIn: new Date('2026-11-16T09:00:00Z') }),
@@ -59,4 +59,18 @@ test('a same-day arrival only counts as missed after check-in time plus grace', 
   const evening = await getDashboardGlance(3, 'Manager', new Date('2026-11-16T20:30:00Z'));
   expect(evening.arrivals.missed.map((s: any) => s.reservationId).sort()).toEqual(['C', 'E']);
   expect(evening.arrivals.waiting).toHaveLength(0);
+});
+
+test('reports fully booked tonight and why guests cannot book online', async () => {
+  db.property.findUnique.mockResolvedValue({ timezone: 'Africa/Accra', checkOutTime: '11:00', checkInTime: '14:00', isOnlineBookingEnabled: true });
+  db.room.findMany.mockResolvedValue([
+    { roomId: 1, roomNumber: '101', operationalStatus: 'Occupied', housekeepingStatus: 'Clean', isOnlineBookable: false, roomType: { typeName: 'Standard' }, reservationRooms: [{ reservationRoomId: 1 }] },
+  ]);
+  const full = await getDashboardGlance(3, 'Manager', new Date('2026-11-16T12:00:00Z'));
+  expect(full.rooms.fullyBookedTonight).toBe(true);
+  expect(full.onlineBlocker).toBe('all-hidden');
+  db.room.findMany.mockResolvedValue([]);
+  expect((await getDashboardGlance(3, 'Manager', new Date('2026-11-16T12:00:00Z'))).onlineBlocker).toBe('no-rooms');
+  db.property.findUnique.mockResolvedValue({ timezone: 'Africa/Accra', checkOutTime: '11:00', checkInTime: '14:00', isOnlineBookingEnabled: false });
+  expect((await getDashboardGlance(3, 'Manager', new Date('2026-11-16T12:00:00Z'))).onlineBlocker).toBe('online-off');
 });

@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { AlarmClock, BedDouble, ChevronRight, Coins, Hotel, Loader2, LogIn, LogOut, Sparkles, Wallet, X } from 'lucide-react';
+import { AlarmClock, AlertTriangle, BedDouble, ChevronRight, Coins, Hotel, Loader2, LogIn, LogOut, Sparkles, Wallet, X } from 'lucide-react';
 import api from '../../lib/axios';
 import useCheckoutAlerts from '../../hooks/useCheckoutAlerts';
 import { formatDuration, formatTime } from '../../lib/stayTiming';
 import { bookingLink } from '../../lib/bookingLink';
+import { useAuthStore } from '../../store/authStore';
 
 const cash = (value) => `GHS ${Number(value || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const shortDate = (value) => new Date(value).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
@@ -58,6 +59,7 @@ export default function TodayAtAGlance() {
         <h2 id="glance-title" className="text-lg font-bold text-text">Today at a glance</h2>
         <p className="text-xs text-text-muted">Click any figure for details · updated {clock(data.generatedAt)}</p>
       </div>
+      <AvailabilityBanners data={data} />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {tiles.map((tile) => <Tile key={tile.key} {...tile} onClick={() => setOpen(tile.key)} />)}
       </div>
@@ -74,6 +76,37 @@ export default function TodayAtAGlance() {
         </Drawer>
       )}
     </section>
+  );
+}
+
+const BLOCKERS = {
+  'online-off': { text: 'Online booking is switched off for this hotel.', fix: 'Turn it on in Properties', to: '/properties' },
+  'no-rooms': { text: 'No rooms have been set up yet, so the hotel is hidden from online booking.', fix: 'Add rooms', to: '/room-management' },
+  'all-maintenance': { text: 'Every room is under maintenance, so nothing can be booked online.', fix: 'Review rooms', to: '/rooms' },
+  'all-hidden': { text: 'Every room is hidden from online booking.', fix: 'Show rooms on the website', to: '/rooms' },
+};
+
+// "Fully booked" is good news (no space tonight); "can't book online" is a setup problem to fix.
+function AvailabilityBanners({ data }) {
+  const isManager = useAuthStore((state) => state.user?.role) === 'Manager';
+  const blocker = BLOCKERS[data.onlineBlocker];
+  return (
+    <>
+      {data.rooms.fullyBookedTonight && (
+        <div role="status" className="flex flex-wrap items-center gap-3 rounded-xl border border-success-200 bg-success-50 p-4 text-success-800">
+          <BedDouble size={20} className="shrink-0" />
+          <p className="min-w-0 flex-1 text-sm"><strong>Fully booked tonight.</strong> All {data.rooms.total} rooms are occupied or reserved, so walk-ins can't be placed tonight.</p>
+          <Link to="/availability" className="text-sm font-semibold underline">See other dates</Link>
+        </div>
+      )}
+      {blocker && (
+        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-xl border border-warning-200 bg-warning-50 p-4 text-warning-800">
+          <AlertTriangle size={20} className="shrink-0" />
+          <p className="min-w-0 flex-1 text-sm"><strong>Guests can't book online.</strong> {blocker.text}{isManager ? '' : ' Please tell your manager.'}</p>
+          {isManager && <Link to={blocker.to} className="rounded-lg bg-warning-600 px-3 py-2 text-sm font-semibold text-white">{blocker.fix}</Link>}
+        </div>
+      )}
+    </>
   );
 }
 
