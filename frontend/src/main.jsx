@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App.jsx';
 import './index.css';
+import './lib/toastSetup';
 import { enableDatePickers } from './lib/datePickers';
 import ErrorBoundary from './components/ErrorBoundary';
 

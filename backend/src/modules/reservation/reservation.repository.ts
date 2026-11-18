@@ -124,7 +124,7 @@ export const findReservations = async (
       take: limit,
       orderBy: { createdAt: 'desc' },
       include: {
-        property: { select: { propertyId: true, propertyName: true, propertyCode: true, checkOutTime: true, timezone: true } },
+        property: { select: { propertyId: true, propertyName: true, propertyCode: true, checkOutTime: true, checkInTime: true, timezone: true } },
         propertyGuest: { select: { guestId: true, fullName: true, phone: true } },
         platformGuest: { select: { guestId: true, fullName: true, phone: true, email: true } },
         staff: { select: { userId: true, fullName: true } },

@@ -18,3 +18,11 @@ export function expectedCheckoutAt(checkOutDate, checkOutTime = '11:00') {
 }
 
 export const formatTime = (date) => date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+// Same rule as the server: a guest may still arrive until 6 hours after check-in time on the
+// arrival day; only then can they be marked as a no-show.
+export function noShowAllowedFrom(checkInDate, checkInTime = '14:00') {
+  const [hour, minute] = /^\d{2}:\d{2}$/.test(checkInTime || '') ? checkInTime.split(':').map(Number) : [14, 0];
+  const day = String(checkInDate).slice(0, 10);
+  return new Date(Number(day.slice(0, 4)), Number(day.slice(5, 7)) - 1, Number(day.slice(8, 10)), hour + 6, minute);
+}

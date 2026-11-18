@@ -24,7 +24,7 @@ import EarlyCheckoutDialog from '../components/reservations/EarlyCheckoutDialog'
 import ExtendStayDialog from '../components/reservations/ExtendStayDialog';
 import ShortenStayDialog from '../components/reservations/ShortenStayDialog';
 import TakePaymentDialog from '../components/reservations/TakePaymentDialog';
-import { expectedCheckoutAt, formatDuration, formatTime } from '../lib/stayTiming';
+import { expectedCheckoutAt, formatDuration, formatTime, noShowAllowedFrom } from '../lib/stayTiming';
 
 // The hotel's calendar day as YYYY-MM-DD, using the browser's local time.
 const localToday = () => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
@@ -432,7 +432,7 @@ export default function ReservationsPage() {
     <section id={`${compact ? 'mobile' : 'desktop'}-rooms-${res.reservationId}`} className={compact ? 'mt-4 rounded-xl border border-border bg-secondary-50/50 p-3' : ''}>
       <div className="flex items-center gap-2 mb-4">
         <BedDouble size={18} className="text-primary-600" />
-        <h4 className="min-w-0 flex-1 text-sm font-bold text-text">Room assignments</h4>
+        <h4 className="min-w-0 flex-1 text-sm font-bold text-text">Assigned rooms</h4>
         <span className="shrink-0 whitespace-nowrap text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full font-semibold">{res.reservationRooms?.length || 0} {res.reservationRooms?.length === 1 ? 'room' : 'rooms'}</span>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -562,7 +562,7 @@ export default function ReservationsPage() {
           const amountPaid = parseFloat(res.amountPaid || 0);
           const balanceDue = Math.max(0, totalAmount - amountPaid);
           const refundedAmount = (res.refunds || []).filter(refund => !refund.isSimulated).reduce((sum, refund) => sum + Number(refund.amount), 0) + (res.payments || []).filter((payment) => payment.status === 'Refunded').reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
-          const isPastCheckIn = new Date(res.checkInDate) < new Date();
+          const isPastCheckIn = Date.now() >= noShowAllowedFrom(res.checkInDate, res.property?.checkInTime).getTime();
           const cardStatusClass = res.status === 'Confirmed' ? 'bg-primary-50 text-primary-700 ring-1 ring-primary-600/20' : res.status === 'InHouse' ? 'bg-success-50 text-success-700 ring-1 ring-success-600/20' : res.status === 'Cancelled' ? 'bg-danger-50 text-danger-700 ring-1 ring-danger-600/20' : res.status === 'NoShow' ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-600/20' : res.status === 'Expired' ? 'bg-warning-50 text-warning-700 ring-1 ring-warning-600/20' : 'bg-secondary-100 text-secondary-700';
           const cardStatusLabel = res.status === 'InHouse' ? 'In-House' : res.status === 'NoShow' ? 'No Show' : res.status;
 
@@ -597,7 +597,7 @@ export default function ReservationsPage() {
                 <div className="mt-2 flex gap-2">
                   {res.reservationRooms?.length > 0 && (
                     <button type="button" onClick={() => setExpandedId(isExpanded ? null : id)} aria-expanded={isExpanded} aria-controls={`mobile-rooms-${id}`} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50">
-                      {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />} {isExpanded ? 'Hide rooms' : 'Rooms & more'}
+                      {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />} {isExpanded ? 'Hide assigned rooms' : `View assigned ${res.reservationRooms.length === 1 ? 'room' : `rooms (${res.reservationRooms.length})`}`}
                     </button>
                   )}
                   {['Cancelled', 'Expired'].includes(res.status) && res.refundStatus === 'Pending' && permissions?.includes('CanCancelReservation') && (
@@ -611,18 +611,16 @@ export default function ReservationsPage() {
                   </Link>
                 </div>
 
-                {(res.status === 'Confirmed' || (res.status !== 'Completed' && res.status !== 'Cancelled' && res.status !== 'NoShow' && res.status !== 'Expired')) && (
-                  <details className="mt-3 border-t border-border pt-3">
-                    <summary className="cursor-pointer select-none text-sm font-semibold text-text-muted">More actions</summary>
-                    <div className="mt-3 grid grid-cols-1 gap-2">
-                      {res.status === 'Confirmed' && isPastCheckIn && (
-                        <button onClick={() => askReservationAction(id, 'noShow', 'Mark as No Show?', `This will mark reservation ${res.confirmationCode || `#${id.slice(0, 8)}`} as a No Show and release the rooms back to inventory. This cannot be undone.`, { danger: true, confirmLabel: 'Mark as No Show' })} className="min-h-11 rounded-lg border border-orange-200 px-3 text-left text-sm font-semibold text-orange-700 hover:bg-orange-50">Mark as No Show</button>
-                      )}
-                      {res.status !== 'Completed' && res.status !== 'Cancelled' && res.status !== 'NoShow' && res.status !== 'Expired' && (
-                        <button onClick={() => askReservationAction(id, 'cancel', 'Cancel reservation?', `This will cancel reservation ${res.confirmationCode || `#${id.slice(0, 8)}`}. This can't be undone from here.`, { danger: true, confirmLabel: 'Cancel Reservation' })} className="min-h-11 rounded-lg border border-danger-200 px-3 text-left text-sm font-semibold text-danger-700 hover:bg-danger-50">Cancel reservation</button>
-                      )}
-                    </div>
-                  </details>
+                {/* Always visible so staff don't have to look for them; both still ask for confirmation. */}
+                {((res.status === 'Confirmed' && isPastCheckIn) || ['Pending', 'Confirmed'].includes(res.status) && !res.reservationRooms?.some(stay => stay.status === 'CheckedIn')) && (
+                  <div className="mt-2 flex gap-2">
+                    {res.status === 'Confirmed' && isPastCheckIn && (
+                      <button onClick={() => askReservationAction(id, 'noShow', 'Mark as No Show?', `This will mark reservation ${res.confirmationCode || `#${id.slice(0, 8)}`} as a No Show and release the rooms back to inventory. This cannot be undone.`, { danger: true, confirmLabel: 'Mark as No Show' })} className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border border-orange-200 px-3 text-sm font-semibold text-orange-700 hover:bg-orange-50"><AlertCircle size={16} /> No-show</button>
+                    )}
+                    {['Pending', 'Confirmed'].includes(res.status) && !res.reservationRooms?.some(stay => stay.status === 'CheckedIn') && (
+                      <button onClick={() => askReservationAction(id, 'cancel', 'Cancel reservation?', `This will cancel reservation ${res.confirmationCode || `#${id.slice(0, 8)}`}. This can't be undone from here.`, { danger: true, confirmLabel: 'Cancel Reservation' })} className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border border-danger-200 px-3 text-sm font-semibold text-danger-700 hover:bg-danger-50"><XCircle size={16} /> Cancel booking</button>
+                    )}
+                  </div>
                 )}
 
                 {isExpanded && res.reservationRooms?.length > 0 && renderRoomAssignments(res, true)}
@@ -710,7 +708,8 @@ export default function ReservationsPage() {
                   if (res.status === 'NoShow') statusClass = 'bg-orange-50 text-orange-700 ring-1 ring-orange-600/20';
 
                   const isExpanded = expandedId === res.reservationId;
-                  const isPastCheckIn = new Date(res.checkInDate) < new Date();
+                  // No Show only once the guest can no longer be expected (same rule as the server).
+                  const isPastCheckIn = Date.now() >= noShowAllowedFrom(res.checkInDate, res.property?.checkInTime).getTime();
 
                   // 🌟 UPDATED: Actions with No Show support
                   let actions = null;
@@ -720,7 +719,7 @@ export default function ReservationsPage() {
                       aria-expanded={isExpanded} aria-controls={`desktop-rooms-${res.reservationId}`}
                       className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-border text-text hover:bg-secondary-50 transition"
                     >
-                      {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {isExpanded ? 'Hide rooms' : 'Rooms & more'}
+                      {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {isExpanded ? 'Hide assigned rooms' : `View assigned ${res.reservationRooms?.length === 1 ? 'room' : `rooms (${res.reservationRooms?.length || 0})`}`}
                     </button>
                   );
                   if (res.status === 'Confirmed') {

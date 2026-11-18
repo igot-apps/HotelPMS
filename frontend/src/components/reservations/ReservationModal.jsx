@@ -92,7 +92,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
 
   // 🌟 UPDATED: Auto-select the rooms when Step 2 loads
   useEffect(() => {
-    if (currentStep === 2 && formData.checkInDate && formData.checkOutDate && propertyId) {
+    if (currentStep === 1 && isOpen && formData.checkInDate && formData.checkOutDate && propertyId) {
       setIsFetchingRooms(true);
       getAvailableRooms(formData.checkInDate, formData.checkOutDate, propertyId)
         .then(res => {
@@ -102,12 +102,15 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
           if (initialData?.roomIds && initialData.roomIds.length > 0) {
             const preSelectedRooms = rooms.filter(room => initialData.roomIds.includes(room.roomId));
             setFormData(prev => ({ ...prev, selectedRooms: preSelectedRooms }));
+          } else {
+            // Dates changed: keep only the selected rooms that are still free for the new dates.
+            setFormData(prev => ({ ...prev, selectedRooms: prev.selectedRooms.filter(selected => rooms.some(room => room.roomId === selected.roomId)) }));
           }
         })
         .catch(err => { console.error(err); setAvailableRooms([]); })
         .finally(() => setIsFetchingRooms(false));
     }
-  }, [currentStep, formData.checkInDate, formData.checkOutDate, propertyId, initialData]);
+  }, [currentStep, isOpen, formData.checkInDate, formData.checkOutDate, propertyId, initialData]);
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
@@ -211,7 +214,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
   // Look up a complete phone number automatically after typing pauses.
   useEffect(() => {
     const digits = phoneLookup.replace(/\D/g, '');
-    if (!isOpen || currentStep !== 1 || digits.length !== 10 || lastAutoLookupRef.current === digits) return;
+    if (!isOpen || currentStep !== 2 || digits.length !== 10 || lastAutoLookupRef.current === digits) return;
 
     const value = phoneLookup;
     const timer = setTimeout(() => {
@@ -256,27 +259,31 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
 
   const nextStep = () => {
     if (currentStep === 1) {
-      // 🌟 CHANGED: Check propertyGuestId
-      if (!formData.propertyGuestId || !formData.checkInDate || !formData.checkOutDate) {
-        toast.error(!formData.propertyGuestId ? 'Choose the guest first: pick them from the search, or tap "Create guest" to add a new one.' : 'Choose both the check-in and check-out dates.'); 
+      // Step 1: dates and at least one room.
+      if (!formData.checkInDate || !formData.checkOutDate) {
+        toast.error('Choose both the check-in and check-out dates.');
         return;
       }
-      const todayDate = new Date(); 
+      const todayDate = new Date();
       todayDate.setHours(0,0,0,0);
-      const checkInDate = new Date(formData.checkInDate); 
+      const checkInDate = new Date(formData.checkInDate);
       checkInDate.setHours(0,0,0,0);
-      
       if (checkInDate < todayDate) {
-        toast.error('Check-in date cannot be in the past.'); 
+        toast.error('Check-in date cannot be in the past.');
         return;
       }
-      if (nights <= 0) { 
-        toast.error('Check-out date must be after check-in date.'); 
-        return; 
+      if (nights <= 0) {
+        toast.error('Check-out date must be after check-in date.');
+        return;
+      }
+      if (formData.selectedRooms.length === 0) {
+        toast.error('Tap at least one room to continue.');
+        return;
       }
     }
-    if (currentStep === 2 && formData.selectedRooms.length === 0) {
-      toast.error('Please select at least one room.'); 
+    if (currentStep === 2 && !formData.propertyGuestId) {
+      // Step 2: the guest.
+      toast.error('Choose the guest: enter their phone number, or tap "Guest has no phone number".');
       return;
     }
     setCurrentStep(prev => prev + 1);
@@ -374,9 +381,9 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
             </button>
           </div>
           <div className="flex items-center justify-center gap-2">
-            <StepIndicator num={1} label="Guest & Dates" active={currentStep >= 1} completed={currentStep > 1} />
+            <StepIndicator num={1} label="Dates & Room" active={currentStep >= 1} completed={currentStep > 1} />
             <div className={`w-12 h-0.5 ${currentStep > 1 ? 'bg-primary-500' : 'bg-border'}`} />
-            <StepIndicator num={2} label="Select Rooms" active={currentStep >= 2} completed={currentStep > 2} />
+            <StepIndicator num={2} label="Guest" active={currentStep >= 2} completed={currentStep > 2} />
             <div className={`w-12 h-0.5 ${currentStep > 2 ? 'bg-primary-500' : 'bg-border'}`} />
             <StepIndicator num={3} label="Confirm & Pay" active={currentStep >= 3} completed={false} />
           </div>
@@ -384,9 +391,90 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6">
           {currentStep === 1 && (
+            <div className="space-y-6">
+              <div className="mx-auto max-w-2xl">
+                <p className="mb-3 text-sm text-text-muted">Pick the dates, then tap the rooms the guest wants.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-text mb-1.5">Check-in Date *</label>
+                    <input 
+                      type="date" 
+                      name="checkInDate" 
+                      min={today} 
+                      value={formData.checkInDate} 
+                      onChange={handleChange} 
+                      required 
+                      className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-text mb-1.5">Check-out Date *</label>
+                    <input 
+                      type="date" 
+                      name="checkOutDate" 
+                      min={getMinCheckOut(formData.checkInDate)} 
+                      value={formData.checkOutDate} 
+                      onChange={handleChange} 
+                      required 
+                      className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition" 
+                    />
+                  </div>
+                </div>
+                </div>
+            <div className="space-y-5">
+              <div className="bg-secondary-50 p-4 rounded-xl border border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-text">Available Rooms</h3>
+                  <p className="text-xs text-text-muted">{formatDate(formData.checkInDate)} → {formatDate(formData.checkOutDate)} ({nights} Night{nights > 1 ? 's' : ''})</p>
+                </div>
+                <p className="text-xs font-semibold text-primary-600">Tick one or more rooms to add to this booking.</p>
+              </div>
+              {isFetchingRooms ? (
+                <div className="p-12 text-center text-text-muted flex flex-col items-center gap-2"><Loader2 className="animate-spin" size={24} /> Searching...</div>
+              ) : availableRooms.length === 0 ? (
+                <div className="p-12 text-center text-warning-700 bg-warning-50 rounded-xl border border-warning-100 flex flex-col items-center gap-2"><AlertCircle size={24} /> <p className="font-semibold">No rooms available.</p></div>
+              ) : (
+                <>
+                {/* Tap a room type to show only those rooms (selected rooms stay selected). */}
+                {roomTypeOptions.length > 1 && (
+                  <div role="group" aria-label="Filter by room type" className="flex flex-wrap gap-2">
+                    {[{ key: 'all', name: 'All types', count: availableRooms.length }, ...roomTypeOptions].map(option => (
+                      <button key={option.key} type="button" aria-pressed={roomTypeFilter === option.key} onClick={() => setRoomTypeFilter(option.key)} className={`inline-flex min-h-10 items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-semibold transition ${roomTypeFilter === option.key ? 'border-primary-600 bg-primary-600 text-white' : 'border-border bg-surface text-text hover:bg-secondary-50'}`}>
+                        {option.name}<span className={`rounded-full px-2 text-xs ${roomTypeFilter === option.key ? 'bg-white/20' : 'bg-secondary-100 text-text-muted'}`}>{option.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {availableRooms.filter(room => roomTypeFilter === 'all' || !roomTypeOptions.some(option => option.key === roomTypeFilter) || String(room.roomTypeId) === roomTypeFilter).map(room => {
+                    const isSelected = formData.selectedRooms.some(r => r.roomId === room.roomId);
+                    const price = parseFloat(room.roomType.basePrice);
+                    return (
+                      <button type="button" key={room.roomId} onClick={() => toggleRoomSelection(room)} className={`relative p-4 rounded-xl border text-left transition-all ${isSelected ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-500/20' : 'border-border bg-background hover:border-primary-300 hover:bg-secondary-50'}`}>
+                        {isSelected && <div className="absolute top-2 right-2 w-6 h-6 bg-primary-600 rounded-full flex items-center justify-center"><Check size={14} className="text-white" /></div>}
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isSelected ? 'bg-primary-100 text-primary-700' : 'bg-success-50 text-success-700'}`}>{isSelected ? 'SELECTED' : 'AVAILABLE'}</span>
+                          <span className="text-lg font-bold text-text">{room.roomNumber}</span>
+                        </div>
+                        <p className="text-xs text-text-muted mb-3">Floor {room.floor} · {room.roomType.typeName}</p>
+                        <div className="border-t border-border pt-2 mt-auto">
+                          <p className="text-sm font-bold text-primary-600">GH₵ {formatCurrency(price)} / night</p>
+                          <p className="text-xs text-text-muted">{nights} night{nights > 1 ? 's' : ''} = GH₵ {formatCurrency(price * nights)}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                </>
+              )}
+            </div>
+            </div>
+          )}
+
+          {currentStep === 2 && (
             <div className="space-y-5 max-w-2xl mx-auto">
               <div>
-                <label htmlFor="reservation-guest-phone" className="block text-sm font-semibold text-text mb-1.5">Guest phone number <span className="font-normal text-text-muted">(optional, 10 digits)</span></label>
+                <label htmlFor="reservation-guest-phone" className="block text-sm font-semibold text-text mb-1.5">Guest's phone number <span className="font-normal text-text-muted">(10 digits)</span></label>
                 <div className="flex gap-2">
                   <input
                     id="reservation-guest-phone"
@@ -405,46 +493,35 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                       setFormData(prev => ({ ...prev, propertyGuestId: '' }));
                     }}
                     onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
-                    placeholder="Find user by phone number"
+                    placeholder="e.g. 0241234567" autoFocus
                     className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text placeholder:text-text-muted focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition"
                   />
-                  {!phoneLookupMessage.startsWith('No guest exists with') && (
-                    <button 
-                      type="button" 
-                      onClick={() => {
-                        setNewGuestData({ fullName: '', phone: phoneLookup, email: '', idNumber: '' });
-                        setIsAddGuestOpen(true);
-                      }} 
-                      className="px-4 py-2.5 bg-primary-50 text-primary-600 border border-primary-100 rounded-lg hover:bg-primary-100 transition flex items-center gap-2 font-semibold text-sm whitespace-nowrap"
-                      title="Add New Guest"
-                    >
-                      <UserPlus size={18} /> Add Guest
-                    </button>
-                  )}
                 </div>
                 {isPhoneLookupLoading && (
                   <p className="mt-2 inline-flex items-center gap-2 text-xs text-text-muted">
                     <Loader2 size={14} className="animate-spin" /> Checking for an existing guest…
                   </p>
                 )}
-                {phoneLookupMessage && (
+                {phoneLookupMessage && !phoneLookupMessage.startsWith('No guest exists with') && (
                   <p className={`mt-2 text-xs ${phoneLookupResult?.isActive === false ? 'text-warning-700' : phoneLookupResult || formData.propertyGuestId ? 'text-success-700' : 'text-text-muted'}`}>
-                    {phoneLookupMessage.startsWith('No guest exists with') ? (
-                      <>No guest exists with <span className="select-all rounded bg-secondary-100 px-1 font-mono font-semibold text-text">{phoneLookup}</span>. Would you like to create a guest with this number?</>
-                    ) : phoneLookupMessage}
+                    {phoneLookupMessage}
                   </p>
                 )}
+                {/* Number not registered yet: this is a new guest — register them with the number filled in. */}
                 {phoneLookupMessage.startsWith('No guest exists with') && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNewGuestData({ fullName: '', phone: phoneLookup, email: '', idNumber: '' });
-                      setIsAddGuestOpen(true);
-                    }}
-                    className="mt-2 inline-flex items-center gap-2 rounded-lg bg-primary-600 px-3 py-2 text-xs font-semibold text-text-inverted hover:bg-primary-700"
-                  >
-                    <UserPlus size={15} /> Create guest with this number
-                  </button>
+                  <div role="status" className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-primary-200 bg-primary-50 p-3">
+                    <p className="min-w-0 flex-1 text-sm text-primary-900"><strong>New guest.</strong> <span className="select-all font-mono font-semibold">{phoneLookup}</span> isn't registered yet.</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewGuestData({ fullName: '', phone: phoneLookup, email: '', idNumber: '' });
+                        setIsAddGuestOpen(true);
+                      }}
+                      className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-text-inverted hover:bg-primary-700"
+                    >
+                      <UserPlus size={16} /> Register new guest
+                    </button>
+                  </div>
                 )}
                 {phoneLookupResult && (
                   <div className="mt-2 space-y-2">
@@ -505,56 +582,20 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                     )}
                   </div>
                 )}
+                {/* Guests are found by phone (unique). No phone: go straight to the registration form. */}
                 <button
                   type="button"
-                  onClick={() => setShowNameGuestSearch(prev => !prev)}
-                  className="mt-3 text-xs font-semibold text-primary-700 hover:underline"
+                  onClick={() => { setNewGuestData({ fullName: '', phone: '', email: '', idNumber: '' }); setIsAddGuestOpen(true); }}
+                  className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text hover:bg-secondary-50"
                 >
-                  {showNameGuestSearch ? 'Hide guest name search' : 'Search existing guests by name instead'}
+                  <UserPlus size={16} /> Guest has no phone number
                 </button>
-                {showNameGuestSearch && (
-                  <div className="mt-2">
-                    <label className="block text-xs font-semibold text-text-muted mb-1.5">Find guest by name or phone</label>
-                    <SearchableGuestSelect
-                      guests={guests}
-                      value={formData.propertyGuestId}
-                      onChange={(id) => setFormData(prev => ({ ...prev, propertyGuestId: id }))}
-                    />
-                  </div>
-                )}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-text mb-1.5">Check-in Date *</label>
-                  <input 
-                    type="date" 
-                    name="checkInDate" 
-                    min={today} 
-                    value={formData.checkInDate} 
-                    onChange={handleChange} 
-                    required 
-                    className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition" 
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-text mb-1.5">Check-out Date *</label>
-                  <input 
-                    type="date" 
-                    name="checkOutDate" 
-                    min={getMinCheckOut(formData.checkInDate)} 
-                    value={formData.checkOutDate} 
-                    onChange={handleChange} 
-                    required 
-                    className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition" 
-                  />
-                </div>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-text mb-1.5">Booking Source</label>
                 <select name="source" value={formData.source} onChange={handleChange} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition">
                   <option value="Walk-in">Walk-in</option>
                   <option value="Phone">Phone</option>
-                  <option value="Website">Website</option>
                   <option value="Direct">Direct</option>
                 </select>
               </div>
@@ -562,56 +603,6 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                 <label className="block text-sm font-semibold text-text mb-1.5">Notes</label>
                 <textarea name="notes" value={formData.notes} onChange={handleChange} rows="2" className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition resize-none" placeholder="Special requests..." />
               </div>
-            </div>
-          )}
-
-          {currentStep === 2 && (
-            <div className="space-y-5">
-              <div className="bg-secondary-50 p-4 rounded-xl border border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <div>
-                  <h3 className="text-sm font-bold text-text">Available Rooms</h3>
-                  <p className="text-xs text-text-muted">{formatDate(formData.checkInDate)} → {formatDate(formData.checkOutDate)} ({nights} Night{nights > 1 ? 's' : ''})</p>
-                </div>
-                <p className="text-xs font-semibold text-primary-600">Tick one or more rooms to add to this booking.</p>
-              </div>
-              {isFetchingRooms ? (
-                <div className="p-12 text-center text-text-muted flex flex-col items-center gap-2"><Loader2 className="animate-spin" size={24} /> Searching...</div>
-              ) : availableRooms.length === 0 ? (
-                <div className="p-12 text-center text-warning-700 bg-warning-50 rounded-xl border border-warning-100 flex flex-col items-center gap-2"><AlertCircle size={24} /> <p className="font-semibold">No rooms available.</p></div>
-              ) : (
-                <>
-                {/* Tap a room type to show only those rooms (selected rooms stay selected). */}
-                {roomTypeOptions.length > 1 && (
-                  <div role="group" aria-label="Filter by room type" className="flex flex-wrap gap-2">
-                    {[{ key: 'all', name: 'All types', count: availableRooms.length }, ...roomTypeOptions].map(option => (
-                      <button key={option.key} type="button" aria-pressed={roomTypeFilter === option.key} onClick={() => setRoomTypeFilter(option.key)} className={`inline-flex min-h-10 items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-semibold transition ${roomTypeFilter === option.key ? 'border-primary-600 bg-primary-600 text-white' : 'border-border bg-surface text-text hover:bg-secondary-50'}`}>
-                        {option.name}<span className={`rounded-full px-2 text-xs ${roomTypeFilter === option.key ? 'bg-white/20' : 'bg-secondary-100 text-text-muted'}`}>{option.count}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {availableRooms.filter(room => roomTypeFilter === 'all' || !roomTypeOptions.some(option => option.key === roomTypeFilter) || String(room.roomTypeId) === roomTypeFilter).map(room => {
-                    const isSelected = formData.selectedRooms.some(r => r.roomId === room.roomId);
-                    const price = parseFloat(room.roomType.basePrice);
-                    return (
-                      <button type="button" key={room.roomId} onClick={() => toggleRoomSelection(room)} className={`relative p-4 rounded-xl border text-left transition-all ${isSelected ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-500/20' : 'border-border bg-background hover:border-primary-300 hover:bg-secondary-50'}`}>
-                        {isSelected && <div className="absolute top-2 right-2 w-6 h-6 bg-primary-600 rounded-full flex items-center justify-center"><Check size={14} className="text-white" /></div>}
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isSelected ? 'bg-primary-100 text-primary-700' : 'bg-success-50 text-success-700'}`}>{isSelected ? 'SELECTED' : 'AVAILABLE'}</span>
-                          <span className="text-lg font-bold text-text">{room.roomNumber}</span>
-                        </div>
-                        <p className="text-xs text-text-muted mb-3">Floor {room.floor} · {room.roomType.typeName}</p>
-                        <div className="border-t border-border pt-2 mt-auto">
-                          <p className="text-sm font-bold text-primary-600">GH₵ {formatCurrency(price)} / night</p>
-                          <p className="text-xs text-text-muted">{nights} night{nights > 1 ? 's' : ''} = GH₵ {formatCurrency(price * nights)}</p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-                </>
-              )}
             </div>
           )}
 
@@ -760,7 +751,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
           <div className="bg-surface w-full max-w-md rounded-2xl shadow-2xl border border-border overflow-hidden">
             <div className="p-5 border-b border-border flex justify-between items-center bg-primary-50/30">
               <h3 className="text-lg font-bold text-text flex items-center gap-2">
-                <UserPlus size={20} className="text-primary-600" /> Quick Add Guest
+                <UserPlus size={20} className="text-primary-600" /> Register new guest
               </h3>
               <button type="button" onClick={() => setIsAddGuestOpen(false)} className="p-1.5 rounded-lg hover:bg-secondary-100 text-text-muted transition">
                 <X size={20} />
