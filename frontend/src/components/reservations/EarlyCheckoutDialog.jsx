@@ -7,6 +7,7 @@ import { invalidateCorrections } from '../../lib/correction-actions';
 
 const REASON = 'Guest checked out early';
 const cash = (value) => `GHS ${Number(value || 0).toFixed(2)}`;
+const addDays = (date, days) => new Date(Date.parse(`${date}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
 const dateLabel = (value) => new Date(`${value}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
 // Shown only when a guest checks out before their scheduled departure date.
@@ -18,8 +19,11 @@ export default function EarlyCheckoutDialog({ room, reservation, today, onCheckO
   const [error, setError] = useState('');
   const scheduled = String(room.checkOutDate).slice(0, 10);
   const arrival = String(room.checkInDate).slice(0, 10);
-  const canShorten = today > arrival; // at least one night must remain on the booking
-  const correction = { action: 'correct-date', stayIds: [room.reservationRoomId], newCheckOutDate: today, reason: REASON };
+  // At least one night stays on the booking: a guest who arrived today is charged for one night.
+  const arrivedToday = today <= arrival;
+  const newCheckOutDate = arrivedToday ? addDays(arrival, 1) : today;
+  const canShorten = newCheckOutDate < scheduled;
+  const correction = { action: 'correct-date', stayIds: [room.reservationRoomId], newCheckOutDate, reason: REASON };
   const url = `/reservations/${reservation.reservationId}`;
 
   const choose = async (next) => {
@@ -81,12 +85,12 @@ export default function EarlyCheckoutDialog({ room, reservation, today, onCheckO
           <button type="button" aria-label="Close" disabled={busy} onClick={onClose} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border text-text"><X size={18} /></button>
         </div>
         <p className="text-sm text-text-muted">
-          Room {room.room?.roomNumber || room.roomNumberSnapshot} is booked until <strong className="text-text">{dateLabel(scheduled)}</strong>. How would you like to handle the remaining nights?
+          Room {room.room?.roomNumber || room.roomNumberSnapshot} (booking {reservation.confirmationCode}) is booked until <strong className="text-text">{dateLabel(scheduled)}</strong>. How would you like to handle the remaining nights?
         </p>
 
         <div className="space-y-2">
           {option('keep', 'Keep original charges', 'Guest pays the full agreed booking amount.')}
-          {option('shorten', 'Shorten stay and recalculate charges', canShorten ? `Change departure to today (${dateLabel(today)}) and recalculate the balance.` : 'Not available: the guest arrived today, so the booking must keep at least one night.', !canShorten)}
+          {option('shorten', 'Shorten stay and recalculate charges', !canShorten ? 'Not available: only one night is booked, and at least one night is always charged.' : arrivedToday ? `Charge one night only (departure ${dateLabel(newCheckOutDate)}) and recalculate the balance.` : `Change departure to today (${dateLabel(today)}) and recalculate the balance.`, !canShorten)}
         </div>
 
         {choice === 'shorten' && preview && (

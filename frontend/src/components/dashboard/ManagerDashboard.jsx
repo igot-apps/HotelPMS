@@ -69,11 +69,11 @@ export default function ManagerDashboard() {
       <section aria-labelledby="mgr-money" className="space-y-3">
         <h2 id="mgr-money" className="text-lg font-bold text-text">Money</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat icon={Coins} label="Collected today" value={today.isError ? '—' : cash(today.data?.netCollections)} hint={today.data ? `${today.data.transactions} payment${today.data.transactions === 1 ? '' : 's'} · after refunds` : ''} loading={today.isLoading} tone="success" />
-          <Stat icon={Coins} label={`Collected in ${month.label}`} value={report.isError ? '—' : cash(summary.currentRevenue)} loading={report.isLoading} tone="primary"
+          <Stat to="/reports" icon={Coins} label="Collected today" value={today.isError ? '—' : cash(today.data?.netCollections)} hint={today.data ? `${today.data.transactions} payment${today.data.transactions === 1 ? '' : 's'} · after refunds` : ''} loading={today.isLoading} tone="success" />
+          <Stat to="/reports" icon={Coins} label={`Collected in ${month.label}`} value={report.isError ? '—' : cash(summary.currentRevenue)} loading={report.isLoading} tone="primary"
             hint={report.data ? <span className={`inline-flex items-center gap-1 ${growth >= 0 ? 'text-success-700' : 'text-danger-700'}`}>{growth >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}{Math.abs(growth).toFixed(0)}% vs the same days last period</span> : ''} />
-          <Stat icon={Wallet} label="Owed by guests still here" value={glance.isError ? '—' : cash(owedInHouse)} hint={`${glance.data?.money?.unpaidInHouse?.length || 0} booking${glance.data?.money?.unpaidInHouse?.length === 1 ? '' : 's'}`} loading={glance.isLoading} tone={owedInHouse > 0 ? 'warning' : 'neutral'} />
-          <Stat icon={Receipt} label="Owed by guests who left" value={owedAfter.isError ? '—' : cash(owedAfterTotal)} hint={`${owedAfterCount} guest${owedAfterCount === 1 ? '' : 's'} to follow up`} loading={owedAfter.isLoading} tone={owedAfterTotal > 0 ? 'danger' : 'neutral'} />
+          <Stat to="/reservations?status=InHouse" icon={Wallet} label="Owed by guests still here" value={glance.isError ? '—' : cash(owedInHouse)} hint={`${glance.data?.money?.unpaidInHouse?.length || 0} booking${glance.data?.money?.unpaidInHouse?.length === 1 ? '' : 's'}`} loading={glance.isLoading} tone={owedInHouse > 0 ? 'warning' : 'neutral'} />
+          <Stat to="/reservations?status=Completed" icon={Receipt} label="Owed by guests who left" value={owedAfter.isError ? '—' : cash(owedAfterTotal)} hint={`${owedAfterCount} guest${owedAfterCount === 1 ? '' : 's'} to follow up`} loading={owedAfter.isLoading} tone={owedAfterTotal > 0 ? 'danger' : 'neutral'} />
         </div>
       </section>
 
@@ -81,10 +81,10 @@ export default function ManagerDashboard() {
       <section aria-labelledby="mgr-rooms" className="space-y-3">
         <h2 id="mgr-rooms" className="text-lg font-bold text-text">Rooms</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat icon={BedDouble} label="Rooms taken tonight" value={glance.data ? `${glance.data.rooms.occupiedTonight} of ${glance.data.rooms.total}` : '—'} hint={glance.data ? `${glance.data.rooms.occupancyPercent}% full tonight` : ''} loading={glance.isLoading} tone="primary" />
-          <Stat icon={BarChart3} label={`How full in ${month.label}`} value={`${summary.occupancyRate || 0}%`} hint={`${summary.actualOccupiedNights || 0} of ${summary.totalAvailableNights || 0} room-nights sold`} loading={report.isLoading} tone="primary" />
-          <Stat icon={Coins} label="Average price per night sold" value={cash(summary.adr)} hint="Room money ÷ nights sold" loading={report.isLoading} tone="neutral" />
-          <Stat icon={Coins} label="Earned per room per night" value={cash(summary.revpar)} hint="Room money ÷ all room-nights, sold or empty" loading={report.isLoading} tone="neutral" />
+          <Stat to="/rooms" icon={BedDouble} label="Rooms taken tonight" value={glance.data ? `${glance.data.rooms.occupiedTonight} of ${glance.data.rooms.total}` : '—'} hint={glance.data ? `${glance.data.rooms.occupancyPercent}% full tonight` : ''} loading={glance.isLoading} tone="primary" />
+          <Stat to="/reports" icon={BarChart3} label={`How full in ${month.label}`} value={`${summary.occupancyRate || 0}%`} hint={`${summary.actualOccupiedNights || 0} of ${summary.totalAvailableNights || 0} room-nights sold`} loading={report.isLoading} tone="primary" />
+          <Stat to="/reports" icon={Coins} label="Average price per night sold" value={cash(summary.adr)} hint="Room money ÷ nights sold" loading={report.isLoading} tone="neutral" />
+          <Stat to="/reports" icon={Coins} label="Earned per room per night" value={cash(summary.revpar)} hint="Room money ÷ all room-nights, sold or empty" loading={report.isLoading} tone="neutral" />
         </div>
       </section>
 
@@ -118,16 +118,17 @@ export default function ManagerDashboard() {
 
 const TONES = { primary: 'text-primary-600 bg-primary-50', success: 'text-success-600 bg-success-50', warning: 'text-warning-600 bg-warning-50', danger: 'text-danger-600 bg-danger-50', neutral: 'text-secondary-600 bg-secondary-50' };
 
-function Stat({ icon: Icon, label, value, hint, loading, tone = 'neutral' }) {
+function Stat({ to, icon: Icon, label, value, hint, loading, tone = 'neutral' }) {
+  // Every figure opens the page where it can be checked or acted on.
   return (
-    <div className="min-w-0 rounded-xl border border-border bg-surface p-4 shadow-sm">
+    <Link to={to} className="block min-w-0 rounded-xl border border-border bg-surface p-4 shadow-sm transition hover:border-primary-300 hover:shadow-md">
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm font-semibold text-text-muted">{label}</p>
         <span className={`rounded-lg p-2 ${TONES[tone]}`}><Icon size={18} /></span>
       </div>
       {loading ? <Loader2 size={20} className="mt-2 animate-spin text-text-muted" /> : <p className="mt-1 break-words text-2xl font-bold text-text">{value}</p>}
       {hint && !loading && <p className="mt-1 text-xs text-text-muted">{hint}</p>}
-    </div>
+    </Link>
   );
 }
 

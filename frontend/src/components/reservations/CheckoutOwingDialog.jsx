@@ -13,7 +13,7 @@ const field = 'w-full rounded-lg border border-border bg-background px-4 py-2.5 
 
 // Checkout when the guest still owes money. Nothing about the money changes here: the balance
 // stays on the booking for collection, and the reason is saved with the checkout record.
-export default function CheckoutOwingDialog({ roomNumber, guestName, balanceDue, lateText, onTakePayment, onCheckOut, onClose }) {
+export default function CheckoutOwingDialog({ roomNumber, guestName, code, balanceDue, lateText, onTakePayment, onCheckOut, onClose }) {
   const [choice, setChoice] = useState('');
   const [otherText, setOtherText] = useState('');
   const [departureNote, setDepartureNote] = useState('');
@@ -40,18 +40,18 @@ export default function CheckoutOwingDialog({ roomNumber, guestName, balanceDue,
 
   return (
     <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="owing-checkout-title">
-      <form onSubmit={submit} className="w-full max-w-md overflow-hidden rounded-2xl border border-border bg-surface shadow-xl">
-        <div className="flex items-start justify-between gap-3 border-b border-border p-5">
+      <form onSubmit={submit} className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-xl">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border p-5">
           <div>
             <h2 id="owing-checkout-title" className="flex items-center gap-2 text-xl font-bold text-text"><LogOut size={20} className="text-primary-600" /> Check out Room {roomNumber}</h2>
-            <p className="mt-1 text-xs text-text-muted">{guestName}</p>
+            <p className="mt-1 text-xs text-text-muted">{guestName}{code ? ` · ${code}` : ''}</p>
           </div>
           <button type="button" aria-label="Close" onClick={onClose} className="rounded-lg p-2 text-text-muted hover:bg-secondary-100"><X size={20} /></button>
         </div>
 
-        <div className="space-y-4 p-5">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
           <div className="rounded-xl border border-danger-100 bg-danger-50 p-4">
-            <p className="flex items-center gap-2 text-sm font-semibold text-danger-700"><AlertTriangle size={16} /> This guest still owes</p>
+            <p className="flex items-center gap-2 text-sm font-semibold text-danger-700"><AlertTriangle size={16} /> Booking balance still owed</p>
             <p className="mt-1 text-2xl font-bold text-danger-700">GHS {Number(balanceDue || 0).toFixed(2)}</p>
           </div>
 
@@ -86,7 +86,7 @@ export default function CheckoutOwingDialog({ roomNumber, guestName, balanceDue,
           {error && <p role="alert" className="rounded-lg border border-danger-100 bg-danger-50 p-3 text-sm text-danger-700">{error}</p>}
         </div>
 
-        <div className="flex justify-end gap-3 border-t border-border p-5">
+        <div className="flex shrink-0 justify-end gap-3 border-t border-border bg-surface p-4 sm:p-5">
           <button type="button" onClick={onClose} className="min-h-11 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text hover:bg-secondary-50">Cancel</button>
           <button type="submit" disabled={saving} className="flex min-h-11 items-center gap-2 rounded-lg bg-danger-600 px-4 py-2 text-sm font-semibold text-white hover:bg-danger-700 disabled:opacity-50">
             {saving && <Loader2 size={16} className="animate-spin" />} Check out with money owed

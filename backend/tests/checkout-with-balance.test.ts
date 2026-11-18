@@ -88,25 +88,49 @@ describe('B and D: guest still owes money', () => {
   });
 });
 
-describe('F: permissions and the receptionist limit', () => {
-  test('staff outside the front desk cannot approve checkout with money owed', async () => {
+describe('multi-room booking: balance belongs to the booking', () => {
+  const addRoom = async (tx: any, status: string) => {
+    const res = await tx.reservation.findUniqueOrThrow();
+    res.reservationRooms.push({ reservationRoomId: 6, reservationId: 'R1', roomId: 10, roomNumberSnapshot: '205', status, checkInDate: new Date('2026-11-09T00:00:00Z'), checkOutDate: new Date('2026-11-13T00:00:00Z') });
+    tx.reservation.findUniqueOrThrow.mockResolvedValue(res);
+  };
+  test('one room leaves while another room is still checked in: no money-owed reason needed, debt untouched', async () => {
+    const { tx } = fixture(150, receptionist());
+    await addRoom(tx, 'CheckedIn');
+    await transitionStay(5, 'CheckedOut', actor, {});
+    const audit = lastAudit(tx);
+    expect(audit.action).toBe('CheckedOut');
+    expect(audit.newData.value).toMatchObject({ partialCheckout: true, bookingBalance: 250 });
+    expect(tx.room.update).toHaveBeenCalledWith({ where: { roomId: 9 }, data: { operationalStatus: 'Available', housekeepingStatus: 'Dirty' } });
+    expectMoneyUntouched(tx);
+  });
+  test('the last checked-in room still needs the reason when money is owed', async () => {
+    const { tx } = fixture(150, receptionist());
+    await addRoom(tx, 'CheckedOut');
+    await expect(transitionStay(5, 'CheckedOut', actor, {})).rejects.toMatchObject({ code: 'BALANCE_OWING' });
+    await transitionStay(5, 'CheckedOut', actor, { overrideReason: 'Guest promised to pay later.' });
+    expect(lastAudit(tx).action).toBe('CreditCheckoutApproved');
+  });
+  test('a room still only reserved (not arrived) does not count as occupied', async () => {
+    const { tx } = fixture(150, receptionist());
+    await addRoom(tx, 'Reserved');
+    await expect(transitionStay(5, 'CheckedOut', actor, {})).rejects.toMatchObject({ code: 'BALANCE_OWING' });
+  });
+});
+
+describe('F: permissions (no manager approval, no amount limit)', () => {
+  test('staff outside the front desk cannot check out a guest owing money', async () => {
     const { tx } = fixture(150, housekeeper);
     await expect(transitionStay(5, 'CheckedOut', actor, { overrideReason: 'Guest promised to pay later.' })).rejects.toThrow('Front desk staff required');
     expect(tx.reservationRoom.update).not.toHaveBeenCalled();
   });
-  test('a receptionist above the limit set by the manager is refused; within it is allowed', async () => {
-    let { tx } = fixture(150, receptionist({ 'credit-checkout': 200 }));
-    await expect(transitionStay(5, 'CheckedOut', actor, { overrideReason: 'Guest promised to pay later.' })).rejects.toThrow('above your limit of GHS 200.00');
-    expect(tx.reservationRoom.update).not.toHaveBeenCalled();
-    ({ tx } = fixture(250, receptionist({ 'credit-checkout': 200 })));
+  test('a receptionist checks out any amount owed directly, even if an old limit is still stored', async () => {
+    const { tx } = fixture(0, receptionist({ 'credit-checkout': 100 }));
     await transitionStay(5, 'CheckedOut', actor, { overrideReason: 'Guest promised to pay later.' });
     expect(lastAudit(tx).action).toBe('CreditCheckoutApproved');
-  });
-  test('managers are never limited, and receptionists without a limit keep the current rule', () => {
-    expect(financialDecision({ ...manager, financialDelegation: { 'credit-checkout': 10 } }, 'credit-checkout', { balance: 5000 }).canApply).toBe(true);
-    expect(financialDecision(receptionist(), 'credit-checkout', { balance: 5000 }).canApply).toBe(true);
-    expect(financialDecision(receptionist({ 'credit-checkout': 100 }), 'credit-checkout', { balance: 100 }).canApply).toBe(true);
-    expect(financialDecision(receptionist({ 'credit-checkout': 100 }), 'credit-checkout', { balance: 100.5 }).canApply).toBe(false);
+    expectMoneyUntouched(tx);
+    expect(financialDecision(receptionist({ 'credit-checkout': 100 }), 'credit-checkout', { balance: 5000 }).canApply).toBe(true);
+    expect(financialDecision(manager, 'credit-checkout', { balance: 5000 }).canApply).toBe(true);
   });
 });
 

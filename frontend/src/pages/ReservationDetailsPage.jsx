@@ -1,7 +1,11 @@
 import ResponsiveTable from '../components/ui/ResponsiveTable';
 import BackButton from '../components/ui/BackButton';
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
+import { bookingLink } from '../lib/bookingLink';
+import { bookingStatusLabel, roomStatusLabel, roomStatusTone } from '../lib/statusLabels';
+
+const localToday = () => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getReservationById, getReservationStats, updateReservation } from '../api/reservations';
 import api from '../lib/axios';
@@ -20,6 +24,9 @@ import { useAuthStore } from '../store/authStore';
 
 export default function ReservationDetailsPage() {
   const { id } = useParams();
+  const location = useLocation();
+  const fix = new URLSearchParams(location.search).get('fix');
+  const fixStay = new URLSearchParams(location.search).get('stay');
   const user = useAuthStore(state => state.user);
 
   const queryClient = useQueryClient();
@@ -140,7 +147,7 @@ export default function ReservationDetailsPage() {
             resData.status === 'NoShow' ? 'bg-orange-50 text-orange-700' :
             'bg-secondary-100 text-secondary-700'
           }`}>
-            {resData.status}
+            {bookingStatusLabel(resData.status)}
           </span>
 
           {/* Print Options Dropdown */}
@@ -171,6 +178,55 @@ export default function ReservationDetailsPage() {
           </button>
         </div>
       </div>
+
+      {/* Rooms: always visible, each with its own status and everyday actions (room-level). */}
+      <section aria-labelledby="booking-rooms-title" className="min-w-0 rounded-xl border border-border bg-surface p-4 shadow-sm sm:p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 id="booking-rooms-title" className="flex items-center gap-2 font-bold text-text"><BedDouble size={18} /> Rooms in this booking <span className="text-sm font-normal text-text-muted">({resData.reservationRooms?.length || 0})</span></h2>
+          <p className="text-xs text-text-muted">Room buttons change only that room. Payments and refunds are for the whole booking.</p>
+        </div>
+        {!resData.reservationRooms?.length && <p className="text-sm text-text-muted">No rooms assigned to this reservation.</p>}
+        <ul className="grid gap-3 md:grid-cols-2">
+          {resData.reservationRooms?.map((rr) => {
+            const active = ['Confirmed', 'InHouse'].includes(resData.status);
+            const roomLink = (action) => `${bookingLink(resData, action, rr.reservationRoomId)}&back=booking`;
+            const canCheckIn = active && rr.status === 'Reserved' && String(rr.checkInDate).slice(0, 10) <= localToday();
+            const inRoom = active && rr.status === 'CheckedIn';
+            const btn = 'inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold';
+            return (
+              <li key={rr.reservationRoomId} className="rounded-lg border border-border bg-secondary-50 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-base font-bold text-text">Room {rr.room?.roomNumber || rr.roomNumberSnapshot || 'Removed'}</p>
+                    <p className="text-xs text-text-muted">{rr.roomType?.typeName || rr.room?.roomType?.typeName || rr.roomTypeNameSnapshot || 'Room type removed'} · {fmt(rr.agreedPricePerNight)} GHS per night</p>
+                  </div>
+                  <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${roomStatusTone(rr.status)}`}>{roomStatusLabel(rr.status)}</span>
+                </div>
+                <p className="mt-2 text-sm text-text-muted">{new Date(rr.checkInDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })} → {new Date(rr.checkOutDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })}</p>
+                <p className="break-words text-sm text-text"><span className="text-text-muted">Occupant: </span>{rr.occupantName || 'Not assigned'}{rr.occupantPhone ? ` · ${rr.occupantPhone}` : ''}</p>
+                {rr.status === 'Reserved' && rr.room?.housekeepingStatus && !['Clean', 'Inspected'].includes(rr.room.housekeepingStatus) && <p className="mt-1 text-xs font-semibold text-warning-700">Room needs cleaning before check-in</p>}
+                {(canCheckIn || inRoom || (active && rr.status === 'Reserved')) && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {canCheckIn && <Link to={roomLink('checkin')} className={`${btn} bg-success-600 text-white hover:bg-success-700`}>Check in</Link>}
+                    {inRoom && <Link to={roomLink('checkout')} className={`${btn} bg-primary-600 text-white hover:bg-primary-700`}>Check out</Link>}
+                    {inRoom && <Link to={roomLink('extend')} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Extend</Link>}
+                    {inRoom && <Link to={roomLink('shorten')} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Shorten</Link>}
+                    <Link to={`/reservations/${resData.reservationId}?fix=transfer&stay=${rr.reservationRoomId}#corrections`} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Move to another room</Link>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-3 text-sm">
+          <span className="text-text-muted">Whole booking:</span>
+          <Link to={`/reservations/${resData.reservationId}#payments`} className="font-semibold text-primary-700 hover:underline">Payments</Link>
+          <span className="text-text-muted">·</span>
+          <Link to={`/reservations/${resData.reservationId}#refunds`} className="font-semibold text-primary-700 hover:underline">Refunds</Link>
+          <span className="text-text-muted">·</span>
+          <Link to={`/reservations/${resData.reservationId}#corrections`} className="font-semibold text-primary-700 hover:underline">Correct or undo a mistake</Link>
+        </div>
+      </section>
 
       <ReservationSection key={`${id}-overview`} id="overview" title="Reservation overview" icon={FileText} summary={resData.guestNameSnapshot || resData.platformGuest?.fullName || resData.propertyGuest?.fullName || undefined}>
       <div className="space-y-6">
@@ -211,32 +267,12 @@ export default function ReservationDetailsPage() {
           </div>
         </section>
 
-        {/* Room Assignments */}
-        <section className="min-w-0 rounded-lg border border-border p-4 lg:col-span-2"><h3 className="mb-4 flex items-center gap-2 font-bold text-text"><BedDouble size={18} />Assigned rooms <span className="text-xs font-normal text-text-muted">({resData.reservationRooms?.length || 0})</span></h3>
-          <div className="space-y-3">
-            {!resData.reservationRooms?.length && <p className="text-sm text-text-muted">No rooms assigned to this reservation.</p>}
-            {resData.reservationRooms?.map((rr) => (
-              <div key={rr.reservationRoomId} className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between p-4 bg-secondary-50 rounded-lg border border-border">
-                <div>
-                  <p className="text-sm font-bold text-text">Room {rr.room?.roomNumber || rr.roomNumberSnapshot || 'Removed'}</p>
-                  <p className="text-xs text-text-muted">{rr.roomType?.typeName || rr.room?.roomType?.typeName || rr.roomTypeNameSnapshot || 'Room type removed'}</p>
-                  <p className="mt-2 break-words text-sm text-text"><span className="text-text-muted">Room occupant: </span>{rr.occupantName || 'Not assigned'}</p>
-                  {rr.occupantPhone && <p className="text-xs text-text-muted">{rr.occupantPhone}</p>}
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold text-primary-600">{fmt(rr.agreedPricePerNight)} GHS</p>
-                  <p className="text-xs text-text-muted">per night</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
       </div>
       </div>
       </ReservationSection>
 
       {/* Payment History */}
-      <ReservationSection key={`${id}-corrections`} id="corrections" title="Correct or undo actions" icon={Wrench}><ReservationRecoveryPanel reservation={resData} embedded /></ReservationSection>
+      <ReservationSection key={`${id}-corrections`} id="corrections" title="Correct or undo actions" icon={Wrench}><ReservationRecoveryPanel key={`${fix || 'none'}-${fixStay || ''}`} reservation={resData} embedded initialAction={fix || undefined} initialStayId={fixStay || undefined} /></ReservationSection>
       <ReservationSection key={`${id}-refunds`} id="refunds" title={<span className="flex flex-wrap items-center gap-2">Refunds{approvedRefunds.length > 0 && <span className="rounded-full bg-success-50 px-2.5 py-0.5 text-xs font-semibold text-success-700">Approved · ready to return</span>}{approvedRefunds.length === 0 && pendingRefunds.length > 0 && <span className="rounded-full bg-warning-50 px-2.5 py-0.5 text-xs font-semibold text-warning-700">Awaiting approval</span>}</span>} icon={Undo2} summary={approvedRefunds.length > 0 ? `GHS ${fmt(approvedRefundTotal)} approved · money not yet returned` : Number(resData.refundDue) > 0 ? `GHS ${fmt(resData.refundDue)} remaining` : resData.refunds?.length ? 'View refund history' : undefined}><RefundPanel reservation={resData} embedded /></ReservationSection>
       <ReservationSection key={`${id}-payments`} id="payments" title="Payment history" icon={CreditCard} summary={`${resData.payments?.length || 0} payment(s)`}>
         <div className="flex flex-wrap gap-3 items-center justify-end mb-4">

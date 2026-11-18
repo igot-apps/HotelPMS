@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { createContext, useContext, useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { AlarmClock, AlertTriangle, BedDouble, ChevronRight, Coins, Hotel, Loader2, LogIn, LogOut, Receipt, Sparkles, Wallet, X } from 'lucide-react';
+import { AlarmClock, AlertTriangle, BedDouble, ChevronRight, Coins, Hotel, Loader2, LogIn, LogOut, Plus, Receipt, Sparkles, Wallet, X } from 'lucide-react';
 import api from '../../lib/axios';
 import useCheckoutAlerts from '../../hooks/useCheckoutAlerts';
 import { formatDuration, formatTime } from '../../lib/stayTiming';
@@ -13,6 +13,9 @@ const cash = (value) => `GHS ${Number(value || 0).toLocaleString('en-GH', { mini
 const shortDate = (value) => new Date(value).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 const clock = (value) => new Date(value).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 const reservationLink = (row, action) => bookingLink(row, action);
+// Which dashboard list a link was opened from, so the Reservations page can offer "Back to <list>".
+const PanelContext = createContext(null);
+const withBack = (to, panel) => (panel && to.startsWith('/reservations') ? `${to}${to.includes('?') ? '&' : '?'}back=${panel}` : to);
 const RESULT = { present: 'still in the room', departed: 'has left', unlocated: 'could not be found' };
 
 // The front desk's key questions for today. Each tile answers one question; click it for the details.
@@ -28,7 +31,15 @@ export default function TodayAtAGlance() {
     queryFn: async () => (await api.get('/dashboard/owed-after-checkout', { skipErrorToast: true })).data.data,
     refetchInterval: 60000,
   });
-  const [open, setOpen] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [open, setOpen] = useState(() => searchParams.get('panel'));
+  // Coming back from the Reservations page: reopen the same list once, then tidy the URL.
+  useEffect(() => {
+    if (!searchParams.get('panel')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('panel');
+    setSearchParams(next, { replace: true });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (event) => { if (event.key === 'Escape') setOpen(null); };
@@ -70,7 +81,8 @@ export default function TodayAtAGlance() {
         {tiles.map((tile) => <Tile key={tile.key} {...tile} onClick={() => setOpen(tile.key)} />)}
       </div>
       {open && (
-        <Drawer title={tiles.find((tile) => tile.key === open).label} onClose={() => setOpen(null)}>
+        <PanelContext.Provider value={open}>
+        <Drawer title={tiles.find((tile) => tile.key === open)?.label || ''} onClose={() => setOpen(null)}>
           {open === 'overdue' && <OverdueDetail rows={overdue} />}
           {open === 'arrivals' && <ArrivalsDetail data={data} missed={missed} />}
           {open === 'departures' && <DeparturesDetail data={data} />}
@@ -81,6 +93,7 @@ export default function TodayAtAGlance() {
           {open === 'owedAfter' && <OwedAfterCheckoutDetail query={owedAfter} />}
           {open === 'attention' && <AttentionDetail data={data} />}
         </Drawer>
+        </PanelContext.Provider>
       )}
     </section>
   );
@@ -160,13 +173,32 @@ function Group({ title, empty, children, count }) {
   );
 }
 
-function Row({ to, title, lines = [], badge, badgeTone = 'neutral' }) {
+const ACTION_TONES = {
+  primary: 'bg-primary-600 text-white hover:bg-primary-700',
+  success: 'bg-success-600 text-white hover:bg-success-700',
+  warning: 'border border-warning-300 bg-warning-50 text-warning-700 hover:bg-warning-100',
+};
+const ACTION_ICONS = { checkin: LogIn, checkout: LogOut, pay: Wallet, book: Plus };
+
+// A row opens the booking; its action buttons jump straight into that step (check in, check out,
+// take payment) on the Reservations page, where the usual confirmations and checks run.
+function Row({ to, title, code, lines = [], badge, badgeTone = 'neutral', actions = [] }) {
+  const shown = actions.filter(Boolean);
+  const panel = useContext(PanelContext);
   return (
-    <li>
-      <Link to={to} className="block rounded-lg border border-border p-3 transition hover:border-primary-300 hover:bg-primary-50/30">
-        <span className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{title}</span>{badge && <span className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-bold ${TONES[badgeTone]}`}>{badge}</span>}</span>
+    <li className="rounded-lg border border-border transition hover:border-primary-300">
+      <Link to={withBack(to, panel)} className="block rounded-lg p-3 hover:bg-primary-50/30">
+        {code && <span className="block text-xs font-bold uppercase tracking-wide text-primary-700">{code}</span>}<span className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{title}</span>{badge && <span className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-bold ${TONES[badgeTone]}`}>{badge}</span>}</span>
         {lines.filter(Boolean).map((line) => <span key={line} className="mt-0.5 block text-sm text-text-muted">{line}</span>)}
       </Link>
+      {shown.length > 0 && (
+        <div className="flex flex-wrap gap-2 px-3 pb-3">
+          {shown.map(({ label, to: actionTo, tone = 'primary', icon }) => {
+            const Icon = ACTION_ICONS[icon];
+            return <Link key={label} to={withBack(actionTo, panel)} className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold ${ACTION_TONES[tone]}`}>{Icon && <Icon size={16} />} {label}</Link>;
+          })}
+        </div>
+      )}
     </li>
   );
 }
@@ -175,12 +207,13 @@ function OverdueDetail({ rows }) {
   return (
     <Group title="Guests past checkout time" count={rows.length} empty="No checkouts are overdue.">
       {rows.map((alert) => (
-        <Row key={alert.reservationRoomId} to={reservationLink(alert, 'checkout')}
-          title={`Room ${alert.roomNumber || '—'} · ${alert.guestName}`} badge={`${formatDuration(alert.minutesLate * 60000)} late`} badgeTone="danger"
+        <Row key={alert.reservationRoomId} to={reservationLink(alert)}
+          actions={[{ label: 'Check out', to: reservationLink(alert, 'checkout'), icon: 'checkout' }, alert.balanceDue > 0 && { label: 'Take payment', to: reservationLink(alert, 'pay'), tone: 'warning', icon: 'pay' }]}
+          title={`Room ${alert.roomNumber || '—'} · ${alert.guestName}`} code={alert.confirmationCode} badge={`${formatDuration(alert.minutesLate * 60000)} late`} badgeTone="danger"
           lines={[
             `Expected out ${formatTime(new Date(alert.expectedCheckoutAt))} on ${new Date(alert.expectedCheckoutAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`,
             alert.verification ? `Last check: guest ${RESULT[alert.verification.result]} · ${clock(alert.verification.at)}${alert.verification.by ? ` by ${alert.verification.by}` : ''}` : 'Not verified yet — use Verify in Checkout reminders',
-            alert.balanceDue > 0 ? `Balance owed: ${cash(alert.balanceDue)}` : 'Paid in full',
+            alert.balanceDue > 0 ? `Booking balance: ${cash(alert.balanceDue)}` : 'Paid in full',
             alert.escalated ? 'Escalated to the manager' : '',
           ]} />
       ))}
@@ -196,11 +229,12 @@ function ArrivalsDetail({ data, missed }) {
         <Group title="Missed arrival — guest didn't come" count={missed.length}>
           {missed.map((stay) => (
             <li key={stay.reservationId} className="rounded-lg border border-warning-200 bg-warning-50/40 p-3">
+              {stay.confirmationCode && <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{stay.confirmationCode}</p>}
               <p className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{stay.guestName}</span><span className="shrink-0 rounded-md bg-warning-100 px-2 py-0.5 text-xs font-bold text-warning-800">{stay.daysMissed ? `${stay.daysMissed} day${stay.daysMissed === 1 ? '' : 's'} missed` : 'Not arrived'}</span></p>
               <p className="mt-0.5 text-sm text-text-muted">Room {stay.rooms.filter(Boolean).join(', ') || 'unassigned'} · arrival {shortDate(stay.checkInDate)} · {stay.nightsLeft} night{stay.nightsLeft === 1 ? '' : 's'} still held</p>
               <p className="text-sm text-text-muted">{stay.amountPaid > 0 ? `Paid ${cash(stay.amountPaid)}` : 'Nothing paid'}{stay.source === 'Website' ? ' · online booking' : ''}</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                <Link to={reservationLink(stay, 'checkin')} className="min-h-10 rounded-lg bg-primary-600 px-3 py-2 text-xs font-semibold text-white">Check in</Link>
+                <Link to={withBack(reservationLink(stay, 'checkin'), 'arrivals')} className="min-h-10 rounded-lg bg-primary-600 px-3 py-2 text-xs font-semibold text-white">Check in</Link>
                 <button type="button" onClick={() => setNoShow(stay)} className="min-h-10 rounded-lg border border-warning-300 px-3 py-2 text-xs font-semibold text-warning-800">Mark no-show</button>
               </div>
             </li>
@@ -210,13 +244,14 @@ function ArrivalsDetail({ data, missed }) {
       {noShow && <NoShowDialog stay={noShow} onClose={() => setNoShow(null)} />}
       <Group title="Expected to check in" count={data.arrivals.waiting.length} empty="Everyone expected today has arrived.">
         {data.arrivals.waiting.map((stay) => (
-          <Row key={stay.reservationRoomId} to={reservationLink(stay, 'checkin')} title={`Room ${stay.roomNumber || 'unassigned'} · ${stay.guestName}`}
+          <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || 'unassigned'} · ${stay.guestName}`} code={stay.confirmationCode}
+            actions={[{ label: 'Check in', to: reservationLink(stay, 'checkin'), tone: 'success', icon: 'checkin' }, stay.balanceDue > 0 && { label: 'Take payment', to: reservationLink(stay, 'pay'), tone: 'warning', icon: 'pay' }]}
             badge={stay.late ? `Due ${shortDate(stay.checkInDate)}` : stay.source === 'Website' ? 'Online' : null} badgeTone={stay.late ? 'danger' : 'primary'}
-            lines={[`${stay.nightsBooked} night${stay.nightsBooked === 1 ? '' : 's'} · leaves ${shortDate(stay.checkOutDate)}`, stay.balanceDue > 0 ? `Balance to collect: ${cash(stay.balanceDue)}` : 'Paid in full']} />
+            lines={[`${stay.nightsBooked} night${stay.nightsBooked === 1 ? '' : 's'} · leaves ${shortDate(stay.checkOutDate)}`, stay.balanceDue > 0 ? `Booking balance: ${cash(stay.balanceDue)}` : 'Paid in full']} />
         ))}
       </Group>
       <Group title="Arrived today" count={data.arrivals.arrivedToday.length} empty="No check-ins yet today.">
-        {data.arrivals.arrivedToday.map((stay) => <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || '—'} · ${stay.guestName}`} lines={[`Checked in at ${clock(stay.actualCheckIn)}`]} />)}
+        {data.arrivals.arrivedToday.map((stay) => <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || '—'} · ${stay.guestName}`} code={stay.confirmationCode} lines={[`Checked in at ${clock(stay.actualCheckIn)}`]} />)}
       </Group>
     </>
   );
@@ -269,13 +304,14 @@ function DeparturesDetail({ data }) {
     <>
       <Group title="Due to check out" count={data.departures.waiting.length} empty="No one else is due to leave today.">
         {data.departures.waiting.map((stay) => (
-          <Row key={stay.reservationRoomId} to={reservationLink(stay, 'checkout')} title={`Room ${stay.roomNumber || '—'} · ${stay.guestName}`}
+          <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || '—'} · ${stay.guestName}`} code={stay.confirmationCode}
+            actions={[{ label: 'Check out', to: reservationLink(stay, 'checkout'), icon: 'checkout' }, stay.balanceDue > 0 && { label: 'Take payment', to: reservationLink(stay, 'pay'), tone: 'warning', icon: 'pay' }]}
             badge={stay.minutesLate > 0 ? `${formatDuration(stay.minutesLate * 60000)} late` : `By ${formatTime(new Date(stay.expectedCheckoutAt))}`} badgeTone={stay.minutesLate > 0 ? 'danger' : 'warning'}
-            lines={[stay.balanceDue > 0 ? `Balance owed: ${cash(stay.balanceDue)}` : 'Paid in full']} />
+            lines={[stay.balanceDue > 0 ? `Booking balance: ${cash(stay.balanceDue)}` : 'Paid in full']} />
         ))}
       </Group>
       <Group title="Checked out today" count={data.departures.departedToday.length} empty="No checkouts yet today.">
-        {data.departures.departedToday.map((stay) => <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || '—'} · ${stay.guestName}`} lines={[`Left at ${clock(stay.actualCheckOut)}`, stay.balanceDue > 0 ? `Still owes ${cash(stay.balanceDue)}` : '']} />)}
+        {data.departures.departedToday.map((stay) => <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || '—'} · ${stay.guestName}`} code={stay.confirmationCode} lines={[`Left at ${clock(stay.actualCheckOut)}`, stay.balanceDue > 0 ? `Booking still owes ${cash(stay.balanceDue)}` : '']} actions={[stay.balanceDue > 0 && { label: 'Take payment', to: reservationLink(stay, 'pay'), tone: 'warning', icon: 'pay' }]} />)}
       </Group>
     </>
   );
@@ -285,9 +321,10 @@ function InHouseDetail({ rows }) {
   return (
     <Group title="Checked-in guests" count={rows.length} empty="No guests are checked in.">
       {rows.map((stay) => (
-        <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || '—'} · ${stay.guestName}`}
+        <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || '—'} · ${stay.guestName}`} code={stay.confirmationCode}
           badge={stay.minutesLate > 0 ? 'Overdue' : null} badgeTone="danger"
-          lines={[`Night ${Math.min(stay.nightsUsed + 1, stay.nightsBooked)} of ${stay.nightsBooked} · leaves ${shortDate(stay.checkOutDate)}`, stay.actualCheckIn ? `In room for ${formatDuration(Date.now() - new Date(stay.actualCheckIn).getTime())}` : '', stay.balanceDue > 0 ? `Balance owed: ${cash(stay.balanceDue)}` : 'Paid in full']} />
+          actions={[{ label: 'Check out', to: reservationLink(stay, 'checkout'), icon: 'checkout' }, stay.balanceDue > 0 && { label: 'Take payment', to: reservationLink(stay, 'pay'), tone: 'warning', icon: 'pay' }]}
+          lines={[`Night ${Math.min(stay.nightsUsed + 1, stay.nightsBooked)} of ${stay.nightsBooked} · leaves ${shortDate(stay.checkOutDate)}`, stay.actualCheckIn ? `In room for ${formatDuration(Date.now() - new Date(stay.actualCheckIn).getTime())}` : '', stay.balanceDue > 0 ? `Booking balance: ${cash(stay.balanceDue)}` : 'Paid in full']} />
       ))}
     </Group>
   );
@@ -300,7 +337,8 @@ function FreeDetail({ rooms }) {
     <Group key={type} title={type} count={list.length}>
       {list.map((room) => (
         <Row key={room.roomId} to="/rooms" title={`Room ${room.roomNumber}`} badge={room.housekeepingStatus === 'Dirty' ? 'Needs cleaning' : 'Ready'} badgeTone={room.housekeepingStatus === 'Dirty' ? 'warning' : 'success'}
-          lines={[room.isOnlineBookable === false ? 'Hidden from online booking' : '']} />
+          lines={[room.isOnlineBookable === false ? 'Hidden from online booking' : '']}
+          actions={[{ label: `Book Room ${room.roomNumber}`, to: `/reservations?new=1&room=${room.roomId}`, tone: 'success', icon: 'book' }]} />
       ))}
     </Group>
   ));
@@ -310,7 +348,7 @@ function CollectedDetail({ money }) {
   return (
     <Group title="Payments received today" count={money.payments.length} empty="No payments recorded yet today.">
       {money.payments.map((payment) => (
-        <Row key={payment.paymentId} to={reservationLink(payment)} title={`${cash(payment.amount)} · ${payment.method}`}
+        <Row key={payment.paymentId} to={reservationLink(payment)} title={`${cash(payment.amount)} · ${payment.method}`} code={payment.confirmationCode}
           lines={[`${clock(payment.at)} · ${payment.guestName}`, payment.receivedBy ? `Received by ${payment.receivedBy}` : '']} />
       ))}
     </Group>
@@ -321,7 +359,7 @@ function UnpaidDetail({ money }) {
   return (
     <>
       <Group title="In-house guests with a balance" count={money.unpaidInHouse.length} empty="Every in-house booking is paid in full.">
-        {money.unpaidInHouse.map((stay) => <Row key={stay.reservationId} to={reservationLink(stay, 'pay')} title={`${cash(stay.balanceDue)} · ${stay.guestName}`} lines={[`Room ${stay.roomNumber || '—'} · leaves ${shortDate(stay.checkOutDate)}`]} />)}
+        {money.unpaidInHouse.map((stay) => <Row key={stay.reservationId} to={reservationLink(stay)} actions={[stay.balanceDue > 0 && { label: 'Take payment', to: reservationLink(stay, 'pay'), tone: 'warning', icon: 'pay' }]} title={`${cash(stay.balanceDue)} · ${stay.guestName}`} code={stay.confirmationCode} lines={[`Room ${stay.roomNumber || '—'} · leaves ${shortDate(stay.checkOutDate)}`]} />)}
       </Group>
       {money.refundsPending > 0 && <Link to="/refunds" className="block rounded-lg border border-border p-3 text-sm font-semibold text-primary-700 hover:bg-primary-50/40">{money.refundsPending} refund{money.refundsPending === 1 ? '' : 's'} waiting · open Refunds</Link>}
     </>
@@ -345,7 +383,7 @@ function OwedAfterCheckoutDetail({ query }) {
             <span className="mt-0.5 block text-sm text-text-muted">Approved by: {row.approvedBy || 'Not recorded'}</span>
           </Link>
           <div className="mt-2 flex gap-2">
-            <Link to={reservationLink(row, 'pay')} className="inline-flex min-h-10 items-center rounded-lg bg-primary-600 px-3 text-sm font-semibold text-text-inverted hover:bg-primary-700">Take payment</Link>
+            <Link to={withBack(reservationLink(row, 'pay'), 'owedAfter')} className="inline-flex min-h-10 items-center rounded-lg bg-primary-600 px-3 text-sm font-semibold text-text-inverted hover:bg-primary-700">Take payment</Link>
             <Link to={`/reservations/${row.reservationId}`} className="inline-flex min-h-10 items-center rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50">View payments</Link>
           </div>
         </li>
@@ -354,12 +392,43 @@ function OwedAfterCheckoutDetail({ query }) {
   );
 }
 
+// One tap to mark a room clean, using the same room update as the Rooms page.
+function CleaningRow({ room }) {
+  const queryClient = useQueryClient();
+  const canUpdate = useAuthStore((state) => state.permissions?.includes('CanUpdateRoomStatus'));
+  const [saving, setSaving] = useState(false);
+  const markClean = async () => {
+    setSaving(true);
+    try {
+      await api.patch(`/rooms/${room.roomId}/status`, { operationalStatus: room.operationalStatus, housekeepingStatus: 'Clean' });
+      toast.success(`Room ${room.roomNumber} marked clean.`);
+      for (const key of ['dashboardGlance', 'rooms', 'operationalOverview']) queryClient.invalidateQueries({ queryKey: [key] });
+    } catch {
+      // The request layer already shows the error.
+      setSaving(false);
+    }
+  };
+  return (
+    <li className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+      <Link to="/rooms" className="min-w-0 hover:text-primary-700">
+        <span className="block font-semibold text-text">Room {room.roomNumber}</span>
+        <span className="block text-sm text-text-muted">{room.roomType} · {room.operationalStatus === 'Occupied' ? 'Guest in room' : 'Empty'}</span>
+      </Link>
+      {canUpdate && (
+        <button type="button" disabled={saving} onClick={markClean} className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg bg-success-600 px-3 text-sm font-semibold text-white hover:bg-success-700 disabled:opacity-60">
+          {saving ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} Mark clean
+        </button>
+      )}
+    </li>
+  );
+}
+
 function AttentionDetail({ data }) {
   return (
     <>
       {data.approvalsPending > 0 && <Link to="/approvals" className="block rounded-lg border border-warning-200 bg-warning-50/50 p-3 text-sm font-semibold text-warning-800">{data.approvalsPending} request{data.approvalsPending === 1 ? '' : 's'} waiting for your approval · open Approvals</Link>}
       <Group title="Rooms needing cleaning" count={data.rooms.needsCleaning.length} empty="All rooms are clean.">
-        {data.rooms.needsCleaning.map((room) => <Row key={room.roomId} to="/rooms" title={`Room ${room.roomNumber}`} lines={[room.roomType, room.operationalStatus === 'Occupied' ? 'Guest in room' : 'Empty']} />)}
+        {data.rooms.needsCleaning.map((room) => <CleaningRow key={room.roomId} room={room} />)}
       </Group>
       <Group title="Under maintenance" count={data.rooms.maintenance.length} empty="No rooms are under maintenance.">
         {data.rooms.maintenance.map((room) => <Row key={room.roomId} to="/rooms" title={`Room ${room.roomNumber}`} lines={[room.roomType, room.maintenanceReason ? `Reason: ${room.maintenanceReason}` : '']} />)}

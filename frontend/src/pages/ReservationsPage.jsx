@@ -25,6 +25,8 @@ import ExtendStayDialog from '../components/reservations/ExtendStayDialog';
 import ShortenStayDialog from '../components/reservations/ShortenStayDialog';
 import TakePaymentDialog from '../components/reservations/TakePaymentDialog';
 import CheckoutOwingDialog from '../components/reservations/CheckoutOwingDialog';
+import BulkRoomsDialog from '../components/reservations/BulkRoomsDialog';
+import { bookingStatusLabel, roomStatusLabel, roomStatusTone } from '../lib/statusLabels';
 import { expectedCheckoutAt, formatDuration, formatTime, noShowAllowedFrom } from '../lib/stayTiming';
 
 // The hotel's calendar day as YYYY-MM-DD, using the browser's local time.
@@ -107,6 +109,8 @@ function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', danger 
   );
 }
 
+const BACK_LABELS = { overdue: 'Overdue checkouts', arrivals: 'Arrivals to check in', departures: 'Departures to check out', inHouse: 'Guests in house', free: 'Rooms free tonight', collected: 'Collected today', unpaid: 'Owed by guests in house', owedAfter: 'Owed after checkout', attention: 'Needs attention', dashboard: 'the dashboard', booking: 'the booking details' };
+
 export default function ReservationsPage() {
   const user = useAuthStore((state) => state.user);
   const permissions = useAuthStore((state) => state.permissions);
@@ -125,6 +129,8 @@ export default function ReservationsPage() {
   const [shortenStay, setShortenStay] = useState(null);
   const [paymentFor, setPaymentFor] = useState(null);
   const [owingCheckout, setOwingCheckout] = useState(null);
+  const [bulkRooms, setBulkRooms] = useState(null);
+  const [newBookingInitial, setNewBookingInitial] = useState(null);
   const checkoutTargetRef = useRef(null);
   // Open the "guest still owes" checkout for the room being checked out.
   const openOwingCheckout = (balanceDue) => {
@@ -143,6 +149,7 @@ export default function ReservationsPage() {
   const status = searchParams.get('status') || 'all';
   const fromDate = searchParams.get('fromDate') || '';
   const toDate = searchParams.get('toDate') || '';
+  const backPanel = searchParams.get('back');
 
   const updateParams = (updates) => {
     const newParams = new URLSearchParams(searchParams);
@@ -189,7 +196,12 @@ export default function ReservationsPage() {
   // or ?new=1 to start a booking. The booking opens and the action starts, then the link params are cleared.
   const handledLink = useRef('');
   useEffect(() => {
-    if (searchParams.get('new') === '1') { setIsModalOpen(true); updateParams({ new: null }); return; }
+    if (searchParams.get('new') === '1') {
+      // A free room tapped on the dashboard is pre-selected (only if it is still free for the dates).
+      const room = Number(searchParams.get('room'));
+      setNewBookingInitial(Number.isSafeInteger(room) && room > 0 ? { roomIds: [room] } : null);
+      setIsModalOpen(true); updateParams({ new: null, room: null }); return;
+    }
     const open = searchParams.get('open');
     if (!open || isLoading || isPlaceholderData || handledLink.current === searchParams.toString()) return;
     const res = reservations.find((item) => item.reservationId === open);
@@ -201,6 +213,7 @@ export default function ReservationsPage() {
     if (action === 'checkin' && stay?.status === 'Reserved') setOccupantDialog({ room: stay, reservation: res, mode: 'checkin' });
     if (action === 'checkout' && stay?.status === 'CheckedIn') startCheckOut(stay, res);
     if (action === 'extend' && stay?.status === 'CheckedIn') setExtendRoom(stay);
+    if (action === 'shorten' && stay?.status === 'CheckedIn') setShortenStay({ room: stay, reservationId: res.reservationId });
     if (action === 'pay') setPaymentFor(res);
     if (action) updateParams({ do: null, stay: null });
     setTimeout(() => [...document.querySelectorAll(`[data-booking="${open}"]`)].find((el) => el.offsetParent !== null)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 50);
@@ -409,14 +422,18 @@ export default function ReservationsPage() {
     const due = expectedCheckoutAt(room.checkOutDate, res.property?.checkOutTime);
     const late = Date.now() - due.getTime();
     checkoutTargetRef.current = { room, reservation: res, lateText: late >= 60000 ? `Late departure: ${formatDuration(late)} after the ${formatTime(due)} checkout time. No extra night is charged.` : '' };
-    // Money still owed: offer to take payment first, or check out with a reason (debt stays on the booking).
+    // Money still owed: when this is the last room still checked in, offer to take payment first or check
+    // out with a reason. While other rooms of the booking stay checked in, the balance simply stays on the booking.
     const owing = Math.round((Number(res.totalAmount || 0) - Number(res.amountPaid || 0)) * 100) / 100;
-    if (owing > 0.01) { openOwingCheckout(owing); return; }
+    const othersInRoom = (res.reservationRooms || []).filter((stay) => stay.reservationRoomId !== room.reservationRoomId && stay.status === 'CheckedIn');
+    if (owing > 0.01 && !othersInRoom.length) { openOwingCheckout(owing); return; }
+    const code = res.confirmationCode || `#${res.reservationId.slice(0, 8)}`;
+    const balanceNote = owing > 0.01 ? `\n\nBooking balance: GHS ${owing.toFixed(2)}. This belongs to the whole booking ${code}, not to this room. It stays on the booking while Room ${othersInRoom.map((stay) => stay.room?.roomNumber || stay.roomNumberSnapshot).join(', ')} ${othersInRoom.length === 1 ? 'is' : 'are'} still checked in.` : '';
     askRoomAction(
       room.reservationRoomId,
       'CheckedOut',
-      'Confirm Check-out',
-      `You are about to check out Room ${room.room?.roomNumber}.\n\nOccupant: ${occupant}${late >= 60000 ? `\n\nLate departure: ${formatDuration(late)} after the ${formatTime(due)} checkout time. No extra night is charged.` : ''}\n\nPlease verify this is the correct guest before proceeding.`,
+      `Check out Room ${room.room?.roomNumber || room.roomNumberSnapshot} · ${code}`,
+      `Only Room ${room.room?.roomNumber || room.roomNumberSnapshot} is checked out.\n\nOccupant: ${occupant}${late >= 60000 ? `\n\nLate departure: ${formatDuration(late)} after the ${formatTime(due)} checkout time. No extra night is charged.` : ''}${balanceNote}\n\nPlease verify this is the correct guest before proceeding.`,
       late >= 60000 ? { inputLabel: 'Late departure note (optional)', inputValue: '' } : {},
     );
   };
@@ -424,6 +441,21 @@ export default function ReservationsPage() {
   // The next thing staff usually do with a booking, shown right on its row:
   // check in (arrival due), check out (guest in house), take payment (balance due).
   // Bookings with several rooms open their room list instead, so each room is handled on its own.
+  // Every room of the booking with its own status, so partly checked-in/out bookings are clear at a glance.
+  const renderRoomChips = (res, fallback) => {
+    const stays = res.reservationRooms || [];
+    if (!stays.length) return <span>{fallback}</span>;
+    if (stays.length === 1 && ['Cancelled', 'Expired', 'NoShow'].includes(res.status)) return <span>{fallback}</span>;
+    return (
+      <ul className="flex flex-wrap gap-1.5">
+        {stays.map((stay) => (
+          <li key={stay.reservationRoomId} className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-semibold ${roomStatusTone(stay.status)}`}>
+            {stay.room?.roomNumber || stay.roomNumberSnapshot || 'Removed'} · {roomStatusLabel(stay.status)}
+          </li>
+        ))}
+      </ul>
+    );
+  };
   const owesAfterCheckout = (res) => res.status === 'Completed' && Number(res.totalAmount || 0) - Number(res.amountPaid || 0) > 0.01;
   const rowActions = (res, compact = false) => {
     // Checked-out bookings still owing money keep Take payment so the debt can be collected.
@@ -437,13 +469,13 @@ export default function ReservationsPage() {
     return (
       <>
         {arriving.length > 0 && (
-          <button type="button" onClick={() => (arriving.length === 1 ? setOccupantDialog({ room: arriving[0], reservation: res, mode: 'checkin' }) : openRooms())} className={`${base} inline-flex items-center justify-center gap-1.5 bg-success-600 text-white hover:bg-success-700`}>
-            <LogIn size={compact ? 16 : 14} /> {arriving.length === 1 ? 'Check in' : `Check in ${arriving.length} rooms`}
+          <button type="button" onClick={() => { openRooms(); if (arriving.length === 1) setOccupantDialog({ room: arriving[0], reservation: res, mode: 'checkin' }); else setBulkRooms({ mode: 'checkin', reservation: res }); }} className={`${base} inline-flex items-center justify-center gap-1.5 bg-success-600 text-white hover:bg-success-700`}>
+            <LogIn size={compact ? 16 : 14} /> {arriving.length === 1 ? (stays.length > 1 ? `Check in Room ${arriving[0].room?.roomNumber || arriving[0].roomNumberSnapshot}` : 'Check in') : `Check in ${arriving.length} rooms`}
           </button>
         )}
         {inRoom.length > 0 && (
-          <button type="button" onClick={() => (inRoom.length === 1 ? startCheckOut(inRoom[0], res) : openRooms())} className={`${base} inline-flex items-center justify-center gap-1.5 bg-primary-600 text-white hover:bg-primary-700`}>
-            <LogOut size={compact ? 16 : 14} /> {inRoom.length === 1 ? 'Check out' : `Check out ${inRoom.length} rooms`}
+          <button type="button" onClick={() => { openRooms(); if (inRoom.length === 1) startCheckOut(inRoom[0], res); else setBulkRooms({ mode: 'checkout', reservation: res }); }} className={`${base} inline-flex items-center justify-center gap-1.5 bg-primary-600 text-white hover:bg-primary-700`}>
+            <LogOut size={compact ? 16 : 14} /> {inRoom.length === 1 ? (stays.length > 1 ? `Check out Room ${inRoom[0].room?.roomNumber || inRoom[0].roomNumberSnapshot}` : 'Check out') : `Check out ${inRoom.length} rooms`}
           </button>
         )}
         {balance > 0.01 && (
@@ -483,6 +515,12 @@ export default function ReservationsPage() {
 
   return (
     <div className="space-y-6">
+      {backPanel && (
+        <Link to={backPanel === 'booking' ? `/reservations/${searchParams.get('open')}` : backPanel === 'dashboard' ? '/dashboard' : `/dashboard?panel=${backPanel}`}
+          className="sticky top-2 z-30 flex min-h-12 items-center gap-2 rounded-xl border border-primary-200 bg-primary-50 px-4 text-sm font-semibold text-primary-700 shadow-sm hover:bg-primary-100">
+          <ChevronLeft size={18} /> Back to {BACK_LABELS[backPanel] || 'the dashboard'} {backPanel !== 'booking' && <span className="hidden font-normal text-primary-600 sm:inline">— the list is already updated, continue with the next guest</span>}
+        </Link>
+      )}
       <RefundSummary />
       <BookingPaymentNotice reservation={paymentRecoveryReservation} onDismiss={() => setPaymentRecoveryReservation(null)} />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
@@ -613,7 +651,7 @@ export default function ReservationsPage() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs font-medium text-text-muted">Room{res.reservationRooms?.length === 1 ? '' : 's'}</p>
-                    <p className="mt-1 break-words font-semibold text-text">{rooms}</p>
+                    <div className="mt-1">{renderRoomChips(res, rooms)}</div>
                   </div>
                 </div>
 
@@ -624,7 +662,7 @@ export default function ReservationsPage() {
                 <div className="mt-2 flex gap-2">
                   {res.reservationRooms?.length > 0 && (
                     <button type="button" onClick={() => setExpandedId(isExpanded ? null : id)} aria-expanded={isExpanded} aria-controls={`mobile-rooms-${id}`} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50">
-                      {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />} {isExpanded ? 'Hide assigned rooms' : `View assigned ${res.reservationRooms.length === 1 ? 'room' : `rooms (${res.reservationRooms.length})`}`}
+                      {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />} {isExpanded ? 'Hide rooms' : res.reservationRooms.length === 1 ? 'View room' : `Manage ${res.reservationRooms.length} rooms`}
                     </button>
                   )}
                   {['Cancelled', 'Expired'].includes(res.status) && res.refundStatus === 'Pending' && permissions?.includes('CanCancelReservation') && (
@@ -746,7 +784,7 @@ export default function ReservationsPage() {
                       aria-expanded={isExpanded} aria-controls={`desktop-rooms-${res.reservationId}`}
                       className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-border text-text hover:bg-secondary-50 transition"
                     >
-                      {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {isExpanded ? 'Hide assigned rooms' : `View assigned ${res.reservationRooms?.length === 1 ? 'room' : `rooms (${res.reservationRooms?.length || 0})`}`}
+                      {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {isExpanded ? 'Hide rooms' : (res.reservationRooms?.length || 0) === 1 ? 'View room' : `Manage ${res.reservationRooms?.length || 0} rooms`}
                     </button>
                   );
                   if (res.status === 'Confirmed') {
@@ -787,7 +825,8 @@ export default function ReservationsPage() {
                     );
                   }
 
-                  if (res.status !== 'Completed' && res.status !== 'Cancelled' && res.status !== 'NoShow' && res.status !== 'Expired') {
+                  // Cancel only before anyone is in the room (same rule as the server and the mobile cards).
+                  if (['Pending', 'Confirmed'].includes(res.status) && !res.reservationRooms?.some(stay => stay.status === 'CheckedIn')) {
                     actions = (
                       <div className="flex items-center justify-end gap-2">
                         {actions}
@@ -846,11 +885,11 @@ export default function ReservationsPage() {
                          {res.guestPhoneSnapshot || res.platformGuest?.phone || res.propertyGuest?.phone || 'N/A'}
                        </p>
                      </td>
-                        <td className="px-6 py-4 text-sm text-text font-medium">{rooms}</td>
+                        <td className="px-6 py-4 text-sm text-text font-medium">{renderRoomChips(res, rooms)}</td>
                         <td className="px-6 py-4 text-sm text-text-muted">{checkIn} <span className="mx-1">→</span> {checkOut}</td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1.5">
-                            <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold ${statusClass}`}>{res.status}</span>
+                            <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold ${statusClass}`}>{bookingStatusLabel(res.status)}</span>
                             <RefundApprovalBadge reservation={res} />
                           </div>
                         </td>
@@ -908,7 +947,8 @@ export default function ReservationsPage() {
 
       <ReservationModal
         isOpen={isModalOpen}
-        onClose={() => { setIsModalOpen(false); setCreatedReservation(null); createMutation.reset(); }}
+        initialData={newBookingInitial}
+        onClose={() => { setIsModalOpen(false); setNewBookingInitial(null); setCreatedReservation(null); createMutation.reset(); }}
         onSubmit={(data) => createMutation.mutate(data)}
         isLoading={createMutation.isPending}
         createdReservation={createdReservation}
@@ -916,11 +956,24 @@ export default function ReservationsPage() {
 
       {occupantDialog && <RoomOccupantDialog key={`${occupantDialog.room.reservationRoomId}-${occupantDialog.mode}`} {...occupantDialog} busy={roomActionMutation.isPending || updateOccupantMutation.isPending} onClose={() => setOccupantDialog(null)} onSubmit={details => occupantDialog.mode === 'checkin' ? roomActionMutation.mutateAsync({ id: occupantDialog.room.reservationRoomId, status: 'CheckedIn', ...details }) : updateOccupantMutation.mutateAsync({ id: occupantDialog.room.reservationRoomId, ...details })} />}
       {paymentFor && <TakePaymentDialog key={paymentFor.reservationId} reservation={paymentFor} onClose={() => setPaymentFor(null)} />}
+      {bulkRooms && (
+        <BulkRoomsDialog
+          key={`${bulkRooms.mode}-${bulkRooms.reservation.reservationId}`}
+          mode={bulkRooms.mode}
+          reservation={bulkRooms.reservation}
+          onClose={() => setBulkRooms(null)}
+          onTakePayment={() => { setPaymentFor(bulkRooms.reservation); setBulkRooms(null); }}
+          onDone={() => {
+            for (const key of ['reservations', 'rooms', 'dashboardActive', 'reservation', 'operationalOverview', 'dashboardGlance', 'owedAfterCheckout', 'checkoutAlerts']) queryClient.invalidateQueries({ queryKey: [key] });
+          }}
+        />
+      )}
       {owingCheckout && (
         <CheckoutOwingDialog
           key={owingCheckout.room.reservationRoomId}
           roomNumber={owingCheckout.room.room?.roomNumber || owingCheckout.room.roomNumberSnapshot}
           guestName={owingCheckout.room.occupantName || owingCheckout.reservation.guestNameSnapshot || owingCheckout.reservation.propertyGuest?.fullName || 'Guest'}
+          code={owingCheckout.reservation.confirmationCode}
           balanceDue={owingCheckout.balanceDue}
           lateText={owingCheckout.lateText}
           onClose={() => setOwingCheckout(null)}

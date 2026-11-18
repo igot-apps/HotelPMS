@@ -67,7 +67,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
     propertyName: '', propertyCode: '', businessName: '', legalName: '', propertyType: 'Hotel', address: '', area: '', city: '', region: '', country: 'Ghana',
     latitude: '', longitude: '', checkInTime: '14:00', checkOutTime: '11:00',
     primaryEmail: '', primaryPhone: '', primaryPhoneWhatsappOnly: false, coverImage: '', galleryImages: [], publicDescription: '',
-    cancellationPolicy: '', houseRules: '', taxPercentage: 0.00, isOnlineBookingEnabled: false,
+    cancellationPolicy: '', houseRules: '', taxPercentage: 0.00, isOnlineBookingEnabled: false, isNonRefundable: true,
     paystackSecretKey: '',
   });
   const [locationLoading, setLocationLoading] = useState(false);
@@ -104,6 +104,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
         houseRules: initialData.houseRules || '',
         taxPercentage: initialData.taxPercentage ? parseFloat(initialData.taxPercentage) : 0.00,
         isOnlineBookingEnabled: initialData.isOnlineBookingEnabled || false,
+        isNonRefundable: initialData.isNonRefundable !== false,
         paystackSecretKey: '',
       });
     } else {
@@ -111,7 +112,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
         propertyName: '', propertyCode: '', businessName: '', legalName: '', propertyType: 'Hotel', address: '', area: '', city: '', region: '', country: 'Ghana',
         latitude: '', longitude: '', checkInTime: '14:00', checkOutTime: '11:00',
         primaryEmail: '', primaryPhone: '', primaryPhoneWhatsappOnly: false, coverImage: '', galleryImages: [], publicDescription: '',
-        cancellationPolicy: '', houseRules: '', taxPercentage: 0.00, isOnlineBookingEnabled: false,
+        cancellationPolicy: '', houseRules: '', taxPercentage: 0.00, isOnlineBookingEnabled: false, isNonRefundable: true,
         paystackSecretKey: '',
       });
     }
@@ -321,6 +322,22 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
               </div>
               <label className="relative inline-flex shrink-0 min-h-11 items-center cursor-pointer">
                 <input type="checkbox" name="isOnlineBookingEnabled" checked={formData.isOnlineBookingEnabled} onChange={handleChange} className="sr-only peer" />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+              </label>
+            </div>
+
+            {/* Refund policy */}
+            <div className="flex items-start justify-between gap-4 p-4 bg-warning-50 border border-warning-100 rounded-lg mb-6">
+              <div className="flex-1">
+                <label htmlFor="isNonRefundable" className="text-sm font-bold text-text">Non-refundable bookings</label>
+                <p className="text-xs text-text-muted mt-0.5">
+                  {formData.isNonRefundable
+                    ? 'On: when a booking is cancelled, the hotel keeps the money. Staff can still record a refund as an exception. Guests see "Non-refundable" when booking online.'
+                    : 'Off: when a booking is cancelled, the money paid becomes a refund due to the guest. Guests see "Refundable" when booking online.'}
+                </p>
+              </div>
+              <label className="relative inline-flex shrink-0 min-h-11 items-center cursor-pointer">
+                <input id="isNonRefundable" type="checkbox" name="isNonRefundable" checked={formData.isNonRefundable} onChange={handleChange} className="sr-only peer" />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
               </label>
             </div>

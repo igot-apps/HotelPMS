@@ -6,6 +6,7 @@ import { netPaid } from './refund.service';
 import { FINANCIAL_ACTIONS, financialDecision } from './financial-delegation';
 import { checkoutDueAt, minutesLate } from './stay-timing';
 import { hotelDate } from '../reports/daily-overview.service';
+import { cancellationRefund, hotelIsNonRefundable } from './refund-policy';
 
 export type Actor = { userId: number; propertyId: number };
 export const correctionVersion = (res: any): string => [res.updatedAt.toISOString(), ...[...res.reservationRooms].sort((a, b) => a.reservationRoomId - b.reservationRoomId).map((room: any) => `${room.reservationRoomId}:${room.updatedAt.toISOString()}`)].join('|');
@@ -128,18 +129,24 @@ export async function cancelSafely(id: string, actor: Actor, reason = 'Staff can
   let wasConfirmed = false;
   const cancelled = await atomic(async tx => {
     const { res } = await booking(tx, id, actor);
-    if (!['Pending', 'Confirmed'].includes(res.status) || res.reservationRooms.some((r: any) => r.status === 'CheckedIn')) {
-      throw new Error('Only an unoccupied pending or confirmed reservation can be cancelled. Check out in-house guests first.');
+    const inRoom = res.reservationRooms.filter((r: any) => r.status === 'CheckedIn');
+    if (inRoom.length) {
+      const rooms = inRoom.map((r: any) => r.roomNumberSnapshot).filter(Boolean).join(', ');
+      throw new Error(`This booking can't be cancelled because the guest is already checked in${rooms ? ` to Room ${rooms}` : ''}. If the guest is leaving, use Check out. To charge fewer nights, use Shorten stay first.`);
+    }
+    if (!['Pending', 'Confirmed'].includes(res.status)) {
+      const why: Record<string, string> = { Completed: 'the guest has already checked out', Cancelled: 'it is already cancelled', NoShow: 'it was marked as a no-show', Expired: 'it expired without payment' };
+      throw new Error(`This booking can't be cancelled because ${why[res.status] || `its status is ${res.status}`}.`);
     }
     wasConfirmed = res.status === 'Confirmed';
     await lockRooms(tx, res.reservationRooms.map((r: any) => r.roomId).filter((id: any) => id !== null));
     await tx.reservationRoom.updateMany({ where: { reservationId: id }, data: { status: 'Cancelled' } });
+    const { refundDue, refundStatus, refundPolicy } = cancellationRefund(money(res.amountPaid), await hotelIsNonRefundable(tx, actor.propertyId));
     const updated = await tx.reservation.update({ where: { reservationId: id }, data: {
-      status: 'Cancelled', cancellationDate: new Date(), refundDue: money(res.amountPaid),
-      refundStatus: money(res.amountPaid) > 0 ? 'Pending' : 'None',
+      status: 'Cancelled', cancellationDate: new Date(), refundDue, refundStatus,
     } });
     // Cancelling an allocation never changes a physical room occupied by another stay.
-    await audit(tx, actor, id, 'ReservationCancelled', reason, res, updated);
+    await audit(tx, actor, id, 'ReservationCancelled', reason, res, { ...updated, refundPolicy });
     return updated;
   });
   if (wasConfirmed) await recordSimulatedSms(id, 'cancelled');
@@ -176,15 +183,20 @@ export async function transitionStay(stayId: number, status: string, actor: Acto
         guestPresenceStatus: 'InRoom', guestOutAt: null, expectedReturnAt: null };
       await tx.room.update({ where: { roomId: stay.roomId }, data: { operationalStatus: 'Occupied' } });
     } else if (status === 'CheckedOut' && stay.status === 'CheckedIn') {
-      creditReason = balanceApproval(res, user, details.overrideReason);
-      reason = creditReason || reason;
+      // The balance belongs to the whole booking. While other rooms of the booking are still checked in,
+      // one room may leave without the money-owed reason; the last occupied room applies the usual rule.
+      const othersInRoom = res.reservationRooms.some((r: any) => r.reservationRoomId !== stayId && r.status === 'CheckedIn');
+      creditReason = othersInRoom ? '' : balanceApproval(res, user, details.overrideReason);
+      reason = creditReason || (othersInRoom ? 'Room checked out; other rooms of the booking remain checked in' : reason);
       const departureNote = typeof details.departureNote === 'string' ? details.departureNote.trim().slice(0, 300) : '';
       await releaseOccupiedRoom(tx, stay);
       data = { status, actualCheckOut: new Date(), guestPresenceStatus: 'InRoom', guestOutAt: null, expectedReturnAt: null };
       // Late departure is recorded for the audit only; it never adds a night or a fee.
       const hotel = await tx.property.findUnique({ where: { propertyId: actor.propertyId }, select: { timezone: true, checkOutTime: true } });
       const dueAt = checkoutDueAt(stay.checkOutDate, hotel?.checkOutTime, hotel?.timezone || 'Africa/Accra');
-      occupantConfirmation = { lateMinutes: minutesLate(dueAt, data.actualCheckOut), expectedCheckoutAt: dueAt.toISOString(), ...(departureNote ? { departureNote } : {}) };
+      const bookingBalance = Math.max(0, money(money(res.totalAmount) - money(res.amountPaid)));
+      occupantConfirmation = { lateMinutes: minutesLate(dueAt, data.actualCheckOut), expectedCheckoutAt: dueAt.toISOString(), ...(departureNote ? { departureNote } : {}),
+        ...(othersInRoom ? { partialCheckout: true, bookingBalance } : {}) };
     } else throw new Error('Invalid room transition. Use the dedicated manager correction actions.');
     const updated = await tx.reservationRoom.update({ where: { reservationRoomId: stayId }, data });
     await derive(tx, res.reservationId);

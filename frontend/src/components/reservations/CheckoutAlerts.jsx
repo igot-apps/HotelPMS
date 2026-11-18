@@ -42,14 +42,15 @@ export default function CheckoutAlerts() {
                 <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${state.className}`}>{state.label}</span>
               </div>
               <p className="text-sm text-text">{alert.guestName}</p>
+              {alert.confirmationCode && <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{alert.confirmationCode}</p>}
               <p className="text-sm text-text-muted">Expected checkout: {formatTime(new Date(alert.expectedCheckoutAt))}{alert.state !== 'due' && alert.state !== 'dueSoon' ? ` on ${new Date(alert.expectedCheckoutAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}</p>
               {alert.state === 'overdue' && <p className="text-sm font-semibold text-danger-700">{formatDuration(alert.minutesLate * 60000)} late · guest departure needs confirmation</p>}
               {alert.verification && <p className="mt-1 text-xs text-text-muted">Last check: {RESULT[alert.verification.result]} · {new Date(alert.verification.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}{alert.verification.by ? ` · ${alert.verification.by}` : ''}{alert.verification.note ? ` — ${alert.verification.note}` : ''}</p>}
               {alert.escalated && <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-danger-700"><ShieldAlert size={13} /> {isManager ? 'Needs manager attention' : 'Escalated to the manager'}</p>}
-              {alert.balanceDue > 0 && <p className="mt-1 text-xs font-semibold text-danger-700">Balance due: GHS {alert.balanceDue.toFixed(2)}</p>}
+              {alert.balanceDue > 0 && <p className="mt-1 text-xs font-semibold text-danger-700">Booking balance: GHS {alert.balanceDue.toFixed(2)}</p>}
               <div className="mt-3 flex flex-wrap gap-2">
-                <Link to={bookingLink(alert, 'checkout')} className="min-h-10 rounded-lg bg-primary-600 px-3 py-2 text-xs font-semibold text-white">Check Out</Link>
-                <Link to={bookingLink(alert, 'extend')} className="min-h-10 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text">Extend</Link>
+                <Link to={`${bookingLink(alert, 'checkout')}&back=dashboard`} className="min-h-10 rounded-lg bg-primary-600 px-3 py-2 text-xs font-semibold text-white">Check Out</Link>
+                <Link to={`${bookingLink(alert, 'extend')}&back=dashboard`} className="min-h-10 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text">Extend</Link>
                 <button type="button" onClick={() => setVerifying(alert)} className="min-h-10 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text">Verify</button>
               </div>
             </li>
@@ -105,7 +106,7 @@ function VerifyDepartureDialog({ alert, onClose, onRecordEarlier }) {
           <div className="space-y-3 text-sm">
             <p className="text-text">Recorded that {alert.guestName} has left. Now close the stay:</p>
             <div className="flex flex-wrap gap-2">
-              <Link to={bookingLink(alert, 'checkout')} className="min-h-11 rounded-lg bg-primary-600 px-4 py-2 font-semibold text-white">Check out now</Link>
+              <Link to={`${bookingLink(alert, 'checkout')}&back=dashboard`} className="min-h-11 rounded-lg bg-primary-600 px-4 py-2 font-semibold text-white">Check out now</Link>
               <button type="button" onClick={onRecordEarlier} className="min-h-11 rounded-lg border border-border px-4 py-2 font-semibold text-text">They left earlier — record actual departure</button>
             </div>
           </div>

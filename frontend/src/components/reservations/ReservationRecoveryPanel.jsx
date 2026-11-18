@@ -7,11 +7,11 @@ import ReasonSelect from './ReasonSelect';
 import CorrectionRequests, { CorrectionImpact } from './CorrectionRequests';
 import { invalidateCorrections } from '../../lib/correction-actions';
 
-export default function ReservationRecoveryPanel({ reservation, embedded = false }) {
+export default function ReservationRecoveryPanel({ reservation, embedded = false, initialAction, initialStayId }) {
   const userId = useAuthStore(state => state.user?.userId);
   const client = useQueryClient();
   const id = reservation.reservationId;
-  const [form, setForm] = useState({ action: ['Cancelled', 'NoShow'].includes(reservation.status) ? 'restore' : reservation.reservationRooms?.some(stay => stay.status === 'CheckedIn') ? 'undo-checkin' : reservation.reservationRooms?.some(stay => stay.status === 'CheckedOut') ? 'undo-checkout' : 'correct-date', stayId: '', targetRoomId: '', paymentId: '', newAmount: '', newCheckOutDate: '', reason: '' });
+  const [form, setForm] = useState({ action: initialAction ? initialAction : ['Cancelled', 'NoShow'].includes(reservation.status) ? 'restore' : reservation.reservationRooms?.some(stay => stay.status === 'CheckedIn') ? 'undo-checkin' : reservation.reservationRooms?.some(stay => stay.status === 'CheckedOut') ? 'undo-checkout' : 'correct-date', stayId: initialStayId ? String(initialStayId) : '', targetRoomId: '', paymentId: '', newAmount: '', newCheckOutDate: '', reason: '' });
   const [preview, setPreview] = useState(null);
   const [stayIds, setStayIds] = useState([]);
   const multiRoom = ['undo-checkin', 'undo-checkout', 'correct-date', 'credit-checkout'].includes(form.action);

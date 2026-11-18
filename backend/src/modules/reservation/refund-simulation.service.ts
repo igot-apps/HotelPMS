@@ -36,7 +36,7 @@ export async function simulationRecipient(tx: any, actor: Actor, booking: any) {
   return phone;
 }
 export async function simulateRefundInTransaction(tx: any, actor: Actor, request: any, preview: any) {
-  await staff(tx, actor, true);
+  await staff(tx, actor);
   const recipientPhone = await simulationRecipient(tx, actor, { reservationId: request.reservationId });
   if (recipientPhone !== request.input.recipientPhone || recipientPhone !== preview.recipientPhone) throw fail('The recipient phone changed. Reject this request and submit a new one.');
   const simulation = { reference: `SIM-MOMO-${request.requestId}`, recipientPhone, amount: Number(request.input.amount), currency: 'GHS', method: 'MobileMoney', simulatedAt: new Date().toISOString(), moneySent: false, status: 'Sent', balancesApplied: true };

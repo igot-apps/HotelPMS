@@ -307,6 +307,16 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
               )}
             </div>
           </div>
+          <div className="bg-surface p-6 rounded-2xl border border-border shadow-sm">
+            <h3 className="text-lg font-bold text-text mb-2 flex items-center gap-2">
+              <ShieldCheck size={18} className="text-primary-600" /> Refund policy
+            </h3>
+            <p className="text-sm text-text-muted leading-relaxed">
+              {property.isNonRefundable !== false
+                ? <><strong className="text-text">Non-refundable.</strong> If you cancel, the amount paid is not returned.</>
+                : <><strong className="text-text">Refundable.</strong> If you cancel before check-in, the hotel will arrange your refund.</>}
+            </p>
+          </div>
           {property.houseRules && (
             <div className="bg-surface p-6 rounded-2xl border border-border shadow-sm">
               <h3 className="text-lg font-bold text-text mb-3 flex items-center gap-2">

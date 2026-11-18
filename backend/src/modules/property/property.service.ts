@@ -66,7 +66,7 @@ export const updateProperty = async (propertyId: number, data: any) => {
     'propertyName', 'businessName', 'legalName', 'propertyType', 'address', 'area', 'city', 'region',
     'country', 'latitude', 'longitude', 'primaryEmail', 'primaryPhone', 'primaryPhoneWhatsappOnly', 'coverImage',
     'galleryImages', 'publicDescription', 'cancellationPolicy', 'houseRules', 'taxPercentage',
-    'isOnlineBookingEnabled', 'checkInTime', 'checkOutTime',
+    'isOnlineBookingEnabled', 'checkInTime', 'checkOutTime', 'isNonRefundable',
   ] as const;
   const updateData: Record<string, unknown> = {};
 
@@ -74,6 +74,7 @@ export const updateProperty = async (propertyId: number, data: any) => {
     if (Object.prototype.hasOwnProperty.call(data, field)) updateData[field] = data[field];
   }
   if (updateData.country !== undefined && String(updateData.country).toLowerCase() !== 'ghana') throw new Error('Hotels must be located in Ghana.');
+  if (updateData.isNonRefundable !== undefined && typeof updateData.isNonRefundable !== 'boolean') throw new Error('Choose whether bookings are refundable.');
 
   if (data.paystackSecretKey !== undefined && data.replacePaystackSecretKey !== true) {
     throw new Error('Choose Replace Paystack key before changing the payment setup.');

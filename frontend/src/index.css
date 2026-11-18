@@ -14,7 +14,8 @@ input, select, textarea { max-width: 100%; }
   display: block;
   box-sizing: border-box;
   flex: 1 1 0%;
-  width: 0;
+  /* Full width on its own line; inside a flex row the 0% flex-basis still shares the space. */
+  width: 100%;
   min-width: 0;
   max-width: 100%;
   min-height: 48px;

@@ -5,8 +5,8 @@ import { canCorrect } from '../src/modules/reservation/correction-policy';
 const receptionist = { userId: 2, isActive: true, role: { roleName: 'Receptionist' }, financialDelegation: {} };
 const manager = { userId: 1, isActive: true, role: { roleName: 'Manager' } };
 
-test('only refunds and recorded departures need a manager', () => {
-  expect(canCorrect(receptionist, 'refund')).toBe(false);
+test('only recorded departures need a manager; receptionists refund directly', () => {
+  expect(canCorrect(receptionist, 'refund')).toBe(true);
   expect(canCorrect(receptionist, 'record-departure')).toBe(false);
   for (const action of ['correct-date', 'credit-checkout', 'correct-payment', 'undo-checkin', 'undo-checkout', 'restore', 'transfer']) expect(canCorrect(receptionist, action)).toBe(true);
   expect(canCorrect(manager, 'record-departure')).toBe(true);

@@ -3,7 +3,7 @@ import { canCorrect, validateCorrectionPermissions, CORRECTION_ACTIONS, DEFAULT_
 
 test('default receptionist access allows room corrections and departure previews', () => {
   const user = { isActive: true, role: { roleName: 'Receptionist' }, correctionPermissions: DEFAULT_RECEPTIONIST_CORRECTIONS };
-  for (const item of CORRECTION_ACTIONS) expect(canCorrect(user, item.action)).toBe(!['refund', 'record-departure'].includes(item.action));
+  for (const item of CORRECTION_ACTIONS) expect(canCorrect(user, item.action)).toBe(item.action !== 'record-departure');
   expect(canCorrect({ ...user, correctionPermissions: [] }, 'restore')).toBe(true);
 });
 test('active receptionists can preview payment corrections, while other financial actions need delegation', () => {

@@ -374,7 +374,7 @@ router.get('/reservations', requireBookingGuest, async (req: any, res: Response)
     const reservations = await prisma.reservation.findMany({
       where: whereClause,
       include: {
-        property: { select: { propertyName: true, city: true, propertyCode: true, cancellationPolicy: true } },
+        property: { select: { propertyName: true, city: true, propertyCode: true, cancellationPolicy: true, isNonRefundable: true } },
         reservationRooms: { include: { roomType: { select: { typeName: true } } } },
         refunds: { select: { amount: true, returnedAt: true, method: true, isSimulated: true } },
         correctionRequests: { where: { action: 'refund', status: { in: ['Pending', 'Approved'] } }, select: { status: true } },
@@ -417,7 +417,7 @@ router.get('/:propertyCode', async (req: any, res: Response) => {
       select: {
         ...publicBookingFields,
         propertyId: true, propertyCode: true, propertyName: true, businessName: true,
-        coverImage: true, galleryImages: true, updatedAt: true, publicDescription: true, cancellationPolicy: true,
+        coverImage: true, galleryImages: true, updatedAt: true, publicDescription: true, cancellationPolicy: true, isNonRefundable: true,
         houseRules: true, taxPercentage: true, checkInTime: true, checkOutTime: true,
         address: true, area: true, city: true, region: true, country: true, latitude: true, longitude: true, primaryPhone: true, primaryPhoneWhatsappOnly: true, primaryEmail: true,
       }

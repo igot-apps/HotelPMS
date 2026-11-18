@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { prisma } from '../../shared/utils/prisma';
 import type { Actor } from './recovery.service';
 import { simulationRecipient, momoPhone, simulateRefundInTransaction } from './refund-simulation.service';
+import { hotelIsNonRefundable } from './refund-policy';
 const cents = (value: any) => Math.round(Number(value || 0) * 100);
 const fail = (message: string, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 export const refundVersion = (res: any) => createHash('sha256').update(JSON.stringify([res.updatedAt, res.status, res.totalAmount, res.amountPaid, res.payments.map((p: any) => [p.paymentId, p.amount, p.status, p.updatedAt]).sort(), res.refunds.map((r: any) => r.refundId).sort()])).digest('hex');
@@ -64,28 +65,27 @@ export async function refundPreviewInTransaction(tx: any, actor: Actor, id: stri
 export async function requestRefund(actor: Actor, id: string, input: any) {
   const details = input.preview !== true && input.recordDirectly === true && input.mode !== 'SimulatedMoMo' ? completionDetails(input) : null;
   return atomic(async tx => {
+    // Front desk staff (managers and receptionists) record refunds directly; the refund record,
+    // payment balance and audit log are the accountability, not a prior approval.
     const user = await staff(tx, actor);
-    const manager = user.role.roleName === 'Manager';
     const result = await preview(tx, actor, id, input);
     if (input.preview === true) {
-      if (!manager) return result;
       return { ...result, message: result.mode === 'SimulatedMoMo'
         ? `Record a TEST MoMo refund of GHS ${result.amount.toFixed(2)} to ${result.recipientPhone}. No real money is transferred.`
         : `Record GHS ${result.amount.toFixed(2)} returned from payment #${result.paymentId}. Only record this after the guest has received the money.` };
     }
     if (input.expectedVersion !== result.version) throw fail('The booking changed. Preview the refund again.');
-    if (manager && input.recordDirectly !== true) throw fail('Refresh the page and use Record refund.');
-    if (!manager && input.recordDirectly === true) throw fail('Only a hotel manager can record a refund directly.', 403);
-    const refundInput = { paymentId: result.paymentId, amount: result.amount, reason: result.reason, mode: result.mode, recipientPhone: result.recipientPhone };
+    if (input.recordDirectly !== true) throw fail('Refresh the page and use Record refund.');
+    if (result.mode === 'SimulatedMoMo') throw fail('Simulated MoMo refunds have been removed. Record the money returned to the guest instead.');
+    // Non-refundable hotels keep the money; a refund is only recorded as a confirmed, audited exception.
+    const policyException = await hotelIsNonRefundable(tx, actor.propertyId);
+    if (policyException && input.policyException !== true) throw Object.assign(fail('This hotel is non-refundable. Confirm this refund is an exception to the policy.'), { code: 'NON_REFUNDABLE' });
+    const refundInput = { paymentId: result.paymentId, amount: result.amount, reason: result.reason, mode: result.mode, recipientPhone: result.recipientPhone, ...(policyException ? { policyException: true } : {}) };
     let request = await tx.correctionRequest.create({ data: {
       propertyId: actor.propertyId, reservationId: id, requestedBy: actor.userId,
       action: 'refund', expectedVersion: result.version, input: refundInput,
-      ...(manager ? { status: 'Approved', reviewedBy: actor.userId, reviewedAt: new Date() } : {}),
+      status: 'Approved', reviewedBy: actor.userId, reviewedAt: new Date(),
     } });
-    if (!manager) {
-      await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Reservation', action: 'RefundRequested', newData: { reservationId: id, requestId: request.requestId, amount: result.amount, paymentId: result.paymentId, reason: result.reason } } });
-      return request;
-    }
     if (result.mode === 'SimulatedMoMo') {
       const simulation = await simulateRefundInTransaction(tx, actor, request, result);
       request = await tx.correctionRequest.update({ where: { requestId: request.requestId }, data: { status: 'Simulated', input: { ...refundInput, simulation } } });
@@ -105,7 +105,7 @@ export async function refundOverview(actor: Actor, id: string) {
   const requests = await prisma.correctionRequest.findMany({ where: { reservationId: id, propertyId: actor.propertyId, action: 'refund' }, include: { requester: { select: { fullName: true } }, reviewer: { select: { fullName: true } } }, orderBy: { createdAt: 'desc' } });
   const open = requests.filter(r => ['Pending', 'Approved'].includes(r.status));
   const held = open.reduce((sum, r) => sum + cents((r.input as any).amount), 0);
-  return { simulatedReturnedTotal: res.refunds.filter(r => r.isSimulated).reduce((sum,r) => sum+cents(r.amount),0)/100, actualReturnedTotal: res.refunds.filter(r => !r.isSimulated).reduce((sum,r) => sum+cents(r.amount),0)/100, simulationRecipientPhone: momoPhone(res.guestPhoneSnapshot || res.propertyGuest?.phone || res.platformGuest?.phone), refundable: Math.max(0, totals.eligible - held) / 100, totalRefundable: totals.eligible / 100, returnedTotal: res.refunds.reduce((sum, r) => sum + cents(r.amount), 0) / 100, requests, refunds: res.refunds, payments: res.payments.filter(p => p.status === 'Completed').map(p => ({ paymentId: p.paymentId, amount: Number(p.amount), method: p.paymentMethod, available: Math.max(0, Math.min(totals.eligible - held, cents(p.amount) - res.refunds.filter(r => r.paymentId === p.paymentId).reduce((sum, r) => sum + cents(r.amount), 0) - open.filter(r => Number((r.input as any).paymentId) === p.paymentId).reduce((sum, r) => sum + cents((r.input as any).amount), 0))) / 100 })) };
+  return { nonRefundable: await hotelIsNonRefundable(prisma, actor.propertyId), simulatedReturnedTotal: res.refunds.filter(r => r.isSimulated).reduce((sum,r) => sum+cents(r.amount),0)/100, actualReturnedTotal: res.refunds.filter(r => !r.isSimulated).reduce((sum,r) => sum+cents(r.amount),0)/100, simulationRecipientPhone: momoPhone(res.guestPhoneSnapshot || res.propertyGuest?.phone || res.platformGuest?.phone), refundable: Math.max(0, totals.eligible - held) / 100, totalRefundable: totals.eligible / 100, returnedTotal: res.refunds.reduce((sum, r) => sum + cents(r.amount), 0) / 100, requests, refunds: res.refunds, payments: res.payments.filter(p => p.status === 'Completed').map(p => ({ paymentId: p.paymentId, amount: Number(p.amount), method: p.paymentMethod, available: Math.max(0, Math.min(totals.eligible - held, cents(p.amount) - res.refunds.filter(r => r.paymentId === p.paymentId).reduce((sum, r) => sum + cents(r.amount), 0) - open.filter(r => Number((r.input as any).paymentId) === p.paymentId).reduce((sum, r) => sum + cents((r.input as any).amount), 0))) / 100 })) };
 }
 function completionDetails(input: any) {
   if (input.moneyReturned !== true || !methods.includes(input.method)) throw fail('Confirm that the money was returned, and enter a return method.');
@@ -127,7 +127,7 @@ async function recordReturn(tx: any, actor: Actor, user: any, res: any, request:
   const refund = await tx.refund.create({ data: { requestId: request.requestId, propertyId: actor.propertyId, reservationId: request.reservationId, paymentId: result.paymentId, amount: result.amount, method, reference, returnedBy: actor.userId, returnedByName: user.fullName, returnedAt } });
   await tx.reservation.update({ where: { reservationId: request.reservationId }, data: { amountPaid: (totals.net - cents(result.amount)) / 100, refundDue: remaining / 100, refundStatus: remaining ? 'Pending' : 'Processed' } });
   await tx.correctionRequest.update({ where: { requestId: request.requestId }, data: { status: 'Completed' } });
-  await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Reservation', action: 'RefundCompleted', newData: { reservationId: request.reservationId, requestId: request.requestId, refundId: refund.refundId, amount: result.amount, method: refund.method, reference: refund.reference, returnedAt: returnedAt.toISOString(), reason: result.reason } } });
+  await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Reservation', action: 'RefundCompleted', newData: { reservationId: request.reservationId, requestId: request.requestId, refundId: refund.refundId, amount: result.amount, method: refund.method, reference: refund.reference, returnedAt: returnedAt.toISOString(), reason: result.reason, ...(request.input?.policyException ? { policyException: true } : {}) } } });
   return refund;
 }
 export async function completeRefund(actor: Actor, requestId: number, input: any) {
@@ -144,8 +144,11 @@ export async function completeRefund(actor: Actor, requestId: number, input: any
       if (existing.method !== input.method || existing.reference !== reference) throw fail('This refund was already recorded with different details. Review its history.');
       return existing;
     }
-    if (request.status !== 'Approved') throw fail('A manager must approve this refund before completion.');
+    // Requests made before direct refunds (still Pending) are resolved here in one step; the amount is
+    // re-checked against what is refundable now, and this request's own hold is not counted twice.
+    if (!['Pending', 'Approved'].includes(request.status)) throw fail('This refund request is already closed. Refresh to see its history.');
     const result = await preview(tx, actor, request.reservationId, request.input, requestId);
+    if (request.status === 'Pending') await tx.correctionRequest.update({ where: { requestId }, data: { status: 'Approved', reviewedBy: actor.userId, reviewedAt: new Date() } });
     return recordReturn(tx, actor, user, res, request, result, details);
   }).catch((error: any) => { if (error.code === 'P2002') throw fail('This refund or reference was already recorded. Refresh and check the return history.'); throw error; });
 }

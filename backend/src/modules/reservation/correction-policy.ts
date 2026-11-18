@@ -10,11 +10,11 @@ export const CORRECTION_ACTIONS = [
   { action: 'credit-checkout', label: 'Checkout with outstanding balance', delegatable: false },
   { action: 'record-departure', label: 'Record actual departure (forgotten checkout)', delegatable: false },
 ];
-export const MANAGER_ONLY_ACTIONS = ['refund', 'record-departure'];
+export const MANAGER_ONLY_ACTIONS = ['record-departure'];
 export function canCorrect(user: any, action: string) {
   const policy = CORRECTION_ACTIONS.find(item => item.action === action);
   if (!policy || !user.isActive) return false;
-  // Receptionists apply everything except refunds and recorded (backdated) departures.
+  // Receptionists apply everything except recorded (backdated) departures.
   return user.role?.roleName === 'Manager' || (user.role?.roleName === 'Receptionist' && !MANAGER_ONLY_ACTIONS.includes(action));
 }
 export function validateCorrectionPermissions(value: unknown): string[] {

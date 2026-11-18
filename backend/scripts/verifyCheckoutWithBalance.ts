@@ -95,15 +95,16 @@ async function main() {
     assert.equal(owed.bookings.length, 0);
     console.log('E ok: later payments reduce the debt; overpaying refused; settled booking leaves the list');
 
-    // F: receptionist limit set by the manager is enforced on the server.
+    // F: no amount limit or manager approval — even an old stored limit is ignored.
     await prisma.user.update({ where: { userId: r.userId }, data: { financialDelegation: { 'credit-checkout': 100 } } });
     const c = await booking('103', 300, 0);
-    await assert.rejects(() => transitionStay(c.stayId, 'CheckedOut', r, { overrideReason: 'Guest promised to pay later.' }), /above your limit/);
-    assert.equal((await reload(c.res.reservationId)).reservationRooms[0].status, 'CheckedIn');
-    await transitionStay(c.stayId, 'CheckedOut', { userId: manager.userId, propertyId: hotel.propertyId }, { overrideReason: 'Manager approved checkout with outstanding balance.' });
-    const audits = await prisma.auditLog.findFirstOrThrow({ where: { action: 'CreditCheckoutApproved', userId: manager.userId } });
-    assert.equal((audits.newData as any).reservationId, c.res.reservationId);
-    console.log('F ok: receptionist over the 100 limit refused; manager can approve; audit names the manager');
+    await transitionStay(c.stayId, 'CheckedOut', r, { overrideReason: 'Guest disputed the outstanding amount.' });
+    const afterC = await reload(c.res.reservationId);
+    assert.equal(afterC.status, 'Completed');
+    assert.equal(Number(afterC.amountPaid), 0);
+    const auditC = await prisma.auditLog.findFirstOrThrow({ where: { action: 'CreditCheckoutApproved', userId: r.userId }, orderBy: { createdAt: 'desc' } });
+    assert.equal((auditC.newData as any).reservationId, c.res.reservationId);
+    console.log('F ok: receptionist checked out GHS 300 owing directly (old limit ignored); debt and audit kept');
 
     console.log('\nAll checkout-with-balance checks passed.');
   } finally {

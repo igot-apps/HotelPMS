@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { roomStatusLabel } from '../../lib/statusLabels';
 import { LogIn, LogOut, Loader2, Clock, Pencil, History, CalendarMinus } from 'lucide-react';
 import { expectedCheckoutAt, formatDuration, formatTime } from '../../lib/stayTiming';
 
@@ -91,9 +92,14 @@ export default function RoomCard({
           roomStatus === 'CheckedOut' ? 'bg-secondary-100 text-secondary-700' :
           'bg-primary-50 text-primary-700'
         }`}>
-          {roomStatus}
+          {roomStatusLabel(roomStatus)}
         </span>
       </div>
+      {roomStatus === 'Reserved' && rr.room?.housekeepingStatus && (
+        ['Clean', 'Inspected'].includes(rr.room.housekeepingStatus)
+          ? <p className="text-xs font-semibold text-success-700">Room is clean and ready</p>
+          : <p className="text-xs font-semibold text-warning-700">Room needs cleaning before check-in</p>
+      )}
 
       {/* Actual Check-in/Check-out Times */}
       {(rr.actualCheckIn || rr.actualCheckOut) && (

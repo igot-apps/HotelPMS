@@ -96,6 +96,7 @@ model Property {
   isOnlineBookingEnabled Boolean   @default(false)
   paystackSecretKey      String?   @db.Text
   refundSimulationEnabled Boolean @default(false)
+  isNonRefundable     Boolean @default(true) // hotel keeps the money on cancellation; refunds only as a recorded exception
   housekeepingEnabled Boolean @default(false)
   smsSimulationEnabled Boolean @default(false)
 
