@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { AlarmClock, AlertTriangle, BedDouble, ChevronRight, Coins, Hotel, Loader2, LogIn, LogOut, Sparkles, Wallet, X } from 'lucide-react';
+import { AlarmClock, AlertTriangle, BedDouble, ChevronRight, Coins, Hotel, Loader2, LogIn, LogOut, Receipt, Sparkles, Wallet, X } from 'lucide-react';
 import api from '../../lib/axios';
 import useCheckoutAlerts from '../../hooks/useCheckoutAlerts';
 import { formatDuration, formatTime } from '../../lib/stayTiming';
@@ -23,6 +23,11 @@ export default function TodayAtAGlance() {
     refetchInterval: 60000,
   });
   const alerts = useCheckoutAlerts();
+  const owedAfter = useQuery({
+    queryKey: ['owedAfterCheckout'],
+    queryFn: async () => (await api.get('/dashboard/owed-after-checkout', { skipErrorToast: true })).data.data,
+    refetchInterval: 60000,
+  });
   const [open, setOpen] = useState(null);
   useEffect(() => {
     if (!open) return undefined;
@@ -50,6 +55,7 @@ export default function TodayAtAGlance() {
     { key: 'free', icon: BedDouble, tone: 'success', label: 'Rooms free tonight', value: data.rooms.freeTonight.length, hint: `${data.rooms.occupancyPercent}% occupancy` },
     { key: 'collected', icon: Coins, tone: 'success', label: 'Collected today', value: cash(data.money.collectedToday), hint: `${data.money.payments.length} payment${data.money.payments.length === 1 ? '' : 's'}` },
     { key: 'unpaid', icon: Wallet, tone: data.money.unpaidInHouse.length ? 'warning' : 'neutral', label: 'Owed by guests in house', value: cash(data.money.inHouseOutstanding), hint: `${data.money.unpaidInHouse.length} booking${data.money.unpaidInHouse.length === 1 ? '' : 's'}${data.money.refundsPending ? ` · ${data.money.refundsPending} refund${data.money.refundsPending === 1 ? '' : 's'} pending` : ''}` },
+    { key: 'owedAfter', icon: Receipt, tone: owedAfter.data?.bookings?.length ? 'danger' : 'neutral', label: 'Owed after checkout', value: owedAfter.isError ? '—' : cash(owedAfter.data?.total), hint: owedAfter.isError ? 'Could not load' : `${owedAfter.data?.bookings?.length || 0} guest${owedAfter.data?.bookings?.length === 1 ? '' : 's'} left owing` },
     { key: 'attention', icon: Sparkles, tone: attention ? 'warning' : 'neutral', label: 'Needs attention', value: attention, hint: `${data.rooms.needsCleaning.length} to clean · ${data.rooms.maintenance.length} maintenance${data.approvalsPending ? ` · ${data.approvalsPending} approvals` : ''}` },
   ];
 
@@ -72,6 +78,7 @@ export default function TodayAtAGlance() {
           {open === 'free' && <FreeDetail rooms={data.rooms.freeTonight} />}
           {open === 'collected' && <CollectedDetail money={data.money} />}
           {open === 'unpaid' && <UnpaidDetail money={data.money} />}
+          {open === 'owedAfter' && <OwedAfterCheckoutDetail query={owedAfter} />}
           {open === 'attention' && <AttentionDetail data={data} />}
         </Drawer>
       )}
@@ -318,6 +325,32 @@ function UnpaidDetail({ money }) {
       </Group>
       {money.refundsPending > 0 && <Link to="/refunds" className="block rounded-lg border border-border p-3 text-sm font-semibold text-primary-700 hover:bg-primary-50/40">{money.refundsPending} refund{money.refundsPending === 1 ? '' : 's'} waiting · open Refunds</Link>}
     </>
+  );
+}
+
+// Guests who left still owing money. The amount is the booking's own balance, so a payment
+// recorded on the booking removes it from this list.
+function OwedAfterCheckoutDetail({ query }) {
+  if (query.isLoading) return <p className="flex items-center gap-2 text-sm text-text-muted"><Loader2 size={16} className="animate-spin" /> Loading…</p>;
+  if (query.isError) return <p className="text-sm text-danger-700">Could not load this list. Please try again.</p>;
+  const rows = query.data?.bookings || [];
+  return (
+    <Group title="Checked out with money owed" count={rows.length} empty="No guest has left owing money.">
+      {rows.map((row) => (
+        <li key={row.reservationId} className="rounded-lg border border-border p-3">
+          <Link to={`/reservations/${row.reservationId}`} className="block hover:text-primary-700">
+            <span className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{row.guestName}</span><span className="shrink-0 rounded-md bg-danger-50 px-2 py-0.5 text-xs font-bold text-danger-700">{cash(row.balanceDue)}</span></span>
+            <span className="mt-0.5 block text-sm text-text-muted">{row.confirmationCode} · Room {row.roomNumbers.join(', ') || '—'}{row.checkedOutAt ? ` · left ${shortDate(row.checkedOutAt)}` : ''}</span>
+            <span className="mt-0.5 block text-sm text-text-muted">Reason: {row.reason || 'Not recorded'}</span>
+            <span className="mt-0.5 block text-sm text-text-muted">Approved by: {row.approvedBy || 'Not recorded'}</span>
+          </Link>
+          <div className="mt-2 flex gap-2">
+            <Link to={reservationLink(row, 'pay')} className="inline-flex min-h-10 items-center rounded-lg bg-primary-600 px-3 text-sm font-semibold text-text-inverted hover:bg-primary-700">Take payment</Link>
+            <Link to={`/reservations/${row.reservationId}`} className="inline-flex min-h-10 items-center rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50">View payments</Link>
+          </div>
+        </li>
+      ))}
+    </Group>
   );
 }
 

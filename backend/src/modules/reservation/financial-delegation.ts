@@ -22,5 +22,10 @@ export function financialDecision(user: any, action: string, context: { oldTotal
   if (user.role?.roleName === 'Manager') return { canApply: true, delegationReason: '' };
   if (user.role?.roleName !== 'Receptionist') return { canApply: false, delegationReason: 'Front desk staff required.' };
   if (action === 'correct-payment' && context.payment?.gatewayReference) return { canApply: false, delegationReason: 'Online payments must match the payment provider, so a manager corrects them.' };
+  // A manager may cap how much a receptionist can let a guest leave owing (Staff settings).
+  const creditLimit = action === 'credit-checkout' ? delegationLimit(user, action) : null;
+  if (creditLimit !== null && Number(context.balance || 0) > creditLimit + 0.001) {
+    return { canApply: false, delegationReason: `The guest owes GHS ${Number(context.balance).toFixed(2)}, above your limit of GHS ${creditLimit.toFixed(2)} for checkout with money owing. Ask a manager to check the guest out, or take a payment first.` };
+  }
   return { canApply: FINANCIAL_ACTIONS.includes(action) || action === 'correct-payment', delegationReason: '' };
 }

@@ -113,9 +113,14 @@ async function releaseOccupiedRoom(tx: any, stay: any) {
 function balanceApproval(res: any, user: any, overrideReason?: unknown) {
   if (res.totalAmount === null || !Number.isFinite(Number(res.totalAmount)) || Number(res.totalAmount) < 0) throw new Error('The reservation total must be reconciled before checkout.');
   if (money(res.totalAmount) - money(res.amountPaid) <= 0.01) return '';
-  if (!overrideReason) throw new Error(`Outstanding balance: GHS ${money(money(res.totalAmount) - money(res.amountPaid)).toFixed(2)}. Record the payment, or check out with the balance owing and give a reason.`);
+  const owing = money(money(res.totalAmount) - money(res.amountPaid));
+  if (!overrideReason) throw Object.assign(new Error(`Outstanding balance: GHS ${owing.toFixed(2)}. Record the payment, or check out with the balance owing and give a reason.`), {
+    statusCode: 409, code: 'BALANCE_OWING', details: { balanceDue: owing },
+  });
   // Front desk staff may check out with a balance owing; the debt stays on the booking and is audited.
   if (!['Manager', 'Receptionist'].includes(user.role.roleName)) throw new Error('Front desk staff required.');
+  const decision = financialDecision(user, 'credit-checkout', { balance: money(money(res.totalAmount) - money(res.amountPaid)) });
+  if (!decision.canApply) throw new Error(decision.delegationReason);
   return reasonText(overrideReason);
 }
 
@@ -153,6 +158,7 @@ export async function transitionStay(stayId: number, status: string, actor: Acto
     let data: any;
     let occupantConfirmation: any = {};
     let reason = 'Normal room lifecycle transition';
+    let creditReason = '';
     if (status === 'CheckedIn' && stay.status === 'Reserved') {
       const occupant = occupantDetails(details.occupantName, details.occupantPhone);
       occupantConfirmation = await confirmOccupant(tx, actor.propertyId, stay, occupant, details.duplicateOccupantConfirmation, true);
@@ -170,7 +176,8 @@ export async function transitionStay(stayId: number, status: string, actor: Acto
         guestPresenceStatus: 'InRoom', guestOutAt: null, expectedReturnAt: null };
       await tx.room.update({ where: { roomId: stay.roomId }, data: { operationalStatus: 'Occupied' } });
     } else if (status === 'CheckedOut' && stay.status === 'CheckedIn') {
-      reason = balanceApproval(res, user, details.overrideReason) || reason;
+      creditReason = balanceApproval(res, user, details.overrideReason);
+      reason = creditReason || reason;
       const departureNote = typeof details.departureNote === 'string' ? details.departureNote.trim().slice(0, 300) : '';
       await releaseOccupiedRoom(tx, stay);
       data = { status, actualCheckOut: new Date(), guestPresenceStatus: 'InRoom', guestOutAt: null, expectedReturnAt: null };
@@ -181,7 +188,7 @@ export async function transitionStay(stayId: number, status: string, actor: Acto
     } else throw new Error('Invalid room transition. Use the dedicated manager correction actions.');
     const updated = await tx.reservationRoom.update({ where: { reservationRoomId: stayId }, data });
     await derive(tx, res.reservationId);
-    await audit(tx, actor, res.reservationId, status === 'CheckedOut' && details.overrideReason ? 'CreditCheckoutApproved' : status, reason, stay, { ...updated, ...occupantConfirmation });
+    await audit(tx, actor, res.reservationId, status === 'CheckedOut' && creditReason ? 'CreditCheckoutApproved' : status, reason, stay, { ...updated, ...occupantConfirmation });
     return updated;
   });
 }

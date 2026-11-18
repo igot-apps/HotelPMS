@@ -24,6 +24,7 @@ import EarlyCheckoutDialog from '../components/reservations/EarlyCheckoutDialog'
 import ExtendStayDialog from '../components/reservations/ExtendStayDialog';
 import ShortenStayDialog from '../components/reservations/ShortenStayDialog';
 import TakePaymentDialog from '../components/reservations/TakePaymentDialog';
+import CheckoutOwingDialog from '../components/reservations/CheckoutOwingDialog';
 import { expectedCheckoutAt, formatDuration, formatTime, noShowAllowedFrom } from '../lib/stayTiming';
 
 // The hotel's calendar day as YYYY-MM-DD, using the browser's local time.
@@ -123,6 +124,16 @@ export default function ReservationsPage() {
   const [extendRoom, setExtendRoom] = useState(null);
   const [shortenStay, setShortenStay] = useState(null);
   const [paymentFor, setPaymentFor] = useState(null);
+  const [owingCheckout, setOwingCheckout] = useState(null);
+  const checkoutTargetRef = useRef(null);
+  // Open the "guest still owes" checkout for the room being checked out.
+  const openOwingCheckout = (balanceDue) => {
+    const target = checkoutTargetRef.current;
+    if (!target) return;
+    setPendingConfirm(null);
+    setEarlyCheckout(null);
+    setOwingCheckout({ ...target, balanceDue });
+  };
   const [occupantDialog, setOccupantDialog] = useState(null);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
@@ -203,15 +214,17 @@ export default function ReservationsPage() {
 
   // 🌟 Room action mutation
   const roomActionMutation = useMutation({
-    mutationFn: ({ id, status, occupantName, occupantPhone, duplicateOccupantConfirmation, uncleanRoomConfirmed, departureNote }) => {
+    mutationFn: ({ id, status, occupantName, occupantPhone, duplicateOccupantConfirmation, uncleanRoomConfirmed, departureNote, overrideReason }) => {
       const data = { status };
       if (departureNote) data.departureNote = departureNote;
+      if (overrideReason) data.overrideReason = overrideReason;
       if (occupantName !== undefined) data.occupantName = occupantName;
       if (occupantPhone !== undefined) data.occupantPhone = occupantPhone;
       if (duplicateOccupantConfirmation !== undefined) data.duplicateOccupantConfirmation = duplicateOccupantConfirmation;
       if (uncleanRoomConfirmed) data.uncleanRoomConfirmed = true;
       // The occupant dialog shows its own errors and warnings inline.
-      return updateReservationRoomStatus(id, data, occupantDialog || earlyCheckout ? { skipErrorToast: true } : undefined);
+      // Checkout refused because money is owed opens the owing dialog instead of an error toast.
+      return updateReservationRoomStatus(id, data, occupantDialog || earlyCheckout || owingCheckout || status === 'CheckedOut' ? { skipErrorToast: true } : undefined);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
@@ -220,10 +233,14 @@ export default function ReservationsPage() {
       toast.success('Room status updated');
       setPendingConfirm(null);
       setOccupantDialog(null);
-      for (const key of ['reservation', 'reservationCorrections', 'operationalOverview']) queryClient.invalidateQueries({ queryKey: [key] });
+      for (const key of ['reservation', 'reservationCorrections', 'operationalOverview', 'dashboardGlance', 'owedAfterCheckout', 'checkoutAlerts']) queryClient.invalidateQueries({ queryKey: [key] });
     },
-    onError: (err) => {
-      if (occupantDialog || earlyCheckout) return; // these dialogs show the error inline
+    onError: (err, variables) => {
+      if (variables?.status === 'CheckedOut' && err.response?.data?.code === 'BALANCE_OWING' && !owingCheckout) {
+        openOwingCheckout(err.response.data.details?.balanceDue);
+        return;
+      }
+      if (occupantDialog || earlyCheckout || owingCheckout) return; // these dialogs show the error inline
       toast.dismiss();
       toast.error(err.response?.data?.message || 'Failed to update room status');
       setPendingConfirm(null);
@@ -382,11 +399,19 @@ export default function ReservationsPage() {
   const startCheckOut = (room, res) => {
     // Before the scheduled departure date, ask how to handle the remaining nights.
     const today = localToday();
-    if (today < String(room.checkOutDate).slice(0, 10)) { setEarlyCheckout({ room, reservation: res, today }); return; }
+    if (today < String(room.checkOutDate).slice(0, 10)) {
+      checkoutTargetRef.current = { room, reservation: res, lateText: '' };
+      setEarlyCheckout({ room, reservation: res, today });
+      return;
+    }
     const occupant = room.occupantName || 'Not assigned';
     // Past the hotel's checkout time: show how late and allow a note (no extra charge).
     const due = expectedCheckoutAt(room.checkOutDate, res.property?.checkOutTime);
     const late = Date.now() - due.getTime();
+    checkoutTargetRef.current = { room, reservation: res, lateText: late >= 60000 ? `Late departure: ${formatDuration(late)} after the ${formatTime(due)} checkout time. No extra night is charged.` : '' };
+    // Money still owed: offer to take payment first, or check out with a reason (debt stays on the booking).
+    const owing = Math.round((Number(res.totalAmount || 0) - Number(res.amountPaid || 0)) * 100) / 100;
+    if (owing > 0.01) { openOwingCheckout(owing); return; }
     askRoomAction(
       room.reservationRoomId,
       'CheckedOut',
@@ -399,8 +424,10 @@ export default function ReservationsPage() {
   // The next thing staff usually do with a booking, shown right on its row:
   // check in (arrival due), check out (guest in house), take payment (balance due).
   // Bookings with several rooms open their room list instead, so each room is handled on its own.
+  const owesAfterCheckout = (res) => res.status === 'Completed' && Number(res.totalAmount || 0) - Number(res.amountPaid || 0) > 0.01;
   const rowActions = (res, compact = false) => {
-    if (!['Confirmed', 'InHouse'].includes(res.status)) return null;
+    // Checked-out bookings still owing money keep Take payment so the debt can be collected.
+    if (!['Confirmed', 'InHouse'].includes(res.status) && !owesAfterCheckout(res)) return null;
     const stays = res.reservationRooms || [];
     const arriving = stays.filter((stay) => stay.status === 'Reserved' && String(stay.checkInDate).slice(0, 10) <= localToday());
     const inRoom = stays.filter((stay) => stay.status === 'CheckedIn');
@@ -429,10 +456,10 @@ export default function ReservationsPage() {
   };
 
   const renderRoomAssignments = (res, compact = false) => (
-    <section id={`${compact ? 'mobile' : 'desktop'}-rooms-${res.reservationId}`} className={compact ? 'mt-4 rounded-xl border border-border bg-secondary-50/50 p-3' : ''}>
+    <section id={`${compact ? 'mobile' : 'desktop'}-rooms-${res.reservationId}`} className={compact ? 'rooms-reveal mt-4 rounded-xl border-2 border-primary-200 bg-primary-50/40 p-4' : ''}>
       <div className="flex items-center gap-2 mb-4">
         <BedDouble size={18} className="text-primary-600" />
-        <h4 className="min-w-0 flex-1 text-sm font-bold text-text">Assigned rooms</h4>
+        <h4 className="min-w-0 flex-1 text-sm font-bold text-text">Assigned rooms <span className="font-semibold text-primary-700">· {res.confirmationCode || `#${res.reservationId.slice(0, 8)}`}</span></h4>
         <span className="shrink-0 whitespace-nowrap text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full font-semibold">{res.reservationRooms?.length || 0} {res.reservationRooms?.length === 1 ? 'room' : 'rooms'}</span>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -567,7 +594,7 @@ export default function ReservationsPage() {
           const cardStatusLabel = res.status === 'InHouse' ? 'In-House' : res.status === 'NoShow' ? 'No Show' : res.status;
 
           return (
-            <article key={id} data-booking={id} className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+            <article key={id} data-booking={id} className={`overflow-hidden rounded-xl border bg-surface shadow-sm transition-shadow ${isExpanded ? 'border-primary-400 ring-2 ring-primary-500/30' : 'border-border'}`}>
               <div className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -593,7 +620,7 @@ export default function ReservationsPage() {
                 <RefundApprovalBadge reservation={res} />
                 {['Cancelled', 'Expired'].includes(res.status) ? <div className="mt-3"><RefundPaymentSummary returned={refundedAmount} remaining={res.refundDue} requests={res.correctionRequests} simulated={(res.refunds || []).filter(r => r.isSimulated).reduce((sum,r) => sum + Number(r.amount),0)} /></div> : <div className="mt-3 flex items-center justify-between gap-3"><div><p className="text-xs text-text-muted">Total</p><p className="font-bold text-text">{totalAmount.toFixed(2)} GHS</p></div>{balanceDue > 0.01 ? <span className="rounded-md bg-danger-50 px-2 py-1 text-right text-xs font-bold text-danger-700">Due {balanceDue.toFixed(2)} GHS</span> : <span className="inline-flex items-center gap-1 text-xs font-semibold text-success-700"><Check size={14} /> Paid</span>}</div>}
 
-                {['Confirmed', 'InHouse'].includes(res.status) && <div className="mt-4 flex flex-wrap gap-2">{rowActions(res, true)}</div>}
+                {(['Confirmed', 'InHouse'].includes(res.status) || owesAfterCheckout(res)) && <div className="mt-4 flex flex-wrap gap-2">{rowActions(res, true)}</div>}
                 <div className="mt-2 flex gap-2">
                   {res.reservationRooms?.length > 0 && (
                     <button type="button" onClick={() => setExpandedId(isExpanded ? null : id)} aria-expanded={isExpanded} aria-controls={`mobile-rooms-${id}`} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50">
@@ -750,6 +777,8 @@ export default function ReservationsPage() {
                         {roomsToggle}
                       </div>
                     );
+                  } else if (owesAfterCheckout(res)) {
+                    actions = <div className="flex flex-wrap items-center justify-end gap-2">{rowActions(res)}</div>;
                   }
 
                   if (['Cancelled', 'Expired'].includes(res.status) && res.refundStatus === 'Pending' && permissions?.includes('CanCancelReservation')) {
@@ -790,8 +819,8 @@ export default function ReservationsPage() {
 
                   return (
                     <Fragment key={res.reservationId}>
-                      <tr data-booking={res.reservationId} className="border-b border-border last:border-0 hover:bg-secondary-50/50 transition-colors">
-                        <td className="px-2 py-4">
+                      <tr data-booking={res.reservationId} className={`transition-colors ${isExpanded ? 'bg-primary-50/70' : 'border-b border-border last:border-0 hover:bg-secondary-50/50'}`}>
+                        <td className={`px-2 py-4 ${isExpanded ? 'shadow-[inset_4px_0_0_0_theme(colors.primary.600)]' : ''}`}>
                           {res.reservationRooms?.length > 0 && (
                             <button
                               onClick={() => setExpandedId(isExpanded ? null : res.reservationId)}
@@ -837,9 +866,11 @@ export default function ReservationsPage() {
                       </tr>
 
                       {isExpanded && (
-                        <tr className="bg-secondary-50/30">
-                          <td colSpan="7" className="p-6 border-b border-border">
-                            {renderRoomAssignments(res)}
+                        <tr className="bg-primary-50/70">
+                          <td colSpan="7" className="border-b-2 border-primary-200 px-6 pb-6 pt-1 shadow-[inset_4px_0_0_0_theme(colors.primary.600)]">
+                            <div className="rooms-reveal rounded-xl border border-primary-200 bg-surface p-5 shadow-sm">
+                              {renderRoomAssignments(res)}
+                            </div>
                           </td>
                         </tr>
                       )}
@@ -885,6 +916,26 @@ export default function ReservationsPage() {
 
       {occupantDialog && <RoomOccupantDialog key={`${occupantDialog.room.reservationRoomId}-${occupantDialog.mode}`} {...occupantDialog} busy={roomActionMutation.isPending || updateOccupantMutation.isPending} onClose={() => setOccupantDialog(null)} onSubmit={details => occupantDialog.mode === 'checkin' ? roomActionMutation.mutateAsync({ id: occupantDialog.room.reservationRoomId, status: 'CheckedIn', ...details }) : updateOccupantMutation.mutateAsync({ id: occupantDialog.room.reservationRoomId, ...details })} />}
       {paymentFor && <TakePaymentDialog key={paymentFor.reservationId} reservation={paymentFor} onClose={() => setPaymentFor(null)} />}
+      {owingCheckout && (
+        <CheckoutOwingDialog
+          key={owingCheckout.room.reservationRoomId}
+          roomNumber={owingCheckout.room.room?.roomNumber || owingCheckout.room.roomNumberSnapshot}
+          guestName={owingCheckout.room.occupantName || owingCheckout.reservation.guestNameSnapshot || owingCheckout.reservation.propertyGuest?.fullName || 'Guest'}
+          balanceDue={owingCheckout.balanceDue}
+          lateText={owingCheckout.lateText}
+          onClose={() => setOwingCheckout(null)}
+          onTakePayment={() => {
+            // Payment first; the receptionist then taps Check out again (normal checkout once settled).
+            setPaymentFor({ ...owingCheckout.reservation, amountPaid: Number(owingCheckout.reservation.totalAmount || 0) - Number(owingCheckout.balanceDue || 0) });
+            setOwingCheckout(null);
+          }}
+          onCheckOut={async (overrideReason, departureNote) => {
+            await roomActionMutation.mutateAsync({ id: owingCheckout.room.reservationRoomId, status: 'CheckedOut', overrideReason, departureNote });
+            toast.success(`Checked out. GHS ${Number(owingCheckout.balanceDue || 0).toFixed(2)} is still owed and listed under "Owed after checkout".`);
+            setOwingCheckout(null);
+          }}
+        />
+      )}
       {shortenStay && <ShortenStayDialog key={shortenStay.room.reservationRoomId} {...shortenStay} onClose={() => setShortenStay(null)} />}
       {extendRoom && (
         <ExtendStayDialog

@@ -11,12 +11,12 @@ const field = 'w-full rounded-lg border border-border bg-background px-4 py-2.5 
 export default function TakePaymentDialog({ reservation, onClose }) {
   const queryClient = useQueryClient();
   const balanceDue = Math.max(0, Number(reservation.totalAmount || 0) - Number(reservation.amountPaid || 0));
-  const [form, setForm] = useState({ amount: balanceDue.toFixed(2), paymentMethod: 'Cash', gatewayReference: '', notes: '' });
+  const [form, setForm] = useState({ amount: '', paymentMethod: 'Cash', gatewayReference: '', notes: '' });
   const change = (event) => setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
   const mutation = useMutation({
     mutationFn: () => recordPayment({ reservationId: reservation.reservationId, amount: parseFloat(form.amount), paymentMethod: form.paymentMethod, gatewayReference: form.gatewayReference || null, notes: form.notes || null }),
     onSuccess: () => {
-      for (const key of ['reservations', 'reservation', 'reservationStats', 'payments', 'dashboardGlance', 'checkoutAlerts']) queryClient.invalidateQueries({ queryKey: [key] });
+      for (const key of ['reservations', 'reservation', 'reservationStats', 'payments', 'dashboardGlance', 'checkoutAlerts', 'owedAfterCheckout']) queryClient.invalidateQueries({ queryKey: [key] });
       toast.success(`Payment of GHS ${parseFloat(form.amount).toFixed(2)} recorded.`);
       onClose();
     },
@@ -36,7 +36,7 @@ export default function TakePaymentDialog({ reservation, onClose }) {
         <div className="space-y-4 p-5">
           {mutation.isError && <p role="alert" className="flex items-start gap-2 rounded-lg border border-danger-100 bg-danger-50 p-3 text-sm text-danger-600"><AlertCircle size={16} className="mt-0.5 shrink-0" />{mutation.error?.response?.data?.message || 'Failed to record payment'}</p>}
           <label className="block text-sm font-semibold text-text">Amount (GHS)
-            <input type="number" step="0.01" min="0.01" name="amount" required value={form.amount} onChange={change} className={`${field} mt-1.5`} />
+            <input type="number" step="0.01" min="0.01" name="amount" required value={form.amount} onChange={change} placeholder={balanceDue.toFixed(2)} inputMode="decimal" className={`${field} mt-1.5`} />
           </label>
           <label className="block text-sm font-semibold text-text">Payment method
             <select name="paymentMethod" value={form.paymentMethod} onChange={change} className={`${field} mt-1.5`}>

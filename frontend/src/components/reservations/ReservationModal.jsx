@@ -143,18 +143,18 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
   // Quick Add Guest Handler
   const handleQuickAddGuest = async (e) => {
     e.preventDefault();
-    const name = newGuestData.fullName.trim().replace(/s+/g, " ");
+    const name = newGuestData.fullName.trim().replace(/\s+/g, " ");
     const phone = newGuestData.phone.trim();
     const email = newGuestData.email.trim();
     if (name.length < 2) {
       toast.error('Enter the guest\x27s full name (at least 2 letters).');
       return;
     }
-    if (phone && !/^0d{9}$/.test(phone)) {
+    if (phone && !/^0\d{9}$/.test(phone)) {
       toast.error('Phone number must be 10 digits starting with 0, or leave it empty.');
       return;
     }
-    if (email && !/^[^s@]+@[^s@]+.[^s@]{2,}$/.test(email)) {
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
       toast.error('That email address doesn\x27t look right. Fix it or leave it empty.');
       return;
     }
@@ -308,11 +308,12 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
     if (formData.recordPayment) {
       const raw = String(formData.amountPaid ?? '').trim();
       const amount = Number(raw);
-      if (!raw || !/^d+(.d{1,2})?$/.test(raw) || amount <= 0) {
-        toast.error('Enter a payment amount above 0 (up to 2 decimal places), or untick "Record Initial Payment now".');
+      // Empty is fine: the booking is saved with no payment yet.
+      if (raw && (!/^\d+(\.\d{1,2})?$/.test(raw) || amount < 0)) {
+        toast.error('Payment amount must be a number with up to 2 decimal places, or leave it empty.');
         return;
       }
-      if (amount > exactTotal) {
+      if (raw && amount > exactTotal) {
         toast.error(`Payment can't be more than the total due (GH₵ ${exactTotal.toFixed(2)}).`);
         return;
       }
@@ -697,7 +698,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                   <div className="space-y-3 pt-2 border-t border-border">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-xs font-semibold text-text-muted mb-1">Initial Payment Amount (GH₵)</label>
+                        <label className="block text-xs font-semibold text-text-muted mb-1">Initial Payment Amount (GH₵) <span className="font-normal">(optional)</span></label>
                         <div className="flex gap-2">
                           <input 
                             type="number" 
@@ -708,8 +709,8 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                             onKeyDown={(e) => { if (['-', '+', 'e', 'E'].includes(e.key)) e.preventDefault(); }}
                             name="amountPaid" 
                             value={formData.amountPaid} 
-                            onChange={handleChange} 
-                            required 
+                            onChange={handleChange}
+                            placeholder={`e.g. ${totalDue.toFixed(2)}`}
                             className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" 
                           />
                           <button 
@@ -787,7 +788,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
             <form onSubmit={handleQuickAddGuest} className="p-5 space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-text-muted mb-1">Full Name <span className="text-danger-600">*</span></label>
-                <input type="text" value={newGuestData.fullName} onChange={(e) => setNewGuestData({...newGuestData, fullName: e.target.value.replace(/[^p{L} .'-]/gu, "")})} maxLength={80} required placeholder="e.g. Kwame Asante"
+                <input type="text" value={newGuestData.fullName} onChange={(e) => setNewGuestData({...newGuestData, fullName: e.target.value.replace(/[^\p{L} .'-]/gu, "")})} maxLength={80} required placeholder="e.g. Kwame Asante"
                   className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
               </div>
               <div className="grid grid-cols-2 gap-3">
