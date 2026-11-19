@@ -5,7 +5,7 @@ import { registerHotel } from '../api/auth';
 import BackButton from '../components/ui/BackButton';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
-import { Building2, User, ArrowRight, ArrowLeft, Loader2, CheckCircle2, Sparkles, MapPin } from 'lucide-react';
+import { Building2, User, ArrowRight, ArrowLeft, Loader2, CheckCircle2, Sparkles, MapPin, Eye, EyeOff } from 'lucide-react';
 import { isWithinGhanaBounds, googleMapsUrl } from '../utils/ghanaCoordinates';
 
 const GHANA_REGIONS = [
@@ -19,6 +19,8 @@ export default function HotelRegistrationWizard() {
   const login = useAuthStore((state) => state.login);
   
   const [step, setStep] = useState(1);
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     // Step 1: Hotel Details
     hotelName: '',
@@ -88,6 +90,10 @@ export default function HotelRegistrationWizard() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (formData.password !== confirmPassword) {
+      toast.error('Passwords do not match. Type the same password in both fields.');
+      return;
+    }
     mutation.mutate(formData);
   };
 
@@ -219,10 +225,26 @@ export default function HotelRegistrationWizard() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-text mb-1.5">Create Password *</label>
-                  <input type="password" name="password" value={formData.password} onChange={handleChange} required minLength={6}
-                    className="w-full px-4 py-3 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20" 
-                  />
+                  <label htmlFor="owner-password" className="block text-sm font-semibold text-text mb-1.5">Create Password *</label>
+                  <div className="flex items-center rounded-lg border border-border bg-background focus-within:ring-2 focus-within:ring-primary-500/20">
+                    <input id="owner-password" type={showPassword ? 'text' : 'password'} name="password" value={formData.password} onChange={handleChange} required minLength={6} autoComplete="new-password"
+                      className="min-w-0 flex-1 bg-transparent px-4 py-3 text-text outline-none" />
+                    <button type="button" onClick={() => setShowPassword((shown) => !shown)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword}
+                      className="flex min-h-11 min-w-11 items-center justify-center gap-1 px-3 text-sm font-semibold text-text-muted hover:text-text">
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />} <span className="hidden sm:inline">{showPassword ? 'Hide' : 'Show'}</span>
+                    </button>
+                  </div>
+                  <p className="mt-1 text-xs text-text-muted">At least 6 characters.</p>
+                </div>
+
+                <div>
+                  <label htmlFor="owner-password-confirm" className="block text-sm font-semibold text-text mb-1.5">Confirm Password *</label>
+                  <input id="owner-password-confirm" type={showPassword ? 'text' : 'password'} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required autoComplete="new-password"
+                    aria-invalid={Boolean(confirmPassword) && confirmPassword !== formData.password}
+                    className={`w-full px-4 py-3 bg-background border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 ${confirmPassword && confirmPassword !== formData.password ? 'border-danger-500' : 'border-border'}`} />
+                  {confirmPassword && (confirmPassword === formData.password
+                    ? <p className="mt-1 text-xs font-semibold text-success-700">Passwords match.</p>
+                    : <p role="alert" className="mt-1 text-xs font-semibold text-danger-700">Passwords do not match.</p>)}
                 </div>
 
                 <div className="flex gap-3 mt-6">
