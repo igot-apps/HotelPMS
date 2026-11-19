@@ -23,7 +23,8 @@ export default function ReservationRecoveryPanel({ reservation, embedded = false
   const { data: rooms = [] } = useQuery({ queryKey: ['transferRooms', id], enabled: form.action === 'transfer', queryFn: async () => (await api.get('/rooms', { params: { limit: 500 } })).data.data });
   const mutation = useMutation({
     mutationFn: async (apply) => {
-      const request = apply && !canApply;
+      if (apply && !canApply) throw Object.assign(new Error(), { response: { data: { message: 'Only a manager can apply this correction. Ask a manager to do it.' } } });
+      const request = false;
       return { ...(await api.post(`/reservations/${id}/${request ? 'correction-requests' : 'corrections'}`, { ...form, ...(multiRoom ? { stayIds } : {}), preview: !apply, expectedVersion: apply ? preview?.version : undefined })).data.data, requested: request };
     },
     onSuccess: (result, apply) => {
@@ -53,7 +54,7 @@ export default function ReservationRecoveryPanel({ reservation, embedded = false
         <option value="correct-payment">Correct or void a manual payment</option>
         <option value="credit-checkout">Approve checkout with outstanding balance</option>
       </select></label>
-      {access.data && !canApply && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Manager approval required. You can send a request after previewing it.</p>}
+      {access.data && !canApply && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Only a manager can apply this correction. You can preview it, then ask a manager to do it.</p>}
       {form.action === 'correct-date' && !preview && <p className="text-sm text-text-muted">Extend or shorten directly. Shortening only removes nights the guest has not used yet; any overpayment becomes a refund to review.</p>}
       {form.action === 'correct-payment' && <p className="text-sm text-text-muted">Manual payments can be corrected or voided directly and are audited. Online payments are corrected by a manager.</p>}
       {preview?.delegationReason && <p role="status" className="text-sm text-text-muted">{preview.delegationReason}</p>}
@@ -64,7 +65,7 @@ export default function ReservationRecoveryPanel({ reservation, embedded = false
       {form.action === 'correct-payment' && <><label className="block text-sm text-text">Original payment<select required name="paymentId" value={form.paymentId} onChange={change} className={inputClass}><option value="">Select completed manual payment</option>{(reservation.payments || []).filter(payment => payment.status === 'Completed' && !payment.gatewayReference?.startsWith('RES-')).map(payment => <option key={payment.paymentId} value={payment.paymentId}>#{payment.paymentId} — {payment.amount} GHS ({payment.paymentMethod})</option>)}</select></label><label className="block text-sm text-text">Correct amount (zero to void)<input required type="number" min="0" step="0.01" name="newAmount" value={form.newAmount} onChange={change} className={inputClass} /></label></>}
       <ReasonSelect key={form.action} action={form.action} value={form.reason} onChange={reason => { setPreview(null); setForm(current => ({ ...current, reason })); }} className={inputClass} disabled={mutation.isPending} />
       {preview && <CorrectionImpact preview={preview} />}
-      <div className="flex flex-wrap gap-2"><button className="min-h-11 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{mutation.isPending ? 'Checking…' : preview ? canApply ? 'Confirm correction' : 'Send for manager approval' : 'Preview correction'}</button>{preview && <button type="button" onClick={() => setPreview(null)} className="min-h-11 rounded-lg border border-border px-4 py-2 text-sm">Back to edit</button>}</div>
+      <div className="flex flex-wrap gap-2"><button disabled={Boolean(preview && !canApply)} className="min-h-11 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{mutation.isPending ? 'Checking…' : preview ? canApply ? 'Confirm correction' : 'Manager only' : 'Preview correction'}</button>{preview && <button type="button" onClick={() => setPreview(null)} className="min-h-11 rounded-lg border border-border px-4 py-2 text-sm">Back to edit</button>}</div>
       </fieldset>
     </form>
     <CorrectionRequests reservationId={id} onPendingChange={setPendingRequest} />

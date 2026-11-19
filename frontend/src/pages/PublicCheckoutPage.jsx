@@ -358,9 +358,7 @@ export default function PublicCheckoutPage() {
                 <p className="pl-6">If payment doesn't go through, open <strong>My Reservations</strong> and tap <strong>Pay</strong> to try again within that time.</p>
                 <p className="flex items-start gap-2"><AlertCircle size={14} className="mt-0.5 shrink-0" /> Double-check your dates — changes after payment may need the hotel's approval.</p>
               </div>
-              {property && (property.isNonRefundable !== false
-                ? <p role="note" className="mb-4 rounded-lg border border-warning-100 bg-warning-50 p-3 text-xs font-semibold text-warning-700"><AlertCircle size={14} className="mr-1 inline -mt-0.5" /> Non-refundable: if you cancel, the amount paid is not returned.</p>
-                : <p role="note" className="mb-4 rounded-lg border border-success-100 bg-success-50 p-3 text-xs font-semibold text-success-700">Refundable: if you cancel before check-in, the hotel will arrange your refund.</p>)}
+              {property && <p role="note" className="mb-4 rounded-lg border border-warning-100 bg-warning-50 p-3 text-xs font-semibold text-warning-700"><AlertCircle size={14} className="mr-1 inline -mt-0.5" /> Non-refundable: online payments are not refunded, even if you cancel.</p>}
 
               <button
                 type="submit"

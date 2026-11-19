@@ -5,6 +5,13 @@ export async function hotelIsNonRefundable(tx: any, propertyId: number): Promise
   return hotel?.isNonRefundable !== false;
 }
 
+// Money paid at the hotel (cash, MoMo, card at the desk). Online payments confirmed by the provider
+// are strictly non-refundable, so they never count towards a refund.
+export function paidAtHotel(res: { payments?: any[] }) {
+  const sum = (res.payments || []).filter(p => p.status === 'Completed' && !p.verifiedProvider).reduce((total, p) => total + Math.round(Number(p.amount) * 100), 0);
+  return sum / 100;
+}
+
 // Money that becomes due back to the guest when a booking is cancelled.
 export function cancellationRefund(paid: number, nonRefundable: boolean) {
   const refundDue = nonRefundable ? 0 : paid;

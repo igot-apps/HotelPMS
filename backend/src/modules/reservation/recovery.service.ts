@@ -6,7 +6,7 @@ import { netPaid } from './refund.service';
 import { FINANCIAL_ACTIONS, financialDecision } from './financial-delegation';
 import { checkoutDueAt, minutesLate } from './stay-timing';
 import { hotelDate } from '../reports/daily-overview.service';
-import { cancellationRefund, hotelIsNonRefundable } from './refund-policy';
+import { cancellationRefund, hotelIsNonRefundable, paidAtHotel } from './refund-policy';
 
 export type Actor = { userId: number; propertyId: number };
 export const correctionVersion = (res: any): string => [res.updatedAt.toISOString(), ...[...res.reservationRooms].sort((a, b) => a.reservationRoomId - b.reservationRoomId).map((room: any) => `${room.reservationRoomId}:${room.updatedAt.toISOString()}`)].join('|');
@@ -141,7 +141,7 @@ export async function cancelSafely(id: string, actor: Actor, reason = 'Staff can
     wasConfirmed = res.status === 'Confirmed';
     await lockRooms(tx, res.reservationRooms.map((r: any) => r.roomId).filter((id: any) => id !== null));
     await tx.reservationRoom.updateMany({ where: { reservationId: id }, data: { status: 'Cancelled' } });
-    const { refundDue, refundStatus, refundPolicy } = cancellationRefund(money(res.amountPaid), await hotelIsNonRefundable(tx, actor.propertyId));
+    const { refundDue, refundStatus, refundPolicy } = cancellationRefund(paidAtHotel(res), await hotelIsNonRefundable(tx, actor.propertyId));
     const updated = await tx.reservation.update({ where: { reservationId: id }, data: {
       status: 'Cancelled', cancellationDate: new Date(), refundDue, refundStatus,
     } });
@@ -444,7 +444,8 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
       const payment = res.payments.find((p: any) => p.paymentId === Number(input.paymentId));
       const amount = Number(input.newAmount);
       if (!payment || payment.status !== 'Completed' || res.status === 'Cancelled' || res.refundStatus !== 'None') throw new Error('Choose a completed payment on a booking without a cancellation or pending refund.');
-      if (payment.gatewayReference?.startsWith('RES-')) throw new Error('Verified online payments cannot be edited. Use the provider refund and reconciliation process.');
+      // Payments confirmed by the provider are immutable for everyone, managers included.
+      if (payment.verifiedProvider) throw new Error('Verified online payments cannot be edited. Use the provider refund and reconciliation process.');
       if (await tx.refund.count({ where: { paymentId: payment.paymentId } })) throw new Error('This payment has linked refund records and cannot be replaced or voided.');
       if (input.newAmount === '' || input.newAmount === null || !Number.isFinite(amount) || amount < 0 || amount > 99999999.99 || money(amount) !== amount) throw new Error('Enter a non-negative amount with at most two decimal places. Use zero to void the incorrect entry.');
       const paid = await netPaid(tx, id);
@@ -456,7 +457,9 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
       Object.assign(result, { oldAmount: money(payment.amount), newAmount: amount, newPaid, message: 'Void the mistaken entry without deleting its original amount, and record a linked replacement. This corrects bookkeeping only; it does not move money.' });
       if (preview) return result;
       await tx.payment.update({ where: { paymentId: payment.paymentId }, data: { status: 'Voided' } });
-      const replacement = amount > 0 ? await tx.payment.create({ data: { reservationId: id, propertyId: actor.propertyId, amount, paymentMethod: payment.paymentMethod, receivedBy: actor.userId, status: 'Completed', notes: `Correction of payment #${payment.paymentId}: ${reason}` } }) : null;
+      // The replacement stays with whoever took the money and on the day it was taken, so each person's
+      // cash and that day's totals reflect the correction. Who made the correction is in the audit log.
+      const replacement = amount > 0 ? await tx.payment.create({ data: { reservationId: id, propertyId: actor.propertyId, amount, paymentMethod: payment.paymentMethod, gatewayReference: payment.gatewayReference, paymentDate: payment.paymentDate, receivedBy: payment.receivedBy ?? actor.userId, status: 'Completed', notes: `Correction of payment #${payment.paymentId}: ${reason}` } }) : null;
       await tx.reservation.update({ where: { reservationId: id }, data: { amountPaid: newPaid } });
       result.replacementPaymentId = replacement?.paymentId || null;
     } else throw new Error('Unknown correction action.');

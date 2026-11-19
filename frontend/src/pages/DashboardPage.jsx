@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import CorrectionRequests from '../components/reservations/CorrectionRequests';
 import CheckoutAlerts from '../components/reservations/CheckoutAlerts';
 import TodayAtAGlance from '../components/dashboard/TodayAtAGlance';
 import MyDayCard from '../components/dashboard/MyDayCard';
+import MyCashCard from '../components/dashboard/MyCashCard';
 import BookingSearch from '../components/dashboard/BookingSearch';
 import ManagerDashboard from '../components/dashboard/ManagerDashboard';
-import ApprovalSummary from '../components/reservations/ApprovalSummary';
 import RefundSummary from '../components/reservations/RefundSummary';
 import RequirePermission from '../components/RequirePermission';
 import { Link } from 'react-router-dom';
@@ -163,8 +162,8 @@ export default function DashboardPage() {
     {managerView ? <ManagerDashboard /> : <>
     {frontDesk && <TodayAtAGlance />}
     {frontDesk && <MyDayCard />}
+    {frontDesk && <MyCashCard />}
     {user?.role === 'Receptionist' && <RefundSummary />}
-    {user?.propertyId && (user.role === 'Manager' ? <ApprovalSummary /> : <CorrectionRequests />)}
 
     <section aria-labelledby="quick-actions-title" className="rounded-xl border border-border bg-surface p-4 shadow-sm">
       <h2 id="quick-actions-title" className="mb-3 flex items-center gap-2 text-sm font-bold text-text"><LayoutGrid size={17} className="text-primary-600" /> Quick Actions</h2>

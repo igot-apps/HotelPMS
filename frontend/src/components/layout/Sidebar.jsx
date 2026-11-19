@@ -1,12 +1,11 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Search, BedDouble, Users, CalendarDays, BarChart3, Sparkles,
-  LogOut, Settings, Building2, X, Shield, Crown, ClipboardCheck, HandCoins
+  LogOut, Settings, Building2, X, Shield, Crown, HandCoins
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import RequirePermission from '../RequirePermission'; 
-import useApprovalCount from '../../hooks/useApprovalCount';
 import useRefundCount from '../../hooks/useRefundCount';
 import useCheckoutAlerts from '../../hooks/useCheckoutAlerts';
 import BrandMark from '../ui/BrandMark';
@@ -15,7 +14,6 @@ const operationItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/availability', icon: Search, label: 'Check Availability' },
   { to: '/reservations', icon: CalendarDays, label: 'Reservations', permission: 'CanCreateReservation' },
-  { to: '/approvals', icon: ClipboardCheck, label: 'Approvals', managerOnly: true },
   { to: '/refunds', icon: HandCoins, label: 'Refunds', staffOnly: true },
   { to: '/rooms', icon: BedDouble, label: 'Rooms & Inventory' },
   { to: '/housekeeping', icon: Sparkles, label: 'Housekeeping', housekeeping: true },
@@ -40,7 +38,6 @@ export default function Sidebar({ isOpen, onClose }) {
   const logout = useAuthStore((state) => state.logout);
   const user = useAuthStore((state) => state.user); // 🌟 Get user for trial check
   const navigate = useNavigate();
-  const approvals = useApprovalCount();
   const refunds = useRefundCount();
   const checkoutAlerts = useCheckoutAlerts();
   const overdueCheckouts = checkoutAlerts.data?.counts?.overdue || 0;
@@ -81,7 +78,6 @@ export default function Sidebar({ isOpen, onClose }) {
             <span className="flex-1">{item.label}</span>
             {item.to === '/dashboard' && overdueCheckouts > 0 && <span aria-label={`${overdueCheckouts} overdue checkouts`} title="Overdue checkouts" className="rounded-full bg-danger-100 px-2 py-0.5 text-xs font-bold text-danger-800">{overdueCheckouts > 99 ? '99+' : overdueCheckouts}</span>}
             {item.to === '/refunds' && (refunds.isError ? <span title="Could not refresh refunds" className="rounded bg-amber-100 px-2 text-xs text-amber-900">!</span> : refunds.data?.ready > 0 && <span aria-label={`${refunds.data.ready} approved refunds ready to return`} className="rounded-full bg-primary-100 px-2 py-0.5 text-xs font-bold text-primary-900">{refunds.data.ready > 99 ? '99+' : refunds.data.ready}</span>)}
-            {item.to === '/approvals' && (approvals.isError ? <span title="Could not refresh approvals" className="rounded bg-amber-100 px-2 text-xs text-amber-900">!</span> : (approvals.data?.actionRequired ?? approvals.data?.pending) > 0 && <span aria-label={`${(approvals.data.actionRequired ?? approvals.data.pending)} requests needing attention`} className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">{(approvals.data.actionRequired ?? approvals.data.pending) > 99 ? '99+' : (approvals.data.actionRequired ?? approvals.data.pending)}</span>)}
             
             {/* 🌟 Premium UX: Pulsing red dot if trial is expiring in 3 days or less */}
             {item.to === '/billing' && user?.subscriptionStatus === 'Trial' && daysLeft <= 3 && (

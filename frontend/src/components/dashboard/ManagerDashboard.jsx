@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, BarChart3, BedDouble, ClipboardCheck, Coins, Loader2, Receipt, Undo2, Users, Wallet } from 'lucide-react';
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, BarChart3, BedDouble, Coins, Loader2, Receipt, Undo2, Users, Wallet } from 'lucide-react';
 import api from '../../lib/axios';
 
 const cash = (value) => `GHS ${Number(value || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -30,6 +30,12 @@ export default function ManagerDashboard() {
     queryFn: async () => (await api.get('/dashboard/glance', { skipErrorToast: true })).data.data,
     refetchInterval: 60000,
   });
+  const cashToday = useQuery({
+    queryKey: ['cashRecon', 'today'],
+    queryFn: async () => (await api.get('/dashboard/cash', { skipErrorToast: true })).data.data,
+    refetchInterval: 60000,
+  });
+  const cashTotals = cashToday.data?.totals;
   const owedAfter = useQuery({
     queryKey: ['owedAfterCheckout'],
     queryFn: async () => (await api.get('/dashboard/owed-after-checkout', { skipErrorToast: true })).data.data,
@@ -43,11 +49,9 @@ export default function ManagerDashboard() {
   const growth = Number(summary.revenueGrowth || 0);
   const owedInHouse = glance.data?.money?.inHouseOutstanding || 0;
   const owedAfterTotal = owedAfter.data?.total || 0;
-  const approvals = glance.data?.approvalsPending || 0;
   const refunds = glance.data?.money?.refundsPending || 0;
   const owedAfterCount = owedAfter.data?.bookings?.length || 0;
   const todo = [
-    approvals > 0 && { to: '/approvals', icon: ClipboardCheck, text: `${approvals} request${approvals === 1 ? '' : 's'} waiting for your approval` },
     refunds > 0 && { to: '/refunds', icon: Undo2, text: `${refunds} refund${refunds === 1 ? '' : 's'} to return to guests` },
     owedAfterCount > 0 && { to: '/reservations?status=Completed', icon: Receipt, text: `${owedAfterCount} guest${owedAfterCount === 1 ? '' : 's'} left owing ${cash(owedAfterTotal)}` },
     (glance.data?.rooms?.needsCleaning?.length || 0) > 0 && { to: '/rooms', icon: BedDouble, text: `${glance.data.rooms.needsCleaning.length} room${glance.data.rooms.needsCleaning.length === 1 ? '' : 's'} need cleaning` },
@@ -69,6 +73,9 @@ export default function ManagerDashboard() {
       <section aria-labelledby="mgr-money" className="space-y-3">
         <h2 id="mgr-money" className="text-lg font-bold text-text">Money</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Stat to="/reports#cash" icon={Coins} label="Cash today: expected vs counted" loading={cashToday.isLoading} tone={cashTotals?.difference ? 'danger' : 'success'}
+            value={cashToday.isError || !cashTotals ? '—' : cash(cashTotals.expectedCash)}
+            hint={!cashTotals ? '' : cashTotals.countedCash === null ? 'Not counted yet' : `Counted ${cash(cashTotals.countedCash)} · ${Number(cashTotals.difference) === 0 ? 'matches' : `difference ${Number(cashTotals.difference) > 0 ? '+' : '−'}${cash(Math.abs(cashTotals.difference))}`}`} />
           <Stat to="/reports" icon={Coins} label="Collected today" value={today.isError ? '—' : cash(today.data?.netCollections)} hint={today.data ? `${today.data.transactions} payment${today.data.transactions === 1 ? '' : 's'} · after refunds` : ''} loading={today.isLoading} tone="success" />
           <Stat to="/reports" icon={Coins} label={`Collected in ${month.label}`} value={report.isError ? '—' : cash(summary.currentRevenue)} loading={report.isLoading} tone="primary"
             hint={report.data ? <span className={`inline-flex items-center gap-1 ${growth >= 0 ? 'text-success-700' : 'text-danger-700'}`}>{growth >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}{Math.abs(growth).toFixed(0)}% vs the same days last period</span> : ''} />

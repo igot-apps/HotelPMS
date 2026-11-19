@@ -6,7 +6,8 @@ import { hotelIsNonRefundable } from './refund-policy';
 const cents = (value: any) => Math.round(Number(value || 0) * 100);
 const fail = (message: string, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 export const refundVersion = (res: any) => createHash('sha256').update(JSON.stringify([res.updatedAt, res.status, res.totalAmount, res.amountPaid, res.payments.map((p: any) => [p.paymentId, p.amount, p.status, p.updatedAt]).sort(), res.refunds.map((r: any) => r.refundId).sort()])).digest('hex');
-const methods = ['Cash', 'MobileMoney', 'BankTransfer', 'Paystack'];
+// Refunds are paid back by the hotel (no provider refunds), so Paystack is not a refund method.
+const methods = ['Cash', 'MobileMoney', 'BankTransfer'];
 async function staff(tx: any, actor: Actor, manager = false) {
   const user = await tx.user.findFirst({ where: { userId: actor.userId, propertyId: actor.propertyId, isActive: true }, include: { role: true } });
   if (!user || !['Manager', 'Receptionist'].includes(user.role.roleName) || (manager && user.role.roleName !== 'Manager')) throw fail(manager ? 'Only an active hotel manager can approve or complete refunds.' : 'Active hotel staff required.', 403);
@@ -32,6 +33,11 @@ function balance(res: any) {
   if (!released && (res.totalAmount === null || !Number.isFinite(Number(res.totalAmount)))) throw fail('Reconcile the booking total before refunding.');
   return { net, eligible: released ? net : Math.max(0, net - cents(res.totalAmount)) };
 }
+// Money still refundable from payments taken at the hotel (online payments are never refunded).
+function refundableAtHotel(res: any) {
+  return res.payments.filter((p: any) => p.status === 'Completed' && !p.verifiedProvider)
+    .reduce((sum: number, p: any) => sum + cents(p.amount) - res.refunds.filter((r: any) => r.paymentId === p.paymentId).reduce((s: number, r: any) => s + cents(r.amount), 0), 0);
+}
 export async function netPaid(tx: any, reservationId: string) {
   const paid = await tx.payment.aggregate({ where: { reservationId, status: 'Completed' }, _sum: { amount: true } });
   const returned = await tx.refund.aggregate({ where: { reservationId }, _sum: { amount: true } });
@@ -49,6 +55,8 @@ async function preview(tx: any, actor: Actor, id: string, input: any, excludeId?
   if (typeof input.reason !== 'string' || input.reason.trim().length < 5 || input.reason.trim().length > 500) throw fail('Choose a refund reason between 5 and 500 characters.');
   const payment = res.payments.find((item: any) => item.paymentId === paymentId && item.status === 'Completed');
   if (!payment) throw fail('Choose a completed payment from this reservation.');
+  // Online payments confirmed by the provider are strictly non-refundable.
+  if (payment.verifiedProvider) throw fail('Online payments are non-refundable. Choose a payment taken at the hotel.');
   const reserved = await tx.correctionRequest.findMany({ where: { propertyId: actor.propertyId, reservationId: id, action: 'refund', status: { in: ['Pending', 'Approved'] }, ...(excludeId ? { requestId: { not: excludeId } } : {}) } });
   const held = reserved.reduce((sum: number, item: any) => sum + cents(item.input.amount), 0);
   const heldOnPayment = reserved.filter((item: any) => Number(item.input.paymentId) === paymentId).reduce((sum: number, item: any) => sum + cents(item.input.amount), 0);
@@ -105,14 +113,13 @@ export async function refundOverview(actor: Actor, id: string) {
   const requests = await prisma.correctionRequest.findMany({ where: { reservationId: id, propertyId: actor.propertyId, action: 'refund' }, include: { requester: { select: { fullName: true } }, reviewer: { select: { fullName: true } } }, orderBy: { createdAt: 'desc' } });
   const open = requests.filter(r => ['Pending', 'Approved'].includes(r.status));
   const held = open.reduce((sum, r) => sum + cents((r.input as any).amount), 0);
-  return { nonRefundable: await hotelIsNonRefundable(prisma, actor.propertyId), simulatedReturnedTotal: res.refunds.filter(r => r.isSimulated).reduce((sum,r) => sum+cents(r.amount),0)/100, actualReturnedTotal: res.refunds.filter(r => !r.isSimulated).reduce((sum,r) => sum+cents(r.amount),0)/100, simulationRecipientPhone: momoPhone(res.guestPhoneSnapshot || res.propertyGuest?.phone || res.platformGuest?.phone), refundable: Math.max(0, totals.eligible - held) / 100, totalRefundable: totals.eligible / 100, returnedTotal: res.refunds.reduce((sum, r) => sum + cents(r.amount), 0) / 100, requests, refunds: res.refunds, payments: res.payments.filter(p => p.status === 'Completed').map(p => ({ paymentId: p.paymentId, amount: Number(p.amount), method: p.paymentMethod, available: Math.max(0, Math.min(totals.eligible - held, cents(p.amount) - res.refunds.filter(r => r.paymentId === p.paymentId).reduce((sum, r) => sum + cents(r.amount), 0) - open.filter(r => Number((r.input as any).paymentId) === p.paymentId).reduce((sum, r) => sum + cents((r.input as any).amount), 0))) / 100 })) };
+  return { nonRefundable: await hotelIsNonRefundable(prisma, actor.propertyId), simulatedReturnedTotal: res.refunds.filter(r => r.isSimulated).reduce((sum,r) => sum+cents(r.amount),0)/100, actualReturnedTotal: res.refunds.filter(r => !r.isSimulated).reduce((sum,r) => sum+cents(r.amount),0)/100, simulationRecipientPhone: momoPhone(res.guestPhoneSnapshot || res.propertyGuest?.phone || res.platformGuest?.phone), refundable: Math.min(Math.max(0, totals.eligible - held), refundableAtHotel(res)) / 100, totalRefundable: totals.eligible / 100, returnedTotal: res.refunds.reduce((sum, r) => sum + cents(r.amount), 0) / 100, requests, refunds: res.refunds, payments: res.payments.filter(p => p.status === 'Completed').map(p => ({ paymentId: p.paymentId, amount: Number(p.amount), method: p.paymentMethod, online: Boolean(p.verifiedProvider), available: p.verifiedProvider ? 0 : Math.max(0, Math.min(totals.eligible - held, cents(p.amount) - res.refunds.filter(r => r.paymentId === p.paymentId).reduce((sum, r) => sum + cents(r.amount), 0) - open.filter(r => Number((r.input as any).paymentId) === p.paymentId).reduce((sum, r) => sum + cents((r.input as any).amount), 0))) / 100 })) };
 }
 function completionDetails(input: any) {
   if (input.moneyReturned !== true || !methods.includes(input.method)) throw fail('Confirm that the money was returned, and enter a return method.');
   if (input.reference != null && typeof input.reference !== 'string') throw fail('Enter a valid refund reference or leave it blank.');
   const reference = typeof input.reference === 'string' ? input.reference.trim() || null : null;
   if (reference && reference.length > 200) throw fail('The refund reference must be at most 200 characters.');
-  if (input.method === 'Paystack' && input.providerConfirmed !== true) throw fail('Confirm that Paystack reports the refund as successful before recording it.');
   const returnedAt = input.returnedAt ? new Date(input.returnedAt) : new Date();
   if (!Number.isFinite(returnedAt.getTime()) || returnedAt.getTime() > Date.now() + 300000) throw fail('Choose a valid return date that is not in the future.');
   return { method: input.method as string, reference, returnedAt };

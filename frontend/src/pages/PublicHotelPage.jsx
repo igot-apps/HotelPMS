@@ -312,9 +312,7 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
               <ShieldCheck size={18} className="text-primary-600" /> Refund policy
             </h3>
             <p className="text-sm text-text-muted leading-relaxed">
-              {property.isNonRefundable !== false
-                ? <><strong className="text-text">Non-refundable.</strong> If you cancel, the amount paid is not returned.</>
-                : <><strong className="text-text">Refundable.</strong> If you cancel before check-in, the hotel will arrange your refund.</>}
+              <strong className="text-text">Non-refundable.</strong> Bookings paid online are not refunded, even if you cancel.
             </p>
           </div>
           {property.houseRules && (

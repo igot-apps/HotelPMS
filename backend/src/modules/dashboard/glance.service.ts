@@ -95,9 +95,9 @@ export async function getDashboardGlance(propertyId: number, role: string, now =
     money: {
       // Hotel-wide collections are for the manager only; receptionists see their own takings ("You today").
       collectedToday: role === 'Manager' ? money(payments.reduce((sum, p) => sum + Number(p.amount), 0)) : null,
-      collectedAtDesk: role === 'Manager' ? money(payments.filter(p => !p.gatewayReference).reduce((sum, p) => sum + Number(p.amount), 0)) : null,
-      collectedOnline: role === 'Manager' ? money(payments.filter(p => p.gatewayReference).reduce((sum, p) => sum + Number(p.amount), 0)) : null,
-      payments: role !== 'Manager' ? [] : payments.map(p => ({ paymentId: p.paymentId, amount: money(p.amount), method: p.paymentMethod, at: p.paymentDate, receivedBy: p.receiver?.fullName || (p.gatewayReference ? 'Online' : null), reservationId: p.reservation.reservationId, confirmationCode: p.reservation.confirmationCode, guestName: p.reservation.guestNameSnapshot || 'Guest' })),
+      collectedAtDesk: role === 'Manager' ? money(payments.filter(p => !p.verifiedProvider).reduce((sum, p) => sum + Number(p.amount), 0)) : null,
+      collectedOnline: role === 'Manager' ? money(payments.filter(p => p.verifiedProvider).reduce((sum, p) => sum + Number(p.amount), 0)) : null,
+      payments: role !== 'Manager' ? [] : payments.map(p => ({ paymentId: p.paymentId, amount: money(p.amount), method: p.paymentMethod, at: p.paymentDate, receivedBy: p.receiver?.fullName || (p.verifiedProvider ? 'Online' : null), reservationId: p.reservation.reservationId, confirmationCode: p.reservation.confirmationCode, guestName: p.reservation.guestNameSnapshot || 'Guest' })),
       inHouseOutstanding: money([...unpaid.values()].reduce((sum, stay) => sum + stay.balanceDue, 0)),
       unpaidInHouse: [...unpaid.values()],
       refundsPending,

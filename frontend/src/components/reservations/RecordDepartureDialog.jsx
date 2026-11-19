@@ -3,7 +3,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, History, Info, Loader2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../lib/axios';
-import { useAuthStore } from '../../store/authStore';
 import { invalidateCorrections } from '../../lib/correction-actions';
 
 export const EVIDENCE_TYPES = [
@@ -20,7 +19,7 @@ const localInput = (date) => new Date(date.getTime() - date.getTimezoneOffset() 
 // Forgotten checkout: record when the guest really left. Managers apply it; receptionists send it for approval.
 export default function RecordDepartureDialog({ stay, onClose }) {
   const queryClient = useQueryClient();
-  const isManager = useAuthStore((state) => state.user?.role) === 'Manager';
+
   const [form, setForm] = useState({ departedAt: localInput(new Date()), evidenceType: '', evidenceNote: '', reason: 'Checkout was not recorded when the guest left.', contradictionNote: '' });
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -39,10 +38,10 @@ export default function RecordDepartureDialog({ stay, onClose }) {
         setPreview((await api.post(`${url}/corrections`, { ...body(), preview: true }, { skipErrorToast: true })).data.data);
         return;
       }
-      await api.post(`${url}/${isManager ? 'corrections' : 'correction-requests'}`, { ...body(), expectedVersion: preview.version }, { skipErrorToast: true });
+      await api.post(`${url}/corrections`, { ...body(), expectedVersion: preview.version }, { skipErrorToast: true });
       invalidateCorrections(queryClient);
       queryClient.invalidateQueries({ queryKey: ['checkoutAlerts'] });
-      toast.success(isManager ? 'Departure recorded and guest checked out.' : 'Sent to a manager for approval.');
+      toast.success('Departure recorded and guest checked out.');
       onClose();
     } catch (err) {
       setError(err.response?.data?.message || 'Could not record the departure.');
@@ -94,7 +93,6 @@ export default function RecordDepartureDialog({ stay, onClose }) {
                 <textarea required minLength={10} maxLength={500} rows={2} value={form.contradictionNote} onChange={change('contradictionNote')} className={field} />
               </label>
             )}
-            {!isManager && <p className="text-amber-800">A manager must approve this. The guest stays checked in until then.</p>}
           </div>
         )}
 
@@ -103,7 +101,7 @@ export default function RecordDepartureDialog({ stay, onClose }) {
           <button type="button" disabled={busy} onClick={onClose} className="min-h-11 rounded-lg border border-border px-4 py-2 text-sm text-text disabled:opacity-50">Cancel</button>
           <button disabled={busy || !ready} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
             {busy && <Loader2 size={16} className="animate-spin" />}
-            {!preview ? 'Preview' : isManager ? 'Record departure and check out' : 'Send for manager approval'}
+            {!preview ? 'Preview' : 'Record departure and check out'}
           </button>
         </div>
       </form>

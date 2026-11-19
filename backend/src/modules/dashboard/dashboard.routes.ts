@@ -4,6 +4,7 @@
    import { getDashboardGlance } from './glance.service';
    import { getOwedAfterCheckout } from './owed-after-checkout.service';
    import { getMyDay } from './my-day.service';
+   import { cashReconciliation, recordCashCount } from '../reports/cash-reconciliation.service';
    import * as dashboardController from './dashboard.controller';
 
    // 🚨 TRACKING BEACON
@@ -45,6 +46,22 @@
        return res.json({ success: true, data: await getMyDay(user.userId, user.propertyId) });
      } catch {
        return res.status(400).json({ success: false, message: 'Could not load your figures for today.' });
+     }
+   });
+
+   // End-of-day cash: managers see everyone and hotel totals; receptionists see only their own cash.
+   router.get('/cash', async (req: AuthRequest, res) => {
+     try {
+       return res.json({ success: true, data: await cashReconciliation({ userId: req.user!.userId, propertyId: req.user!.propertyId }, req.query.date) });
+     } catch (error: any) {
+       return res.status(error.statusCode || 400).json({ success: false, message: error.statusCode ? error.message : 'Could not load the cash reconciliation.' });
+     }
+   });
+   router.post('/cash-counts', async (req: AuthRequest, res) => {
+     try {
+       return res.status(201).json({ success: true, data: await recordCashCount({ userId: req.user!.userId, propertyId: req.user!.propertyId }, req.body) });
+     } catch (error: any) {
+       return res.status(error.statusCode || 400).json({ success: false, message: error.message || 'Could not save the cash count.' });
      }
    });
 

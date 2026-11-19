@@ -48,7 +48,7 @@ export async function dailyOverview(userId: number, propertyId: number, requeste
     const methods = new Map<string, number>();
     let totalCents = 0, correctionCents = 0, transactions = 0;
     const transactionsList = payments.map(p => {
-      const online = Boolean(p.gatewayReference?.startsWith('RES-'));
+      const online = Boolean(p.verifiedProvider); // confirmed by the payment provider
       const correction = Boolean(p.notes?.startsWith('Correction of payment #'));
       const cents = Math.round(Number(p.amount) * 100);
       const recordedBy = online ? 'Online / Paystack' : p.receiver?.fullName || 'Unknown / former staff';

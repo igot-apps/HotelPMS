@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../src/shared/utils/prisma';
 import { cancelSafely } from '../src/modules/reservation/recovery.service';
+import { refundOverview, requestRefund } from '../src/modules/reservation/refund.service';
 
 async function main() {
   assert(['localhost', '127.0.0.1'].includes(new URL(process.env.DATABASE_URL!).hostname), 'Local database only.');
@@ -37,6 +38,24 @@ async function main() {
     assert.equal(Number(cancelledB.refundDue), 200);
     assert.equal(cancelledB.refundStatus, 'Pending');
     console.log('2 ok: refundable hotel — cancelled, GHS 200 becomes a refund due');
+    // Refundable hotel, booking paid GHS 300 online (Paystack-verified) + GHS 200 cash: only the cash can be refunded.
+    const c = await prisma.reservation.create({ data: {
+      propertyId: hotel.propertyId, confirmationCode: `${code}-C`, source: 'Website', checkInDate: day, checkOutDate: new Date(day.getTime() + 2 * 86400000), totalAmount: 500, amountPaid: 500, status: 'Confirmed',
+      reservationRooms: { create: { roomId: room.roomId, roomTypeId: type.roomTypeId, checkInDate: day, checkOutDate: new Date(day.getTime() + 2 * 86400000), agreedPricePerNight: 250, status: 'Reserved' } },
+      payments: { create: [
+        { propertyId: hotel.propertyId, amount: 300, paymentMethod: 'Card', gatewayReference: `PSK-${code}`, receivedBy: null, verifiedProvider: 'Paystack', verifiedAt: new Date(), notes: 'Online payment verified with Paystack.' },
+        { propertyId: hotel.propertyId, amount: 200, paymentMethod: 'Cash', receivedBy: user.userId },
+      ] },
+    }, include: { payments: true } });
+    const cancelledC = await cancelSafely(c.reservationId, actor);
+    assert.equal(Number(cancelledC.refundDue), 200);
+    const overview: any = await refundOverview(actor, c.reservationId);
+    assert.equal(overview.refundable, 200);
+    assert.equal(overview.payments.find((p: any) => p.online).available, 0);
+    const onlinePayment = c.payments.find(p => p.verifiedProvider)!;
+    await assert.rejects(() => requestRefund(actor, c.reservationId, { paymentId: onlinePayment.paymentId, amount: 50, reason: 'Guest asked for money back.', mode: 'Manual', preview: true }), /Online payments are non-refundable/);
+    console.log('3 ok: refundable hotel — cancelling refunds only the GHS 200 cash; the GHS 300 online payment cannot be refunded by anyone');
+
     console.log('\nAll cancellation policy checks passed.');
   } finally {
     await prisma.auditLog.deleteMany({ where: { userId: { in: userIds } } });

@@ -45,7 +45,7 @@ export default function ShortenStayDialog({ room, reservationId, onClose }) {
 
   const applyShorten = () => run(async () => {
     if (!preview.canApply) {
-      await api.post(`${url}/correction-requests`, { ...correction, expectedVersion: preview.version }, { skipErrorToast: true });
+      throw Object.assign(new Error(), { response: { data: { message: 'Only a manager can make this change. Ask a manager to do it.' } } });
       refresh();
       toast.success('Sent to a manager for approval.');
       onClose();

@@ -111,6 +111,7 @@ model Property {
   subscriptionPayments   SubscriptionPayment[]
   correctionRequests     CorrectionRequest[]
   refunds                Refund[]
+  cashCounts             CashCount[]
   simulatedSms           SimulatedSms[]
   websiteDomains         PropertyWebsiteDomain[]
   hotelGuestAccounts     HotelGuestAccount[]
@@ -193,6 +194,8 @@ model User {
   requestedCorrections CorrectionRequest[] @relation("correctionRequester")
   reviewedCorrections CorrectionRequest[] @relation("correctionReviewer")
   returnedRefunds Refund[]
+  cashCountsCounted  CashCount[] @relation("cashCountStaff")
+  cashCountsRecorded CashCount[] @relation("cashCountRecorder")
 
   @@map("users")
 }
@@ -528,6 +531,9 @@ model Payment {
   paymentMethod     String    @db.VarChar(50)
   paymentDate       DateTime  @default(now())
   gatewayReference  String?   @db.VarChar(200)
+  // Set only when the payment provider itself confirmed this payment (e.g. "Paystack"). Such payments are immutable.
+  verifiedProvider  String?   @db.VarChar(30)
+  verifiedAt        DateTime?
   receivedBy        Int?
   status            PaymentStatus @default(Completed)
   notes             String?   @db.Text
@@ -657,4 +663,28 @@ model RoomTypeAmenity {
 
   @@id([roomTypeId, amenityId])
   @@map("room_type_amenities")
+}
+
+// End-of-day cash count for one staff member's cash on one hotel date. Append-only: a recount adds a
+// new row. expectedAmount is a snapshot taken when the count was saved; later corrections change the
+// live report but never this record.
+model CashCount {
+  cashCountId    Int      @id @default(autoincrement())
+  propertyId     Int
+  businessDate   DateTime @db.Date
+  staffUserId    Int
+  expectedAmount Decimal  @db.Decimal(10, 2)
+  countedAmount  Decimal  @db.Decimal(10, 2)
+  difference     Decimal  @db.Decimal(10, 2)
+  note           String?  @db.VarChar(300)
+  recordedBy     Int
+  recordedAt     DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
+  staff    User     @relation("cashCountStaff", fields: [staffUserId], references: [userId])
+  recorder User     @relation("cashCountRecorder", fields: [recordedBy], references: [userId])
+
+  @@index([propertyId, businessDate])
+  @@index([staffUserId])
+  @@map("cash_counts")
 }

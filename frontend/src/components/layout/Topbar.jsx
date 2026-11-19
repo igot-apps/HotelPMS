@@ -1,12 +1,10 @@
 import { useAuthStore } from '../../store/authStore';
-import { Menu, Building2, ClipboardCheck, HandCoins } from 'lucide-react';
+import { Menu, Building2, HandCoins } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import useApprovalCount from '../../hooks/useApprovalCount';
 import useRefundCount from '../../hooks/useRefundCount';
 
 export default function Topbar({ onMenuClick, isMenuOpen }) {
   const user = useAuthStore((state) => state.user);
-  const approvals = useApprovalCount();
   const refunds = useRefundCount();
 
   return (
@@ -40,7 +38,6 @@ export default function Topbar({ onMenuClick, isMenuOpen }) {
       {/* Right Side: User Profile */}
       <div className="shrink-0 flex items-center gap-2 sm:gap-4 ml-auto">
         {user?.role === 'Receptionist' && <Link to="/refunds" aria-label={refunds.isError ? 'Refunds, count unavailable' : `Refunds, ${refunds.data?.ready || 0} approved and ready to return`} className="relative flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-border px-2.5 text-sm font-semibold text-primary-700 md:hidden"><HandCoins size={19} /><span>Refunds</span>{(refunds.data?.ready > 0 || refunds.isError) && <span className="absolute -right-1 -top-1 rounded-full bg-primary-100 px-1.5 text-xs font-bold text-primary-900">{refunds.isError ? '!' : refunds.data.ready > 99 ? '99+' : refunds.data.ready}</span>}</Link>}
-        {user?.role === 'Manager' && <Link to="/approvals" aria-label={approvals.isError ? 'Approvals, count unavailable' : `Approvals${approvals.data ? `, ${(approvals.data.actionRequired ?? approvals.data.pending)} need attention` : ''}`} className="relative flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border text-primary-700 md:hidden"><ClipboardCheck size={21} />{((approvals.data?.actionRequired ?? approvals.data?.pending) > 0 || approvals.isError) && <span className="absolute -right-1 -top-1 rounded-full bg-amber-100 px-1.5 text-xs font-bold text-amber-900">{approvals.isError ? '!' : (approvals.data.actionRequired ?? approvals.data.pending) > 99 ? '99+' : (approvals.data.actionRequired ?? approvals.data.pending)}</span>}</Link>}
         <div className="text-right hidden sm:block max-w-40 truncate">
           <p className="text-sm font-semibold text-text">{user?.fullName || 'User'}</p>
           <p className="text-xs text-text-muted">{user?.role || 'Staff'}</p>

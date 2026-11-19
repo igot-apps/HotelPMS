@@ -66,7 +66,7 @@ export default function PublicBookingSuccessPage() {
           {review ? <AlertTriangle size={32} className="text-warning-600" /> : <CheckCircle2 size={34} className="text-success-600" />}
         </div>
         <h1 className="mb-2 text-2xl font-bold text-text">{review ? bookingReleased ? 'Payment received · Booking not confirmed' : 'Payment received · Review needed' : 'You\'re booked!'}</h1>
-        <p className="mb-6 text-text-muted">{review ? bookingReleased ? 'This booking was already released. Your payment has been recorded for refund review. Contact the hotel; your room is not confirmed.' : 'Your booking is confirmed, but an extra payment requires hotel refund review. Do not pay again; contact the hotel about your credit.' : `Your stay at ${property?.propertyName || 'the hotel'} is confirmed. Keep your reservation code below.`}</p>
+        <p className="mb-6 text-text-muted">{review ? bookingReleased ? 'This booking was already released when your payment arrived, so your room is not confirmed. Online payments are non-refundable. Contact the hotel with your reservation code.' : 'Your booking is confirmed. An extra payment was received; online payments are non-refundable, so do not pay again and contact the hotel about it.' : `Your stay at ${property?.propertyName || 'the hotel'} is confirmed. Keep your reservation code below.`}</p>
 
         <div className="mb-6 rounded-xl border border-dashed border-primary-200 bg-primary-50/50 p-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Reservation code</p>

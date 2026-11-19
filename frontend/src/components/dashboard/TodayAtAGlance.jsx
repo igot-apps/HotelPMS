@@ -67,7 +67,7 @@ export default function TodayAtAGlance() {
   const dueTodayBookings = new Set(arrivingStays.filter((stay) => String(stay.checkInDate).slice(0, 10) === data.date).map((stay) => stay.reservationId));
   const todayArrivalsTotal = new Set([...arrivedTodayBookings, ...dueTodayBookings]).size;
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-  const attention = data.rooms.needsCleaning.length + data.rooms.maintenance.length + data.approvalsPending;
+  const attention = data.rooms.needsCleaning.length + data.rooms.maintenance.length;
   const tiles = [
     { key: 'overdue', icon: AlarmClock, tone: overdue.length ? 'danger' : 'neutral', label: 'Overdue checkouts', value: overdue.length, hint: overdue.length ? `Longest: ${formatDuration(Math.max(...overdue.map((a) => a.minutesLate)) * 60000)} late` : `Checkout time ${data.checkOutTime}` },
     { key: 'arrivals', icon: LogIn, tone: missed.length ? 'warning' : 'primary', label: 'Arrivals to check in', value: arrivingBookings, hint: [`${arrivingBookings === 1 ? 'booking' : 'bookings'} · ${plural(arrivingStays.length, 'room')}`, missed.length ? `${missed.length} past no-show time` : '', `${arrivedTodayBookings.size} of ${todayArrivalsTotal} arrived today`, `${(data.arrivals.upcoming || []).length} in next 7 days`, data.arrivals.unpaidCount ? `${data.arrivals.unpaidCount} unpaid` : ''].filter(Boolean).join(' · ') },
@@ -441,7 +441,6 @@ function CleaningRow({ room }) {
 function AttentionDetail({ data }) {
   return (
     <>
-      {data.approvalsPending > 0 && <Link to="/approvals" className="block rounded-lg border border-warning-200 bg-warning-50/50 p-3 text-sm font-semibold text-warning-800">{data.approvalsPending} request{data.approvalsPending === 1 ? '' : 's'} waiting for your approval · open Approvals</Link>}
       <Group title="Rooms needing cleaning" count={data.rooms.needsCleaning.length} empty="All rooms are clean.">
         {data.rooms.needsCleaning.map((room) => <CleaningRow key={room.roomId} room={room} />)}
       </Group>

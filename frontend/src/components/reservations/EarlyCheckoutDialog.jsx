@@ -48,7 +48,7 @@ export default function EarlyCheckoutDialog({ room, reservation, today, onCheckO
       if (choice === 'shorten') {
         if (!preview.canApply) {
           // Outside the receptionist's limit: ask a manager. The booking stays unchanged until approved.
-          await api.post(`${url}/correction-requests`, { ...correction, expectedVersion: preview.version }, { skipErrorToast: true });
+          throw Object.assign(new Error(), { response: { data: { message: 'Only a manager can make this change. Ask a manager to do it.' } } });
           invalidateCorrections(queryClient);
           toast.success('Sent to a manager for approval. Check the guest out once it is approved.');
           onClose();

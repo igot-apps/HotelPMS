@@ -25,7 +25,6 @@ import { SHOW_DISCOVER } from './lib/platformConfig';
 
 // Protected Pages (Staff PMS)
 import DashboardPage from './pages/DashboardPage';
-import ApprovalsPage from './pages/ApprovalsPage';
 import RefundsPage from './pages/RefundsPage';
 import RoomsPage from './pages/RoomsPage';
 import HousekeepingPage from './pages/HousekeepingPage';
@@ -111,7 +110,7 @@ function App() {
         {/* ========================================== */}
         <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/approvals" element={<ApprovalsPage />} />
+          <Route path="/approvals" element={<Navigate to="/dashboard" replace />} />
           <Route path="/refunds" element={<RefundsPage />} />
           <Route path="/rooms" element={<RoomsPage />} />
           <Route path="/housekeeping" element={<HousekeepingPage />} />

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../lib/axios';
+import CashReconciliation from './reports/CashReconciliation';
 
 const cash = value => `GHS ${Number(value || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const actionName = action => action.replace(/^Correction:/, '').replace(/-/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
@@ -40,5 +41,6 @@ export default function DailyOverview() {
       <details><summary className="cursor-pointer font-bold">Activity and correction history ({data.events.length})</summary><div className="mt-3 max-h-96 space-y-2 overflow-auto">{data.events.map(event => <div key={event.id} className="rounded-lg border border-border p-3 text-sm"><p>{time(event.time)} · <strong className="capitalize">{actionName(event.action)}</strong> · {event.actor}{event.reservationId && <> · <Link className="text-primary-600 underline" to={`/reservations/${event.reservationId}`}>Open reservation</Link></>}</p>{event.reason && <p className="mt-1 text-text-muted">{event.reason}</p>}</div>)}{!data.events.length && <p className="text-sm text-text-muted">No recorded activity for this date.</p>}</div></details>
       <p className="text-xs text-text-muted">Updated {time(data.generatedAt)} · refreshes every minute.</p>
     </>}
+    {data && <CashReconciliation date={date || data.date} />}
   </section>;
 }

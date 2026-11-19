@@ -1,6 +1,6 @@
 import { prisma } from '../../shared/utils/prisma';
 import { recordSimulatedSms } from '../notifications/simulated-sms.service';
-import { cancellationRefund, hotelIsNonRefundable } from './refund-policy';
+import { cancellationRefund, hotelIsNonRefundable, paidAtHotel } from './refund-policy';
 
 export async function cancelGuestReservation(reservationId: string, guestId: number, suppliedReason: unknown, propertyId?: number | null) {
   if (typeof suppliedReason !== 'string' || suppliedReason.trim().length < 5 || suppliedReason.trim().length > 500) throw new Error('Select a reason or enter 5 to 500 characters.');
@@ -22,7 +22,7 @@ export async function cancelGuestReservation(reservationId: string, guestId: num
     if (Math.abs(paid - Number(booking.amountPaid)) > 0.01) throw new Error('This booking needs a payment review. Please contact the hotel to cancel.');
     // Release the allocation only. Another guest may physically occupy the same room today.
     await tx.reservationRoom.updateMany({ where: { reservationId, status: 'Reserved' }, data: { status: 'Cancelled' } });
-    const { refundDue, refundStatus, refundPolicy } = cancellationRefund(paid, await hotelIsNonRefundable(tx, booking.propertyId));
+    const { refundDue, refundStatus, refundPolicy } = cancellationRefund(paidAtHotel(booking), await hotelIsNonRefundable(tx, booking.propertyId));
     await tx.reservation.update({ where: { reservationId }, data: { status: 'Cancelled', cancellationDate: new Date(), refundDue, refundStatus } });
     await tx.auditLog.create({ data: { entityType: 'Reservation', action: 'GuestCancelledReservation',
       oldData: { reservationId, status: booking.status },

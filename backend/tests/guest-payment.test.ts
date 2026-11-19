@@ -53,7 +53,7 @@ describe('guest payment webhook recovery', () => {
     expect(result.data.bookingStatus).toBe('Expired');
     expect(tx.reservationRoom.update).not.toHaveBeenCalled();
     expect(tx.reservationRoom.updateMany).toHaveBeenCalledWith({ where: { reservationId, status: 'Reserved' }, data: { status: 'Cancelled' } });
-    expect(tx.reservation.update).toHaveBeenCalledWith({ where: { reservationId }, data: { amountPaid: { increment: 200 }, status: 'Expired', refundDue: { increment: 200 }, refundStatus: 'Pending' } });
+    expect(tx.reservation.update).toHaveBeenCalledWith({ where: { reservationId }, data: { amountPaid: { increment: 200 }, status: 'Expired' } }); // online payments are non-refundable: never marked as refund due
   });
   it('restores an expired allocation only when matching inventory is available', async () => {
     const hold = { reservationId, propertyId: 1, checkInDate: new Date('2030-01-01'), confirmationCode: 'ABC', status: 'Expired', source: 'Website', amountPaid: 0, totalAmount: 200 };
@@ -125,7 +125,7 @@ describe('guest payment webhook recovery', () => {
   it('flags late cancelled-booking payments for refund without resurrecting the booking', async () => {
     tx.reservation.findUniqueOrThrow.mockResolvedValueOnce({ confirmationCode: 'ABC', status: 'Cancelled' });
     await processGuestPaymentWebhook(body(), signature(body()));
-    expect(tx.reservation.update).toHaveBeenCalledWith({ where: { reservationId }, data: { amountPaid: { increment: 200 }, refundDue: { increment: 200 }, refundStatus: 'Pending' } });
+    expect(tx.reservation.update).toHaveBeenCalledWith({ where: { reservationId }, data: { amountPaid: { increment: 200 } } }); // online payments are non-refundable: never marked as refund due
   });
 
   it('confirms a timely hold and sends an expired hold to refund review when its hotel is unavailable', async () => {
@@ -139,7 +139,7 @@ describe('guest payment webhook recovery', () => {
     expect(late.data.bookingStatus).toBe('Expired');
     expect(late.data.requiresRefundReview).toBe(true);
     expect(tx.reservationRoom.updateMany).toHaveBeenCalledWith({ where: { reservationId, status: 'Reserved' }, data: { status: 'Cancelled' } });
-    expect(tx.reservation.update).toHaveBeenLastCalledWith({ where: { reservationId }, data: { amountPaid: { increment: 200 }, status: 'Expired', refundDue: { increment: 200 }, refundStatus: 'Pending' } });
+    expect(tx.reservation.update).toHaveBeenLastCalledWith({ where: { reservationId }, data: { amountPaid: { increment: 200 }, status: 'Expired' } }); // online payments are non-refundable: never marked as refund due
   });
 
   it('retries when a signed success event is not yet successful on verification', async () => {

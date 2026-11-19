@@ -32,7 +32,7 @@ test('separates staff, online, unknown, voids and replacement entries without do
   tx.payment.findMany.mockResolvedValue([
     payment(1, 20.10), payment(2, 30.20), payment(3, 100, { status: 'Voided' }),
     payment(4, 80, { notes: 'Correction of payment #3: wrong amount' }),
-    payment(5, 50, { gatewayReference: 'RES-123', receiver: null, receivedBy: null, paymentMethod: 'Card' }),
+    payment(5, 50, { gatewayReference: 'RES-123', verifiedProvider: 'Paystack', receiver: null, receivedBy: null, paymentMethod: 'Card' }),
     payment(6, 5, { receiver: null, receivedBy: null }), payment(7, 9, { status: 'Refunded' }),
   ]);
   tx.reservation.findMany.mockResolvedValue([{ totalAmount: 100, amountPaid: 40 }, { totalAmount: 50, amountPaid: 70 }]);

@@ -17,3 +17,17 @@ describe('hotel refund policy', () => {
     expect(cancellationRefund(0, false)).toEqual({ refundDue: 0, refundStatus: 'None', refundPolicy: 'Refundable' });
   });
 });
+
+describe('online payments are never refundable', () => {
+  test('only money paid at the hotel counts towards a cancellation refund', async () => {
+    const { paidAtHotel } = await import('../src/modules/reservation/refund-policy');
+    const res = { payments: [
+      { amount: 300, status: 'Completed', verifiedProvider: 'Paystack' },
+      { amount: 200, status: 'Completed', verifiedProvider: null },
+      { amount: 50, status: 'Voided', verifiedProvider: null },
+    ] };
+    expect(paidAtHotel(res)).toBe(200);
+    expect(cancellationRefund(paidAtHotel(res), false)).toMatchObject({ refundDue: 200, refundStatus: 'Pending' });
+    expect(cancellationRefund(paidAtHotel({ payments: [res.payments[0]] }), false)).toMatchObject({ refundDue: 0, refundStatus: 'None' });
+  });
+});

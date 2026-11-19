@@ -332,8 +332,8 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
                 <label htmlFor="isNonRefundable" className="text-sm font-bold text-text">Non-refundable bookings</label>
                 <p className="text-xs text-text-muted mt-0.5">
                   {formData.isNonRefundable
-                    ? 'On: when a booking is cancelled, the hotel keeps the money. Staff can still record a refund as an exception. Guests see "Non-refundable" when booking online.'
-                    : 'Off: when a booking is cancelled, the money paid becomes a refund due to the guest. Guests see "Refundable" when booking online.'}
+                    ? 'On: when a booking is cancelled, the hotel keeps money paid at the hotel. Staff can still refund it as a recorded exception. Online payments are always non-refundable.'
+                    : 'Off: when a booking is cancelled, money paid at the hotel becomes a refund due to the guest. Online payments are always non-refundable.'}
                 </p>
               </div>
               <label className="relative inline-flex shrink-0 min-h-11 items-center cursor-pointer">

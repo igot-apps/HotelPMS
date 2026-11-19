@@ -81,10 +81,11 @@ router.post('/correction-requests/:requestId/review', async (req: AuthRequest, r
   try { return res.json({ success: true, data: await approvals.reviewRequest(actor(req), Number(req.params.requestId), req.body) }); }
   catch (error: any) { return res.status(400).json({ success: false, message: error.message }); }
 });
-router.post('/:id/correction-requests', async (req: AuthRequest, res) => {
-  try { return res.status(201).json({ success: true, data: await approvals.createRequest(actor(req), String(req.params.id), req.body) }); }
-  catch (error: any) { return res.status(400).json({ success: false, message: error.message }); }
-});
+// Approvals are no longer used: staff apply what they are allowed to directly, and manager-only
+// actions are done by a manager. Requests already created can still be resolved (review route above).
+router.post('/:id/correction-requests', (_req: AuthRequest, res) => res.status(403).json({
+  success: false, message: 'Approval requests are no longer used. Ask a manager to make this change.',
+}));
 
 router.get('/:id/corrections', async (req: AuthRequest, res) => {
   try { return res.json({ success: true, data: await recovery.correctionHistory(String(req.params.id), { userId: req.user!.userId, propertyId: req.user!.propertyId }) }); }

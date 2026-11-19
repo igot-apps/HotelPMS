@@ -80,7 +80,9 @@ export async function verifyGuestPayment(propertyCode: string, reference: string
     const total = Number(reservation.totalAmount);
     const newOverpayment = Number.isFinite(total)
       ? Math.max(0, Math.round((paidBefore + amount - total) * 100)) - Math.max(0, Math.round((paidBefore - total) * 100)) : 0;
-    const refundIncrement = released ? amount : newOverpayment / 100;
+    // Online payments are strictly non-refundable: a late or extra online payment never becomes a refund due.
+    const refundIncrement = 0;
+    void newOverpayment;
     if (late && !restored) {
       await tx.reservationRoom.updateMany({ where: { reservationId, status: 'Reserved' }, data: { status: 'Cancelled' } });
       await tx.auditLog.create({ data: { entityType: 'Reservation', action: 'OnlinePaymentHoldExpired', oldData: { reservationId, status: reservation.status }, newData: { reservationId, status: 'Expired', reason: 'Payment arrived after the 10-minute hold expired. Allocation released and payment flagged for refund review.' } } });
@@ -90,6 +92,7 @@ export async function verifyGuestPayment(propertyCode: string, reference: string
     await tx.payment.create({ data: {
       reservationId, propertyId: property.propertyId, amount, paymentMethod,
       gatewayReference: reference, status: 'Completed', receivedBy: null,
+      verifiedProvider: 'Paystack', verifiedAt: new Date(), // confirmed by Paystack: never editable
       notes: 'Online payment verified with Paystack.',
     } });
     await tx.reservation.update({ where: { reservationId }, data: {

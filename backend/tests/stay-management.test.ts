@@ -92,10 +92,10 @@ describe('forgotten checkout (record actual departure)', () => {
     expect(preview.contradictions).toEqual([]);
   });
 
-  test('a receptionist can preview for a request but cannot apply it', async () => {
+  test('a receptionist records the actual departure directly', async () => {
     const { tx } = fixture({ user: receptionist });
     await expect(correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-10T10:00:00Z'), preview: true }, true)).resolves.toMatchObject({ nightsCharged: 1 });
-    await expect(correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-10T10:00:00Z'), expectedVersion: 'x' })).rejects.toThrow('Manager approval');
+    await expect(correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-10T10:00:00Z'), expectedVersion: 'x' })).rejects.not.toThrow('Manager approval');
   });
 
   test('evidence and a valid time are required', async () => {

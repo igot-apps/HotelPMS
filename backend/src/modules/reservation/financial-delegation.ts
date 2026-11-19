@@ -13,13 +13,12 @@ export function delegationLimit(user: any, action: string): number | null {
   const value = user.financialDelegation?.[action];
   return FINANCIAL_ACTIONS.includes(action) && typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
 }
-// Front desk rule: receptionists handle stay dates (unused nights only — enforced in the
-// correction itself), checkout with a balance owing and manual payment corrections directly.
-// Only refunds and recorded (backdated) departures need a manager, plus corrections to online
-// gateway payments, whose records must match the payment provider.
-export function financialDecision(user: any, action: string, context: { oldTotal?: number; newTotal?: number; isExtension?: boolean; balance?: number; payment?: any; newAmount?: number; timezone?: string }, _now = new Date()) {
+// Front desk rule: managers and receptionists apply stay-date changes (unused nights only — enforced in
+// the correction itself), checkout with a balance owing and manual payment corrections directly, each
+// audited. Provider-verified payments are protected separately: nobody can edit them.
+export function financialDecision(user: any, action: string, _context: { oldTotal?: number; newTotal?: number; isExtension?: boolean; balance?: number; payment?: any; newAmount?: number; timezone?: string } = {}, _now = new Date()) {
   if (!user.isActive) return { canApply: false, delegationReason: 'An active staff account is required.' };
   if (user.role?.roleName === 'Manager') return { canApply: true, delegationReason: '' };
   if (user.role?.roleName !== 'Receptionist') return { canApply: false, delegationReason: 'Front desk staff required.' };
-  if (action === 'correct-payment' && context.payment?.gatewayReference) return { canApply: false, delegationReason: 'Online payments must match the payment provider, so a manager corrects them.' };  return { canApply: FINANCIAL_ACTIONS.includes(action) || action === 'correct-payment', delegationReason: '' };
+  return { canApply: FINANCIAL_ACTIONS.includes(action) || action === 'correct-payment', delegationReason: '' };
 }
