@@ -256,11 +256,36 @@ function OverdueDetail({ rows: unsorted }) {
   );
 }
 
+// Group stays by reservationId and build a card with guest info, dates, balance, and room list.
+function groupByReservation(stays) {
+  return Object.values(stays.reduce((byRes, stay) => {
+    const current = byRes[stay.reservationId];
+    if (!current) {
+      byRes[stay.reservationId] = {
+        reservationId: stay.reservationId,
+        guestName: stay.guestName,
+        confirmationCode: stay.confirmationCode,
+        checkInDate: stay.checkInDate,
+        checkOutDate: stay.checkOutDate,
+        nightsBooked: stay.nightsBooked,
+        balanceDue: stay.balanceDue || 0,
+        amountPaid: stay.amountPaid || 0,
+        source: stay.source,
+        rooms: [{ roomNumber: stay.roomNumber, reservationRoomId: stay.reservationRoomId, checkInStatus: stay.checkInStatus || (stay.actualCheckIn ? 'checked-in' : 'pending') }],
+      };
+    } else {
+      current.rooms.push({ roomNumber: stay.roomNumber, reservationRoomId: stay.reservationRoomId, checkInStatus: stay.checkInStatus || (stay.actualCheckIn ? 'checked-in' : 'pending') });
+    }
+    return byRes;
+  }, {}));
+}
+
 function ArrivalsDetail({ data, missed: missedUnsorted }) {
   const missed = useSorted(missedUnsorted, 'checkInDate');
-  const today = useSorted(data.arrivals.waiting, 'checkInDate');
-  const upcoming = useSorted(data.arrivals.upcoming || [], 'checkInDate');
-  const arrived = useSorted(data.arrivals.arrivedToday, 'actualCheckIn');
+  const todayGrouped = groupByReservation(data.arrivals.waiting);
+  const upcomingGrouped = groupByReservation(data.arrivals.upcoming || []);
+  const arrivedGrouped = groupByReservation(data.arrivals.arrivedToday);
+
   return (
     <>
       {missed.length > 0 && (
@@ -278,44 +303,146 @@ function ArrivalsDetail({ data, missed: missedUnsorted }) {
           ))}
         </Group>
       )}
-      <Group title="Expected today" count={today.length} empty={missed.length ? "No other arrivals due today." : "Everyone expected today has arrived."}>
-        {today.map((stay) => (
-          <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || 'unassigned'} · ${stay.guestName}`} code={stay.confirmationCode}
-            actions={[{ label: 'View reservation', to: reservationLink(stay), icon: 'view' }]}
-            badge={stay.late ? `Due ${shortDate(stay.checkInDate)}` : stay.source === 'Website' ? 'Online' : null} badgeTone={stay.late ? 'danger' : 'primary'}
-            lines={[stayDates(stay), stay.balanceDue > 0 ? `Booking balance: ${cash(stay.balanceDue)}` : 'Paid in full']} />
+      <Group title="Expected today" count={todayGrouped.length} empty={missed.length ? "No other arrivals due today." : "Everyone expected today has arrived."}>
+        {todayGrouped.map((res) => (
+          <li key={res.reservationId} className="rounded-lg border border-border p-3">
+            {res.confirmationCode && <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{res.confirmationCode}</p>}
+            <p className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{res.guestName}</span><span className="shrink-0 rounded-md bg-primary-50 px-2 py-0.5 text-xs font-bold text-primary-700">{res.rooms.length} room{res.rooms.length === 1 ? '' : 's'}</span></p>
+            <p className="mt-0.5 text-sm text-text-muted">{shortDate(res.checkInDate)} → {shortDate(res.checkOutDate)} · {res.nightsBooked} night{res.nightsBooked === 1 ? '' : 's'}</p>
+            <p className="text-sm text-text-muted">{res.balanceDue > 0 ? `Booking balance: ${cash(res.balanceDue)}` : 'Paid in full'}</p>
+            <ul className="mt-2 space-y-1">
+              {res.rooms.map((r) => (
+                <li key={r.reservationRoomId} className="text-sm text-text-muted">Room {r.roomNumber || 'unassigned'} · {r.checkInStatus === 'checked-in' ? 'Checked in' : 'Awaiting check-in'}</li>
+              ))}
+            </ul>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Link to={withBack(reservationLink(res), 'arrivals')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white hover:bg-primary-700"><Eye size={16} /> View reservation</Link>
+            </div>
+          </li>
         ))}
       </Group>
-      <Group title="Expected in the next 7 days" count={upcoming.length} empty="No arrivals booked for the next 7 days.">
-        {upcoming.map((stay) => (
-          <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || 'unassigned'} · ${stay.guestName}`} code={stay.confirmationCode}
-            badge={`Arrives ${shortDate(stay.checkInDate)}`} badgeTone="primary"
-            actions={[{ label: 'View reservation', to: reservationLink(stay), icon: 'view' }]}
-            lines={[stayDates(stay), stay.balanceDue > 0 ? `Booking balance: ${cash(stay.balanceDue)}` : 'Paid in full']} />
+      <Group title="Expected in the next 7 days" count={upcomingGrouped.length} empty="No arrivals booked for the next 7 days.">
+        {upcomingGrouped.map((res) => (
+          <li key={res.reservationId} className="rounded-lg border border-border p-3">
+            {res.confirmationCode && <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{res.confirmationCode}</p>}
+            <p className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{res.guestName}</span><span className="shrink-0 rounded-md bg-primary-50 px-2 py-0.5 text-xs font-bold text-primary-700">{res.rooms.length} room{res.rooms.length === 1 ? '' : 's'}</span></p>
+            <p className="mt-0.5 text-sm text-text-muted">Arrives {shortDate(res.checkInDate)} · {shortDate(res.checkOutDate)}</p>
+            <p className="text-sm text-text-muted">{res.balanceDue > 0 ? `Booking balance: ${cash(res.balanceDue)}` : 'Paid in full'}</p>
+            <ul className="mt-2 space-y-1">
+              {res.rooms.map((r) => (
+                <li key={r.reservationRoomId} className="text-sm text-text-muted">Room {r.roomNumber || 'unassigned'}</li>
+              ))}
+            </ul>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Link to={withBack(reservationLink(res), 'arrivals')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white hover:bg-primary-700"><Eye size={16} /> View reservation</Link>
+            </div>
+          </li>
         ))}
       </Group>
-      <Group title="Arrived today" count={arrived.length} empty="No check-ins yet today.">
-        {arrived.map((stay) => <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || '—'} · ${stay.guestName}`} code={stay.confirmationCode} lines={[`Checked in at ${clock(stay.actualCheckIn)}`, stayDates(stay)]} />)}
+      <Group title="Arrived today" count={arrivedGrouped.length} empty="No check-ins yet today.">
+        {arrivedGrouped.map((res) => (
+          <li key={res.reservationId} className="rounded-lg border border-border p-3">
+            {res.confirmationCode && <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{res.confirmationCode}</p>}
+            <p className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{res.guestName}</span><span className="shrink-0 rounded-md bg-success-50 px-2 py-0.5 text-xs font-bold text-success-700">{res.rooms.length} room{res.rooms.length === 1 ? '' : 's'}</span></p>
+            <p className="mt-0.5 text-sm text-text-muted">{shortDate(res.checkInDate)} → {shortDate(res.checkOutDate)} · {res.nightsBooked} night{res.nightsBooked === 1 ? '' : 's'}</p>
+            <ul className="mt-2 space-y-1">
+              {res.rooms.map((r) => (
+                <li key={r.reservationRoomId} className="text-sm text-text-muted">Room {r.roomNumber || '—'} · Checked in</li>
+              ))}
+            </ul>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Link to={withBack(reservationLink(res), 'arrivals')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50"><Eye size={16} /> View reservation</Link>
+            </div>
+          </li>
+        ))}
       </Group>
     </>
   );
 }
 
 function DeparturesDetail({ data }) {
-  const due = useSorted(data.departures.waiting, 'checkOutDate');
-  const left = useSorted(data.departures.departedToday, 'actualCheckOut');
+  // Group by reservation, using check-out status fields for departures
+  const groupWaiting = Object.values(data.departures.waiting.reduce((byRes, stay) => {
+    const current = byRes[stay.reservationId];
+    if (!current) {
+      byRes[stay.reservationId] = {
+        reservationId: stay.reservationId,
+        guestName: stay.guestName,
+        confirmationCode: stay.confirmationCode,
+        expectedCheckoutAt: stay.expectedCheckoutAt,
+        actualCheckOut: null,
+        minutesLate: stay.minutesLate,
+        balanceDue: stay.balanceDue || 0,
+        amountPaid: stay.amountPaid || 0,
+        source: stay.source,
+        rooms: [{ roomNumber: stay.roomNumber, reservationRoomId: stay.reservationRoomId }],
+      };
+    } else {
+      current.rooms.push({ roomNumber: stay.roomNumber, reservationRoomId: stay.reservationRoomId });
+    }
+    return byRes;
+  }, {}));
+
+  const groupDeparted = Object.values(data.departures.departedToday.reduce((byRes, stay) => {
+    const current = byRes[stay.reservationId];
+    if (!current) {
+      byRes[stay.reservationId] = {
+        reservationId: stay.reservationId,
+        guestName: stay.guestName,
+        confirmationCode: stay.confirmationCode,
+        expectedCheckoutAt: null,
+        actualCheckOut: stay.actualCheckOut,
+        minutesLate: null,
+        balanceDue: stay.balanceDue || 0,
+        amountPaid: stay.amountPaid || 0,
+        source: stay.source,
+        rooms: [{ roomNumber: stay.roomNumber, reservationRoomId: stay.reservationRoomId }],
+      };
+    } else {
+      current.rooms.push({ roomNumber: stay.roomNumber, reservationRoomId: stay.reservationRoomId });
+    }
+    return byRes;
+  }, {}));
+
+  const due = useSorted(groupWaiting, 'rooms?.[0]');
+  const left = useSorted(groupDeparted, 'actualCheckOut');
+
   return (
     <>
       <Group title="Due to check out" count={due.length} empty="No one else is due to leave today.">
-        {due.map((stay) => (
-          <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || '—'} · ${stay.guestName}`} code={stay.confirmationCode}
-            actions={[{ label: 'View reservation', to: reservationLink(stay), icon: 'view' }]}
-            badge={stay.minutesLate > 0 ? `${formatDuration(stay.minutesLate * 60000)} late` : `By ${formatTime(new Date(stay.expectedCheckoutAt))}`} badgeTone={stay.minutesLate > 0 ? 'danger' : 'warning'}
-            lines={[stayDates(stay), stay.balanceDue > 0 ? `Booking balance: ${cash(stay.balanceDue)}` : 'Paid in full']} />
+        {due.map((res) => (
+          <li key={res.reservationId} className="rounded-lg border border-border p-3">
+            {res.confirmationCode && <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{res.confirmationCode}</p>}
+            <p className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{res.guestName}</span><span className="shrink-0 rounded-md bg-warning-50 px-2 py-0.5 text-xs font-bold text-warning-700">{res.rooms.length} room{res.rooms.length === 1 ? '' : 's'}</span></p>
+            <p className="mt-0.5 text-sm text-text-muted">{res.expectedCheckoutAt ? `By ${formatTime(new Date(res.expectedCheckoutAt))}` : ''}{res.minutesLate > 0 ? ` · ${formatDuration(res.minutesLate * 60000)} late` : ''}</p>
+            <p className="text-sm text-text-muted">{res.balanceDue > 0 ? `Booking balance: ${cash(res.balanceDue)}` : 'Paid in full'}</p>
+            <ul className="mt-2 space-y-1">
+              {res.rooms.map((r) => (
+                <li key={r.reservationRoomId} className="text-sm text-text-muted">Room {r.roomNumber || '—'} {r.reservationRoomId === data.departures.waiting.find(w => w.reservationRoomId === r.reservationRoomId)?.actualCheckIn ? '(checked in)' : 'awaiting check-out'}</li>
+              ))}
+            </ul>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Link to={withBack(reservationLink(res), 'departures')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white hover:bg-primary-700"><Eye size={16} /> View reservation</Link>
+            </div>
+          </li>
         ))}
       </Group>
       <Group title="Checked out today" count={left.length} empty="No checkouts yet today.">
-        {left.map((stay) => <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || '—'} · ${stay.guestName}`} code={stay.confirmationCode} lines={[`Left at ${clock(stay.actualCheckOut)}`, stay.balanceDue > 0 ? `Booking still owes ${cash(stay.balanceDue)}` : '']} actions={[{ label: 'View reservation', to: reservationLink(stay), icon: 'view' }]} />)}
+        {left.map((res) => (
+          <li key={res.reservationId} className="rounded-lg border border-border p-3">
+            {res.confirmationCode && <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{res.confirmationCode}</p>}
+            <p className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{res.guestName}</span><span className="shrink-0 rounded-md bg-success-50 px-2 py-0.5 text-xs font-bold text-success-700">{res.rooms.length} room{res.rooms.length === 1 ? '' : 's'}</span></p>
+            <p className="mt-0.5 text-sm text-text-muted">{res.actualCheckOut ? `Left at ${clock(res.actualCheckOut)}` : ''}</p>
+            <ul className="mt-2 space-y-1">
+              {res.rooms.map((r) => (
+                <li key={r.reservationRoomId} className="text-sm text-text-muted">Room {r.roomNumber || '—'} · checked out</li>
+              ))}
+            </ul>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Link to={withBack(reservationLink(res), 'departures')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white hover:bg-primary-700"><Eye size={16} /> View reservation</Link>
+            </div>
+          </li>
+        ))}
       </Group>
     </>
   );
@@ -362,12 +489,32 @@ function CollectedDetail({ money }) {
 
 function UnpaidDetail({ money }) {
   const unpaidRows = useSorted(money.unpaidInHouse, 'checkOutDate');
+  // Collecting an in-house balance is a single payment on the booking, so it can be taken right here.
+  const [paying, setPaying] = useState(null);
   return (
     <>
       <Group title="In-house guests with a balance" count={money.unpaidInHouse.length} empty="Every in-house booking is paid in full.">
-        {unpaidRows.map((stay) => <Row key={stay.reservationId} to={reservationLink(stay)} actions={[{ label: 'View reservation', to: reservationLink(stay), icon: 'view' }]} title={`${cash(stay.balanceDue)} · ${stay.guestName}`} code={stay.confirmationCode} lines={[`Room ${stay.roomNumber || '—'} · leaves ${shortDate(stay.checkOutDate)}`]} />)}
+        {unpaidRows.map((stay) => (
+          <li key={stay.reservationId} className="rounded-lg border border-border p-3">
+            <Link to={withBack(reservationLink(stay), 'unpaid')} className="block hover:text-primary-700">
+              <span className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{stay.guestName}</span><span className="shrink-0 rounded-md bg-danger-50 px-2 py-0.5 text-xs font-bold text-danger-700">{cash(stay.balanceDue)}</span></span>
+              <span className="mt-0.5 block text-sm text-text-muted">{stay.confirmationCode} · Room {stay.roomNumber || '—'} · leaves {shortDate(stay.checkOutDate)}</span>
+            </Link>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button type="button" onClick={() => setPaying(stay)} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-text-inverted hover:bg-primary-700"><Wallet size={16} /> Take payment</button>
+              <Link to={withBack(reservationLink(stay), 'unpaid')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50"><Eye size={16} /> View reservation</Link>
+            </div>
+          </li>
+        ))}
       </Group>
       {money.refundsPending > 0 && <Link to="/refunds" className="block rounded-lg border border-border p-3 text-sm font-semibold text-primary-700 hover:bg-primary-50/40">{money.refundsPending} refund{money.refundsPending === 1 ? '' : 's'} waiting · open Refunds</Link>}
+      {paying && (
+        <TakePaymentDialog
+          key={paying.reservationId}
+          reservation={{ reservationId: paying.reservationId, confirmationCode: paying.confirmationCode, guestNameSnapshot: paying.guestName, totalAmount: paying.balanceDue, amountPaid: 0 }}
+          onClose={() => setPaying(null)}
+        />
+      )}
     </>
   );
 }

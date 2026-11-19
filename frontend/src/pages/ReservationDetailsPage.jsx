@@ -11,7 +11,7 @@ import { getReservationById, getReservationStats, updateReservation } from '../a
 import api from '../lib/axios';
 import { recordPayment } from '../api/payments';
 import {
-  BedDouble, CreditCard, Edit2, X, Loader2,
+  BedDouble, CreditCard, X, Loader2,
   CalendarDays, AlertCircle, Plus, Printer, ChevronDown, Smartphone, Undo2, Wrench, ChevronRight
 } from 'lucide-react';
 import ReceiptModal from '../components/reservations/ReceiptModal';
@@ -87,12 +87,6 @@ export default function ReservationDetailsPage() {
       setPaymentData({ amount: '', paymentMethod: 'Cash', gatewayReference: '', notes: '' });
     },
   });
-
-  // Handlers
-  const openEditModal = () => {
-    setEditData({ notes: resData?.notes || '', source: resData?.source || '' });
-    setIsEditModalOpen(true);
-  };
 
   const handleSaveEdit = (e) => {
     e.preventDefault();
@@ -176,9 +170,6 @@ export default function ReservationDetailsPage() {
             </div>
           </div>
 
-          <button onClick={openEditModal} className="inline-flex items-center gap-2 px-4 py-2 bg-surface border border-border text-text text-sm font-semibold rounded-lg hover:bg-secondary-50 transition">
-            <Edit2 size={16} /> Edit Details
-          </button>
         </div>
       </div>
 
