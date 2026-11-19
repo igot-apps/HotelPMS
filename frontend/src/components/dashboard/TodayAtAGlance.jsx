@@ -470,14 +470,14 @@ function DeparturesDetail({ data }) {
 
 function InHouseDetail({ rows: unsorted }) {
   const rows = useSorted(unsorted, 'checkOutDate');
-  const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
   const [marking, setMarking] = useState(null);
   const presenceMutation = useMutation({
     mutationFn: ({ reservationRoomId, action, expectedReturnAt }) =>
       updateGuestPresence(reservationRoomId, action, expectedReturnAt),
     onSuccess: (_result, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['rooms', user?.propertyId] });
+      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+      queryClient.invalidateQueries({ queryKey: ['reservations'] });
       queryClient.invalidateQueries({ queryKey: ['dashboardGlance'] });
       toast.success(variables.action === 'out' ? 'Guest marked as out.' : 'Guest marked as returned.');
       setMarking(null);
@@ -522,7 +522,7 @@ function InHouseDetail({ rows: unsorted }) {
               <button
                 type="button"
                 disabled={isUpdating(stay)}
-                onClick={() => setMarking(stay.reservationRoomId)}
+                onClick={() => { setMarking(stay.reservationRoomId); presenceMutation.mutate({ reservationRoomId: stay.reservationRoomId, action: out ? 'returned' : 'out' }); }}
                 className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold ${out ? 'bg-success-600 text-white hover:bg-success-700' : 'border border-warning-300 bg-surface text-warning-800 hover:bg-warning-50'} disabled:opacity-60`}
               >
                 {isUpdating(stay) ? <Loader2 size={13} className="animate-spin" /> : out ? <LogIn size={13} /> : <LogOut size={13} />}
