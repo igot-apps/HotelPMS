@@ -1,13 +1,14 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { AlarmClock, AlertTriangle, BedDouble, ChevronRight, Coins, Eye, Hotel, Loader2, LogIn, LogOut, Plus, Receipt, Search, Sparkles, Wallet, X } from 'lucide-react';
+import { AlarmClock, AlertTriangle, BedDouble, ChevronRight, Clock, Coins, Eye, Hotel, Loader2, LogIn, LogOut, Plus, Receipt, Search, Sparkles, Wallet, X } from 'lucide-react';
 import api from '../../lib/axios';
 import useCheckoutAlerts from '../../hooks/useCheckoutAlerts';
 import { formatDuration, formatTime } from '../../lib/stayTiming';
 import { bookingLink } from '../../lib/bookingLink';
 import TakePaymentDialog from '../reservations/TakePaymentDialog';
+import { updateGuestPresence } from '../../api/reservations';
 import { useAuthStore } from '../../store/authStore';
 
 const cash = (value) => `GHS ${Number(value || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -469,14 +470,69 @@ function DeparturesDetail({ data }) {
 
 function InHouseDetail({ rows: unsorted }) {
   const rows = useSorted(unsorted, 'checkOutDate');
+  const user = useAuthStore((state) => state.user);
+  const queryClient = useQueryClient();
+  const [marking, setMarking] = useState(null);
+  const presenceMutation = useMutation({
+    mutationFn: ({ reservationRoomId, action, expectedReturnAt }) =>
+      updateGuestPresence(reservationRoomId, action, expectedReturnAt),
+    onSuccess: (_result, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['rooms', user?.propertyId] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardGlance'] });
+      toast.success(variables.action === 'out' ? 'Guest marked as out.' : 'Guest marked as returned.');
+      setMarking(null);
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Could not update guest presence.');
+      setMarking(null);
+    },
+  });
+  const isUpdating = (stay) => marking === stay.reservationRoomId || presenceMutation.isPending && presenceMutation.variables?.reservationRoomId === stay.reservationRoomId;
   return (
     <Group title="Checked-in guests" count={rows.length} empty="No guests are checked in.">
-      {rows.map((stay) => (
-        <Row key={stay.reservationRoomId} to={reservationLink(stay)} title={`Room ${stay.roomNumber || '—'} · ${stay.guestName}`} code={stay.confirmationCode}
-          badge={stay.minutesLate > 0 ? 'Overdue' : null} badgeTone="danger"
-          actions={[{ label: 'View reservation', to: reservationLink(stay), icon: 'view' }]}
-          lines={[`Night ${Math.min(stay.nightsUsed + 1, stay.nightsBooked)} of ${stay.nightsBooked} · ${shortDate(stay.checkInDate)} → ${shortDate(stay.checkOutDate)}`, stay.actualCheckIn ? `In room for ${formatDuration(Date.now() - new Date(stay.actualCheckIn).getTime())}` : '', stay.balanceDue > 0 ? `Booking balance: ${cash(stay.balanceDue)}` : 'Paid in full']} />
-      ))}
+      {rows.map((stay) => {
+        const out = stay.guestPresenceStatus === 'Out';
+        return (
+          <li key={stay.reservationRoomId} className="rounded-lg border border-border p-3">
+            <Link to={withBack(reservationLink(stay), 'inHouse')} className="block hover:text-primary-700">
+              <span className="flex items-start justify-between gap-2">
+                <span className="font-semibold text-text">{stay.guestName}</span>
+                <span className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-bold ${out ? 'bg-warning-100 text-warning-800' : 'bg-success-100 text-success-800'}`}>
+                  {out ? 'Out' : 'In room'}
+                </span>
+              </span>
+              {stay.confirmationCode && <p className="mt-0.5 text-xs font-bold uppercase tracking-wide text-primary-700">{stay.confirmationCode}</p>}
+              <p className="mt-0.5 text-sm text-text-muted">Room {stay.roomNumber || '—'} · leaves {shortDate(stay.checkOutDate)}</p>
+              {stay.balanceDue > 0 && <p className="text-sm text-text-muted">{`Booking balance: ${cash(stay.balanceDue)}`}</p>}
+              {out && stay.guestOutAt && (
+                <p className="mt-0.5 text-xs text-warning-800 flex items-center gap-1">
+                  <Clock size={12} /> Out since {new Date(stay.guestOutAt).toLocaleString()}
+                </p>
+              )}
+              {out && stay.expectedReturnAt && (
+                <p className="text-xs text-text-muted">Expected back {new Date(stay.expectedReturnAt).toLocaleString()}</p>
+              )}
+              {!out && stay.guestReturnedAt && (
+                <p className="mt-0.5 text-xs text-success-700 flex items-center gap-1">
+                  <Clock size={12} /> Returned at {new Date(stay.guestReturnedAt).toLocaleString()}
+                </p>
+              )}
+            </Link>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={isUpdating(stay)}
+                onClick={() => setMarking(stay.reservationRoomId)}
+                className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold ${out ? 'bg-success-600 text-white hover:bg-success-700' : 'border border-warning-300 bg-surface text-warning-800 hover:bg-warning-50'} disabled:opacity-60`}
+              >
+                {isUpdating(stay) ? <Loader2 size={13} className="animate-spin" /> : out ? <LogIn size={13} /> : <LogOut size={13} />}
+                {out ? 'Mark Returned' : 'Mark Guest Out'}
+              </button>
+              <Link to={withBack(reservationLink(stay), 'inHouse')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50"><Eye size={16} /> View reservation</Link>
+            </div>
+          </li>
+        );
+      })}
     </Group>
   );
 }
