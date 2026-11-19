@@ -454,7 +454,7 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
       await checkDelegation({ payment, newAmount: amount });
       if (newPaid > Number(res.totalAmount) + 0.01) throw new Error('The corrected payment exceeds the reservation total.');
       if (amount === Number(payment.amount)) throw new Error('The amount is unchanged.');
-      Object.assign(result, { oldAmount: money(payment.amount), newAmount: amount, newPaid, message: 'Void the mistaken entry without deleting its original amount, and record a linked replacement. This corrects bookkeeping only; it does not move money.' });
+      Object.assign(result, { paymentId: payment.paymentId, paymentMethod: payment.paymentMethod, originalReceivedBy: payment.receivedBy, oldAmount: money(payment.amount), newAmount: amount, newPaid, message: 'Void the mistaken entry without deleting its original amount, and record a linked replacement. This corrects bookkeeping only; it does not move money.' });
       if (preview) return result;
       await tx.payment.update({ where: { paymentId: payment.paymentId }, data: { status: 'Voided' } });
       // The replacement stays with whoever took the money and on the day it was taken, so each person's

@@ -46,7 +46,7 @@ export default function MyCashCard() {
             {latest ? (
               <p className={`mt-2 rounded-lg p-2 text-sm ${Number(mine.differenceNow) === 0 ? 'bg-success-50 text-success-700' : 'bg-warning-50 text-warning-700'}`}>
                 Last count {time(latest.recordedAt)}: <strong>{cash(latest.countedAmount)}</strong> · {Number(mine.differenceNow) === 0 ? 'matches' : `difference ${signed(mine.differenceNow)}`}
-                {mine.changedSinceCount && <span className="block text-xs">Payments changed after that count (expected was {cash(latest.expectedAmount)} then).</span>}
+                {mine.changedSinceCount && <span className="block text-xs">Payments or refunds changed after that count (expected was {cash(latest.expectedAmount)} then).</span>}
               </p>
             ) : <p className="mt-2 text-xs text-text-muted">Not counted yet today.</p>}
           </div>

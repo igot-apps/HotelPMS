@@ -59,18 +59,48 @@ async function deskFigures(db: any, propertyId: number, date: string, timeZone: 
   return { staff, onlineCents, onlineByMethod, refundsCents };
 }
 
+// Read-only facts for the manager: cash payments that were corrected down, and money entries recorded
+// after a person's latest count. These explain differences; they do not change any figure.
+async function cashActivity(db: any, propertyId: number, date: string, timeZone: string) {
+  const { gte, lt } = dayBounds(date, timeZone);
+  const [voided, latePayments, refunds] = await Promise.all([
+    db.payment.findMany({ where: { propertyId, status: 'Voided', paymentMethod: 'Cash', verifiedProvider: null, receivedBy: { not: null }, paymentDate: { gte, lt } },
+      select: { paymentId: true, amount: true, receivedBy: true, reservationId: true, receiver: { select: { fullName: true } }, reservation: { select: { confirmationCode: true } } } }),
+    db.payment.findMany({ where: { propertyId, status: 'Completed', paymentMethod: 'Cash', verifiedProvider: null, receivedBy: { not: null }, paymentDate: { gte, lt }, NOT: { notes: { startsWith: 'Correction of payment #' } } },
+      select: { paymentId: true, amount: true, receivedBy: true, createdAt: true, reservation: { select: { reservationId: true, confirmationCode: true } } } }),
+    db.refund.findMany({ where: { propertyId, isSimulated: false, method: 'Cash', returnedBy: { not: null }, returnedAt: { gte, lt } },
+      select: { refundId: true, amount: true, returnedBy: true, returnedByName: true, createdAt: true, reservationId: true, reservation: { select: { confirmationCode: true } }, request: { select: { input: true } } } }),
+  ]);
+  const replacements = voided.length ? await db.payment.findMany({ where: { OR: voided.map((p: any) => ({ notes: { startsWith: `Correction of payment #${p.paymentId}:` } })) }, select: { paymentId: true, amount: true, notes: true, status: true } }) : [];
+  const audits = voided.length ? await db.auditLog.findMany({ where: { entityType: 'Reservation', action: 'Correction:correct-payment', OR: [...new Set(voided.map((p: any) => p.reservationId))].map(id => ({ newData: { path: ['reservationId'], equals: id } })) },
+    select: { newData: true, createdAt: true, user: { select: { fullName: true } } } }) : [];
+  const corrections = voided.map((p: any) => {
+    const replacement = replacements.find((r: any) => r.notes?.startsWith(`Correction of payment #${p.paymentId}:`) && r.status !== 'Voided');
+    const audit = audits.find((a: any) => { const result = (a.newData as any)?.value?.result || {}; return result.paymentId === p.paymentId || (replacement && result.replacementPaymentId === replacement.paymentId); });
+    const original = cents(p.amount), corrected = replacement ? cents(replacement.amount) : 0;
+    return {
+      paymentId: p.paymentId, reservationId: p.reservationId, confirmationCode: p.reservation.confirmationCode, staffUserId: p.receivedBy,
+      original: fromCents(original), corrected: fromCents(corrected), difference: fromCents(corrected - original),
+      reason: (audit?.newData as any)?.reason || replacement?.notes?.replace(/^Correction of payment #\d+:\s*/, '') || null,
+      collectedBy: p.receiver?.fullName || 'Former staff', correctedBy: audit?.user?.fullName || null, correctedAt: audit?.createdAt || null,
+    };
+  }).filter((c: any) => c.difference < 0); // only corrections that lowered expected cash
+  return { corrections, latePayments, refunds };
+}
+
 export async function cashReconciliation(actor: Actor, requestedDate?: unknown) {
   const user = await staffAccount(prisma, actor);
   const timeZone = user.property?.timezone || 'Africa/Accra';
   const date = pickDate(requestedDate, timeZone);
   const manager = user.role.roleName === 'Manager';
-  const [figures, counts] = await Promise.all([
+  const [figures, counts, activity] = await Promise.all([
     deskFigures(prisma, actor.propertyId, date, timeZone),
     prisma.cashCount.findMany({
       where: { propertyId: actor.propertyId, businessDate: new Date(`${date}T00:00:00Z`), ...(manager ? {} : { staffUserId: actor.userId }) },
       include: { staff: { select: { fullName: true } }, recorder: { select: { fullName: true } } },
       orderBy: { recordedAt: 'desc' },
     }),
+    cashActivity(prisma, actor.propertyId, date, timeZone),
   ]);
   const history = counts.map(c => ({
     cashCountId: c.cashCountId, staffUserId: c.staffUserId, staffName: c.staff.fullName,
@@ -79,6 +109,7 @@ export async function cashReconciliation(actor: Actor, requestedDate?: unknown) 
   }));
   // Everyone who handled money that day, plus anyone with a saved count.
   for (const c of history) if (!figures.staff.has(c.staffUserId)) figures.staff.set(c.staffUserId, { userId: c.staffUserId, name: c.staffName, cashIn: 0, cashRefunds: 0, mobileMoney: 0, card: 0, other: 0, refundsOther: 0 });
+  for (const c of activity.corrections) if (!figures.staff.has(c.staffUserId)) figures.staff.set(c.staffUserId, { userId: c.staffUserId, name: c.collectedBy, cashIn: 0, cashRefunds: 0, mobileMoney: 0, card: 0, other: 0, refundsOther: 0 });
   if (!manager && !figures.staff.has(actor.userId)) figures.staff.set(actor.userId, { userId: actor.userId, name: user.fullName, cashIn: 0, cashRefunds: 0, mobileMoney: 0, card: 0, other: 0, refundsOther: 0 });
 
   const rows = [...figures.staff.values()]
@@ -94,6 +125,17 @@ export async function cashReconciliation(actor: Actor, requestedDate?: unknown) 
         // Live difference uses today's records; the saved count keeps the figures as they were when counted.
         differenceNow: latest ? fromCents(cents(latest.countedAmount) - expectedCash) : null,
         changedSinceCount: latest ? Math.abs(cents(latest.expectedAmount) - expectedCash) >= 1 : false,
+        // Cash payments of this person corrected down (who collected it and who corrected it are both shown).
+        cashCorrections: activity.corrections.filter((c: any) => c.staffUserId === r.userId),
+        // Entries recorded or corrected after this person's latest count, with their effect on expected cash.
+        changesAfterCount: latest ? [
+          ...activity.latePayments.filter((p: any) => p.receivedBy === r.userId && p.createdAt > latest.recordedAt)
+            .map((p: any) => ({ kind: 'payment', effect: fromCents(cents(p.amount)), at: p.createdAt, by: r.name, reservationId: p.reservation.reservationId, confirmationCode: p.reservation.confirmationCode, detail: 'Cash payment recorded after the count' })),
+          ...activity.refunds.filter((x: any) => x.returnedBy === r.userId && x.createdAt > latest.recordedAt)
+            .map((x: any) => ({ kind: 'refund', effect: -fromCents(cents(x.amount)), at: x.createdAt, by: x.returnedByName, reservationId: x.reservationId, confirmationCode: x.reservation.confirmationCode, detail: `Cash refund recorded after the count${(x.request?.input as any)?.policyException ? ' (policy exception)' : ''}${(x.request?.input as any)?.reason ? `: ${(x.request.input as any).reason}` : ''}` })),
+          ...activity.corrections.filter((c: any) => c.staffUserId === r.userId && c.correctedAt && c.correctedAt > latest.recordedAt)
+            .map((c: any) => ({ kind: 'correction', effect: c.difference, at: c.correctedAt, by: c.correctedBy, reservationId: c.reservationId, confirmationCode: c.confirmationCode, detail: `Cash payment corrected from GHS ${c.original.toFixed(2)} to GHS ${c.corrected.toFixed(2)} after the count` })),
+        ].sort((a: any, b: any) => +new Date(a.at) - +new Date(b.at)) : [],
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));

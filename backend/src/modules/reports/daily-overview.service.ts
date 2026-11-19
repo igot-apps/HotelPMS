@@ -42,8 +42,11 @@ export async function dailyOverview(userId: number, propertyId: number, requeste
       tx.reservationRoom.count({ where: { reservation: { propertyId }, actualCheckOut: bounds } }),
       tx.reservation.count({ where: { propertyId, cancellationDate: bounds } }),
       tx.reservation.findMany({ where: { propertyId, status: { in: ['Confirmed', 'InHouse', 'Completed'] } }, select: { totalAmount: true, amountPaid: true } }),
-      tx.refund.findMany({ where: { propertyId, isSimulated: false, returnedAt: bounds }, orderBy: { returnedAt: 'desc' }, include: { reservation: { select: { confirmationCode: true } } } }),
+      tx.refund.findMany({ where: { propertyId, isSimulated: false, returnedAt: bounds }, orderBy: { returnedAt: 'desc' }, include: { reservation: { select: { confirmationCode: true } }, request: { select: { input: true } } } }),
     ]);
+    // Recorded on this day but returned earlier: listed for visibility only (they belong to their return date's totals).
+    const recordedLate = await tx.refund.findMany({ where: { propertyId, isSimulated: false, createdAt: bounds, returnedAt: { lt: bounds.gte } }, orderBy: { createdAt: 'desc' }, include: { reservation: { select: { confirmationCode: true } }, request: { select: { input: true } } } });
+    const describeRefund = (refund: any) => ({ ...refund, reason: (refund.request?.input as any)?.reason || null, policyException: Boolean((refund.request?.input as any)?.policyException), recordedAt: refund.createdAt, recordedOn: hotelDate(refund.createdAt, timeZone), returnedOn: hotelDate(refund.returnedAt, timeZone), request: undefined });
     const staff = new Map<string, any>();
     const methods = new Map<string, number>();
     let totalCents = 0, correctionCents = 0, transactions = 0;
@@ -62,7 +65,7 @@ export async function dailyOverview(userId: number, propertyId: number, requeste
       return { paymentId: p.paymentId, reservationId: p.reservationId, confirmationCode: p.reservation.confirmationCode, guest: p.reservation.guestNameSnapshot || p.reservation.propertyGuest?.fullName || p.reservation.platformGuest?.fullName || 'Guest', amount: Number(p.amount), method: p.paymentMethod, status: p.status, time: p.paymentDate, recordedBy, staffKey: key, correction };
     });
     const refundsReturned = refunds.reduce((sum, refund) => sum + Math.round(Number(refund.amount) * 100), 0) / 100;
-    return { date, timeZone, generatedAt: new Date(), collections: totalCents / 100, transactions, correctionEntries: correctionCents / 100, refundsReturned, netCollections: (totalCents + correctionCents) / 100 - refundsReturned, refunds,
+    return { date, timeZone, generatedAt: new Date(), collections: totalCents / 100, transactions, correctionEntries: correctionCents / 100, refundsReturned, netCollections: (totalCents + correctionCents) / 100 - refundsReturned, refunds: refunds.map(describeRefund), refundsRecordedLate: recordedLate.map(describeRefund),
       byStaff: [...staff.values()].map(row => ({ ...row, total: row.total / 100, methods: Object.fromEntries(Object.entries(row.methods).map(([k, v]) => [k, Number(v) / 100])) })).sort((a, b) => b.total - a.total),
       byMethod: [...methods].map(([method, cents]) => ({ method, total: cents / 100 })),
       activity: { bookingsCreated, checkIns, checkOuts, cancellations, outstandingNow: unpaid.reduce((sum, r) => sum + Math.max(0, Math.round((Number(r.totalAmount || 0) - Number(r.amountPaid)) * 100)), 0) / 100 },

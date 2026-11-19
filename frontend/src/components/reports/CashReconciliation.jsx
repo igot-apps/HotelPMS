@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { AlertTriangle, Banknote, Loader2 } from 'lucide-react';
@@ -56,7 +57,8 @@ export default function CashReconciliation({ date }) {
             <tbody>
               {!data.staff.length && <tr><td colSpan="8" className="p-3 text-text-muted">No money was handled at the desk on this date.</td></tr>}
               {data.staff.map((row) => (
-                <tr key={row.userId} className="border-b border-border align-top">
+                <Fragment key={row.userId}>
+                <tr className={`align-top ${row.cashCorrections?.length || row.changesAfterCount?.length ? '' : 'border-b border-border'}`}>
                   <td className="p-2 font-semibold">{row.name}</td>
                   <td className="p-2">{cash(row.cashTaken)}</td>
                   <td className="p-2">{cash(row.cashRefunded)}</td>
@@ -64,11 +66,28 @@ export default function CashReconciliation({ date }) {
                   <td className="p-2">{row.latestCount ? <>{cash(row.latestCount.countedAmount)}<span className="block text-xs text-text-muted">{when(row.latestCount.recordedAt)} · by {row.latestCount.recordedBy}</span>{row.latestCount.note && <span className="block text-xs text-text-muted">“{row.latestCount.note}”</span>}</> : <span className="text-text-muted">Not counted</span>}</td>
                   <td className={`p-2 font-semibold ${tone(row.differenceNow)}`}>
                     {row.differenceNow === null ? '—' : signed(row.differenceNow)}
-                    {row.changedSinceCount && <span className="mt-1 flex items-start gap-1 text-xs font-normal text-warning-700"><AlertTriangle size={12} className="mt-0.5 shrink-0" /> Payments changed after the count. At count time: expected {cash(row.latestCount.expectedAmount)}, difference {signed(row.latestCount.difference)}.</span>}
+                    {row.changedSinceCount && <span className="mt-1 flex items-start gap-1 text-xs font-normal text-warning-700"><AlertTriangle size={12} className="mt-0.5 shrink-0" /> Payments or refunds changed after the count. At count time: expected {cash(row.latestCount.expectedAmount)}, difference {signed(row.latestCount.difference)}.</span>}
                   </td>
                   <td className="p-2 text-text-muted">{cash(row.mobileMoney)} / {cash(row.card)}</td>
                   <td className="p-2"><button type="button" onClick={() => { setCounting(row); setAmount(''); setNote(''); }} className="min-h-10 rounded-lg border border-border px-3 text-xs font-semibold hover:bg-secondary-50">Record count</button></td>
                 </tr>
+                {(row.cashCorrections?.length > 0 || row.changesAfterCount?.length > 0) && (
+                  <tr className="border-b border-border"><td colSpan="8" className="px-2 pb-3">
+                    {row.cashCorrections?.length > 0 && <div className="rounded-lg border border-border bg-background p-2 text-xs">
+                      <p className="mb-1 font-semibold text-text">Cash payments corrected down ({row.cashCorrections.length}) · {signed(row.cashCorrections.reduce((sum, c) => sum + c.difference, 0))}</p>
+                      <ul className="space-y-1 text-text-muted">{row.cashCorrections.map((c) => (
+                        <li key={c.paymentId}><Link to={`/reservations/${c.reservationId}#payments`} className="font-semibold text-primary-700 underline">{c.confirmationCode}</Link> · {cash(c.original)} → {cash(c.corrected)} ({signed(c.difference)}) · collected by {c.collectedBy} · corrected by {c.correctedBy || 'not recorded'}{c.correctedAt ? ` on ${when(c.correctedAt)}` : ''}{c.reason ? ` · reason: ${c.reason}` : ''}</li>
+                      ))}</ul>
+                    </div>}
+                    {row.changesAfterCount?.length > 0 && <div className="mt-2 rounded-lg border border-warning-200 bg-warning-50/50 p-2 text-xs">
+                      <p className="mb-1 font-semibold text-warning-700">Recorded or corrected after the latest count ({when(row.latestCount.recordedAt)}) — the saved count is unchanged</p>
+                      <ul className="space-y-1 text-text-muted">{row.changesAfterCount.map((c, i) => (
+                        <li key={i}>{when(c.at)} · <Link to={`/reservations/${c.reservationId}`} className="font-semibold text-primary-700 underline">{c.confirmationCode}</Link> · {c.detail} · {signed(c.effect)} on expected cash · by {c.by || 'not recorded'}</li>
+                      ))}</ul>
+                    </div>}
+                  </td></tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>
