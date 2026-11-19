@@ -1,4 +1,7 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Drawer } from './TodayAtAGlance';
+import { refundsRecordedToday, staffRowsWithRefunds } from '../../lib/staffRefunds';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, BarChart3, BedDouble, Coins, Loader2, Receipt, Undo2, Users, Wallet } from 'lucide-react';
 import api from '../../lib/axios';
@@ -43,6 +46,11 @@ export default function ManagerDashboard() {
   });
 
   const summary = report.data?.summary || {};
+  // Refunds each person recorded today (for monitoring). Money totals elsewhere still use the date returned.
+  const [refundsFor, setRefundsFor] = useState(null);
+  const time = (value) => new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const refundsToday = refundsRecordedToday(today.data);
+  const staffRows = staffRowsWithRefunds(today.data);
   const trend = report.data?.timeSeries || [];
   const byMethod = report.data?.categories?.byMethod || [];
   const byRoomType = report.data?.categories?.byRoomType || [];
@@ -111,11 +119,42 @@ export default function ManagerDashboard() {
       {/* Who took money today */}
       <section className="rounded-xl border border-border bg-surface p-4 shadow-sm">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-text"><Users size={17} className="text-primary-600" /> Money taken by each staff member today</h2>
-        {today.isLoading ? <Loading /> : !(today.data?.byStaff || []).length
-          ? <p className="text-sm text-text-muted">No payments recorded yet today.</p>
-          : <ul className="divide-y divide-border">{today.data.byStaff.map((row) => (
-            <li key={row.key} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"><span className="font-semibold text-text">{row.name}</span><span className="text-text-muted">{row.count} payment{row.count === 1 ? '' : 's'} · <strong className="text-text">{cash(row.total)}</strong></span></li>
-          ))}</ul>}
+        {today.isLoading ? <Loading /> : !staffRows.length
+          ? <p className="text-sm text-text-muted">No payments or refunds recorded yet today.</p>
+          : <>
+            <ul className="divide-y divide-border">{staffRows.map((row) => (
+              <li key={row.key} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                <span className="font-semibold text-text">{row.name}</span>
+                <span className="flex flex-wrap items-center gap-2 text-text-muted">
+                  <span>{row.count} payment{row.count === 1 ? '' : 's'} · <strong className="text-text">{cash(row.total)}</strong></span>
+                  {row.refunds.length > 0 && (
+                    <button type="button" onClick={() => setRefundsFor(row)} className={`min-h-9 rounded-lg border px-2.5 text-xs font-semibold hover:opacity-90 ${row.refunds.some((r) => r.policyException) ? 'border-warning-200 bg-warning-50 text-warning-700' : 'border-border bg-surface text-text'}`}>
+                      {row.refunds.length} refund{row.refunds.length === 1 ? '' : 's'} · {cash(row.refunds.reduce((sum, r) => sum + Number(r.amount), 0))}
+                    </button>
+                  )}
+                </span>
+              </li>
+            ))}</ul>
+            <p className="mt-2 border-t border-border pt-2 text-sm text-text-muted">Refunds recorded today: <strong className="text-text">{refundsToday.length} · {cash(refundsToday.reduce((sum, r) => sum + Number(r.amount), 0))}</strong> <span className="text-xs">(money totals use the date the refund was actually returned)</span></p>
+          </>}
+        {refundsFor && (
+          <Drawer title={`Refunds recorded by ${refundsFor.name} today`} onClose={() => setRefundsFor(null)}>
+            <ul className="space-y-2">{refundsFor.refunds.map((r) => {
+              const late = r.recordedLate;
+              return (
+                <li key={r.refundId} className="rounded-lg border border-border p-3 text-sm">
+                  <p className="flex flex-wrap items-start justify-between gap-2"><span className="font-semibold text-text">{r.guestName}</span><strong className="text-text">{cash(r.amount)}</strong></p>
+                  <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{r.reservation.confirmationCode}</p>
+                  <p className="mt-1 text-text-muted"><span className="font-semibold text-text">Reason:</span> {r.reason || 'Not recorded'}</p>
+                  <p className="text-text-muted">Returned via {r.method} on {r.returnedOn} {time(r.returnedAt)}</p>
+                  {late && <p className="font-semibold text-warning-700">Recorded later: {r.recordedOn} {time(r.recordedAt)}</p>}
+                  {r.policyException && <p className="mt-1 inline-block rounded-md border border-warning-200 bg-warning-50 px-2 py-0.5 text-xs font-semibold text-warning-700">Policy exception</p>}
+                  <Link to={`/reservations/${r.reservationId}#refunds`} className="mt-2 flex min-h-10 items-center justify-center rounded-lg border border-border text-sm font-semibold text-primary-700 hover:bg-secondary-50">Open reservation</Link>
+                </li>
+              );
+            })}</ul>
+          </Drawer>
+        )}
       </section>
 
       <p className="text-sm text-text-muted">Need more detail, other dates or every payment line? <Link to="/reports" className="font-semibold text-primary-700 hover:underline">Open full reports</Link></p>

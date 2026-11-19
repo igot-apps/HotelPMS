@@ -42,11 +42,11 @@ export async function dailyOverview(userId: number, propertyId: number, requeste
       tx.reservationRoom.count({ where: { reservation: { propertyId }, actualCheckOut: bounds } }),
       tx.reservation.count({ where: { propertyId, cancellationDate: bounds } }),
       tx.reservation.findMany({ where: { propertyId, status: { in: ['Confirmed', 'InHouse', 'Completed'] } }, select: { totalAmount: true, amountPaid: true } }),
-      tx.refund.findMany({ where: { propertyId, isSimulated: false, returnedAt: bounds }, orderBy: { returnedAt: 'desc' }, include: { reservation: { select: { confirmationCode: true } }, request: { select: { input: true } } } }),
+      tx.refund.findMany({ where: { propertyId, isSimulated: false, returnedAt: bounds }, orderBy: { returnedAt: 'desc' }, include: { reservation: { select: { confirmationCode: true, guestNameSnapshot: true, propertyGuest: { select: { fullName: true } }, platformGuest: { select: { fullName: true } } } }, request: { select: { input: true } } } }),
     ]);
     // Recorded on this day but returned earlier: listed for visibility only (they belong to their return date's totals).
-    const recordedLate = await tx.refund.findMany({ where: { propertyId, isSimulated: false, createdAt: bounds, returnedAt: { lt: bounds.gte } }, orderBy: { createdAt: 'desc' }, include: { reservation: { select: { confirmationCode: true } }, request: { select: { input: true } } } });
-    const describeRefund = (refund: any) => ({ ...refund, reason: (refund.request?.input as any)?.reason || null, policyException: Boolean((refund.request?.input as any)?.policyException), recordedAt: refund.createdAt, recordedOn: hotelDate(refund.createdAt, timeZone), returnedOn: hotelDate(refund.returnedAt, timeZone), request: undefined });
+    const recordedLate = await tx.refund.findMany({ where: { propertyId, isSimulated: false, createdAt: bounds, returnedAt: { lt: bounds.gte } }, orderBy: { createdAt: 'desc' }, include: { reservation: { select: { confirmationCode: true, guestNameSnapshot: true, propertyGuest: { select: { fullName: true } }, platformGuest: { select: { fullName: true } } } }, request: { select: { input: true } } } });
+    const describeRefund = (refund: any) => ({ ...refund, guestName: refund.reservation?.guestNameSnapshot || refund.reservation?.propertyGuest?.fullName || refund.reservation?.platformGuest?.fullName || 'Guest', reason: (refund.request?.input as any)?.reason || null, policyException: Boolean((refund.request?.input as any)?.policyException), recordedAt: refund.createdAt, recordedOn: hotelDate(refund.createdAt, timeZone), returnedOn: hotelDate(refund.returnedAt, timeZone), request: undefined });
     const staff = new Map<string, any>();
     const methods = new Map<string, number>();
     let totalCents = 0, correctionCents = 0, transactions = 0;

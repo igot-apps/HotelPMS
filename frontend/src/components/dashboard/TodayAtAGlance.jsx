@@ -170,7 +170,7 @@ function Tile({ icon: Icon, tone, label, value, hint, onClick }) {
   );
 }
 
-function Drawer({ title, onClose, children, toolbar }) {
+export function Drawer({ title, onClose, children, toolbar }) {
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/30" role="dialog" aria-modal="true" aria-label={title} onClick={onClose}>
       <aside onClick={(event) => event.stopPropagation()} className="flex h-full w-full max-w-md flex-col bg-surface shadow-2xl">
