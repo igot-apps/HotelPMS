@@ -14,7 +14,9 @@ export default function ReservationRecoveryPanel({ reservation, embedded = false
   const [form, setForm] = useState({ action: initialAction ? initialAction : ['Cancelled', 'NoShow'].includes(reservation.status) ? 'restore' : reservation.reservationRooms?.some(stay => stay.status === 'CheckedIn') ? 'undo-checkin' : reservation.reservationRooms?.some(stay => stay.status === 'CheckedOut') ? 'undo-checkout' : 'correct-date', stayId: initialStayId ? String(initialStayId) : '', targetRoomId: '', paymentId: '', newAmount: '', newCheckOutDate: '', reason: '' });
   const [preview, setPreview] = useState(null);
   const [stayIds, setStayIds] = useState([]);
-  const multiRoom = ['undo-checkin', 'undo-checkout', 'correct-date', 'credit-checkout'].includes(form.action);
+  // Restore on an active booking = put back rooms marked as no-show (late arrival).
+  const roomRestore = form.action === 'restore' && !['Cancelled', 'NoShow'].includes(reservation.status);
+  const multiRoom = ['undo-checkin', 'undo-checkout', 'correct-date', 'credit-checkout'].includes(form.action) || roomRestore;
   const [pendingRequest, setPendingRequest] = useState(false);
   const access = useQuery({ queryKey: ['correctionAccess', userId], queryFn: async () => (await api.get('/reservations/correction-access')).data.data, refetchInterval: 15000 });
   const actionAccess = access.data?.find(item => item.action === form.action);
@@ -38,7 +40,7 @@ export default function ReservationRecoveryPanel({ reservation, embedded = false
   const change = event => { setPreview(null); if (event.target.name === 'action') setStayIds([]); setForm(current => ({ ...current, ...(event.target.name === 'action' ? { reason: '', stayId: '' } : {}), [event.target.name]: event.target.value })); };
   const inputClass = 'mt-1 min-h-11 min-w-0 max-w-full w-full rounded-lg border border-border bg-background p-2 text-sm text-text';
   const stays = reservation.reservationRooms || [];
-  const eligibleStays = stays.filter(stay => form.action === 'undo-checkout' ? stay.status === 'CheckedOut' : form.action === 'correct-date' ? ['Reserved', 'CheckedIn'].includes(stay.status) : stay.status === 'CheckedIn');
+  const eligibleStays = stays.filter(stay => roomRestore ? stay.status === 'NoShow' : form.action === 'undo-checkout' ? stay.status === 'CheckedOut' : form.action === 'correct-date' ? ['Reserved', 'CheckedIn'].includes(stay.status) : stay.status === 'CheckedIn');
   return <section className={embedded ? "min-w-0 space-y-4" : "min-w-0 space-y-4 rounded-xl border border-border bg-surface p-4 sm:p-6"}>
     {!embedded && <h3 className="text-lg font-bold text-text">Correct or undo actions</h3>}
     {access.isError && <p role="alert" className="text-sm text-danger-700">Could not load correction access. <button onClick={() => access.refetch()} className="min-h-11 underline">Try again</button></p>}
@@ -48,7 +50,7 @@ export default function ReservationRecoveryPanel({ reservation, embedded = false
       <label className="block text-sm text-text">Action<select name="action" value={form.action} onChange={change} className={inputClass} disabled={mutation.isPending}>
         <option value="undo-checkout">Undo mistaken checkout</option>
         <option value="undo-checkin">Undo mistaken check-in</option>
-        <option value="restore">Restore cancelled or no-show reservation</option>
+        <option value="restore">Restore cancelled or no-show reservation or room</option>
         <option value="correct-date">Correct departure date and charges</option>
         <option value="transfer">Transfer guest to another room</option>
         <option value="correct-payment">Correct or void a manual payment</option>

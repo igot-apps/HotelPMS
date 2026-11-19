@@ -1,7 +1,7 @@
 import ResponsiveTable from '../components/ui/ResponsiveTable';
 import BackButton from '../components/ui/BackButton';
-import { useState } from 'react';
-import { useParams, Link, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { bookingLink } from '../lib/bookingLink';
 import { bookingStatusLabel, roomStatusLabel, roomStatusTone } from '../lib/statusLabels';
 
@@ -11,15 +11,14 @@ import { getReservationById, getReservationStats, updateReservation } from '../a
 import api from '../lib/axios';
 import { recordPayment } from '../api/payments';
 import {
-  User, BedDouble, CreditCard, FileText, Edit2, X, Loader2,
-  CalendarDays, DollarSign, Clock, AlertCircle, Plus, Printer, ChevronDown, Smartphone, Undo2, Wrench
+  BedDouble, CreditCard, Edit2, X, Loader2,
+  CalendarDays, AlertCircle, Plus, Printer, ChevronDown, Smartphone, Undo2, Wrench, ChevronRight
 } from 'lucide-react';
 import ReceiptModal from '../components/reservations/ReceiptModal';
 import ThermalReceiptModal from '../components/reservations/ThermalReceiptModal';
 import { formatPaymentMethod } from '../utils/payment';
 import ReservationRecoveryPanel from '../components/reservations/ReservationRecoveryPanel';
 import RefundPanel from '../components/reservations/RefundPanel';
-import ReservationSection from '../components/reservations/ReservationSection';
 import { useAuthStore } from '../store/authStore';
 
 export default function ReservationDetailsPage() {
@@ -28,6 +27,10 @@ export default function ReservationDetailsPage() {
   const fix = new URLSearchParams(location.search).get('fix');
   const fixStay = new URLSearchParams(location.search).get('stay');
   const user = useAuthStore(state => state.user);
+  const navigate = useNavigate();
+  const panel = ['payments', 'refunds', 'corrections'].includes(location.hash.slice(1)) ? location.hash.slice(1) : null;
+  const openPanel = (name) => navigate({ search: location.search, hash: name }, { replace: true });
+  const closePanel = () => navigate({ search: panel === 'corrections' ? '' : location.search }, { replace: true });
 
   const queryClient = useQueryClient();
 
@@ -218,64 +221,25 @@ export default function ReservationDetailsPage() {
             );
           })}
         </ul>
-        <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-3 text-sm">
-          <span className="text-text-muted">Whole booking:</span>
-          <Link to={`/reservations/${resData.reservationId}#payments`} className="font-semibold text-primary-700 hover:underline">Payments</Link>
-          <span className="text-text-muted">·</span>
-          <Link to={`/reservations/${resData.reservationId}#refunds`} className="font-semibold text-primary-700 hover:underline">Refunds</Link>
-          <span className="text-text-muted">·</span>
-          <Link to={`/reservations/${resData.reservationId}#corrections`} className="font-semibold text-primary-700 hover:underline">Correct or undo a mistake</Link>
+        <div className="mt-4 border-t border-border pt-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">Whole booking</p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <PanelButton icon={CreditCard} title="Payments" hint={`Paid ${fmt(amountPaid)} GHS · ${balanceDue > 0 ? `due ${fmt(balanceDue)} GHS` : 'nothing due'}`} tone={balanceDue > 0 ? 'danger' : 'neutral'} onClick={() => openPanel('payments')} />
+            <PanelButton icon={Undo2} title="Refunds" hint={approvedRefunds.length > 0 ? `GHS ${fmt(approvedRefundTotal)} approved · not yet returned` : pendingRefunds.length > 0 ? 'Awaiting approval' : Number(resData.refundDue) > 0 ? `GHS ${fmt(resData.refundDue)} remaining` : resData.refunds?.length ? `${resData.refunds.length} refund(s) recorded` : 'No refunds'} tone={approvedRefunds.length > 0 || Number(resData.refundDue) > 0 ? 'warning' : 'neutral'} onClick={() => openPanel('refunds')} />
+            <PanelButton icon={Wrench} title="Correct or undo" hint="Fix a mistake: undo check-in/out, restore, move, dates, payments" onClick={() => openPanel('corrections')} />
+          </div>
         </div>
       </section>
 
-      <ReservationSection key={`${id}-overview`} id="overview" title="Reservation overview" icon={FileText} summary={resData.guestNameSnapshot || resData.platformGuest?.fullName || resData.propertyGuest?.fullName || undefined}>
-      <div className="space-y-6">
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={DollarSign} label="Total Amount" value={`${fmt(totalAmount)} GHS`} color="primary" />
-        <StatCard icon={CreditCard} label={resData.refunds?.length ? 'Net paid after refunds' : 'Total Paid'} value={`${fmt(amountPaid)} GHS`} color="success" />
-        <StatCard icon={AlertCircle} label="Balance Due" value={`${fmt(balanceDue)} GHS`} color={balanceDue > 0 ? "danger" : "success"} />
-        <StatCard icon={Clock} label="Total Nights" value={`${statsData?.totalNights || 0} Nights`} color="secondary" />
-      </div>
-
-      <div className="grid min-w-0 gap-6 lg:grid-cols-3">
-        {/* Guest Info */}
-        <section className="min-w-0 rounded-lg border border-border p-4"><h3 className="mb-4 flex items-center gap-2 font-bold text-text"><User size={18} />Booking contact</h3>
-          <div className="space-y-3">
-            <div>
-              <p className="text-xs text-text-muted uppercase font-semibold">Full Name</p>
-              <Link to={`/guests`} className="text-sm font-bold text-primary-600 hover:underline">
-                {resData.guestNameSnapshot || resData.platformGuest?.fullName || resData.propertyGuest?.fullName || 'N/A'}
-              </Link>
-            </div>
-            <div>
-              <p className="text-xs text-text-muted uppercase font-semibold">Phone</p>
-              <p className="text-sm text-text">
-                {resData.guestPhoneSnapshot || resData.platformGuest?.phone || resData.propertyGuest?.phone || 'N/A'}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-text-muted uppercase font-semibold">Email</p>
-              <p className="text-sm text-text">
-                {resData.platformGuest?.email || resData.propertyGuest?.email || 'N/A'}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-text-muted uppercase font-semibold">Booking Source</p>
-              <p className="text-sm text-text font-medium">{resData.source}</p>
-            </div>
+      {panel === 'payments' && (
+        <ActionDialog icon={CreditCard} title="Payments" subtitle={`${resData.confirmationCode || ''} · whole booking`} onClose={closePanel}>
+          <div className="mb-4 grid grid-cols-3 gap-2 text-sm">
+            <Figure label="Total" value={`${fmt(totalAmount)} GHS`} />
+            <Figure label={resData.refunds?.length ? 'Net paid' : 'Paid'} value={`${fmt(amountPaid)} GHS`} />
+            <Figure label="Balance due" value={`${fmt(balanceDue)} GHS`} danger={balanceDue > 0} />
           </div>
-        </section>
-
-      </div>
-      </div>
-      </ReservationSection>
-
-      {/* Payment History */}
-      <ReservationSection key={`${id}-corrections`} id="corrections" title="Correct or undo actions" icon={Wrench}><ReservationRecoveryPanel key={`${fix || 'none'}-${fixStay || ''}`} reservation={resData} embedded initialAction={fix || undefined} initialStayId={fixStay || undefined} /></ReservationSection>
-      <ReservationSection key={`${id}-refunds`} id="refunds" title={<span className="flex flex-wrap items-center gap-2">Refunds{approvedRefunds.length > 0 && <span className="rounded-full bg-success-50 px-2.5 py-0.5 text-xs font-semibold text-success-700">Approved · ready to return</span>}{approvedRefunds.length === 0 && pendingRefunds.length > 0 && <span className="rounded-full bg-warning-50 px-2.5 py-0.5 text-xs font-semibold text-warning-700">Awaiting approval</span>}</span>} icon={Undo2} summary={approvedRefunds.length > 0 ? `GHS ${fmt(approvedRefundTotal)} approved · money not yet returned` : Number(resData.refundDue) > 0 ? `GHS ${fmt(resData.refundDue)} remaining` : resData.refunds?.length ? 'View refund history' : undefined}><RefundPanel reservation={resData} embedded /></ReservationSection>
-      <ReservationSection key={`${id}-payments`} id="payments" title="Payment history" icon={CreditCard} summary={`${resData.payments?.length || 0} payment(s)`}>
-        <div className="flex flex-wrap gap-3 items-center justify-end mb-4">
+          <h3 className="mb-2 text-sm font-bold text-text">Payment history <span className="font-normal text-text-muted">({resData.payments?.length || 0})</span></h3>
+        <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
           <button
             onClick={() => setIsPaymentModalOpen(true)}
             // 🌟 FIXED: 'CheckedIn' → 'InHouse'
@@ -322,7 +286,18 @@ export default function ReservationDetailsPage() {
             No payments recorded yet. Click "Record Payment" to add one.
           </p>
         )}
-      </ReservationSection>
+        </ActionDialog>
+      )}
+      {panel === 'refunds' && (
+        <ActionDialog icon={Undo2} title="Refunds" subtitle={`${resData.confirmationCode || ''} · whole booking`} onClose={closePanel}>
+          <RefundPanel reservation={resData} embedded />
+        </ActionDialog>
+      )}
+      {panel === 'corrections' && (
+        <ActionDialog icon={Wrench} title="Correct or undo a mistake" subtitle={`${resData.confirmationCode || ''} · each change is recorded with its reason`} onClose={closePanel}>
+          <ReservationRecoveryPanel key={`${fix || 'none'}-${fixStay || ''}`} reservation={resData} embedded initialAction={fix || undefined} initialStayId={fixStay || undefined} />
+        </ActionDialog>
+      )}
 
       {/* ========================================== */}
       {/* 1. Record Payment Modal                    */}
@@ -442,20 +417,46 @@ export default function ReservationDetailsPage() {
 // ==========================================
 // Helper Component
 // ==========================================
-function StatCard({ icon: Icon, label, value, color }) {
-  const colorMap = {
-    primary: 'bg-primary-50 text-primary-600',
-    success: 'bg-success-50 text-success-600',
-    danger: 'bg-danger-50 text-danger-600',
-    secondary: 'bg-secondary-100 text-secondary-600',
-  };
+// Whole-booking action that opens a dialog.
+function PanelButton({ icon: Icon, title, hint, tone = 'neutral', onClick }) {
+  const tones = { neutral: 'text-text-muted', danger: 'text-danger-700', warning: 'text-warning-700' };
   return (
-    <div className="bg-surface p-5 rounded-xl border border-border shadow-sm">
-      <div className="flex items-center gap-3 mb-3">
-        <div className={`p-2 rounded-lg ${colorMap[color]}`}> <Icon size={18} /> </div>
-        <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">{label}</p>
+    <button type="button" onClick={onClick} className="flex min-h-14 w-full items-center gap-3 rounded-lg border border-border bg-surface p-3 text-left transition hover:border-primary-300 hover:bg-secondary-50">
+      <Icon size={20} className="shrink-0 text-primary-600" />
+      <span className="min-w-0 flex-1"><span className="block text-sm font-bold text-text">{title}</span><span className={`block text-xs ${tones[tone]}`}>{hint}</span></span>
+      <ChevronRight size={18} className="shrink-0 text-text-muted" />
+    </button>
+  );
+}
+
+// Large dialog for a whole-booking area: a bottom sheet on phones, centred on desktop. Esc closes it.
+function ActionDialog({ icon: Icon, title, subtitle, onClose, children }) {
+  useEffect(() => {
+    const onKey = (event) => { if (event.key === 'Escape' && !document.querySelector('.fixed.inset-0.z-50:not([data-action-dialog])')) onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div data-action-dialog className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={title} onClick={onClose}>
+      <div onClick={(event) => event.stopPropagation()} className="flex max-h-[92vh] w-full min-w-0 flex-col rounded-t-2xl border border-border bg-surface shadow-xl sm:max-w-3xl sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-border p-4 sm:px-6">
+          <div className="min-w-0">
+            <h2 className="flex items-center gap-2 text-lg font-bold text-text"><Icon size={20} className="shrink-0 text-primary-600" /> {title}</h2>
+            {subtitle && <p className="truncate text-sm text-text-muted">{subtitle}</p>}
+          </div>
+          <button type="button" aria-label="Close" onClick={onClose} className="flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-border text-text"><X size={18} /></button>
+        </div>
+        <div className="min-w-0 overflow-y-auto p-4 sm:p-6">{children}</div>
       </div>
-      <h3 className="text-2xl font-bold text-text">{value}</h3>
+    </div>
+  );
+}
+
+function Figure({ label, value, danger = false }) {
+  return (
+    <div className="rounded-lg border border-border bg-background p-2 sm:p-3">
+      <p className="text-xs text-text-muted">{label}</p>
+      <p className={`font-bold ${danger ? 'text-danger-700' : 'text-text'}`}>{value}</p>
     </div>
   );
 }

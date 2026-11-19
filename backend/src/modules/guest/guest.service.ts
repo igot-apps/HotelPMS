@@ -21,12 +21,23 @@ export const normalizePropertyGuestPhone = (value: unknown): string | null => {
 const isUniquePhoneConflict = (error: any) =>
   error?.code === 'P2002' && String(error?.meta?.target || '').includes('phone');
 
+const normalizeEmail = (value: unknown): string | null => {
+  if (value === null || value === undefined) return null;
+  const email = String(value).trim().toLowerCase();
+  if (!email) return null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('Enter a valid email address, for example guest@email.com.');
+  }
+  return email;
+};
+
 export const createGuest = async (data: any) => {
   // ✅ Replaced tenantId check with propertyId
   if (!data.propertyId) throw new Error('Property ID is required');
   if (!data.fullName) throw new Error('Full name is required');
 
   data.phone = normalizePropertyGuestPhone(data.phone);
+  data.email = normalizeEmail(data.email);
 
   if (data.phone) {
     const existingGuest = await guestRepository.findGuestByPhone(data.propertyId, data.phone);
@@ -108,6 +119,10 @@ export const updateGuest = async (guestId: number, data: any) => {
     data.phone = normalizePropertyGuestPhone(data.phone);
   }
 
+  if (Object.prototype.hasOwnProperty.call(data, 'email')) {
+    data.email = normalizeEmail(data.email);
+  }
+
   if (data.phone) {
     const matchingGuest = await guestRepository.findGuestByPhone(guest.propertyId, data.phone);
     if (matchingGuest && matchingGuest.guestId !== guestId) {
@@ -115,10 +130,29 @@ export const updateGuest = async (guestId: number, data: any) => {
     }
   }
 
+  if (data.email) {
+    const matchingGuest = await guestRepository.findGuestByEmail(guest.propertyId, data.email);
+    if (matchingGuest && matchingGuest.guestId !== guestId) {
+      throw new Error(`This email address already belongs to ${matchingGuest.fullName}. Select that guest instead.`);
+    }
+  }
+
   // Hash password if provided
   if (data.password) {
     data.passwordHash = await hashPassword(data.password);
     delete data.password;
+  }
+
+  // PropertyGuest has no email/username columns. Keep only fields the record can store
+  // so extra form fields (or older clients) cannot break the update.
+  const updatable = new Set(['fullName', 'phone', 'email', 'idNumber', 'address', 'city', 'country', 'notes', 'isActive', 'passwordHash']);
+  for (const key of Object.keys(data)) {
+    if (!updatable.has(key)) delete data[key];
+  }
+
+  if (data.fullName !== undefined) {
+    data.fullName = String(data.fullName).trim();
+    if (!data.fullName) throw new Error('Full name is required.');
   }
 
   try {

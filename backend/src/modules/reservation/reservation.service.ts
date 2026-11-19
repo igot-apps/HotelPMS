@@ -168,6 +168,10 @@ export const markAsNoShow = async (reservationId: string, userPropertyId?: numbe
   if (hasCheckedInRoom) {
     throw new Error('Cannot mark as no-show. At least one room is already checked in.');
   }
+  // A booking where any guest actually stayed is never a no-show as a whole: mark only the missing rooms.
+  if (reservation.reservationRooms.some((r: any) => r.actualCheckIn || r.status === 'CheckedOut')) {
+    throw new Error('Some guests of this reservation already stayed. Mark only the rooms whose guests did not arrive.');
+  }
 
   const note = typeof reason === 'string' ? reason.trim().replace(/\s+/g, ' ').slice(0, 300) : '';
   return reservationRepository.markReservationAsNoShow(reservationId, actorUserId, note);

@@ -53,6 +53,7 @@ export const getFinancialSummary = async (
   // ✅ Filter ReservationRoom via reservation relation
   const occupiedRooms = await prisma.reservationRoom.findMany({
     where: {
+      status: { not: 'NoShow' }, // a room whose guest never arrived was not occupied
       reservation: { 
         propertyId,
         status: { notIn: ['Cancelled'] } 
@@ -107,8 +108,15 @@ export const getFinancialSummary = async (
 export const getRevenueTimeSeries = async (
   propertyId: number, // ✅ REMOVED tenantId
   startDate: Date,
-  endDate: Date
+  endDate: Date,
+  timeZone = 'UTC',
 ) => {
+  // Days are hotel days (hotel time zone), matching the Daily overview.
+  const dayOf = (value: Date) => {
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(value);
+    const get = (type: string) => parts.find(p => p.type === type)!.value;
+    return `${get('year')}-${get('month')}-${get('day')}`;
+  };
   const payments = await prisma.payment.findMany({
     where: {
       // ✅ Filter via reservation relation
@@ -127,16 +135,14 @@ export const getRevenueTimeSeries = async (
   const grouped: Record<string, number> = {};
   
   // Initialize all dates in range to 0 so the chart line doesn't break
-  let currentDate = new Date(startDate);
-  while (currentDate <= endDate) {
-    const dateStr = currentDate.toISOString().split('T')[0];
-    grouped[dateStr] = 0;
-    currentDate.setDate(currentDate.getDate() + 1);
+  const lastDay = dayOf(endDate);
+  for (let day = dayOf(startDate); day <= lastDay; day = new Date(Date.parse(`${day}T00:00:00Z`) + 86400000).toISOString().slice(0, 10)) {
+    grouped[day] = 0;
   }
 
   // Sum the payments
   for (const p of payments) {
-    const dateStr = p.paymentDate.toISOString().split('T')[0];
+    const dateStr = dayOf(p.paymentDate);
     if (grouped[dateStr] !== undefined) {
       grouped[dateStr] += Number(p.amount);
     }
@@ -145,7 +151,7 @@ export const getRevenueTimeSeries = async (
   // Format for frontend charting
   const refunds = await prisma.refund.findMany({ where: { propertyId, isSimulated: false, returnedAt: { gte: startDate, lte: endDate } }, select: { returnedAt: true, amount: true } });
   for (const refund of refunds) {
-    const day = refund.returnedAt.toISOString().split('T')[0];
+    const day = dayOf(refund.returnedAt);
     if (grouped[day] !== undefined) grouped[day] -= Number(refund.amount);
   }
   return Object.entries(grouped).map(([date, total]) => ({

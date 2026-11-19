@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import DailyOverview from '../components/DailyOverview';
+import CashRangeSummary from '../components/reports/CashRangeSummary';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getFullDashboardReport } from '../api/reports';
 import { getProperties } from '../api/properties';
@@ -11,6 +12,10 @@ import {
 
 export default function ReportsPage() {
   const user = useAuthStore((state) => state.user);
+  // Opened from the Manager dashboard with ?from=…&to=… : period cash summary.
+  const [params] = useSearchParams();
+  const fromParam = params.get('from'), toParam = params.get('to');
+  const isPeriod = Boolean(fromParam && toParam && fromParam !== toParam);
   
   // 🚨 CHECK IF USER IS TIED TO A SPECIFIC PROPERTY
   const userPropertyId = user?.propertyId;
@@ -62,7 +67,7 @@ const currentPropertyName = user?.propertyName || 'All Properties';
 
   return (
     <div className="space-y-6">
-      {user?.role === 'Manager' && <DailyOverview />}
+      {user?.role === 'Manager' && isPeriod && <CashRangeSummary from={fromParam} to={toParam} />}
       {/* Header & Filters */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>

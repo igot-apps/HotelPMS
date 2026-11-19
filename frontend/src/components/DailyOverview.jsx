@@ -8,8 +8,8 @@ import CashReconciliation from './reports/CashReconciliation';
 const cash = value => `GHS ${Number(value || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const actionName = action => action.replace(/^Correction:/, '').replace(/-/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
 
-export default function DailyOverview() {
-  const [date, setDate] = useState('');
+export default function DailyOverview({ initialDate = '' }) {
+  const [date, setDate] = useState(initialDate);
   const [staff, setStaff] = useState('');
   const { data, isPending, error, refetch, isFetching } = useQuery({
     queryKey: ['dailyOverview', date],
@@ -18,7 +18,7 @@ export default function DailyOverview() {
   });
   const field = 'rounded-lg border border-border bg-background px-3 py-2 text-sm text-text';
   const time = value => new Date(value).toLocaleTimeString('en-GH', { timeZone: data.timeZone, hour: '2-digit', minute: '2-digit' });
-  return <section className="space-y-5 rounded-xl border border-border bg-surface p-5 text-text">
+  return <section id="daily-overview" className="scroll-mt-4 space-y-5 rounded-xl border border-border bg-surface p-5 text-text">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 className="text-xl font-bold">Daily overview</h2><p className="mt-1 text-sm text-text-muted">Collections and hotel activity · {data?.timeZone || 'Hotel local time'}</p></div>
       <div className="flex flex-wrap gap-2"><input aria-label="Daily overview date" type="date" value={date || data?.date || ''} onChange={e => { setDate(e.target.value); setStaff(''); }} className={field} /><button className={field} onClick={() => { setDate(''); setStaff(''); refetch(); }}>Today</button><button disabled={isFetching} onClick={() => refetch()} className={field}>{isFetching ? 'Refreshing…' : 'Refresh'}</button></div>

@@ -56,5 +56,6 @@ export const getReservationsByDateRange = (fromDate, toDate, propertyId) => {
 export const updateGuestPresence = (reservationRoomId, action, expectedReturnAt) =>
   api.patch(`/reservations/rooms/${reservationRoomId}/presence`, { action, expectedReturnAt });
 
-   export const markAsNoShow = (reservationId) => 
-  api.patch(`/reservations/${reservationId}/no-show`);
+   // Whole booking (no stayIds) or only the selected rooms (stayIds); reason is optional.
+   export const markAsNoShow = (reservationId, body = {}) =>
+  api.patch(`/reservations/${reservationId}/no-show`, body);

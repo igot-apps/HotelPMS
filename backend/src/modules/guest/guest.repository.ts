@@ -5,6 +5,7 @@ export const createGuest = async (data: {
   propertyId: number;
   fullName: string;
   phone?: string | null;
+  email?: string | null;
   idNumber?: string;
   address?: string;
   city?: string;
@@ -16,6 +17,7 @@ export const createGuest = async (data: {
       propertyId: data.propertyId,
       fullName: data.fullName,
       phone: data.phone,
+      email: data.email,
       idNumber: data.idNumber,
       address: data.address,
       city: data.city,
@@ -46,6 +48,7 @@ export const findGuests = async (
     where.OR = [
       { fullName: { contains: searchTerm, mode: 'insensitive' } },
       { phone: { contains: searchTerm, mode: 'insensitive' } },
+      { email: { contains: searchTerm, mode: 'insensitive' } },
       { idNumber: { contains: searchTerm, mode: 'insensitive' } },
     ];
     onlineGuestWhere.OR = [
@@ -167,7 +170,7 @@ export const findGuestByEmail = async (propertyId: number, contact: string) => {
   return prisma.propertyGuest.findFirst({
     where: { 
       propertyId, 
-      OR: [{ phone: contact }], 
+      email: contact, 
       isActive: true 
     },
   });
@@ -178,6 +181,7 @@ export const updateGuest = async (
   data: Partial<{
     fullName: string;
     phone: string | null;
+    email: string | null;
     idNumber: string;
     address: string;
     city: string;

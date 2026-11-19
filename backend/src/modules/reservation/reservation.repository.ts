@@ -439,17 +439,17 @@ export const deriveReservationStatus = async (reservationId: string) => {
 // ============================================================
 export const markReservationAsNoShow = async (reservationId: string, actorUserId?: number, reason = '') => {
   return prisma.$transaction(async tx => {
-  const before = await tx.reservation.findUnique({ where: { reservationId }, select: { status: true, amountPaid: true, checkInDate: true, checkOutDate: true } });
+  const before = await tx.reservation.findUnique({ where: { reservationId }, select: { status: true, amountPaid: true, totalAmount: true, checkInDate: true, checkOutDate: true, reservationRooms: { where: { status: 'Reserved' }, select: { reservationRoomId: true, roomNumberSnapshot: true, room: { select: { roomNumber: true } } } } } });
   const updated = await tx.reservation.update({
     where: { reservationId },
     data: {
       status: 'NoShow',
       cancellationDate: new Date(),
-      // Release all rooms back to Available + Clean
+      // Release the reserved rooms: a no-show room no longer blocks inventory and is never a stay.
       reservationRooms: {
         updateMany: {
           where: { status: 'Reserved' },
-          data: { status: 'CheckedOut' }, // Mark as "checked out" so they don't block inventory
+          data: { status: 'NoShow' },
         },
       },
     },
@@ -464,7 +464,9 @@ export const markReservationAsNoShow = async (reservationId: string, actorUserId
   await tx.auditLog.create({ data: {
     userId: actorUserId ?? null, entityType: 'Reservation', action: 'ReservationNoShow',
     oldData: { reservationId, status: before?.status, amountPaid: Number(before?.amountPaid || 0) },
-    newData: { reservationId, status: 'NoShow', reason: reason || null, arrivalDate: before?.checkInDate, departureDate: before?.checkOutDate },
+    newData: { reservationId, status: 'NoShow', reason: reason || null, arrivalDate: before?.checkInDate, departureDate: before?.checkOutDate,
+      rooms: (before?.reservationRooms || []).map(r => `Room ${r.room?.roomNumber || r.roomNumberSnapshot || '—'}`), stayIds: (before?.reservationRooms || []).map(r => r.reservationRoomId),
+      balanceDue: Math.max(0, Number(before?.totalAmount || 0) - Number(before?.amountPaid || 0)) },
   } });
   return updated;
   });

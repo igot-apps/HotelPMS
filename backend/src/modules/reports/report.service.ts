@@ -1,12 +1,21 @@
 import * as reportRepository from './report.repository';
+import { prisma } from '../../shared/utils/prisma';
+import { dayBounds, hotelDate } from './daily-overview.service';
 
-// Helper to get default date range (Current Month)
-const getDefaultDates = () => {
-  const now = new Date();
-  const startDate = new Date(now.getFullYear(), now.getMonth(), 1); // 1st day of current month
-  const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0); // Last day of current month
-  return { startDate, endDate };
-};
+// A report period as whole hotel days: from the start of the first day to the end of the last day
+// (inclusive), in the hotel's time zone. Defaults to the current month.
+async function hotelRange(propertyId: number, startDate?: string, endDate?: string) {
+  const hotel = await prisma.property.findUnique({ where: { propertyId }, select: { timezone: true } });
+  const timeZone = hotel?.timezone || 'Africa/Accra';
+  const today = hotelDate(new Date(), timeZone);
+  const from = startDate || `${today.slice(0, 8)}01`;
+  const to = endDate || today;
+  const start = dayBounds(from, timeZone).gte;
+  const end = new Date(dayBounds(to, timeZone).lt.getTime() - 1);
+  if (start > end) throw new Error('Start date must be before or equal to end date');
+  return { start, end, timeZone };
+}
+
 
 // ==========================================
 // 1. FINANCIAL SUMMARY SERVICE
@@ -16,9 +25,7 @@ export const getFinancialSummary = async (
   startDate?: string,
   endDate?: string
 ) => {
-  const start = startDate ? new Date(startDate) : getDefaultDates().startDate;
-  const end = endDate ? new Date(endDate) : getDefaultDates().endDate;
-  if (start > end) throw new Error('Start date must be before or equal to end date');
+  const { start, end } = await hotelRange(propertyId, startDate, endDate);
   return reportRepository.getFinancialSummary(propertyId, start, end);
 };
 
@@ -30,10 +37,8 @@ export const getRevenueTimeSeries = async (
   startDate?: string,
   endDate?: string
 ) => {
-  const start = startDate ? new Date(startDate) : getDefaultDates().startDate;
-  const end = endDate ? new Date(endDate) : getDefaultDates().endDate;
-  if (start > end) throw new Error('Start date must be before or equal to end date');
-  return reportRepository.getRevenueTimeSeries(propertyId, start, end);
+  const { start, end, timeZone } = await hotelRange(propertyId, startDate, endDate);
+  return reportRepository.getRevenueTimeSeries(propertyId, start, end, timeZone);
 };
 
 // ==========================================
@@ -44,9 +49,7 @@ export const getCategoryBreakdowns = async (
   startDate?: string,
   endDate?: string
 ) => {
-  const start = startDate ? new Date(startDate) : getDefaultDates().startDate;
-  const end = endDate ? new Date(endDate) : getDefaultDates().endDate;
-  if (start > end) throw new Error('Start date must be before or equal to end date');
+  const { start, end } = await hotelRange(propertyId, startDate, endDate);
   return reportRepository.getCategoryBreakdowns(propertyId, start, end);
 };
 
@@ -58,14 +61,12 @@ export const getFullDashboardReport = async (
   startDate?: string,
   endDate?: string
 ) => {
-  const start = startDate ? new Date(startDate) : getDefaultDates().startDate;
-  const end = endDate ? new Date(endDate) : getDefaultDates().endDate;
-  if (start > end) throw new Error('Start date must be before or equal to end date');
+  const { start, end, timeZone } = await hotelRange(propertyId, startDate, endDate);
 
   // Fetch all data simultaneously
   const [financials, timeSeries, categories] = await Promise.all([
     reportRepository.getFinancialSummary(propertyId, start, end),
-    reportRepository.getRevenueTimeSeries(propertyId, start, end),
+    reportRepository.getRevenueTimeSeries(propertyId, start, end, timeZone),
     reportRepository.getCategoryBreakdowns(propertyId, start, end),
   ]);
 

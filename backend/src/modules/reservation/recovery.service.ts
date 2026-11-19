@@ -4,7 +4,7 @@ import { canCorrect } from './correction-policy';
 import { occupantDetails, confirmOccupant } from './occupant.service';
 import { netPaid } from './refund.service';
 import { FINANCIAL_ACTIONS, financialDecision } from './financial-delegation';
-import { checkoutDueAt, minutesLate } from './stay-timing';
+import { checkoutDueAt, minutesLate, noShowAllowedFrom } from './stay-timing';
 import { hotelDate } from '../reports/daily-overview.service';
 import { cancellationRefund, hotelIsNonRefundable, paidAtHotel } from './refund-policy';
 
@@ -101,9 +101,12 @@ async function departureSignals(tx: any, stay: any, departedAt: Date) {
 
 async function derive(tx: any, id: string) {
   const rooms = await tx.reservationRoom.findMany({ where: { reservationId: id } });
-  const active = rooms.filter((r: any) => r.status !== 'Cancelled');
+  // Rooms marked as no-show do not keep the booking open. The booking is only "No Show" when every
+  // remaining room is a no-show (nobody stayed); a booking where some guests stayed completes normally.
+  const active = rooms.filter((r: any) => r.status !== 'Cancelled' && r.status !== 'NoShow');
   const status = active.some((r: any) => r.status === 'CheckedIn') ? 'InHouse'
-    : active.length && active.every((r: any) => r.status === 'CheckedOut') ? 'Completed' : 'Confirmed';
+    : active.length && active.every((r: any) => r.status === 'CheckedOut') ? 'Completed'
+    : !active.length && rooms.some((r: any) => r.status === 'NoShow') ? 'NoShow' : 'Confirmed';
   await tx.reservation.update({ where: { reservationId: id }, data: { status } });
 }
 async function releaseOccupiedRoom(tx: any, stay: any) {
@@ -223,6 +226,41 @@ export async function checkoutBooking(id: string, actor: Actor, overrideReason?:
   });
 }
 
+// Mark one or more rooms whose guest did not arrive as no-show and release only those rooms.
+// Other rooms (checked in, checked out or still expected), charges and payments are untouched; any
+// balance stays on the booking. Allowed only after the no-show time (check-in time + grace, hotel time).
+export async function markRoomsNoShow(id: string, actor: Actor, stayIds: unknown, reasonInput?: unknown) {
+  return atomic(async tx => {
+    const { res } = await booking(tx, id, actor);
+    if (!['Confirmed', 'InHouse'].includes(res.status)) throw new Error('Only active reservations can have rooms marked as no-show.');
+    if (!Array.isArray(stayIds) || !stayIds.length || stayIds.some((value: any) => !Number.isSafeInteger(value) || value < 1) || new Set(stayIds).size !== stayIds.length) throw new Error('Select the rooms whose guests did not arrive.');
+    const selected = stayIds.map((value: number) => res.reservationRooms.find((room: any) => room.reservationRoomId === value));
+    if (selected.some((room: any) => !room)) throw new Error('Every selected room must belong to this reservation.');
+    const hotel = await tx.property.findUnique({ where: { propertyId: actor.propertyId }, select: { timezone: true, checkInTime: true } });
+    const timeZone = hotel?.timezone || 'Africa/Accra';
+    const labels: string[] = [];
+    for (const stay of selected) {
+      const label = `Room ${stay.roomNumberSnapshot || (stay.roomId ? (await tx.room.findUnique({ where: { roomId: stay.roomId } }))?.roomNumber : null) || '—'}`;
+      labels.push(label);
+      if (stay.status !== 'Reserved') throw new Error(`${label} is not waiting for arrival, so it cannot be marked as a no-show.`);
+      const allowedFrom = noShowAllowedFrom(stay.checkInDate, hotel?.checkInTime, timeZone);
+      if (Date.now() < allowedFrom.getTime()) {
+        const time = new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(allowedFrom);
+        throw new Error(`${label}: the guest can still arrive. Mark it as a no-show from ${time} on ${hotelDate(allowedFrom, timeZone)} (hotel time).`);
+      }
+    }
+    const note = typeof reasonInput === 'string' ? reasonInput.trim().replace(/\s+/g, ' ').slice(0, 300) : '';
+    const ids = selected.map((stay: any) => stay.reservationRoomId);
+    await tx.reservationRoom.updateMany({ where: { reservationId: id, reservationRoomId: { in: ids }, status: 'Reserved' }, data: { status: 'NoShow' } });
+    await derive(tx, id);
+    const after = await tx.reservation.findUniqueOrThrow({ where: { reservationId: id } });
+    if (after.status === 'NoShow') await tx.reservation.update({ where: { reservationId: id }, data: { cancellationDate: new Date() } });
+    await audit(tx, actor, id, 'RoomNoShow', note || 'No reason given', { status: res.status, rooms: selected.map((s: any) => ({ reservationRoomId: s.reservationRoomId, status: s.status })) },
+      { status: after.status, rooms: labels, stayIds: ids, amountPaid: money(res.amountPaid), balanceDue: Math.max(0, money(money(res.totalAmount) - money(res.amountPaid))) });
+    return { reservationId: id, status: after.status, rooms: labels };
+  });
+}
+
 export async function checkinBooking(id: string, actor: Actor) {
   return atomic(async tx => {
     const { res } = await booking(tx, id, actor);
@@ -289,7 +327,24 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
       Object.assign(result, financialDecision(user, input.action, { ...context, timezone: hotel?.timezone }));
       if (!preview && !result.canApply) throw new Error(result.delegationReason);
     };
-    if (input.action === 'restore') {
+    if (input.action === 'restore' && ['Confirmed', 'InHouse'].includes(res.status)) {
+      // Late arrival after a room was marked as no-show: put just those rooms back, if still free.
+      const ids = input.stayIds;
+      if (!Array.isArray(ids) || !ids.length || ids.some((value: any) => !Number.isSafeInteger(value) || value < 1) || new Set(ids).size !== ids.length) throw new Error('Select the no-show rooms to restore.');
+      const rooms = ids.map((value: number) => res.reservationRooms.find((room: any) => room.reservationRoomId === value));
+      if (rooms.some((room: any) => !room || room.status !== 'NoShow')) throw new Error('Only rooms marked as no-show can be restored.');
+      await lockRooms(tx, rooms.map((r: any) => r.roomId).filter((id: any) => id !== null));
+      for (const room of rooms) {
+        if (new Date(room.checkOutDate) <= new Date()) throw new Error('The booked dates for this room have passed. Create a new booking instead.');
+        await availableInventory(tx, room.roomId, actor.propertyId);
+        await noConflict(tx, room.roomId, room.reservationRoomId, room.checkInDate, room.checkOutDate);
+      }
+      result.stayIds = rooms.map((r: any) => r.reservationRoomId);
+      result.message = 'Put the selected no-show room(s) back as reserved so the guest can check in. Charges and payments stay unchanged.';
+      if (preview) return result;
+      await tx.reservationRoom.updateMany({ where: { reservationId: id, reservationRoomId: { in: result.stayIds }, status: 'NoShow' }, data: { status: 'Reserved' } });
+      await derive(tx, id);
+    } else if (input.action === 'restore') {
       if (!['Cancelled', 'NoShow'].includes(res.status)) throw new Error('Only cancelled or no-show reservations can be restored.');
       if (res.payments.some((p: any) => p.status === 'Refunded') || res.refundStatus === 'Processed' || await tx.refund.count({ where: { reservationId: id } })) throw new Error('Payments have already been refunded. Create a new booking instead.');
       const recordedPaid = res.payments.filter((p: any) => p.status === 'Completed').reduce((sum: number, p: any) => sum + Number(p.amount), 0);

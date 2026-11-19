@@ -247,6 +247,7 @@ model PropertyGuest {
   propertyId     Int       
   fullName       String    @db.VarChar(200)
   phone          String?   @db.VarChar(50)
+  email          String?   @db.VarChar(200)
   idNumber       String?   @db.VarChar(50)
   address        String?   @db.Text
   city           String?   @db.VarChar(100)

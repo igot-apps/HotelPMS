@@ -172,7 +172,6 @@ export default function DashboardPage() {
         <QuickLink to="/availability" icon={Search} label="See free rooms by date" color="secondary" />
         <RequirePermission permission="CanCreateReservation"><QuickLink to="/reservations" icon={Calendar} label="Reservations & payments" color="success" /></RequirePermission>
         <QuickLink to="/rooms" icon={BedDouble} label="Rooms & housekeeping" color="warning" />
-        {user?.role === 'Manager' && <QuickLink to="/reports" icon={LayoutGrid} label="Daily overview & collections" color="secondary" />}
       </div>
     </section>
 

@@ -27,7 +27,8 @@ import TakePaymentDialog from '../components/reservations/TakePaymentDialog';
 import CheckoutOwingDialog from '../components/reservations/CheckoutOwingDialog';
 import BulkRoomsDialog from '../components/reservations/BulkRoomsDialog';
 import { bookingStatusLabel, roomStatusLabel, roomStatusTone } from '../lib/statusLabels';
-import { expectedCheckoutAt, formatDuration, formatTime, noShowAllowedFrom } from '../lib/stayTiming';
+import { expectedCheckoutAt, formatDuration, formatTime } from '../lib/stayTiming';
+import NoShowDialog, { noShowRooms } from '../components/reservations/NoShowDialog';
 
 // The hotel's calendar day as YYYY-MM-DD, using the browser's local time.
 const localToday = () => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
@@ -109,11 +110,9 @@ function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', danger 
   );
 }
 
-// No Show only when it applies: confirmed, past the no-show time (check-in time + 6 h) and nobody
-// from the booking has checked in or stayed (same rule as the server, which also re-checks it).
-const canMarkNoShow = (res) => res.status === 'Confirmed'
-  && !(res.reservationRooms || []).some((stay) => ['CheckedIn', 'CheckedOut'].includes(stay.status))
-  && Date.now() >= noShowAllowedFrom(res.checkInDate, res.property?.checkInTime).getTime();
+// No Show only when it applies: a room of an active booking is still waiting past its no-show time
+// (hotel check-in time + 6 h, hotel time zone). The dialog lets staff pick which rooms; the server re-checks.
+const canMarkNoShow = (res) => noShowRooms(res).length > 0;
 
 const BACK_LABELS = { overdue: 'Overdue checkouts', arrivals: 'Arrivals to check in', departures: 'Departures to check out', inHouse: 'Guests in house', free: 'Rooms free tonight', collected: 'Collected today', unpaid: 'Owed by guests in house', owedAfter: 'Owed after checkout', attention: 'Needs attention', dashboard: 'the dashboard', booking: 'the booking details' };
 
@@ -130,6 +129,7 @@ export default function ReservationsPage() {
   const [paymentRecoveryReservation, setPaymentRecoveryReservation] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [pendingConfirm, setPendingConfirm] = useState(null);
+  const [noShowFor, setNoShowFor] = useState(null);
   const [earlyCheckout, setEarlyCheckout] = useState(null);
   const [extendRoom, setExtendRoom] = useState(null);
   const [shortenStay, setShortenStay] = useState(null);
@@ -683,10 +683,10 @@ export default function ReservationsPage() {
                 </div>
 
                 {/* Always visible so staff don't have to look for them; both still ask for confirmation. */}
-                {((res.status === 'Confirmed' && isPastCheckIn) || ['Pending', 'Confirmed'].includes(res.status) && !res.reservationRooms?.some(stay => stay.status === 'CheckedIn')) && (
+                {(isPastCheckIn || ['Pending', 'Confirmed'].includes(res.status) && !res.reservationRooms?.some(stay => stay.status === 'CheckedIn')) && (
                   <div className="mt-2 flex gap-2">
-                    {res.status === 'Confirmed' && isPastCheckIn && (
-                      <button onClick={() => askReservationAction(id, 'noShow', 'Mark as No Show?', `This will mark reservation ${res.confirmationCode || `#${id.slice(0, 8)}`} as a No Show and release the rooms back to inventory. This cannot be undone.`, { danger: true, confirmLabel: 'Mark as No Show' })} className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border border-orange-200 px-3 text-sm font-semibold text-orange-700 hover:bg-orange-50"><AlertCircle size={16} /> No-show</button>
+                    {isPastCheckIn && (
+                      <button onClick={() => setNoShowFor(res)} className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border border-orange-200 px-3 text-sm font-semibold text-orange-700 hover:bg-orange-50"><AlertCircle size={16} /> No-show</button>
                     )}
                     {['Pending', 'Confirmed'].includes(res.status) && !res.reservationRooms?.some(stay => stay.status === 'CheckedIn') && (
                       <button onClick={() => askReservationAction(id, 'cancel', 'Cancel reservation?', `This will cancel reservation ${res.confirmationCode || `#${id.slice(0, 8)}`}. This can't be undone from here.`, { danger: true, confirmLabel: 'Cancel Reservation' })} className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border border-danger-200 px-3 text-sm font-semibold text-danger-700 hover:bg-danger-50"><XCircle size={16} /> Cancel booking</button>
@@ -800,13 +800,7 @@ export default function ReservationsPage() {
                         {roomsToggle}
                         {isPastCheckIn && (
                           <button
-                            onClick={() => askReservationAction(
-                              res.reservationId, 
-                              'noShow',
-                              'Mark as No Show?',
-                              `This will mark reservation #${res.reservationId} as a No Show and release the rooms back to inventory. This cannot be undone.`,
-                              { danger: true, confirmLabel: 'Mark as No Show' }
-                            )}
+                            onClick={() => setNoShowFor(res)}
                             className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-orange-200 text-orange-600 hover:bg-orange-50 transition"
                           >
                             <AlertCircle size={14} /> No Show
@@ -819,6 +813,11 @@ export default function ReservationsPage() {
                       <div className="flex flex-wrap items-center justify-end gap-2">
                         {rowActions(res)}
                         {roomsToggle}
+                        {isPastCheckIn && (
+                          <button onClick={() => setNoShowFor(res)} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-orange-200 text-orange-600 hover:bg-orange-50 transition">
+                            <AlertCircle size={14} /> No Show
+                          </button>
+                        )}
                       </div>
                     );
                   } else if (owesAfterCheckout(res)) {
@@ -1018,6 +1017,7 @@ export default function ReservationsPage() {
           }}
         />
       )}
+      {noShowFor && <NoShowDialog reservation={noShowFor} onClose={() => setNoShowFor(null)} />}
       <ConfirmDialog
         open={!!pendingConfirm}
         title={pendingConfirm?.title}

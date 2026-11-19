@@ -1,5 +1,5 @@
 import { prisma } from '../../shared/utils/prisma';
-import { dayBounds, hotelDate } from './daily-overview.service';
+import { dayBounds, hotelDate, rangeBounds } from './daily-overview.service';
 
 type Actor = { userId: number; propertyId: number };
 const cents = (value: unknown) => Math.round(Number(value || 0) * 100);
@@ -160,6 +160,54 @@ export async function cashReconciliation(actor: Actor, requestedDate?: unknown) 
       refundsReturned: fromCents(figures.refundsCents),
       // Shown separately: money guests still owe is not missing cash.
       outstandingBalances: fromCents(outstanding.reduce((s, r) => s + Math.max(0, cents(r.totalAmount) - cents(r.amountPaid)), 0)),
+    },
+  };
+}
+
+// Cash over several days (manager only). Same rules as a single day — cash payments taken minus cash
+// refunds returned, per person per hotel day — compared with each day's latest saved count. Days with
+// cash but no count are listed as "not counted"; they are never treated as a shortage.
+export async function cashReconciliationRange(actor: Actor, from: unknown, to: unknown) {
+  const user = await staffAccount(prisma, actor);
+  if (user.role.roleName !== 'Manager') throw fail('Only the manager can view cash for a period.', 403);
+  const timeZone = user.property?.timezone || 'Africa/Accra';
+  const start = pickDate(from, timeZone), end = pickDate(to, timeZone);
+  const bounds = rangeBounds(start, end, timeZone);
+  const [payments, refunds, counts] = await Promise.all([
+    prisma.payment.findMany({ where: { propertyId: actor.propertyId, status: 'Completed', paymentMethod: 'Cash', verifiedProvider: null, receivedBy: { not: null }, paymentDate: { gte: bounds.gte, lt: bounds.lt } }, select: { amount: true, receivedBy: true, paymentDate: true, receiver: { select: { fullName: true } } } }),
+    prisma.refund.findMany({ where: { propertyId: actor.propertyId, isSimulated: false, method: 'Cash', returnedBy: { not: null }, returnedAt: { gte: bounds.gte, lt: bounds.lt } }, select: { amount: true, returnedBy: true, returnedByName: true, returnedAt: true } }),
+    prisma.cashCount.findMany({ where: { propertyId: actor.propertyId, businessDate: { gte: new Date(`${start}T00:00:00Z`), lte: new Date(`${end}T00:00:00Z`) } }, include: { staff: { select: { fullName: true } } }, orderBy: { recordedAt: 'desc' } }),
+  ]);
+  const people = new Map<number, { userId: number; name: string; days: Map<string, number> }>();
+  const person = (userId: number, name: string) => { if (!people.has(userId)) people.set(userId, { userId, name, days: new Map() }); return people.get(userId)!; };
+  for (const p of payments) { const r = person(p.receivedBy!, p.receiver?.fullName || 'Former staff'); const d = hotelDate(p.paymentDate, timeZone); r.days.set(d, (r.days.get(d) || 0) + cents(p.amount)); }
+  for (const x of refunds) { const r = person(x.returnedBy!, x.returnedByName); const d = hotelDate(x.returnedAt, timeZone); r.days.set(d, (r.days.get(d) || 0) - cents(x.amount)); }
+  const latest = new Map<string, any>(); // newest count per person per day
+  for (const c of counts) { const key = `${c.staffUserId}|${c.businessDate.toISOString().slice(0, 10)}`; if (!latest.has(key)) latest.set(key, c); person(c.staffUserId, c.staff.fullName); }
+  const staff = [...people.values()].map(p => {
+    const dates = new Set([...p.days.keys(), ...[...latest.keys()].filter(k => k.startsWith(`${p.userId}|`)).map(k => k.split('|')[1])]);
+    const days = [...dates].sort().map(date => {
+      const expected = p.days.get(date) || 0;
+      const count = latest.get(`${p.userId}|${date}`);
+      return { date, expected: fromCents(expected), counted: count ? Number(count.countedAmount) : null, difference: count ? fromCents(cents(count.countedAmount) - expected) : null };
+    });
+    const counted = days.filter(d => d.counted !== null);
+    return {
+      userId: p.userId, name: p.name, days,
+      expectedCash: fromCents(days.reduce((s, d) => s + cents(d.expected), 0)),
+      countedDays: counted.length,
+      expectedOnCountedDays: fromCents(counted.reduce((s, d) => s + cents(d.expected), 0)),
+      countedCash: fromCents(counted.reduce((s, d) => s + cents(d.counted), 0)),
+      differenceOnCountedDays: fromCents(counted.reduce((s, d) => s + cents(d.difference), 0)),
+      uncountedDays: days.filter(d => d.counted === null && cents(d.expected) !== 0).map(d => d.date),
+    };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+  const sum = (key: string) => fromCents(staff.reduce((s: number, r: any) => s + cents(r[key]), 0));
+  return {
+    from: start, to: end, timeZone, staff,
+    totals: {
+      expectedCash: sum('expectedCash'), expectedOnCountedDays: sum('expectedOnCountedDays'), countedCash: sum('countedCash'), differenceOnCountedDays: sum('differenceOnCountedDays'),
+      countedPersonDays: staff.reduce((s, r) => s + r.countedDays, 0), uncountedPersonDays: staff.reduce((s, r) => s + r.uncountedDays.length, 0),
     },
   };
 }

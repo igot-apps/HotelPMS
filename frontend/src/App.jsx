@@ -25,12 +25,12 @@ import { SHOW_DISCOVER } from './lib/platformConfig';
 
 // Protected Pages (Staff PMS)
 import DashboardPage from './pages/DashboardPage';
+import ReportsPage from './pages/ReportsPage';
 import RefundsPage from './pages/RefundsPage';
 import RoomsPage from './pages/RoomsPage';
 import HousekeepingPage from './pages/HousekeepingPage';
 import GuestsPage from './pages/GuestsPage';
 import ReservationsPage from './pages/ReservationsPage';
-import ReportsPage from './pages/ReportsPage';
 import PropertiesPage from './pages/PropertiesPage';
 import ReservationDetailsPage from './pages/ReservationDetailsPage';
 import CalendarPage from './pages/CalendarPage';

@@ -4,7 +4,7 @@
    import { getDashboardGlance } from './glance.service';
    import { getOwedAfterCheckout } from './owed-after-checkout.service';
    import { getMyDay } from './my-day.service';
-   import { cashReconciliation, recordCashCount } from '../reports/cash-reconciliation.service';
+   import { cashReconciliation, cashReconciliationRange, recordCashCount } from '../reports/cash-reconciliation.service';
    import * as dashboardController from './dashboard.controller';
 
    // 🚨 TRACKING BEACON
@@ -52,7 +52,10 @@
    // End-of-day cash: managers see everyone and hotel totals; receptionists see only their own cash.
    router.get('/cash', async (req: AuthRequest, res) => {
      try {
-       return res.json({ success: true, data: await cashReconciliation({ userId: req.user!.userId, propertyId: req.user!.propertyId }, req.query.date) });
+       const actor = { userId: req.user!.userId, propertyId: req.user!.propertyId };
+       // A period (from … to) gives the per-day summary; a single date gives the detailed day view.
+       if (req.query.from && req.query.to && req.query.from !== req.query.to) return res.json({ success: true, data: await cashReconciliationRange(actor, req.query.from, req.query.to) });
+       return res.json({ success: true, data: await cashReconciliation(actor, req.query.date || req.query.from) });
      } catch (error: any) {
        return res.status(error.statusCode || 400).json({ success: false, message: error.statusCode ? error.message : 'Could not load the cash reconciliation.' });
      }
