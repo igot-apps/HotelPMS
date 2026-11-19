@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { AlarmClock, AlertTriangle, BedDouble, ChevronRight, Coins, Eye, Hotel, Loader2, LogIn, LogOut, Plus, Receipt, Sparkles, Wallet, X } from 'lucide-react';
+import { AlarmClock, AlertTriangle, BedDouble, ChevronRight, Coins, Eye, Hotel, Loader2, LogIn, LogOut, Plus, Receipt, Search, Sparkles, Wallet, X } from 'lucide-react';
 import api from '../../lib/axios';
 import useCheckoutAlerts from '../../hooks/useCheckoutAlerts';
 import { formatDuration, formatTime } from '../../lib/stayTiming';
@@ -35,6 +35,7 @@ export default function TodayAtAGlance() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [open, setOpen] = useState(() => searchParams.get('panel'));
   const [sort, setSort] = useState('date');
+  const [arrivalsQuery, setArrivalsQuery] = useState('');
   // Coming back from the Reservations page: reopen the same list once, then tidy the URL.
   useEffect(() => {
     if (!searchParams.get('panel')) return;
@@ -62,15 +63,12 @@ export default function TodayAtAGlance() {
   // Arrivals are counted per booking (one party at the desk); the room total is shown alongside.
   const arrivingStays = [...data.arrivals.waiting, ...(data.arrivals.missed || [])];
   const arrivingBookings = new Set(arrivingStays.map((stay) => stay.reservationId)).size;
-  // Today's arrivals total (bookings): those already checked in today plus those due today still to come.
-  const arrivedTodayBookings = new Set(data.arrivals.arrivedToday.map((stay) => stay.reservationId));
-  const dueTodayBookings = new Set(arrivingStays.filter((stay) => String(stay.checkInDate).slice(0, 10) === data.date).map((stay) => stay.reservationId));
-  const todayArrivalsTotal = new Set([...arrivedTodayBookings, ...dueTodayBookings]).size;
+  const arrivedTodayRooms = data.arrivals.arrivedToday.length;
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const attention = data.rooms.needsCleaning.length + data.rooms.maintenance.length;
   const tiles = [
     { key: 'overdue', icon: AlarmClock, tone: overdue.length ? 'danger' : 'neutral', label: 'Overdue checkouts', value: overdue.length, hint: overdue.length ? `Longest: ${formatDuration(Math.max(...overdue.map((a) => a.minutesLate)) * 60000)} late` : `Checkout time ${data.checkOutTime}` },
-    { key: 'arrivals', icon: LogIn, tone: missed.length ? 'warning' : 'primary', label: 'Arrivals to check in', value: arrivingBookings, hint: [`${arrivingBookings === 1 ? 'booking' : 'bookings'} · ${plural(arrivingStays.length, 'room')}`, missed.length ? `${missed.length} past no-show time` : '', `${arrivedTodayBookings.size} of ${todayArrivalsTotal} arrived today`, `${(data.arrivals.upcoming || []).length} in next 7 days`, data.arrivals.unpaidCount ? `${data.arrivals.unpaidCount} unpaid` : ''].filter(Boolean).join(' · ') },
+    { key: 'arrivals', icon: LogIn, tone: missed.length ? 'warning' : 'primary', label: 'Expected arrivals', value: arrivingBookings, hint: [`Awaiting check-in: ${plural(arrivingBookings, 'reservation')} · ${plural(arrivingStays.length, 'room')}`, missed.length ? `${missed.length} past no-show time` : '', `Checked in today: ${plural(arrivedTodayRooms, 'room')}`, `${(data.arrivals.upcoming || []).length} in next 7 days`, data.arrivals.unpaidCount ? `${data.arrivals.unpaidCount} unpaid` : ''].filter(Boolean).join(' · ') },
     { key: 'departures', icon: LogOut, tone: 'warning', label: 'Departures to check out', value: data.departures.waiting.length, hint: `${data.departures.departedToday.length} checked out today` },
     { key: 'inHouse', icon: Hotel, tone: 'primary', label: 'Guests in house', value: data.inHouse.length, hint: `${data.rooms.occupiedTonight} of ${data.rooms.total} rooms taken tonight` },
     { key: 'free', icon: BedDouble, tone: 'success', label: 'Rooms free tonight', value: data.rooms.freeTonight.length, hint: `${data.rooms.occupancyPercent}% occupancy` },
@@ -96,14 +94,22 @@ export default function TodayAtAGlance() {
         <SortContext.Provider value={sort}>
         <Drawer title={tiles.find((tile) => tile.key === open)?.label || ''} onClose={() => setOpen(null)}
           toolbar={SORTABLE.includes(open) && (
-            <label className="flex items-center gap-2 text-sm text-text-muted">Sort by
-              <select value={sort} onChange={(event) => setSort(event.target.value)} className="min-h-10 rounded-lg border border-border bg-background px-2 text-sm text-text">
-                {SORTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-            </label>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-text-muted">Sort by
+                <select value={sort} onChange={(event) => setSort(event.target.value)} className="min-h-10 rounded-lg border border-border bg-background px-2 text-sm text-text">
+                  {SORTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+              {open === 'arrivals' && (
+                <div className="relative min-w-0 flex-1">
+                  <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                  <input value={arrivalsQuery} onChange={(event) => setArrivalsQuery(event.target.value)} placeholder="Search booking code, guest or room..." aria-label="Search expected arrivals" className="min-h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm text-text outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20" />
+                </div>
+              )}
+            </div>
           )}>
           {open === 'overdue' && <OverdueDetail rows={overdue} />}
-          {open === 'arrivals' && <ArrivalsDetail data={data} missed={missed} />}
+          {open === 'arrivals' && <ArrivalsDetail data={data} missed={missed} query={arrivalsQuery} />}
           {open === 'departures' && <DeparturesDetail data={data} />}
           {open === 'inHouse' && <InHouseDetail rows={data.inHouse} />}
           {open === 'free' && <FreeDetail rooms={data.rooms.freeTonight} />}
@@ -265,26 +271,39 @@ function groupByReservation(stays) {
         reservationId: stay.reservationId,
         guestName: stay.guestName,
         confirmationCode: stay.confirmationCode,
+        phone: stay.phone || null,
         checkInDate: stay.checkInDate,
         checkOutDate: stay.checkOutDate,
         nightsBooked: stay.nightsBooked,
         balanceDue: stay.balanceDue || 0,
         amountPaid: stay.amountPaid || 0,
         source: stay.source,
-        rooms: [{ roomNumber: stay.roomNumber, reservationRoomId: stay.reservationRoomId, checkInStatus: stay.checkInStatus || (stay.actualCheckIn ? 'checked-in' : 'pending') }],
+        rooms: [{ roomNumber: stay.roomNumber, reservationRoomId: stay.reservationRoomId, checkInStatus: stay.checkInStatus || (stay.actualCheckIn ? 'checked-in' : 'pending'), phone: stay.occupantPhone || stay.phone || null }],
       };
     } else {
-      current.rooms.push({ roomNumber: stay.roomNumber, reservationRoomId: stay.reservationRoomId, checkInStatus: stay.checkInStatus || (stay.actualCheckIn ? 'checked-in' : 'pending') });
+      current.rooms.push({ roomNumber: stay.roomNumber, reservationRoomId: stay.reservationRoomId, checkInStatus: stay.checkInStatus || (stay.actualCheckIn ? 'checked-in' : 'pending'), phone: stay.occupantPhone || stay.phone || null });
     }
     return byRes;
   }, {}));
 }
 
-function ArrivalsDetail({ data, missed: missedUnsorted }) {
-  const missed = useSorted(missedUnsorted, 'checkInDate');
-  const todayGrouped = groupByReservation(data.arrivals.waiting);
-  const upcomingGrouped = groupByReservation(data.arrivals.upcoming || []);
-  const arrivedGrouped = groupByReservation(data.arrivals.arrivedToday);
+// Popup search: confirmation code, guest name, phone number or room number.
+function matchesQuery(row, query) {
+  const text = query.trim().toLowerCase();
+  if (!text) return true;
+  const rooms = (row.rooms || []).map((room) => (typeof room === 'string' ? room : `${room.roomNumber || ''} ${room.phone || ''}`));
+  return [row.confirmationCode, row.guestName, row.phone, ...rooms].filter(Boolean).join(' ').toLowerCase().includes(text);
+}
+
+function ArrivalsDetail({ data, missed: missedUnsorted, query = '' }) {
+  const missed = useSorted(missedUnsorted, 'checkInDate').filter((row) => matchesQuery(row, query));
+  const todayGrouped = groupByReservation(data.arrivals.waiting).filter((row) => matchesQuery(row, query));
+  const upcomingGrouped = groupByReservation(data.arrivals.upcoming || []).filter((row) => matchesQuery(row, query));
+  const arrivedGrouped = groupByReservation(data.arrivals.arrivedToday).filter((row) => matchesQuery(row, query));
+  const searching = query.trim().length > 0;
+  const noMatches = searching && !missed.length && !todayGrouped.length && !upcomingGrouped.length && !arrivedGrouped.length;
+
+  if (noMatches) return <p className="rounded-lg border border-dashed border-border p-3 text-sm text-text-muted">No expected or arrived bookings match “{query.trim()}”.</p>;
 
   return (
     <>
