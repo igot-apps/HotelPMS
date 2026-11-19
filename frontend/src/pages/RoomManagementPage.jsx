@@ -1,5 +1,6 @@
 import ResponsiveTable from '../components/ui/ResponsiveTable';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
 import {
@@ -12,7 +13,7 @@ import AmenityManagementModal from '../components/catalog/AmenityManagementModal
 import { MaintenanceReasonField, isValidMaintenanceReason } from '../components/rooms/MaintenanceReason';
 import toast from 'react-hot-toast';
 import {
-  BedDouble, Layers, Plus, Edit2, Trash2, Loader2, Sparkles, AlertCircle, X, Tag
+  BedDouble, Layers, Plus, Edit2, Trash2, Loader2, Sparkles, AlertCircle, X, Tag, CheckCircle2, ArrowRight
 } from 'lucide-react';
 
 export default function RoomManagementPage() {
@@ -44,6 +45,15 @@ export default function RoomManagementPage() {
 
   const rooms = roomsData || [];
   const roomTypes = typesData || [];
+  const pickedStartTab = useRef(false);
+  useEffect(() => {
+    if (pickedStartTab.current || isLoadingTypes || !typesData) return;
+    pickedStartTab.current = true;
+    if (!typesData.length) setActiveTab('types');
+  }, [typesData, isLoadingTypes]);
+  const openNewType = () => { setActiveTab('types'); setEditingType(null); setIsTypeModalOpen(true); };
+  const openNewRoom = () => { setActiveTab('rooms'); setEditingRoom(null); setIsRoomModalOpen(true); };
+  const setupDone = roomTypes.length > 0 && rooms.length > 0;
 
   // Mutations
   const roomMutation = useMutation({
@@ -117,22 +127,26 @@ export default function RoomManagementPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-text tracking-tight">Room Management</h1>
-        <p className="text-text-muted text-sm mt-1">Configure physical rooms, categories, base pricing, and amenities.</p>
+        <p className="text-text-muted text-sm mt-1">Set up your room types (with nightly prices), then add each room in the hotel.</p>
       </div>
+
+      {!isLoadingTypes && !isLoadingRooms && !setupDone && (
+        <SetupGuide hasTypes={roomTypes.length > 0} hasRooms={rooms.length > 0} onNewType={openNewType} onNewRoom={openNewRoom} />
+      )}
 
       <div className="border-b border-border">
         <nav className="flex flex-wrap gap-x-4 gap-y-2">
           <button 
-            onClick={() => setActiveTab('rooms')} 
-            className={`pb-3 text-sm font-semibold border-b-2 transition ${activeTab === 'rooms' ? 'border-primary-600 text-primary-600' : 'border-transparent text-text-muted hover:text-text'}`}
-          >
-            <BedDouble size={16} className="inline mr-2" /> Physical Rooms ({rooms.length})
-          </button>
-          <button 
             onClick={() => setActiveTab('types')} 
             className={`pb-3 text-sm font-semibold border-b-2 transition ${activeTab === 'types' ? 'border-primary-600 text-primary-600' : 'border-transparent text-text-muted hover:text-text'}`}
           >
-            <Layers size={16} className="inline mr-2" /> Room Types & Rates ({roomTypes.length})
+            <Layers size={16} className="inline mr-2" /> 1. Room types & prices ({roomTypes.length})
+          </button>
+          <button 
+            onClick={() => setActiveTab('rooms')} 
+            className={`pb-3 text-sm font-semibold border-b-2 transition ${activeTab === 'rooms' ? 'border-primary-600 text-primary-600' : 'border-transparent text-text-muted hover:text-text'}`}
+          >
+            <BedDouble size={16} className="inline mr-2" /> 2. Rooms ({rooms.length})
           </button>
         </nav>
       </div>
@@ -146,6 +160,7 @@ export default function RoomManagementPage() {
           onEdit={(room) => { setEditingRoom(room); setIsRoomModalOpen(true); }}
           onDelete={(id, num) => handleDeleteRoom(id, num)}
           onStatusChange={(id, op, hk) => statusMutation.mutate({ id, data: { operationalStatus: op, housekeepingStatus: hk } })}
+          onNewType={openNewType}
         />
       )}
 
@@ -177,8 +192,10 @@ export default function RoomManagementPage() {
           initialData={editingType}
           onClose={() => { setIsTypeModalOpen(false); setEditingType(null); }}
           onSuccess={() => {
+            const firstType = !editingType && roomTypes.length === 0;
             queryClient.invalidateQueries({ queryKey: ['roomTypes'] });
-            toast.success(editingType ? 'Room type updated!' : 'Room type created!');
+            toast.success(editingType ? 'Room type updated!' : firstType ? 'Room type created! Next: add your rooms.' : 'Room type created!');
+            if (firstType) setActiveTab('rooms');
           }}
         />
       )}
@@ -226,22 +243,49 @@ export default function RoomManagementPage() {
 // ==========================================
 // Sub-Components
 // ==========================================
-function RoomsTab({ rooms, isLoading, onAdd, onEdit, onDelete, onStatusChange, roomTypes }) {
+// Shown until the hotel has at least one room type and one room: what to do, in order.
+function SetupGuide({ hasTypes, hasRooms, onNewType, onNewRoom }) {
+  const steps = [
+    { done: hasTypes, title: 'Create a room type', text: 'A room type is a kind of room you sell, with its nightly price, e.g. "Standard – GHS 300" or "Deluxe – GHS 500".', action: !hasTypes && <button type="button" onClick={onNewType} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary-600 px-4 text-sm font-semibold text-white hover:bg-primary-700"><Plus size={16} /> Create room type</button> },
+    { done: hasRooms, title: 'Add your rooms', text: 'Add each physical room by its number (e.g. 101, 102) and choose its room type. Guests are booked into these rooms.', action: hasTypes && !hasRooms && <button type="button" onClick={onNewRoom} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary-600 px-4 text-sm font-semibold text-white hover:bg-primary-700"><Plus size={16} /> Add a room</button> },
+    { done: false, title: 'Start taking bookings', text: 'Your rooms then appear in Check Availability and New Booking, and online if online booking is on in Properties.', action: hasTypes && hasRooms && <Link to="/reservations?new=1" className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 text-sm font-semibold text-text hover:bg-secondary-50">New booking <ArrowRight size={16} /></Link> },
+  ];
+  const current = steps.findIndex((step) => !step.done);
+  return (
+    <section aria-labelledby="room-setup-title" className="rounded-xl border border-primary-200 bg-primary-50/50 p-4 sm:p-5">
+      <h2 id="room-setup-title" className="text-base font-bold text-text">Set up your rooms in 2 steps</h2>
+      <p className="mt-1 text-sm text-text-muted">Rooms belong to a room type, so create the room type first.</p>
+      <ol className="mt-4 grid gap-3 md:grid-cols-3">
+        {steps.map((step, index) => (
+          <li key={step.title} className={`rounded-lg border bg-surface p-4 ${index === current ? 'border-primary-400 shadow-sm' : 'border-border'} ${index > current ? 'opacity-60' : ''}`}>
+            <p className="flex items-center gap-2 font-semibold text-text">
+              {step.done ? <CheckCircle2 size={20} className="shrink-0 text-success-600" /> : <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${index === current ? 'bg-primary-600 text-white' : 'bg-secondary-100 text-text-muted'}`}>{index + 1}</span>}
+              {step.title}{step.done && <span className="text-xs font-normal text-success-700">· done</span>}
+            </p>
+            <p className="mt-1 text-sm text-text-muted">{step.text}</p>
+            {step.action && <div className="mt-3">{step.action}</div>}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+function RoomsTab({ rooms, isLoading, onAdd, onEdit, onDelete, onStatusChange, roomTypes, onNewType }) {
   const hasRoomTypes = roomTypes && roomTypes.length > 0;
 
   return (
     <div className="bg-surface border border-border rounded-xl shadow-sm overflow-hidden">
       <div className="p-4 border-b border-border flex justify-between items-center bg-secondary-50/30">
-        <h3 className="text-sm font-bold text-text">Physical Rooms</h3>
+        <h3 className="text-sm font-bold text-text">Rooms</h3>
         <RequirePermission permission="CanCreateRoom">
           {hasRoomTypes ? (
             <button onClick={onAdd} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm">
               <Plus size={16} /> Add New Room
             </button>
           ) : (
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-warning-50 text-warning-700 text-sm font-semibold rounded-lg border border-warning-200 cursor-not-allowed">
-              <AlertCircle size={16} /> Create a Room Type first
-            </div>
+            <button type="button" onClick={onNewType} className="inline-flex items-center gap-2 px-4 py-2 bg-warning-50 text-warning-700 text-sm font-semibold rounded-lg border border-warning-200 hover:bg-warning-100">
+              <AlertCircle size={16} /> Create a room type first
+            </button>
           )}
         </RequirePermission>
       </div>
@@ -262,7 +306,7 @@ function RoomsTab({ rooms, isLoading, onAdd, onEdit, onDelete, onStatusChange, r
             ) : rooms.length === 0 ? (
               <tr> 
                 <td colSpan="5" className="p-12 text-center text-text-muted">
-                  {hasRoomTypes ? 'No rooms found. Click "Add New Room" to create one.' : 'No rooms found. Please create a Room Type first.'}
+                  {hasRoomTypes ? 'No rooms yet. Click "Add New Room" and enter each room number (e.g. 101), choosing its room type.' : 'Rooms need a room type first. Create one in "1. Room types & prices".'}
                 </td> 
               </tr>
             ) : (
