@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 const suggestions = {
-  refund: ['Reservation was cancelled and a refund is due.', 'Guest departed early and the charges were corrected.', 'Guest paid more than the booking total.', 'Payment arrived after the room hold expired.'],
+  refund: ['Reservation was cancelled and a refund is due.', 'Guest departed early and the charges were corrected.', 'Payment arrived after the room hold expired.'],
   'reject-correction': ['The requested correction is not appropriate for this booking.', 'Reservation details have changed. Please submit an updated request.', 'Please confirm the details with the guest before requesting this correction.'],
   'guest-cancel': ['My travel plans have changed.', 'I selected the wrong dates or room.', 'I made a duplicate reservation.', 'I no longer need accommodation.'],
   'undo-checkin': ['Checked in the wrong guest or room by mistake.', 'Guest has not arrived; check-in was recorded too early.', 'Check-in was recorded on the wrong reservation.'],

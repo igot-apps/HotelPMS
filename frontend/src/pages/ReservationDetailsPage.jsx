@@ -12,12 +12,13 @@ import useServerClock from '../lib/useServerClock';
 // Today on the hotel's calendar from the server's clock (never the computer's); null until server time is known.
 const localToday = (timeZone) => hotelToday(timeZone);
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getReservationById, getReservationStats, updateReservation } from '../api/reservations';
+import { cancelReservation, getReservationById, getReservationStats, updateReservation } from '../api/reservations';
+import toast from 'react-hot-toast';
 import api from '../lib/axios';
 import { recordPayment } from '../api/payments';
 import {
   BedDouble, CreditCard, X, Loader2,
-  CalendarDays, AlertCircle, Plus, Printer, ChevronDown, Smartphone, Undo2, Wrench, ChevronRight
+  CalendarDays, AlertCircle, Plus, Printer, ChevronDown, Smartphone, Undo2, Wrench, ChevronRight, XCircle
 } from 'lucide-react';
 import ReceiptModal from '../components/reservations/ReceiptModal';
 import ThermalReceiptModal from '../components/reservations/ThermalReceiptModal';
@@ -46,6 +47,17 @@ export default function ReservationDetailsPage() {
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
   const [isThermalReceiptOpen, setIsThermalReceiptOpen] = useState(false);
   const [isPrintMenuOpen, setIsPrintMenuOpen] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  // Same cancellation as the Reservations list (server applies the refund policy and all checks).
+  const cancelMutation = useMutation({
+    mutationFn: () => cancelReservation(id),
+    onSuccess: () => {
+      ['reservation', 'reservations', 'rooms', 'payments', 'dashboardActive'].forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
+      toast.success('Reservation cancelled');
+      setConfirmCancel(false);
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not cancel the reservation. Please try again.'),
+  });
 
   // States for Form Data
   const [editData, setEditData] = useState({ notes: '', source: '' });
@@ -152,6 +164,12 @@ export default function ReservationDetailsPage() {
           }`}>
             {bookingStatusLabel(resData.status, resData.reservationRooms)}
           </span>
+
+          {['Pending', 'Confirmed'].includes(resData.status) && !resData.reservationRooms?.some((stay) => stay.status === 'CheckedIn') && (
+            <button type="button" onClick={() => setConfirmCancel(true)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-danger-200 bg-surface px-4 py-2 text-sm font-semibold text-danger-700 hover:bg-danger-50">
+              <XCircle size={16} /> Cancel reservation
+            </button>
+          )}
 
           {/* Print Options Dropdown */}
           <div className="relative group">
@@ -388,6 +406,20 @@ export default function ReservationDetailsPage() {
       {/* ========================================== */}
       {/* 3. RECEIPT MODALS                          */}
       {/* ========================================== */}
+        {confirmCancel && (
+          <div role="dialog" aria-modal="true" aria-labelledby="cancel-title" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !cancelMutation.isPending && setConfirmCancel(false)}>
+            <div className="w-full max-w-md rounded-xl bg-surface p-5 shadow-xl" onClick={(event) => event.stopPropagation()}>
+              <h2 id="cancel-title" className="text-lg font-bold text-text">Cancel reservation?</h2>
+              <p className="mt-2 text-sm text-text-muted">This will cancel reservation {resData.confirmationCode || `#${id.slice(0, 8)}`}. This can't be undone from here.</p>
+              <div className="mt-5 flex flex-wrap justify-end gap-2">
+                <button type="button" disabled={cancelMutation.isPending} onClick={() => setConfirmCancel(false)} className="min-h-11 rounded-lg border border-border px-4 text-sm font-semibold text-text hover:bg-secondary-50 disabled:opacity-50">Keep reservation</button>
+                <button type="button" disabled={cancelMutation.isPending} onClick={() => cancelMutation.mutate()} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-danger-600 px-4 text-sm font-semibold text-white hover:bg-danger-700 disabled:opacity-50">
+                  {cancelMutation.isPending && <Loader2 size={16} className="animate-spin" />} Cancel Reservation
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       <ReceiptModal
         isOpen={isReceiptOpen}
         onClose={() => setIsReceiptOpen(false)}
