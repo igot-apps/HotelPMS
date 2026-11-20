@@ -9,6 +9,7 @@ import useCheckoutAlerts from '../../hooks/useCheckoutAlerts';
 import { formatDuration, formatTime } from '../../lib/stayTiming';
 import { bookingLink } from '../../lib/bookingLink';
 import TakePaymentDialog from '../reservations/TakePaymentDialog';
+import NoShowDialog from '../reservations/NoShowDialog';
 import { updateGuestPresence } from '../../api/reservations';
 import { useAuthStore } from '../../store/authStore';
 import { matchesQuery } from '../../lib/matchesQuery';
@@ -62,7 +63,7 @@ export default function TodayAtAGlance() {
   // One no-show decision per booking, even if it holds several rooms.
   const missed = Object.values((data.arrivals.missed || []).reduce((byBooking, stay) => {
     const current = byBooking[stay.reservationId];
-    byBooking[stay.reservationId] = current ? { ...current, rooms: [...current.rooms, stay.roomNumber] } : { ...stay, rooms: [stay.roomNumber] };
+    byBooking[stay.reservationId] = current ? { ...current, rooms: [...current.rooms, stay.roomNumber], stays: [...current.stays, stay] } : { ...stay, rooms: [stay.roomNumber], stays: [stay] };
     return byBooking;
   }, {}));
   // Arrivals are counted per booking (one party at the desk); the room total is shown alongside.
@@ -307,6 +308,7 @@ function groupByReservation(stays) {
 
 
 function ArrivalsDetail({ data, missed: missedUnsorted, query = '' }) {
+  const [noShow, setNoShow] = useState(null);
   const missed = useSorted(missedUnsorted, 'checkInDate').filter((row) => matchesQuery(row, query));
   const todayGrouped = groupByReservation(data.arrivals.waiting).filter((row) => matchesQuery(row, query));
   const upcomingGrouped = groupByReservation(data.arrivals.upcoming || []).filter((row) => matchesQuery(row, query));
@@ -318,6 +320,7 @@ function ArrivalsDetail({ data, missed: missedUnsorted, query = '' }) {
 
   return (
     <>
+      {noShow && <NoShowDialog reservationId={noShow.reservationId} stayId={noShow.stayId} onClose={() => setNoShow(null)} />}
       {missed.length > 0 && (
         <Group title="Still expected — past no-show time" count={missed.length}>
           {missed.map((stay) => (
@@ -328,6 +331,10 @@ function ArrivalsDetail({ data, missed: missedUnsorted, query = '' }) {
               <p className="mt-0.5 text-sm text-text-muted">Room {stay.rooms.filter(Boolean).join(', ') || 'unassigned'} · arrival {shortDate(stay.checkInDate)} · {stay.nightsLeft} night{stay.nightsLeft === 1 ? '' : 's'} still held</p>
               <p className="text-sm text-text-muted">{stay.amountPaid > 0 ? `Paid ${cash(stay.amountPaid)}` : 'Nothing paid'}{stay.source === 'Website' ? ' · online booking' : ''}</p>
               <div className="mt-2 flex flex-wrap gap-2">
+                {/* One button per room: each marks only its own room (same dialog and rules as the room cards). */}
+                {stay.stays.map((room) => (
+                  <button key={room.reservationRoomId} type="button" onClick={() => setNoShow({ reservationId: stay.reservationId, stayId: room.reservationRoomId })} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-orange-200 bg-surface px-3 text-sm font-semibold text-orange-700 hover:bg-orange-50"><AlertTriangle size={16} /> Mark Room {room.roomNumber || '—'} no-show</button>
+                ))}
                 <Link to={withBack(reservationLink(stay), 'arrivals')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white hover:bg-primary-700"><Eye size={16} /> View reservation</Link>
               </div>
             </li>

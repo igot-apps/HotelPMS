@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { roomStatusLabel } from '../../lib/statusLabels';
-import { LogIn, LogOut, Loader2, Clock, Pencil, History, CalendarMinus } from 'lucide-react';
+import { LogIn, LogOut, Loader2, Clock, Pencil, History, CalendarMinus, AlertCircle } from 'lucide-react';
 import { expectedCheckoutAt, formatDuration, formatTime } from '../../lib/stayTiming';
 
 export default function RoomCard({ 
@@ -9,6 +9,8 @@ export default function RoomCard({
   isThisRoomBusy, 
   isUpdatingOccupant,
   onCheckIn, 
+  canMarkNoShow,
+  onMarkNoShow,
   onCheckOut, 
   onExtend,
   onEditOccupant,
@@ -25,6 +27,7 @@ export default function RoomCard({
   if (!isRoomComplete) {
     if (roomStatus === 'Reserved') {
       roomActionBtn = (
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
         <button
           disabled={isThisRoomBusy}
           onClick={() => onCheckIn(rr)}
@@ -32,6 +35,24 @@ export default function RoomCard({
         >
           {isThisRoomBusy ? <Loader2 size={14} className="animate-spin" /> : <LogIn size={14} />} Check In Room
         </button>
+        {/* Only once this room is past its no-show time (check-in time + 6 h, hotel time). */}
+        {canMarkNoShow && (
+          <button
+            type="button"
+            disabled={isThisRoomBusy}
+            onClick={() => onMarkNoShow(rr)}
+            className="inline-flex min-h-11 w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-orange-200 text-orange-700 hover:bg-orange-50 transition disabled:opacity-50"
+          >
+            <AlertCircle size={14} /> Mark no-show
+          </button>
+        )}
+        </div>
+      );
+    } else if (roomStatus === 'NoShow') {
+      roomActionBtn = (
+        <Link to={`/reservations/${res.reservationId}`} className="inline-flex min-h-11 w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-border text-text hover:bg-secondary-50">
+          Guest arrived? Restore in reservation details
+        </Link>
       );
     } else if (roomStatus === 'CheckedIn') {
       roomActionBtn = (
@@ -90,6 +111,7 @@ export default function RoomCard({
         <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
           roomStatus === 'CheckedIn' ? 'bg-success-50 text-success-700' :
           roomStatus === 'CheckedOut' ? 'bg-secondary-100 text-secondary-700' :
+          roomStatus === 'NoShow' ? 'bg-orange-50 text-orange-700' :
           'bg-primary-50 text-primary-700'
         }`}>
           {roomStatusLabel(roomStatus)}

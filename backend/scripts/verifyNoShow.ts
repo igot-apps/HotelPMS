@@ -166,6 +166,17 @@ async function main() {
     await assert.rejects(() => correctBooking(single.reservationId, A, { action: 'restore', reason: 'Guest arrived late', preview: true }), /conflicting dates/);
     assert.equal((await status(single.reservationId)).status, 'NoShow');
     console.log('11 ok: whole-booking restore uses the same remaining-night conflict check and refuses to double-book room 104');
+    // 12. Room buttons always send one room. Two-room booking, nobody arrived: first room → booking stays
+    // active for the other; second room → whole booking No-show. Each call touches only its own room.
+    const pair = await book('PAIR', [rooms[2], rooms[3]], -2, -1, 200, 100);
+    await markRoomsNoShow(pair.reservationId, A, [pair.reservationRooms[0].reservationRoomId], 'No answer');
+    s = await status(pair.reservationId);
+    assert.equal(s.status, 'Confirmed'); assert.deepEqual(s.reservationRooms.map(r => r.status), ['NoShow', 'Reserved']);
+    await markRoomsNoShow(pair.reservationId, A, [pair.reservationRooms[1].reservationRoomId], 'No answer');
+    s = await status(pair.reservationId);
+    assert.equal(s.status, 'NoShow'); assert.deepEqual(s.reservationRooms.map(r => r.status), ['NoShow', 'NoShow']);
+    assert.equal(Number(s.amountPaid), 100); assert.equal(s.payments.length, 1);
+    console.log('12 ok: one room at a time — first room leaves the booking active, the last makes it No-show; payment kept');
     console.log('\nAll no-show checks passed.');
   } finally {
     await prisma.auditLog.deleteMany({ where: { userId: { in: userIds } } });
