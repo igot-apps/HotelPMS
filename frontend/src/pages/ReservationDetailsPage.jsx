@@ -225,7 +225,7 @@ export default function ReservationDetailsPage() {
             );
           })}
         </ul>
-        {arrivedStay && <GuestArrivedDialog reservation={resData} stay={arrivedStay} onClose={() => setArrivedStay(null)} />}
+        {arrivedStay && <GuestArrivedDialog reservation={resData} stay={arrivedStay} onClose={() => setArrivedStay(null)} onCheckIn={(room) => navigate(`${bookingLink(resData, 'checkin', room.reservationRoomId)}&back=booking`)} />}
         {noShowStayId && <NoShowDialog reservation={resData} stayId={noShowStayId} onClose={() => setNoShowStayId(null)} />}
         <div className="mt-4 border-t border-border pt-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">Whole booking</p>

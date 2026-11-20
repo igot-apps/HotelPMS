@@ -11,6 +11,7 @@ export default function RoomCard({
   onCheckIn, 
   canMarkNoShow,
   onMarkNoShow,
+  onGuestArrived,
   onCheckOut, 
   onExtend,
   onEditOccupant,
@@ -48,11 +49,11 @@ export default function RoomCard({
         )}
         </div>
       );
-    } else if (roomStatus === 'NoShow') {
+    } else if (roomStatus === 'NoShow' && onGuestArrived) {
       roomActionBtn = (
-        <Link to={`/reservations/${res.reservationId}`} className="inline-flex min-h-11 w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-border text-text hover:bg-secondary-50">
-          Guest arrived? Restore in reservation details
-        </Link>
+        <button type="button" disabled={isThisRoomBusy} onClick={() => onGuestArrived(rr)} className="inline-flex min-h-11 w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-white hover:bg-success-700 transition disabled:opacity-50">
+          <LogIn size={14} /> Guest arrived / Restore
+        </button>
       );
     } else if (roomStatus === 'CheckedIn') {
       roomActionBtn = (

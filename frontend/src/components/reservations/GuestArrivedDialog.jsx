@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Loader2, UserCheck, X } from 'lucide-react';
 import api from '../../lib/axios';
+import { getReservationById } from '../../api/reservations';
 
 const REASONS = ['Guest arrived late', 'Marked as no-show by mistake'];
 const roomName = (stay) => `Room ${stay.room?.roomNumber || stay.roomNumberSnapshot || '—'}`;
@@ -11,8 +12,9 @@ const roomName = (stay) => `Room ${stay.room?.roomNumber || stay.roomNumberSnaps
 // A room marked as no-show whose guest turns up (or that was marked by mistake): put it back as
 // reserved, in the same room if still free, otherwise in a free room of the same type. Check-in is
 // the normal next step; charges and payments are never changed here.
-export default function GuestArrivedDialog({ reservation: res, stay, onClose }) {
+export default function GuestArrivedDialog({ reservation: res, stay, onClose, onCheckIn }) {
   const client = useQueryClient();
+  const [restored, setRestored] = useState(null); // room number after a successful restore
   const [reason, setReason] = useState(REASONS[0]);
   const [targetRoomId, setTargetRoomId] = useState(null);
   const send = async (preview, extra = {}) => (await api.post(`/reservations/${res.reservationId}/corrections`, {
@@ -26,14 +28,32 @@ export default function GuestArrivedDialog({ reservation: res, stay, onClose }) 
     onSuccess: () => {
       for (const key of ['reservations', 'reservation', 'rooms', 'availability', 'calendarReservations', 'dashboardGlance', 'reservationStats', 'owedAfterCheckout', 'reservationCorrections']) client.invalidateQueries({ queryKey: [key] });
       const moved = preview?.alternatives?.find((room) => room.roomId === targetRoomId);
-      toast.success(`${moved ? `Room ${moved.roomNumber}` : roomName(stay)} is reserved for the guest again. Check them in when ready.`);
-      onClose();
+      setRestored(moved ? `Room ${moved.roomNumber}` : roomName(stay));
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Could not restore this room.'),
   });
   const needsRoom = preview?.needsRoom;
   const blocked = check.isError || (needsRoom && !preview.alternatives?.length);
   const ready = preview && !blocked && (!needsRoom || targetRoomId);
+  // Check-in is the normal next step but never automatic: load the restored room fresh and hand it to the page's own check-in.
+  const startCheckIn = useMutation({
+    mutationFn: async () => (await getReservationById(res.reservationId)).data.data,
+    onSuccess: (fresh) => { const room = fresh.reservationRooms?.find((item) => item.reservationRoomId === stay.reservationRoomId); onClose(); if (room?.status === 'Reserved') onCheckIn(room, fresh); },
+    onError: () => toast.error('Could not open check-in. Use Check in on the room.'),
+  });
+
+  if (restored) return (
+    <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="guest-arrived-title">
+      <div className="w-full max-w-md rounded-xl border border-border bg-surface p-5 shadow-xl">
+        <h2 id="guest-arrived-title" className="flex items-center gap-2 text-lg font-bold text-text"><UserCheck size={20} className="text-success-600" /> {restored} restored</h2>
+        <p className="mt-2 text-sm text-text-muted">The room is reserved again. The guest can now be checked in.</p>
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <button type="button" onClick={onClose} className="min-h-11 rounded-lg border border-border px-4 text-sm text-text">Done</button>
+          {onCheckIn && <button type="button" autoFocus disabled={startCheckIn.isPending} onClick={() => startCheckIn.mutate()} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-success-600 px-4 text-sm font-semibold text-white disabled:opacity-50">{startCheckIn.isPending && <Loader2 size={16} className="animate-spin" />} Continue to Check in</button>}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="guest-arrived-title">

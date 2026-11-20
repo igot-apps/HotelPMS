@@ -30,6 +30,7 @@ import BulkRoomsDialog from '../components/reservations/BulkRoomsDialog';
 import { bookingStatusLabel, roomStatusLabel, roomStatusTone } from '../lib/statusLabels';
 import { expectedCheckoutAt, formatDuration, formatTime } from '../lib/stayTiming';
 import NoShowDialog, { noShowRooms } from '../components/reservations/NoShowDialog';
+import GuestArrivedDialog from '../components/reservations/GuestArrivedDialog';
 
 // The hotel's calendar day as YYYY-MM-DD, using the browser's local time.
 import { hotelToday } from '../lib/period';
@@ -135,6 +136,7 @@ export default function ReservationsPage() {
   const [expandedId, setExpandedId] = useState(null);
   const [pendingConfirm, setPendingConfirm] = useState(null);
   const [noShowFor, setNoShowFor] = useState(null);
+  const [arrivedFor, setArrivedFor] = useState(null); // { reservation, stay } for a no-show room whose guest turned up
   const [earlyCheckout, setEarlyCheckout] = useState(null);
   const [extendRoom, setExtendRoom] = useState(null);
   const [shortenStay, setShortenStay] = useState(null);
@@ -516,6 +518,7 @@ export default function ReservationsPage() {
             onCheckIn={room => setOccupantDialog({ room, reservation: res, mode: 'checkin' })}
             canMarkNoShow={noShowRooms(res).some((stay) => stay.reservationRoomId === rr.reservationRoomId)}
             onMarkNoShow={(room) => setNoShowFor({ reservation: res, stayId: room.reservationRoomId })}
+            onGuestArrived={['Confirmed', 'InHouse', 'Completed'].includes(res.status) ? (room) => setArrivedFor({ reservation: res, stay: room }) : undefined}
             onCheckOut={(room) => startCheckOut(room, res)}
             onExtend={(room) => setExtendRoom(room)}
             onShorten={(room) => setShortenStay({ room, reservationId: res.reservationId })}
@@ -1007,6 +1010,7 @@ export default function ReservationsPage() {
         />
       )}
       {noShowFor && <NoShowDialog reservation={noShowFor.reservation} stayId={noShowFor.stayId} onClose={() => setNoShowFor(null)} />}
+      {arrivedFor && <GuestArrivedDialog reservation={arrivedFor.reservation} stay={arrivedFor.stay} onClose={() => setArrivedFor(null)} onCheckIn={(room, fresh) => setOccupantDialog({ room, reservation: fresh, mode: 'checkin' })} />}
       <ConfirmDialog
         open={!!pendingConfirm}
         title={pendingConfirm?.title}
