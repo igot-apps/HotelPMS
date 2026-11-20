@@ -1,5 +1,3 @@
-import { serverNow } from './serverClock.js';
-
 // Display helpers for stay timing. Nights are calendar nights; these only describe elapsed time.
 
 export function formatDuration(ms) {
@@ -39,14 +37,6 @@ function hotelWallTime(day, hour, minute, timeZone, second = 0) {
   }
 }
 
-// Same rule as the server: a guest may still arrive until 6 hours after check-in time on the
-// arrival day (hotel time zone); only then can they be marked as a no-show.
-export const NO_SHOW_GRACE_HOURS = 6;
-export function noShowAllowedFrom(checkInDate, checkInTime = '14:00', timeZone = HOTEL_TIME_ZONE) {
-  const [hour, minute] = /^\d{2}:\d{2}$/.test(checkInTime || '') ? checkInTime.split(':').map(Number) : [14, 0];
-  return new Date(hotelWallTime(String(checkInDate).slice(0, 10), hour, minute, timeZone).getTime() + NO_SHOW_GRACE_HOURS * 3600000);
-}
-
 // datetime-local values in hotel time (backdated departures, refund returns), so a computer set to
 // another time zone still records the moment staff meant.
 export function toHotelInput(date, timeZone = HOTEL_TIME_ZONE, withSeconds = false) {
@@ -67,10 +57,3 @@ export function formatHotelTime(date, timeZone) {
   try { return `${date.toLocaleTimeString('en-GB', options)} on ${date.toLocaleDateString('en-GB', dayOptions)}`; } catch { return date.toLocaleString(); }
 }
 
-// Rooms of a booking that can be marked as no-show now: still reserved and past the no-show time
-// (hotel check-in time + 6 hours on the arrival day, hotel time zone). Same rule as the server.
-export function noShowRooms(res, now = serverNow()?.getTime()) {
-  if (now == null || !['Confirmed', 'InHouse'].includes(res?.status)) return [];
-  return (res.reservationRooms || []).filter((stay) => stay.status === 'Reserved'
-    && now >= noShowAllowedFrom(stay.checkInDate || res.checkInDate, res.property?.checkInTime, res.property?.timezone).getTime());
-}

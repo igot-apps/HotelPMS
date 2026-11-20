@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import * as reservationService from './reservation.service';
-import { markRoomsNoShow, updateOccupantDetails } from './recovery.service';
+import { updateOccupantDetails } from './recovery.service';
 import { AuthRequest } from '../../shared/middleware/auth.middleware';
 
 // 🌟 FIX: Return string (UUID) instead of number
@@ -296,31 +296,6 @@ export const updateGuestPresence = async (req: AuthRequest, res: Response) => {
       expectedReturnAt
     );
     return res.status(200).json({ success: true, data: updatedRoom, message: 'Guest presence updated.' });
-  } catch (error: any) {
-    return res.status(400).json({ success: false, message: error.message });
-  }
-};
-
-export const markAsNoShow = async (req: AuthRequest, res: Response) => {
-  try {
-    const reservationId = req.params.id as string;
-    // Selected rooms only (some guests of the booking arrived, or not all rooms are missing).
-    if (Array.isArray(req.body?.stayIds)) {
-      const result = await markRoomsNoShow(reservationId, { userId: req.user!.userId, propertyId: req.user!.propertyId } as any, req.body.stayIds, req.body?.reason, req.body?.owingReason);
-      return res.status(200).json({ success: true, data: result, message: `${result.rooms.join(', ')} marked as no-show and released.` });
-    }
-    const updated = await reservationService.markAsNoShow(
-      reservationId,
-      req.user?.propertyId,
-      req.user?.userId,
-      req.body?.reason,
-    );
-
-    return res.status(200).json({
-      success: true,
-      data: updated,
-      message: 'Reservation marked as no-show. Rooms released back to inventory.',
-    });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });
   }

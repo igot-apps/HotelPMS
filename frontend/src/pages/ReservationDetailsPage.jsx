@@ -23,8 +23,6 @@ import ReceiptModal from '../components/reservations/ReceiptModal';
 import ThermalReceiptModal from '../components/reservations/ThermalReceiptModal';
 import { formatPaymentMethod } from '../utils/payment';
 import ReservationRecoveryPanel from '../components/reservations/ReservationRecoveryPanel';
-import GuestArrivedDialog from '../components/reservations/GuestArrivedDialog';
-import NoShowDialog, { noShowRooms } from '../components/reservations/NoShowDialog';
 import RefundPanel from '../components/reservations/RefundPanel';
 import { useAuthStore } from '../store/authStore';
 
@@ -44,8 +42,6 @@ export default function ReservationDetailsPage() {
 
   // States for Modals
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [arrivedStay, setArrivedStay] = useState(null);
-  const [noShowStayId, setNoShowStayId] = useState(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
   const [isThermalReceiptOpen, setIsThermalReceiptOpen] = useState(false);
@@ -211,15 +207,10 @@ export default function ReservationDetailsPage() {
                 <p className="break-words text-sm text-text"><span className="text-text-muted">Occupant: </span>{rr.occupantName || 'Not assigned'}{rr.occupantPhone ? ` · ${rr.occupantPhone}` : ''}</p>
                 {rr.status === 'Reserved' && rr.room?.operationalStatus === 'Occupied' && <p className="mt-1 text-xs font-semibold text-danger-700">Room {rr.room.roomNumber} still has a guest checked in. Check them out (or verify their departure) first, or move this guest to another room.</p>}
                 {rr.status === 'Reserved' && rr.room?.housekeepingStatus && !['Clean', 'Inspected'].includes(rr.room.housekeepingStatus) && <p className="mt-1 text-xs font-semibold text-warning-700">Room needs cleaning before check-in</p>}
-                {rr.status === 'NoShow' && ['Confirmed', 'InHouse', 'Completed'].includes(resData.status) && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button type="button" onClick={() => setArrivedStay(rr)} className={`${btn} bg-success-600 text-white hover:bg-success-700`}>Guest arrived · restore room</button>
-                  </div>
-                )}
+                {rr.status === 'NoShow' && <p className="mt-1 text-xs font-semibold text-orange-700">Expired: the guest did not arrive before the checkout date. Create a new booking if they come.</p>}
                 {(canCheckIn || inRoom || (active && rr.status === 'Reserved')) && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {canCheckIn && <Link to={roomLink('checkin')} className={`${btn} bg-success-600 text-white hover:bg-success-700`}>Check in</Link>}
-                    {noShowRooms(resData).some((stay) => stay.reservationRoomId === rr.reservationRoomId) && <button type="button" onClick={() => setNoShowStayId(rr.reservationRoomId)} className={`${btn} border border-orange-200 bg-surface text-orange-700 hover:bg-orange-50`}>Mark no-show</button>}
                     {inRoom && <Link to={roomLink('checkout')} className={`${btn} bg-primary-600 text-white hover:bg-primary-700`}>Check out</Link>}
                     {inRoom && <Link to={roomLink('extend')} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Extend</Link>}
                     {inRoom && <Link to={roomLink('shorten')} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Shorten</Link>}
@@ -230,8 +221,6 @@ export default function ReservationDetailsPage() {
             );
           })}
         </ul>
-        {arrivedStay && <GuestArrivedDialog reservation={resData} stay={arrivedStay} onClose={() => setArrivedStay(null)} onCheckIn={(room) => navigate(`${bookingLink(resData, 'checkin', room.reservationRoomId)}&back=booking`)} />}
-        {noShowStayId && <NoShowDialog reservation={resData} stayId={noShowStayId} onClose={() => setNoShowStayId(null)} />}
         <div className="mt-4 border-t border-border pt-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">Whole booking</p>
           <div className="grid gap-2 sm:grid-cols-3">

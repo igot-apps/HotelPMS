@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { _resetForTests, deviceClockOffset, recordServerTime, serverNow, setResync } from './serverClock.js';
 import { hotelToday } from './period.js';
-import { expectedCheckoutAt, fromHotelInput, noShowAllowedFrom, noShowRooms, toHotelInput } from './stayTiming.js';
+import { expectedCheckoutAt, fromHotelInput, toHotelInput } from './stayTiming.js';
 
 const H = 3600000;
 const SERVER = Date.UTC(2026, 10, 20, 21, 0, 0); // 21:00 Ghana (UTC+0), 20 Nov
@@ -72,18 +72,8 @@ test('Ghana midnight rollover follows server time, not the PC', () => {
   assert.equal(hotelToday(), '2026-11-21');
 });
 
-test('no-show eligibility and late checkout use hotel time, whatever the PC zone', () => {
-  // Arrival 20 Nov, check-in 14:00 Accra -> no-show from 20:00 Accra (UTC 20:00)
-  assert.equal(noShowAllowedFrom('2026-11-20', '14:00').toISOString(), '2026-11-20T20:00:00.000Z');
+test('late checkout uses hotel time, whatever the PC zone', () => {
   assert.equal(expectedCheckoutAt('2026-11-21', '11:00').toISOString(), '2026-11-21T11:00:00.000Z');
-  const res = { status: 'InHouse', property: { checkInTime: '14:00', timezone: 'Africa/Accra' }, reservationRooms: [
-    { reservationRoomId: 1, status: 'Reserved', checkInDate: '2026-11-20' },
-    { reservationRoomId: 2, status: 'CheckedIn', checkInDate: '2026-11-20' },
-    { reservationRoomId: 3, status: 'Reserved', checkInDate: '2026-11-21' },
-  ] };
-  assert.deepEqual(noShowRooms(res, Date.UTC(2026, 10, 20, 19, 59)).map((r) => r.reservationRoomId), []);
-  assert.deepEqual(noShowRooms(res, Date.UTC(2026, 10, 20, 20, 0)).map((r) => r.reservationRoomId), [1]);
-  assert.deepEqual(noShowRooms(res, null), [], 'unknown server time: nothing eligible');
 });
 
 test('departure and refund times are entered and sent in hotel time', () => {

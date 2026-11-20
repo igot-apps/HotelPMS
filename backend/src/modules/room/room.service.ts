@@ -1,6 +1,7 @@
 import * as roomRepository from './room.repository';
 import { prisma } from '../../shared/utils/prisma';
 import { hotelDate } from '../reports/daily-overview.service';
+import { expireUnarrivedStays } from '../reservation/recovery.service';
 
 
 
@@ -20,6 +21,7 @@ export const getRooms = async (
   page: number = 1,
   limit: number = 10
 ) => {
+  if (propertyId) await expireUnarrivedStays(propertyId);
   const result: any = await roomRepository.findRooms(
     propertyId,
     roomTypeId,

@@ -1,4 +1,3 @@
-import { noShowAllowedFrom } from './stay-timing';
 import * as reservationRepository from './reservation.repository';
 import * as recovery from './recovery.service';
 
@@ -19,6 +18,7 @@ export const getReservations = async (
   page: number = 1,
   limit: number = 10
 ) => {
+  if (filters.propertyId) await recovery.expireUnarrivedStays(filters.propertyId);
   const fromDate = filters.fromDate ? new Date(filters.fromDate) : undefined;
   const toDate = filters.toDate ? new Date(filters.toDate) : undefined;
   
@@ -138,43 +138,6 @@ export const updateGuestPresence = async (
     propertyId,
     expectedReturn
   );
-};
-
-export const markAsNoShow = async (reservationId: string, userPropertyId?: number, actorUserId?: number, reason?: unknown) => {
-  const reservation = await reservationRepository.findReservationById(reservationId);
-  if (!reservation) throw new Error('Reservation not found');
-
-  if (userPropertyId && reservation.propertyId !== userPropertyId) {
-    throw new Error('You do not have access to this reservation');
-  }
-
-  if (reservation.status !== 'Confirmed') {
-    throw new Error(`Cannot mark as no-show. Reservation is currently "${reservation.status}". Only "Confirmed" reservations can be marked as no-show.`);
-  }
-
-  const checkIn = new Date(reservation.checkInDate);
-  if (Number.isNaN(checkIn.getTime())) throw new Error('The reservation has an invalid arrival date.');
-  // A guest may still arrive later on their arrival day: allow it only some hours after the
-  // hotel's check-in time (hotel time zone), or any time after the arrival day.
-  const timeZone = reservation.property.timezone || 'Africa/Accra';
-  const allowedFrom = noShowAllowedFrom(checkIn, (reservation.property as any).checkInTime, timeZone);
-  if (Date.now() < allowedFrom.getTime()) {
-    const arrivalDate = checkIn.toISOString().slice(0, 10);
-    const time = new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(allowedFrom);
-    throw new Error(`The guest can still arrive. Mark them as a no-show from ${time} on ${arrivalDate} (hotel time).`);
-  }
-
-  const hasCheckedInRoom = reservation.reservationRooms.some(r => r.status === 'CheckedIn');
-  if (hasCheckedInRoom) {
-    throw new Error('Cannot mark as no-show. At least one room is already checked in.');
-  }
-  // A booking where any guest actually stayed is never a no-show as a whole: mark only the missing rooms.
-  if (reservation.reservationRooms.some((r: any) => r.actualCheckIn || r.status === 'CheckedOut')) {
-    throw new Error('Some guests of this reservation already stayed. Mark only the rooms whose guests did not arrive.');
-  }
-
-  const note = typeof reason === 'string' ? reason.trim().replace(/\s+/g, ' ').slice(0, 300) : '';
-  return reservationRepository.markReservationAsNoShow(reservationId, actorUserId, note);
 };
 
 // ============================================================

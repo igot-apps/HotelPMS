@@ -57,5 +57,3 @@ export const updateGuestPresence = (reservationRoomId, action, expectedReturnAt)
   api.patch(`/reservations/rooms/${reservationRoomId}/presence`, { action, expectedReturnAt });
 
    // Whole booking (no stayIds) or only the selected rooms (stayIds); reason is optional.
-   export const markAsNoShow = (reservationId, body = {}) =>
-  api.patch(`/reservations/${reservationId}/no-show`, body);

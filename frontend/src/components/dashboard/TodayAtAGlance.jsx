@@ -9,7 +9,6 @@ import useCheckoutAlerts from '../../hooks/useCheckoutAlerts';
 import { formatDuration, formatTime } from '../../lib/stayTiming';
 import { bookingLink } from '../../lib/bookingLink';
 import TakePaymentDialog from '../reservations/TakePaymentDialog';
-import NoShowDialog from '../reservations/NoShowDialog';
 import { updateGuestPresence } from '../../api/reservations';
 import { useAuthStore } from '../../store/authStore';
 import { matchesQuery } from '../../lib/matchesQuery';
@@ -60,21 +59,15 @@ export default function TodayAtAGlance() {
   if (isError || !data) return <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Could not load today's figures. They refresh every minute.</p>;
 
   const overdue = (alerts.data?.alerts || []).filter((alert) => alert.state === 'overdue');
-  // One no-show decision per booking, even if it holds several rooms.
-  const missed = Object.values((data.arrivals.missed || []).reduce((byBooking, stay) => {
-    const current = byBooking[stay.reservationId];
-    byBooking[stay.reservationId] = current ? { ...current, rooms: [...current.rooms, stay.roomNumber], stays: [...current.stays, stay] } : { ...stay, rooms: [stay.roomNumber], stays: [stay] };
-    return byBooking;
-  }, {}));
   // Arrivals are counted per booking (one party at the desk); the room total is shown alongside.
-  const arrivingStays = [...data.arrivals.waiting, ...(data.arrivals.missed || [])];
+  const arrivingStays = data.arrivals.waiting;
   const arrivingBookings = new Set(arrivingStays.map((stay) => stay.reservationId)).size;
   const arrivedTodayRooms = data.arrivals.arrivedToday.length;
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const attention = data.rooms.needsCleaning.length + data.rooms.maintenance.length;
   const tiles = [
     { key: 'overdue', icon: AlarmClock, tone: overdue.length ? 'danger' : 'neutral', label: 'Overdue checkouts', value: overdue.length, hint: overdue.length ? `Longest: ${formatDuration(Math.max(...overdue.map((a) => a.minutesLate)) * 60000)} late` : `Checkout time ${data.checkOutTime}` },
-    { key: 'arrivals', icon: LogIn, tone: missed.length ? 'warning' : 'primary', label: 'Expected arrivals', value: arrivingBookings, hint: [`Awaiting check-in: ${plural(arrivingBookings, 'reservation')} · ${plural(arrivingStays.length, 'room')}`, missed.length ? `${missed.length} past no-show time` : '', `Checked in today: ${plural(arrivedTodayRooms, 'room')}`, `${(data.arrivals.upcoming || []).length} in next 7 days`, data.arrivals.unpaidCount ? `${data.arrivals.unpaidCount} unpaid` : ''].filter(Boolean).join(' · ') },
+    { key: 'arrivals', icon: LogIn, tone: 'primary', label: 'Expected arrivals', value: arrivingBookings, hint: [`Awaiting check-in: ${plural(arrivingBookings, 'reservation')} · ${plural(arrivingStays.length, 'room')}`, `Checked in today: ${plural(arrivedTodayRooms, 'room')}`, `${(data.arrivals.upcoming || []).length} in next 7 days`, data.arrivals.unpaidCount ? `${data.arrivals.unpaidCount} unpaid` : ''].filter(Boolean).join(' · ') },
     { key: 'departures', icon: LogOut, tone: 'warning', label: 'Departures to check out', value: data.departures.waiting.length, hint: `Due today${overdue.length ? ` · includes ${overdue.length} overdue` : ''} · ${data.departures.departedToday.length} checked out today` },
     { key: 'inHouse', icon: Hotel, tone: 'primary', label: 'Guests in house', value: data.inHouse.length, hint: `${data.rooms.occupiedTonight} of ${data.rooms.total} rooms taken tonight` },
     { key: 'free', icon: BedDouble, tone: 'success', label: 'Rooms free tonight', value: data.rooms.freeTonight.length, hint: `${data.rooms.occupancyPercent}% occupancy` },
@@ -117,7 +110,7 @@ export default function TodayAtAGlance() {
             </div>
           )}>
           {open === 'overdue' && <OverdueDetail rows={overdue} query={query} />}
-          {open === 'arrivals' && <ArrivalsDetail data={data} missed={missed} query={query} />}
+          {open === 'arrivals' && <ArrivalsDetail data={data} query={query} />}
           {open === 'departures' && <DeparturesDetail data={data} query={query} />}
           {open === 'inHouse' && <InHouseDetail rows={data.inHouse} query={query} />}
           {open === 'free' && <FreeDetail rooms={data.rooms.freeTonight} />}
@@ -307,41 +300,18 @@ function groupByReservation(stays) {
 
 
 
-function ArrivalsDetail({ data, missed: missedUnsorted, query = '' }) {
-  const [noShow, setNoShow] = useState(null);
-  const missed = useSorted(missedUnsorted, 'checkInDate').filter((row) => matchesQuery(row, query));
+function ArrivalsDetail({ data, query = '' }) {
   const todayGrouped = groupByReservation(data.arrivals.waiting).filter((row) => matchesQuery(row, query));
   const upcomingGrouped = groupByReservation(data.arrivals.upcoming || []).filter((row) => matchesQuery(row, query));
   const arrivedGrouped = groupByReservation(data.arrivals.arrivedToday).filter((row) => matchesQuery(row, query));
   const searching = query.trim().length > 0;
-  const noMatches = searching && !missed.length && !todayGrouped.length && !upcomingGrouped.length && !arrivedGrouped.length;
+  const noMatches = searching && !todayGrouped.length && !upcomingGrouped.length && !arrivedGrouped.length;
 
   if (noMatches) return <p className="rounded-lg border border-dashed border-border p-3 text-sm text-text-muted">No expected or arrived bookings match “{query.trim()}”.</p>;
 
   return (
     <>
-      {noShow && <NoShowDialog reservationId={noShow.reservationId} stayId={noShow.stayId} onClose={() => setNoShow(null)} />}
-      {missed.length > 0 && (
-        <Group title="Still expected — past no-show time" count={missed.length}>
-          {missed.map((stay) => (
-            <li key={stay.reservationId} className="rounded-lg border border-warning-200 bg-warning-50/40 p-3">
-              {stay.confirmationCode && <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{stay.confirmationCode}</p>}
-              <p className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{stay.guestName}</span><span className="shrink-0 rounded-md bg-warning-100 px-2 py-0.5 text-xs font-bold text-warning-800">{stay.daysMissed ? `${stay.daysMissed} day${stay.daysMissed === 1 ? '' : 's'} missed` : 'Not arrived'}</span></p>
-              <PhoneLine phone={stay.phone} />
-              <p className="mt-0.5 text-sm text-text-muted">Room {stay.rooms.filter(Boolean).join(', ') || 'unassigned'} · arrival {shortDate(stay.checkInDate)} · {stay.nightsLeft} night{stay.nightsLeft === 1 ? '' : 's'} still held</p>
-              <p className="text-sm text-text-muted">{stay.amountPaid > 0 ? `Paid ${cash(stay.amountPaid)}` : 'Nothing paid'}{stay.source === 'Website' ? ' · online booking' : ''}</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {/* One button per room: each marks only its own room (same dialog and rules as the room cards). */}
-                {stay.stays.map((room) => (
-                  <button key={room.reservationRoomId} type="button" onClick={() => setNoShow({ reservationId: stay.reservationId, stayId: room.reservationRoomId })} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-orange-200 bg-surface px-3 text-sm font-semibold text-orange-700 hover:bg-orange-50"><AlertTriangle size={16} /> Mark Room {room.roomNumber || '—'} no-show</button>
-                ))}
-                <Link to={withBack(reservationLink(stay), 'arrivals')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white hover:bg-primary-700"><Eye size={16} /> View reservation</Link>
-              </div>
-            </li>
-          ))}
-        </Group>
-      )}
-      <Group title="Expected today" count={todayGrouped.length} empty={missed.length ? "No other arrivals due today." : "Everyone expected today has arrived."}>
+      <Group title="Expected today" count={todayGrouped.length} empty="Everyone expected today has arrived.">
         {todayGrouped.map((res) => (
           <li key={res.reservationId} className="rounded-lg border border-border p-3">
             {res.confirmationCode && <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{res.confirmationCode}</p>}

@@ -12,7 +12,6 @@ import {
   updateReservationRoomStatus,
   extendReservationRoom,
   updateOccupantName,
-  markAsNoShow // 🌟 NEW: Import for No Show action
 } from '../api/reservations';
 import { recordPayment } from '../api/payments';
 import { useAuthStore } from '../store/authStore';
@@ -29,8 +28,6 @@ import CheckoutOwingDialog from '../components/reservations/CheckoutOwingDialog'
 import BulkRoomsDialog from '../components/reservations/BulkRoomsDialog';
 import { bookingStatusLabel, roomStatusLabel, roomStatusTone } from '../lib/statusLabels';
 import { expectedCheckoutAt, formatDuration, formatTime } from '../lib/stayTiming';
-import NoShowDialog, { noShowRooms } from '../components/reservations/NoShowDialog';
-import GuestArrivedDialog from '../components/reservations/GuestArrivedDialog';
 
 // The hotel's calendar day as YYYY-MM-DD, using the browser's local time.
 import { hotelToday } from '../lib/period';
@@ -117,11 +114,6 @@ function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', danger 
   );
 }
 
-// No Show only when it applies: a room of an active booking is still waiting past its no-show time
-// (hotel check-in time + 6 h, hotel time zone). The dialog lets staff pick which rooms; the server re-checks.
-// Rooms past their no-show time; each is marked from its own room card.
-const noShowCount = (res) => noShowRooms(res).length;
-const noShowHint = (res) => (noShowCount(res) ? ` · ${noShowCount(res)} not arrived` : '');
 
 const BACK_LABELS = { overdue: 'Overdue checkouts', arrivals: 'Arrivals to check in', departures: 'Departures to check out', inHouse: 'Guests in house', free: 'Rooms free tonight', collected: 'Collected today', unpaid: 'Owed by guests in house', owedAfter: 'Owed after checkout', attention: 'Needs attention', dashboard: 'the dashboard', booking: 'the booking details', rooms: 'Rooms & Inventory' };
 
@@ -139,8 +131,6 @@ export default function ReservationsPage() {
   const [paymentRecoveryReservation, setPaymentRecoveryReservation] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [pendingConfirm, setPendingConfirm] = useState(null);
-  const [noShowFor, setNoShowFor] = useState(null);
-  const [arrivedFor, setArrivedFor] = useState(null); // { reservation, stay } for a no-show room whose guest turned up
   const [earlyCheckout, setEarlyCheckout] = useState(null);
   const [extendRoom, setExtendRoom] = useState(null);
   const [shortenStay, setShortenStay] = useState(null);
@@ -311,21 +301,6 @@ export default function ReservationsPage() {
 
   const updatingOccupantId = updateOccupantMutation.isPending ? updateOccupantMutation.variables?.id : null;
 
-  // 🌟 No Show mutation
-  const noShowMutation = useMutation({
-    mutationFn: ({ id }) => markAsNoShow(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['reservations'] });
-      queryClient.invalidateQueries({ queryKey: ['rooms'] });
-      toast.success('Reservation marked as No Show. Rooms released.');
-      setPendingConfirm(null);
-    },
-    onError: (err) => {
-      toast.error(err.response?.data?.message || 'Failed to mark as No Show');
-      setPendingConfirm(null);
-    },
-  });
-
   const createMutation = useMutation({
     mutationFn: async (payload) => {
       return createWalkInBooking(payload, { createReservation, recordPayment });
@@ -372,15 +347,11 @@ export default function ReservationsPage() {
     setPendingConfirm({ kind: 'room', id: reservationRoomId, status: roomStatus, title, message, ...opts });
   };
 
-  // 🌟 Handle confirm - handles check-ins, extends, and no-shows
+  // 🌟 Handle confirm - handles check-ins and extends
   const handleConfirm = () => {
     if (!pendingConfirm) return;
     if (pendingConfirm.kind === 'reservation') {
-      if (pendingConfirm.action === 'noShow') {
-        noShowMutation.mutate({ id: pendingConfirm.id });
-      } else {
-        actionMutation.mutate({ id: pendingConfirm.id, action: pendingConfirm.action });
-      }
+      actionMutation.mutate({ id: pendingConfirm.id, action: pendingConfirm.action });
     } else {
       const payload = { 
         id: pendingConfirm.id, 
@@ -417,7 +388,7 @@ export default function ReservationsPage() {
   };
 
   const isConfirmLoading =
-    (pendingConfirm?.kind === 'reservation' && (actionMutation.isPending || noShowMutation.isPending)) ||
+    (pendingConfirm?.kind === 'reservation' && actionMutation.isPending) ||
     (pendingConfirm?.kind === 'room' && (roomActionMutation.isPending || extendStayMutation.isPending));
 
   const handleFilterChange = (key, value) => updateParams({ [key]: value, page: 1 });
@@ -521,9 +492,6 @@ export default function ReservationsPage() {
             isThisRoomBusy={activeRoomActionId === rr.reservationRoomId}
             isUpdatingOccupant={updatingOccupantId === rr.reservationRoomId}
             onCheckIn={room => setOccupantDialog({ room, reservation: res, mode: 'checkin' })}
-            canMarkNoShow={noShowRooms(res).some((stay) => stay.reservationRoomId === rr.reservationRoomId)}
-            onMarkNoShow={(room) => setNoShowFor({ reservation: res, stayId: room.reservationRoomId })}
-            onGuestArrived={['Confirmed', 'InHouse', 'Completed'].includes(res.status) ? (room) => setArrivedFor({ reservation: res, stay: room }) : undefined}
             onCheckOut={(room) => startCheckOut(room, res)}
             onExtend={(room) => setExtendRoom(room)}
             onShorten={(room) => setShortenStay({ room, reservationId: res.reservationId })}
@@ -590,7 +558,7 @@ export default function ReservationsPage() {
             <option value="InHouse">In house</option>
             <option value="Completed">Checked out</option>
             <option value="Cancelled">Cancelled</option>
-            <option value="NoShow">No-show</option>
+            <option value="NoShow">Expired</option>
           </select>
         </div>
         <div className={`${showMobileFilters ? 'grid' : 'hidden'} md:grid grid-cols-1 md:grid-cols-3 gap-3 pt-3 border-t border-border`}>
@@ -602,7 +570,7 @@ export default function ReservationsPage() {
               <option value="InHouse">In house</option>
               <option value="Completed">Checked out</option>
               <option value="Cancelled">Cancelled</option>
-              <option value="NoShow">No-show</option>
+              <option value="NoShow">Expired</option>
             </select>
           </div>
           <div>
@@ -682,7 +650,7 @@ export default function ReservationsPage() {
                 <div className="mt-2 flex gap-2">
                   {res.reservationRooms?.length > 0 && (
                     <button type="button" onClick={() => setExpandedId(isExpanded ? null : id)} aria-expanded={isExpanded} aria-controls={`mobile-rooms-${id}`} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50">
-                      {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />} {isExpanded ? 'Hide rooms' : `${res.reservationRooms.length === 1 ? 'View room' : `Manage ${res.reservationRooms.length} rooms`}${noShowHint(res)}`}
+                      {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />} {isExpanded ? 'Hide rooms' : `${res.reservationRooms.length === 1 ? 'View room' : `Manage ${res.reservationRooms.length} rooms`}`}
                     </button>
                   )}
                   {['Cancelled', 'Expired'].includes(res.status) && res.refundStatus === 'Pending' && permissions?.includes('CanCancelReservation') && (
@@ -696,7 +664,7 @@ export default function ReservationsPage() {
                   </Link>
                 </div>
 
-                {/* Always visible so staff don't have to look for it; it still asks for confirmation. No-show is marked per room on the room cards. */}
+                {/* Always visible so staff don't have to look for it; it still asks for confirmation. Rooms whose guest never arrives expire automatically on the checkout date. */}
                 {['Pending', 'Confirmed'].includes(res.status) && !res.reservationRooms?.some(stay => stay.status === 'CheckedIn') && (
                   <div className="mt-2 flex gap-2">
                     {['Pending', 'Confirmed'].includes(res.status) && !res.reservationRooms?.some(stay => stay.status === 'CheckedIn') && (
@@ -800,7 +768,7 @@ export default function ReservationsPage() {
                       aria-expanded={isExpanded} aria-controls={`desktop-rooms-${res.reservationId}`}
                       className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-border text-text hover:bg-secondary-50 transition"
                     >
-                      {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {isExpanded ? 'Hide rooms' : `${(res.reservationRooms?.length || 0) === 1 ? 'View room' : `Manage ${res.reservationRooms?.length || 0} rooms`}${noShowHint(res)}`}
+                      {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {isExpanded ? 'Hide rooms' : `${(res.reservationRooms?.length || 0) === 1 ? 'View room' : `Manage ${res.reservationRooms?.length || 0} rooms`}`}
                     </button>
                   );
                   if (res.status === 'Confirmed') {
@@ -1014,8 +982,6 @@ export default function ReservationsPage() {
           }}
         />
       )}
-      {noShowFor && <NoShowDialog reservation={noShowFor.reservation} stayId={noShowFor.stayId} onClose={() => setNoShowFor(null)} />}
-      {arrivedFor && <GuestArrivedDialog reservation={arrivedFor.reservation} stay={arrivedFor.stay} onClose={() => setArrivedFor(null)} onCheckIn={(room, fresh) => setOccupantDialog({ room, reservation: fresh, mode: 'checkin' })} />}
       <ConfirmDialog
         open={!!pendingConfirm}
         title={pendingConfirm?.title}

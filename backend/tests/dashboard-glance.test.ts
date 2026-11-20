@@ -6,6 +6,7 @@ const db: any = {
   payment: { findMany: mock() }, correctionRequest: { count: mock() },
 };
 jest.mock('../src/shared/utils/prisma', () => ({ get prisma() { return db; } }));
+jest.mock('../src/modules/reservation/recovery.service', () => ({ expireUnarrivedStays: async () => 0 }));
 import { getDashboardGlance } from '../src/modules/dashboard/glance.service';
 
 const day = (value: string) => new Date(`${value}T00:00:00.000Z`);
@@ -38,10 +39,11 @@ test('answers the front desk questions for today with the rows behind them', asy
   expect(glance.departures.waiting.map((s: any) => s.reservationRoomId)).toEqual([1]);
   expect(glance.departures.waiting[0]).toMatchObject({ minutesLate: 60, balanceDue: 200, nightsUsed: 3 });
   expect(glance.departures.departedToday).toHaveLength(1);
-  expect(glance.arrivals).toMatchObject({ unpaidCount: 1 });
-  expect(glance.arrivals.waiting.map((s: any) => s.reservationRoomId)).toEqual([3]);
-  expect(glance.arrivals.missed).toHaveLength(1);
-  expect(glance.arrivals.missed[0]).toMatchObject({ reservationId: 'E', daysMissed: 1, nightsLeft: 2, amountPaid: 150 });
+  expect(glance.arrivals).toMatchObject({ unpaidCount: 2 });
+  // A late arrival (E, due yesterday) stays expected until its checkout date; then it expires automatically.
+  expect(glance.arrivals.waiting.map((s: any) => s.reservationRoomId).sort()).toEqual([3, 5]);
+  expect(glance.arrivals.waiting.find((s: any) => s.reservationId === 'E')).toMatchObject({ late: true, daysMissed: 1, nightsLeft: 2, amountPaid: 150 });
+  expect(glance.arrivals).not.toHaveProperty('missed');
   expect(glance.arrivals.arrivedToday.map((s: any) => s.reservationRoomId)).toEqual([2]);
   expect(glance.rooms).toMatchObject({ total: 3, occupiedTonight: 2, occupancyPercent: 67 });
   expect(glance.rooms.freeTonight.map((r: any) => r.roomNumber)).toEqual(['103']);
@@ -63,10 +65,9 @@ test('hotel-wide collections (including online) are hidden from receptionists', 
   expect(manager.money.collectedAtDesk! + manager.money.collectedOnline!).toBe(120);
 });
 
-test('a same-day arrival only counts as missed after check-in time plus grace', async () => {
+test('arrivals stay expected all evening (no manual no-show cut-off)', async () => {
   const evening = await getDashboardGlance(3, 'Manager', new Date('2026-11-16T20:30:00Z'));
-  expect(evening.arrivals.missed.map((s: any) => s.reservationId).sort()).toEqual(['C', 'E']);
-  expect(evening.arrivals.waiting).toHaveLength(0);
+  expect(evening.arrivals.waiting.map((s: any) => s.reservationId).sort()).toEqual(['C', 'E']);
 });
 
 test('reports fully booked tonight and why guests cannot book online', async () => {

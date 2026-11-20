@@ -11,12 +11,10 @@ export default function ReservationRecoveryPanel({ reservation, embedded = false
   const userId = useAuthStore(state => state.user?.userId);
   const client = useQueryClient();
   const id = reservation.reservationId;
-  const [form, setForm] = useState({ action: initialAction ? initialAction : ['Cancelled', 'NoShow'].includes(reservation.status) ? 'restore' : reservation.reservationRooms?.some(stay => stay.status === 'CheckedIn') ? 'undo-checkin' : reservation.reservationRooms?.some(stay => stay.status === 'CheckedOut') ? 'undo-checkout' : 'correct-date', stayId: initialStayId ? String(initialStayId) : '', targetRoomId: '', paymentId: '', newAmount: '', newCheckOutDate: '', reason: '' });
+  const [form, setForm] = useState({ action: initialAction ? initialAction : reservation.status === 'Cancelled' ? 'restore' : reservation.reservationRooms?.some(stay => stay.status === 'CheckedIn') ? 'undo-checkin' : reservation.reservationRooms?.some(stay => stay.status === 'CheckedOut') ? 'undo-checkout' : 'correct-date', stayId: initialStayId ? String(initialStayId) : '', targetRoomId: '', paymentId: '', newAmount: '', newCheckOutDate: '', reason: '' });
   const [preview, setPreview] = useState(null);
   const [stayIds, setStayIds] = useState([]);
-  // Restore on an active booking = put back rooms marked as no-show (late arrival).
-  const roomRestore = form.action === 'restore' && !['Cancelled', 'NoShow'].includes(reservation.status);
-  const multiRoom = ['undo-checkin', 'undo-checkout', 'correct-date', 'credit-checkout'].includes(form.action) || roomRestore;
+  const multiRoom = ['undo-checkin', 'undo-checkout', 'correct-date', 'credit-checkout'].includes(form.action);
   const [pendingRequest, setPendingRequest] = useState(false);
   const access = useQuery({ queryKey: ['correctionAccess', userId], queryFn: async () => (await api.get('/reservations/correction-access')).data.data, refetchInterval: 15000 });
   const actionAccess = access.data?.find(item => item.action === form.action);
@@ -40,7 +38,7 @@ export default function ReservationRecoveryPanel({ reservation, embedded = false
   const change = event => { setPreview(null); if (event.target.name === 'action') setStayIds([]); setForm(current => ({ ...current, ...(event.target.name === 'action' ? { reason: '', stayId: '' } : {}), [event.target.name]: event.target.value })); };
   const inputClass = 'mt-1 min-h-11 min-w-0 max-w-full w-full rounded-lg border border-border bg-background p-2 text-sm text-text';
   const stays = reservation.reservationRooms || [];
-  const eligibleStays = stays.filter(stay => roomRestore ? stay.status === 'NoShow' : form.action === 'undo-checkout' ? stay.status === 'CheckedOut' : form.action === 'correct-date' ? ['Reserved', 'CheckedIn'].includes(stay.status) : stay.status === 'CheckedIn');
+  const eligibleStays = stays.filter(stay => form.action === 'undo-checkout' ? stay.status === 'CheckedOut' : form.action === 'correct-date' ? ['Reserved', 'CheckedIn'].includes(stay.status) : stay.status === 'CheckedIn');
   return <section className={embedded ? "min-w-0 space-y-4" : "min-w-0 space-y-4 rounded-xl border border-border bg-surface p-4 sm:p-6"}>
     {!embedded && <h3 className="text-lg font-bold text-text">Correct or undo actions</h3>}
     {access.isError && <p role="alert" className="text-sm text-danger-700">Could not load correction access. <button onClick={() => access.refetch()} className="min-h-11 underline">Try again</button></p>}
@@ -50,7 +48,7 @@ export default function ReservationRecoveryPanel({ reservation, embedded = false
       <label className="block text-sm text-text">Action<select name="action" value={form.action} onChange={change} className={inputClass} disabled={mutation.isPending}>
         <option value="undo-checkout">Undo mistaken checkout</option>
         <option value="undo-checkin">Undo mistaken check-in</option>
-        <option value="restore">Restore cancelled or no-show reservation or room</option>
+        <option value="restore">Restore cancelled reservation</option>
         <option value="correct-date">Correct departure date and charges</option>
         <option value="transfer">Transfer guest to another room</option>
         <option value="correct-payment">Correct or void a manual payment</option>
@@ -67,8 +65,7 @@ export default function ReservationRecoveryPanel({ reservation, embedded = false
       {form.action === 'correct-payment' && <><label className="block text-sm text-text">Original payment<select required name="paymentId" value={form.paymentId} onChange={change} className={inputClass}><option value="">Select completed manual payment</option>{(reservation.payments || []).filter(payment => payment.status === 'Completed' && !payment.gatewayReference?.startsWith('RES-')).map(payment => <option key={payment.paymentId} value={payment.paymentId}>#{payment.paymentId} — {payment.amount} GHS ({payment.paymentMethod})</option>)}</select></label><label className="block text-sm text-text">Correct amount (zero to void)<input required type="number" min="0" step="0.01" name="newAmount" value={form.newAmount} onChange={change} className={inputClass} /></label></>}
       <ReasonSelect key={form.action} action={form.action} value={form.reason} onChange={reason => { setPreview(null); setForm(current => ({ ...current, reason })); }} className={inputClass} disabled={mutation.isPending} />
       {preview && <CorrectionImpact preview={preview} />}
-      {preview?.needsRoom && <p role="status" className="rounded-lg border border-border bg-secondary-50 p-3 text-sm text-text">To give the guest another room, close this and use <strong>Guest arrived · restore room</strong> on the room in Rooms in this booking.</p>}
-      <div className="flex flex-wrap gap-2"><button disabled={Boolean(preview && (!canApply || preview.needsRoom))} className="min-h-11 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{mutation.isPending ? 'Checking…' : preview ? canApply ? 'Confirm correction' : 'Manager only' : 'Preview correction'}</button>{preview && <button type="button" onClick={() => setPreview(null)} className="min-h-11 rounded-lg border border-border px-4 py-2 text-sm">Back to edit</button>}</div>
+      <div className="flex flex-wrap gap-2"><button disabled={Boolean(preview && !canApply)} className="min-h-11 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{mutation.isPending ? 'Checking…' : preview ? canApply ? 'Confirm correction' : 'Manager only' : 'Preview correction'}</button>{preview && <button type="button" onClick={() => setPreview(null)} className="min-h-11 rounded-lg border border-border px-4 py-2 text-sm">Back to edit</button>}</div>
       </fieldset>
     </form>
     <CorrectionRequests reservationId={id} onPendingChange={setPendingRequest} />

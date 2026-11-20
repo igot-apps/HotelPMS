@@ -1,7 +1,8 @@
 import { prisma } from '../../shared/utils/prisma';
 import { getSubscriptionState, subscriptionFields } from '../payment/subscription-state';
 import { dayBounds, hotelDate } from '../reports/daily-overview.service';
-import { checkoutDueAt, minutesLate, noShowAllowedFrom } from '../reservation/stay-timing';
+import { checkoutDueAt, minutesLate } from '../reservation/stay-timing';
+import { expireUnarrivedStays } from '../reservation/recovery.service';
 
 const DAY = 86_400_000;
 const money = (value: unknown) => Math.round(Number(value || 0) * 100) / 100;
@@ -12,6 +13,7 @@ const balanceOf = (res: any) => Math.max(0, money(Number(res.totalAmount || 0) -
 
 // The front desk's key questions for today, each with the rows behind the number.
 export async function getDashboardGlance(propertyId: number, role: string, now = new Date()) {
+  await expireUnarrivedStays(propertyId);
   const property = await prisma.property.findUnique({ where: { propertyId }, select: { timezone: true, checkOutTime: true, checkInTime: true, isOnlineBookingEnabled: true, isActive: true, status: true, ...subscriptionFields } });
   if (!property) throw new Error('Hotel not found.');
   const timeZone = property.timezone || 'Africa/Accra';
@@ -55,14 +57,12 @@ export async function getDashboardGlance(propertyId: number, role: string, now =
     return { ...row(stay), nightsUsed: Math.min(nights(stay.checkInDate, today), nights(stay.checkInDate, stay.checkOutDate)), expectedCheckoutAt: dueAt, minutesLate: minutesLate(dueAt, now) };
   });
   const arrivalsWaiting = stays.filter(s => s.status === 'Reserved' && s.checkInDate < tomorrow).map(stay => {
-    // Past the no-show cut-off (arrival day after check-in time + grace, or a later day): likely a no-show.
-    const noShowFrom = noShowAllowedFrom(stay.checkInDate, property.checkInTime, timeZone);
-    return { ...row(stay), late: stay.checkInDate < today, missed: now >= noShowFrom, noShowFrom, amountPaid: money(stay.reservation.amountPaid), daysMissed: nights(stay.checkInDate, today), nightsLeft: nights(stay.checkInDate < today ? today : stay.checkInDate, stay.checkOutDate) };
+    // A late arrival can still check in until the checkout date; after that the room expires automatically.
+    return { ...row(stay), late: stay.checkInDate < today, amountPaid: money(stay.reservation.amountPaid), daysMissed: nights(stay.checkInDate, today), nightsLeft: nights(stay.checkInDate < today ? today : stay.checkInDate, stay.checkOutDate) };
   });
-  const missedArrivals = arrivalsWaiting.filter(stay => stay.missed);
   // Expected over the next 7 days (not today), soonest first.
   const upcoming = stays.filter(s => s.status === 'Reserved' && s.checkInDate >= tomorrow).map(row).sort((a, b) => +new Date(a.checkInDate) - +new Date(b.checkInDate));
-  const expectedArrivals = arrivalsWaiting.filter(stay => !stay.missed);
+  const expectedArrivals = arrivalsWaiting;
   const arrivedToday = stays.filter(s => s.status === 'CheckedIn' && s.actualCheckIn && s.actualCheckIn >= start && s.actualCheckIn < end).map(row);
   const departuresWaiting = inHouse.filter(stay => new Date(stay.checkOutDate) <= today);
   const departedToday = stays.filter(s => s.status === 'CheckedOut').map(row);
@@ -84,7 +84,7 @@ export async function getDashboardGlance(propertyId: number, role: string, now =
 
   return {
     date, timeZone, generatedAt: now, checkOutTime: property.checkOutTime || '11:00',
-    arrivals: { waiting: expectedArrivals, missed: missedArrivals, arrivedToday, upcoming, unpaidCount: expectedArrivals.filter(stay => stay.balanceDue > 0).length },
+    arrivals: { waiting: expectedArrivals, arrivedToday, upcoming, unpaidCount: expectedArrivals.filter(stay => stay.balanceDue > 0).length },
     departures: { waiting: departuresWaiting, departedToday },
     inHouse,
     onlineBlocker,

@@ -59,9 +59,3 @@ export function onlineBookableRoom(from: Date, to: Date, timeZone = 'Africa/Accr
   return { isOnlineBookable: true, operationalStatus: { not: 'Maintenance' }, reservationRooms: { none: overdue ? { OR: [overlapping, overdue] } : overlapping } };
 }
 
-// A guest can still arrive on their arrival day; only call them a no-show this many hours
-// after the hotel's check-in time (e.g. 14:00 + 6 h = 20:00), or any time after that day.
-export const NO_SHOW_GRACE_HOURS = 6;
-export function noShowAllowedFrom(checkInDate: Date, checkInTime: string | null | undefined, timeZone: string) {
-  return new Date(hotelWallTime(dateOnly(checkInDate), checkInTime || '14:00', timeZone).getTime() + NO_SHOW_GRACE_HOURS * 3_600_000);
-}

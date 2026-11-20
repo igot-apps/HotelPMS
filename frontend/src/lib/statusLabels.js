@@ -1,6 +1,6 @@
 // Plain-language labels for booking and room statuses (the stored values stay unchanged).
-const BOOKING = { Pending: 'Awaiting payment', Confirmed: 'Confirmed', InHouse: 'In house', Completed: 'Checked out', Cancelled: 'Cancelled', Expired: 'Expired', NoShow: 'No-show' };
-const ROOM = { Reserved: 'Reserved', CheckedIn: 'Checked in', CheckedOut: 'Checked out', Cancelled: 'Cancelled', NoShow: 'No-show' };
+const BOOKING = { Pending: 'Awaiting payment', Confirmed: 'Confirmed', InHouse: 'In house', Completed: 'Checked out', Cancelled: 'Cancelled', Expired: 'Expired', NoShow: 'Expired' };
+const ROOM = { Reserved: 'Reserved', CheckedIn: 'Checked in', CheckedOut: 'Checked out', Cancelled: 'Cancelled', NoShow: 'Expired' };
 
 export const bookingStatusLabel = (status) => BOOKING[status] || status;
 export const roomStatusLabel = (status) => ROOM[status] || status;

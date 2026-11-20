@@ -10,9 +10,6 @@ export default function RoomCard({
   isThisRoomBusy, 
   isUpdatingOccupant,
   onCheckIn, 
-  canMarkNoShow,
-  onMarkNoShow,
-  onGuestArrived,
   onCheckOut, 
   onExtend,
   onEditOccupant,
@@ -37,24 +34,12 @@ export default function RoomCard({
         >
           {isThisRoomBusy ? <Loader2 size={14} className="animate-spin" /> : <LogIn size={14} />} Check In Room
         </button>
-        {/* Only once this room is past its no-show time (check-in time + 6 h, hotel time). */}
-        {canMarkNoShow && (
-          <button
-            type="button"
-            disabled={isThisRoomBusy}
-            onClick={() => onMarkNoShow(rr)}
-            className="inline-flex min-h-11 w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-orange-200 text-orange-700 hover:bg-orange-50 transition disabled:opacity-50"
-          >
-            <AlertCircle size={14} /> Mark no-show
-          </button>
-        )}
         </div>
       );
-    } else if (roomStatus === 'NoShow' && onGuestArrived) {
+    } else if (roomStatus === 'NoShow') {
+      // Expired automatically: the guest never arrived before the checkout date.
       roomActionBtn = (
-        <button type="button" disabled={isThisRoomBusy} onClick={() => onGuestArrived(rr)} className="inline-flex min-h-11 w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-success-600 text-white hover:bg-success-700 transition disabled:opacity-50">
-          <LogIn size={14} /> Guest arrived / Restore
-        </button>
+        <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-orange-700"><AlertCircle size={14} /> Expired — create a new booking</p>
       );
     } else if (roomStatus === 'CheckedIn') {
       roomActionBtn = (

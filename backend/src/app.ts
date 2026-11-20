@@ -26,6 +26,7 @@ import publicRoutes from './modules/public/public.routes';
 import publicImagesRoutes from './modules/public/public-images.routes';
 import publicAuthRoutes from './modules/public/public-auth.routes';
 import { expireOnlineHolds } from './modules/reservation/online-hold.service';
+import { expireUnarrivedStays } from './modules/reservation/recovery.service';
 import { activateReadyWebsiteDomains } from './modules/property/domain-auto-activation.service';
 import { sendSubscriptionReminders } from './modules/payment/subscription-reminder.service';
 
@@ -126,6 +127,10 @@ if (require.main === module) {
   const releaseHolds = () => expireOnlineHolds().catch(() => console.error('Could not release expired online booking holds; will retry.'));
   void releaseHolds();
   setInterval(releaseHolds, 30000).unref();
+  // Rooms whose guest never arrived expire on their checkout date, even when nobody is signed in.
+  const expireStays = () => expireUnarrivedStays().catch(error => console.error('Could not expire unarrived reservations; will retry.', error));
+  void expireStays();
+  setInterval(expireStays, 5 * 60 * 1000).unref();
   const remindManagers = () => sendSubscriptionReminders().catch(() => console.warn('Could not check subscription reminders.'));
   void remindManagers();
   setInterval(remindManagers, 30 * 60 * 1000).unref();
