@@ -150,7 +150,7 @@ export default function ReservationDetailsPage() {
             resData.status === 'NoShow' ? 'bg-orange-50 text-orange-700' :
             'bg-secondary-100 text-secondary-700'
           }`}>
-            {bookingStatusLabel(resData.status)}
+            {bookingStatusLabel(resData.status, resData.reservationRooms)}
           </span>
 
           {/* Print Options Dropdown */}

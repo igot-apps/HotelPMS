@@ -617,7 +617,7 @@ export default function ReservationsPage() {
           const balanceDue = Math.max(0, totalAmount - amountPaid);
           const refundedAmount = (res.refunds || []).filter(refund => !refund.isSimulated).reduce((sum, refund) => sum + Number(refund.amount), 0) + (res.payments || []).filter((payment) => payment.status === 'Refunded').reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
           const cardStatusClass = res.status === 'Confirmed' ? 'bg-primary-50 text-primary-700 ring-1 ring-primary-600/20' : res.status === 'InHouse' ? 'bg-success-50 text-success-700 ring-1 ring-success-600/20' : res.status === 'Cancelled' ? 'bg-danger-50 text-danger-700 ring-1 ring-danger-600/20' : res.status === 'NoShow' ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-600/20' : res.status === 'Expired' ? 'bg-warning-50 text-warning-700 ring-1 ring-warning-600/20' : 'bg-secondary-100 text-secondary-700';
-          const cardStatusLabel = bookingStatusLabel(res.status);
+          const cardStatusLabel = bookingStatusLabel(res.status, res.reservationRooms);
 
           return (
             <article key={id} data-booking={id} className={`overflow-hidden rounded-xl border bg-surface shadow-sm transition-shadow ${isExpanded ? 'border-primary-400 ring-2 ring-primary-500/30' : 'border-border'}`}>
@@ -859,7 +859,7 @@ export default function ReservationsPage() {
                         <td className="px-6 py-4 text-sm text-text-muted">{checkIn} <span className="mx-1">→</span> {checkOut}</td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1.5">
-                            <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold ${statusClass}`}>{bookingStatusLabel(res.status)}</span>
+                            <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold ${statusClass}`}>{bookingStatusLabel(res.status, res.reservationRooms)}</span>
                             <RefundApprovalBadge reservation={res} />
                           </div>
                         </td>
