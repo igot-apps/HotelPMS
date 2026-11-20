@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { bookingLink } from '../../lib/bookingLink';
 import { BedDouble, Users, Sparkles, AlertTriangle, Wrench, ArrowRightLeft, Phone, UserRound, Clock, LogIn, LogOut, Loader2, Globe, GlobeLock } from 'lucide-react';
 
-export default function RoomCard({ room, onToggleHousekeeping, onToggleOperational, isUpdating, isPresenceUpdating, onSetGuestPresence, canManageOnline, isOnlineUpdating, onToggleOnline }) {
+export default function RoomCard({ room, onToggleHousekeeping, onToggleOperational, isUpdating, isPresenceUpdating, onSetGuestPresence, canManageOnline, isOnlineUpdating, onToggleOnline, canCheckOut }) {
   const [isMarkingOut, setIsMarkingOut] = useState(false);
   const [expectedReturnInput, setExpectedReturnInput] = useState('');
   const opStatus = room.operationalStatus?.toUpperCase();
@@ -150,7 +152,13 @@ export default function RoomCard({ room, onToggleHousekeeping, onToggleOperation
               <p className="text-xs text-text-muted">Occupant details not recorded</p>
             )}
             {activeStay && (
-              <div className="mt-2 border-t border-primary-100 pt-2">
+              <div className="mt-2 flex flex-wrap items-start gap-2 border-t border-primary-100 pt-2">
+                {/* Checkout uses the normal checkout (early-departure, balance and late-departure checks), then comes back here. */}
+                {canCheckOut && reservation?.reservationId && (
+                  <Link to={`${bookingLink(reservation, 'checkout', activeStay.reservationRoomId)}&back=rooms`} className="inline-flex items-center gap-1.5 rounded-md bg-primary-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-primary-700">
+                    <LogOut size={13} /> Check out
+                  </Link>
+                )}
                 {activeStay.guestPresenceStatus === 'Out' ? (
                   <button
                     type="button"
@@ -206,7 +214,7 @@ export default function RoomCard({ room, onToggleHousekeeping, onToggleOperation
                   </button>
                 )}
                 {activeStay.presenceUpdatedByUser?.fullName && (
-                  <p className="mt-1.5 text-[10px] text-text-muted">Last updated by {activeStay.presenceUpdatedByUser.fullName}</p>
+                  <p className="mt-1.5 w-full text-[10px] text-text-muted">Last updated by {activeStay.presenceUpdatedByUser.fullName}</p>
                 )}
               </div>
             )}

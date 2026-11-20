@@ -186,6 +186,7 @@ export default function RoomsPage() {
             <RoomCard
               key={room.roomId}
               room={room}
+              canCheckOut={Boolean(user?.permissions?.includes('CanCheckOutGuest'))}
               onToggleHousekeeping={handleToggleHousekeeping}
               onToggleOperational={handleToggleOperational}
               isUpdating={statusMutation.isPending}

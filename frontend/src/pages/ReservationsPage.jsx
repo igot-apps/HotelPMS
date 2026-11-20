@@ -123,7 +123,7 @@ function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', danger 
 const noShowCount = (res) => noShowRooms(res).length;
 const noShowHint = (res) => (noShowCount(res) ? ` · ${noShowCount(res)} not arrived` : '');
 
-const BACK_LABELS = { overdue: 'Overdue checkouts', arrivals: 'Arrivals to check in', departures: 'Departures to check out', inHouse: 'Guests in house', free: 'Rooms free tonight', collected: 'Collected today', unpaid: 'Owed by guests in house', owedAfter: 'Owed after checkout', attention: 'Needs attention', dashboard: 'the dashboard', booking: 'the booking details' };
+const BACK_LABELS = { overdue: 'Overdue checkouts', arrivals: 'Arrivals to check in', departures: 'Departures to check out', inHouse: 'Guests in house', free: 'Rooms free tonight', collected: 'Collected today', unpaid: 'Owed by guests in house', owedAfter: 'Owed after checkout', attention: 'Needs attention', dashboard: 'the dashboard', booking: 'the booking details', rooms: 'Rooms & Inventory' };
 
 export default function ReservationsPage() {
   useServerClock(); // re-render when server time arrives or is lost
@@ -537,7 +537,7 @@ export default function ReservationsPage() {
   return (
     <div className="space-y-6">
       {backPanel && (
-        <Link to={backPanel === 'booking' ? `/reservations/${searchParams.get('open')}` : backPanel === 'dashboard' ? '/dashboard' : `/dashboard?panel=${backPanel}`}
+        <Link to={backPanel === 'booking' ? `/reservations/${searchParams.get('open')}` : backPanel === 'rooms' ? '/rooms' : backPanel === 'dashboard' ? '/dashboard' : `/dashboard?panel=${backPanel}`}
           className="flex min-h-11 w-fit max-w-full items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-3 text-sm font-semibold text-primary-700 hover:bg-primary-100">
           <ChevronLeft size={18} /> Back to {BACK_LABELS[backPanel] || 'the dashboard'} {backPanel !== 'booking' && <span className="hidden font-normal text-primary-600 sm:inline">— the list is already updated, continue with the next guest</span>}
         </Link>
