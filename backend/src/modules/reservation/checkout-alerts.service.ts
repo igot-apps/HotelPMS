@@ -37,7 +37,7 @@ export async function checkoutAlerts(actor: Actor, now = new Date()) {
   const horizon = new Date(new Date(`${hotelDate(now, timeZone)}T00:00:00Z`).getTime() + 2 * DAY);
   const stays = await prisma.reservationRoom.findMany({
     where: { status: 'CheckedIn', checkOutDate: { lt: horizon }, reservation: { propertyId: actor.propertyId, status: { in: ['Confirmed', 'InHouse'] } } },
-    include: { room: { select: { roomNumber: true } }, reservation: { select: { reservationId: true, confirmationCode: true, guestNameSnapshot: true, totalAmount: true, amountPaid: true, platformGuest: { select: { fullName: true } }, propertyGuest: { select: { fullName: true } } } } },
+    include: { room: { select: { roomNumber: true } }, reservation: { select: { reservationId: true, confirmationCode: true, guestNameSnapshot: true, guestPhoneSnapshot: true, totalAmount: true, amountPaid: true, platformGuest: { select: { fullName: true } }, propertyGuest: { select: { fullName: true } } } } },
     orderBy: [{ checkOutDate: 'asc' }, { reservationRoomId: 'asc' }],
   });
   const verifications = await latestVerifications(stays.map(s => s.reservationRoomId));
@@ -51,6 +51,7 @@ export async function checkoutAlerts(actor: Actor, now = new Date()) {
       reservationRoomId: stay.reservationRoomId, reservationId: res.reservationId, confirmationCode: res.confirmationCode,
       roomNumber: stay.room?.roomNumber || stay.roomNumberSnapshot || null,
       guestName: stay.occupantName || res.guestNameSnapshot || res.platformGuest?.fullName || res.propertyGuest?.fullName || 'Guest',
+      phone: stay.occupantPhone || res.guestPhoneSnapshot || null,
       checkOutDate: stay.checkOutDate, expectedCheckoutAt: dueAt, state, minutesLate: late,
       balanceDue: Math.max(0, Number(res.totalAmount || 0) - Number(res.amountPaid)),
       guestPresenceStatus: stay.guestPresenceStatus, verification,

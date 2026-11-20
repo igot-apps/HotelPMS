@@ -5,7 +5,7 @@ import { getRooms, updateRoomStatus, getOnlineRoomAccess, setRoomOnlineBooking }
 import { MaintenanceReasonDialog } from '../components/rooms/MaintenanceReason';
 import { useAuthStore } from '../store/authStore';
 import RoomCard from '../components/rooms/RoomCard';
-import { BedDouble, AlertCircle, CheckCircle2, Wrench, Sparkles, LayoutGrid } from 'lucide-react';
+import { BedDouble, AlertCircle, CheckCircle2, Wrench, Sparkles, LayoutGrid, Search } from 'lucide-react';
 import { updateGuestPresence } from '../api/reservations';
 import toast from 'react-hot-toast';
 
@@ -15,6 +15,7 @@ export default function RoomsPage() {
   const queryClient = useQueryClient();
   
   const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
   const [maintenanceRoom, setMaintenanceRoom] = useState(null);
 
   const { data: onlineAccess } = useQuery({
@@ -82,7 +83,16 @@ export default function RoomsPage() {
 
   // 4. Data Processing
   const rooms = roomsData || [];
+  const searchText = search.trim().toLowerCase();
+  const matchesSearch = (room) => {
+    if (!searchText) return true;
+    const stay = room.reservationRooms?.[0];
+    const res = stay?.reservation;
+    return [room.roomNumber, room.roomType?.typeName, stay?.occupantName, stay?.occupantPhone, res?.guestNameSnapshot, res?.guestPhoneSnapshot, res?.confirmationCode, room.arrivingToday?.guestName, room.arrivingToday?.confirmationCode]
+      .filter(Boolean).join(' ').toLowerCase().includes(searchText);
+  };
   const filteredRooms = rooms.filter(room => {
+    if (!matchesSearch(room)) return false;
     if (filter === 'all') return true;
     if (filter === 'ready') return room.operationalStatus === 'Available' && ['Clean', 'Inspected'].includes(room.housekeepingStatus) && !room.arrivingToday;
     if (filter === 'dirty') return room.housekeepingStatus?.toUpperCase() === 'DIRTY';
@@ -119,6 +129,11 @@ export default function RoomsPage() {
         <StatBox label="Ready" value={stats.ready} color="success" />
         <StatBox label="Occupied" value={stats.occupied} color="primary" />
         <StatBox label="Needs Cleaning" value={stats.dirty} color="warning" />
+      </div>
+
+      <div className="relative max-w-md">
+        <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden="true" />
+        <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search room, guest, phone or booking code" aria-label="Search rooms" className="min-h-11 w-full rounded-lg border border-border bg-surface pl-9 pr-3 text-sm text-text outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20" />
       </div>
 
       {/* Modern Filter Bar */}
@@ -163,7 +178,7 @@ export default function RoomsPage() {
         <div className="bg-surface border border-border rounded-2xl p-16 text-center">
           <BedDouble className="mx-auto text-text-muted mb-4" size={48} />
           <h3 className="text-lg font-bold text-text">No rooms found</h3>
-          <p className="text-text-muted mt-1">Try adjusting your filters to see more rooms.</p>
+          <p className="text-text-muted mt-1">{searchText ? 'No room matches this search.' : 'Try adjusting your filters to see more rooms.'}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

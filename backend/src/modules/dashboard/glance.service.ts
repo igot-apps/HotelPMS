@@ -44,7 +44,7 @@ export async function getDashboardGlance(propertyId: number, role: string, now =
   const row = (stay: any) => ({
     reservationRoomId: stay.reservationRoomId, reservationId: stay.reservation.reservationId, confirmationCode: stay.reservation.confirmationCode,
     roomNumber: stay.room?.roomNumber || stay.roomNumberSnapshot || null, guestName: guestName(stay),
-    phone: stay.reservation.guestPhoneSnapshot || null,
+    phone: stay.reservation.guestPhoneSnapshot || null, occupantPhone: stay.occupantPhone || null,
     checkInDate: stay.checkInDate, checkOutDate: stay.checkOutDate, actualCheckIn: stay.actualCheckIn, actualCheckOut: stay.actualCheckOut,
     guestPresenceStatus: stay.guestPresenceStatus, guestOutAt: stay.guestOutAt, guestReturnedAt: stay.guestReturnedAt,
     nightsBooked: nights(stay.checkInDate, stay.checkOutDate), balanceDue: balanceOf(stay.reservation), source: stay.reservation.source,

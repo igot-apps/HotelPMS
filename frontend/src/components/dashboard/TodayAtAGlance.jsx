@@ -1,9 +1,9 @@
-import { SkeletonCards } from '../ui/Skeleton';
+import { SkeletonCards, SkeletonLines } from '../ui/Skeleton';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { AlarmClock, AlertTriangle, BedDouble, ChevronRight, Clock, Coins, Eye, Hotel, Loader2, LogIn, LogOut, Plus, Receipt, Search, Sparkles, Wallet, X } from 'lucide-react';
+import { AlarmClock, AlertTriangle, BedDouble, ChevronRight, Clock, Coins, Eye, Hotel, Loader2, LogIn, LogOut, Phone, Plus, Receipt, Search, Sparkles, Wallet, X } from 'lucide-react';
 import api from '../../lib/axios';
 import useCheckoutAlerts from '../../hooks/useCheckoutAlerts';
 import { formatDuration, formatTime } from '../../lib/stayTiming';
@@ -38,8 +38,9 @@ export default function TodayAtAGlance() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [open, setOpen] = useState(() => searchParams.get('panel'));
   const [sort, setSort] = useState('date');
-  const [arrivalsQuery, setArrivalsQuery] = useState('');
-  const [departuresQuery, setDeparturesQuery] = useState('');
+  // Each pop-up has its own search text.
+  const [queries, setQueries] = useState({});
+  const query = queries[open] || '';
   // Coming back from the Reservations page: reopen the same list once, then tidy the URL.
   useEffect(() => {
     if (!searchParams.get('panel')) return;
@@ -97,35 +98,31 @@ export default function TodayAtAGlance() {
         <PanelContext.Provider value={open}>
         <SortContext.Provider value={sort}>
         <Drawer title={tiles.find((tile) => tile.key === open)?.label || ''} onClose={() => setOpen(null)}
-          toolbar={SORTABLE.includes(open) && (
+          toolbar={(SORTABLE.includes(open) || SEARCHABLE[open]) && (
             <div className="flex flex-wrap items-center gap-3">
+              {SORTABLE.includes(open) && (
               <label className="flex items-center gap-2 text-sm text-text-muted">Sort by
                 <select value={sort} onChange={(event) => setSort(event.target.value)} className="min-h-10 rounded-lg border border-border bg-background px-2 text-sm text-text">
                   {SORTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </label>
-              {open === 'arrivals' && (
-                <div className="relative min-w-0 flex-1">
-                  <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-                  <input value={arrivalsQuery} onChange={(event) => setArrivalsQuery(event.target.value)} placeholder="Search booking code, guest or room..." aria-label="Search expected arrivals" className="min-h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm text-text outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20" />
-                </div>
               )}
-              {open === 'departures' && (
+              {SEARCHABLE[open] && (
                 <div className="relative min-w-0 flex-1">
                   <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-                  <input value={departuresQuery} onChange={(event) => setDeparturesQuery(event.target.value)} placeholder="Search booking code, guest, phone or room..." aria-label="Search departures" className="min-h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm text-text outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20" />
+                  <input type="search" value={query} onChange={(event) => setQueries((current) => ({ ...current, [open]: event.target.value }))} placeholder="Search booking code, guest, phone or room..." aria-label={`Search ${SEARCHABLE[open]}`} className="min-h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm text-text outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20" />
                 </div>
               )}
             </div>
           )}>
-          {open === 'overdue' && <OverdueDetail rows={overdue} />}
-          {open === 'arrivals' && <ArrivalsDetail data={data} missed={missed} query={arrivalsQuery} />}
-          {open === 'departures' && <DeparturesDetail data={data} query={departuresQuery} />}
-          {open === 'inHouse' && <InHouseDetail rows={data.inHouse} />}
+          {open === 'overdue' && <OverdueDetail rows={overdue} query={query} />}
+          {open === 'arrivals' && <ArrivalsDetail data={data} missed={missed} query={query} />}
+          {open === 'departures' && <DeparturesDetail data={data} query={query} />}
+          {open === 'inHouse' && <InHouseDetail rows={data.inHouse} query={query} />}
           {open === 'free' && <FreeDetail rooms={data.rooms.freeTonight} />}
-          {open === 'collected' && <CollectedDetail money={data.money} />}
-          {open === 'unpaid' && <UnpaidDetail money={data.money} />}
-          {open === 'owedAfter' && <OwedAfterCheckoutDetail query={owedAfter} />}
+          {open === 'collected' && <CollectedDetail money={data.money} query={query} />}
+          {open === 'unpaid' && <UnpaidDetail money={data.money} query={query} />}
+          {open === 'owedAfter' && <OwedAfterCheckoutDetail owed={owedAfter} query={query} />}
           {open === 'attention' && <AttentionDetail data={data} />}
         </Drawer>
         </SortContext.Provider>
@@ -245,6 +242,14 @@ function Row({ to, title, code, lines = [], badge, badgeTone = 'neutral', action
 const SortContext = createContext('date');
 const SORTS = [['date', 'Date'], ['room', 'Room'], ['guest', 'Guest name']];
 const SORTABLE = ['overdue', 'arrivals', 'departures', 'inHouse', 'unpaid'];
+// Pop-ups with a search box (booking code, guest, phone or room), with the name read out to screen readers.
+const SEARCHABLE = { overdue: 'overdue checkouts', arrivals: 'expected arrivals', departures: 'departures', inHouse: 'guests in house', collected: 'payments received today', unpaid: 'guests owing money', owedAfter: 'guests who left owing' };
+const NO_MATCH = 'No matches for this search.';
+// The room occupant's phone when recorded, otherwise the booker's.
+const phoneOf = (row) => row.occupantPhone || row.phone || row.guestPhone || null;
+function PhoneLine({ phone }) {
+  return phone ? <span className="mt-0.5 flex items-center gap-1 text-sm text-text-muted"><Phone size={13} aria-hidden="true" /> {phone}</span> : null;
+}
 function useSorted(rows, dateKey) {
   const sort = useContext(SortContext);
   const room = (row) => String(row.roomNumber ?? row.rooms?.[0]?.roomNumber ?? row.rooms?.[0] ?? '');
@@ -254,15 +259,16 @@ function useSorted(rows, dateKey) {
 }
 const stayDates = (stay) => `${shortDate(stay.checkInDate)} → ${shortDate(stay.checkOutDate)} · ${stay.nightsBooked ?? ''}${stay.nightsBooked ? ` night${stay.nightsBooked === 1 ? '' : 's'}` : ''}`.replace(/ · $/, '');
 
-function OverdueDetail({ rows: unsorted }) {
-  const rows = useSorted(unsorted, 'expectedCheckoutAt');
+function OverdueDetail({ rows: unsorted, query = '' }) {
+  const rows = useSorted(unsorted, 'expectedCheckoutAt').filter((row) => matchesQuery(row, query));
   return (
-    <Group title="Guests past checkout time" count={rows.length} empty="No checkouts are overdue.">
+    <Group title="Guests past checkout time" count={rows.length} empty={query.trim() ? NO_MATCH : 'No checkouts are overdue.'}>
       {rows.map((alert) => (
         <Row key={alert.reservationRoomId} to={reservationLink(alert)}
           actions={[{ label: 'View reservation', to: reservationLink(alert), icon: 'view' }]}
           title={`Room ${alert.roomNumber || '—'} · ${alert.guestName}`} code={alert.confirmationCode} badge={`${formatDuration(alert.minutesLate * 60000)} late`} badgeTone="danger"
           lines={[
+            alert.phone ? `Phone: ${alert.phone}` : '',
             `Expected out ${formatTime(new Date(alert.expectedCheckoutAt))} on ${new Date(alert.expectedCheckoutAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`,
             alert.verification ? `Last check: guest ${RESULT[alert.verification.result]} · ${clock(alert.verification.at)}${alert.verification.by ? ` by ${alert.verification.by}` : ''}` : 'Not verified yet — use Verify in Checkout reminders',
             alert.balanceDue > 0 ? `Booking balance: ${cash(alert.balanceDue)}` : 'Paid in full',
@@ -318,6 +324,7 @@ function ArrivalsDetail({ data, missed: missedUnsorted, query = '' }) {
             <li key={stay.reservationId} className="rounded-lg border border-warning-200 bg-warning-50/40 p-3">
               {stay.confirmationCode && <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{stay.confirmationCode}</p>}
               <p className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{stay.guestName}</span><span className="shrink-0 rounded-md bg-warning-100 px-2 py-0.5 text-xs font-bold text-warning-800">{stay.daysMissed ? `${stay.daysMissed} day${stay.daysMissed === 1 ? '' : 's'} missed` : 'Not arrived'}</span></p>
+              <PhoneLine phone={stay.phone} />
               <p className="mt-0.5 text-sm text-text-muted">Room {stay.rooms.filter(Boolean).join(', ') || 'unassigned'} · arrival {shortDate(stay.checkInDate)} · {stay.nightsLeft} night{stay.nightsLeft === 1 ? '' : 's'} still held</p>
               <p className="text-sm text-text-muted">{stay.amountPaid > 0 ? `Paid ${cash(stay.amountPaid)}` : 'Nothing paid'}{stay.source === 'Website' ? ' · online booking' : ''}</p>
               <div className="mt-2 flex flex-wrap gap-2">
@@ -332,11 +339,12 @@ function ArrivalsDetail({ data, missed: missedUnsorted, query = '' }) {
           <li key={res.reservationId} className="rounded-lg border border-border p-3">
             {res.confirmationCode && <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{res.confirmationCode}</p>}
             <p className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{res.guestName}</span><span className="shrink-0 rounded-md bg-primary-50 px-2 py-0.5 text-xs font-bold text-primary-700">{res.rooms.length} room{res.rooms.length === 1 ? '' : 's'}</span></p>
+            <PhoneLine phone={res.phone} />
             <p className="mt-0.5 text-sm text-text-muted">{shortDate(res.checkInDate)} → {shortDate(res.checkOutDate)} · {res.nightsBooked} night{res.nightsBooked === 1 ? '' : 's'}</p>
             <p className="text-sm text-text-muted">{res.balanceDue > 0 ? `Booking balance: ${cash(res.balanceDue)}` : 'Paid in full'}</p>
             <ul className="mt-2 space-y-1">
               {res.rooms.map((r) => (
-                <li key={r.reservationRoomId} className="text-sm text-text-muted">Room {r.roomNumber || 'unassigned'} · {r.checkInStatus === 'checked-in' ? 'Checked in' : 'Awaiting check-in'}</li>
+                <li key={r.reservationRoomId} className="text-sm text-text-muted">Room {r.roomNumber || 'unassigned'} · {r.checkInStatus === 'checked-in' ? 'Checked in' : 'Awaiting check-in'}{r.phone && r.phone !== res.phone ? ` · ${r.phone}` : ''}</li>
               ))}
             </ul>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -350,11 +358,12 @@ function ArrivalsDetail({ data, missed: missedUnsorted, query = '' }) {
           <li key={res.reservationId} className="rounded-lg border border-border p-3">
             {res.confirmationCode && <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{res.confirmationCode}</p>}
             <p className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{res.guestName}</span><span className="shrink-0 rounded-md bg-primary-50 px-2 py-0.5 text-xs font-bold text-primary-700">{res.rooms.length} room{res.rooms.length === 1 ? '' : 's'}</span></p>
+            <PhoneLine phone={res.phone} />
             <p className="mt-0.5 text-sm text-text-muted">Arrives {shortDate(res.checkInDate)} · {shortDate(res.checkOutDate)}</p>
             <p className="text-sm text-text-muted">{res.balanceDue > 0 ? `Booking balance: ${cash(res.balanceDue)}` : 'Paid in full'}</p>
             <ul className="mt-2 space-y-1">
               {res.rooms.map((r) => (
-                <li key={r.reservationRoomId} className="text-sm text-text-muted">Room {r.roomNumber || 'unassigned'}</li>
+                <li key={r.reservationRoomId} className="text-sm text-text-muted">Room {r.roomNumber || 'unassigned'}{r.phone && r.phone !== res.phone ? ` · ${r.phone}` : ''}</li>
               ))}
             </ul>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -368,10 +377,11 @@ function ArrivalsDetail({ data, missed: missedUnsorted, query = '' }) {
           <li key={res.reservationId} className="rounded-lg border border-border p-3">
             {res.confirmationCode && <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{res.confirmationCode}</p>}
             <p className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{res.guestName}</span><span className="shrink-0 rounded-md bg-success-50 px-2 py-0.5 text-xs font-bold text-success-700">{res.rooms.length} room{res.rooms.length === 1 ? '' : 's'}</span></p>
+            <PhoneLine phone={res.phone} />
             <p className="mt-0.5 text-sm text-text-muted">{shortDate(res.checkInDate)} → {shortDate(res.checkOutDate)} · {res.nightsBooked} night{res.nightsBooked === 1 ? '' : 's'}</p>
             <ul className="mt-2 space-y-1">
               {res.rooms.map((r) => (
-                <li key={r.reservationRoomId} className="text-sm text-text-muted">Room {r.roomNumber || '—'} · Checked in</li>
+                <li key={r.reservationRoomId} className="text-sm text-text-muted">Room {r.roomNumber || '—'} · Checked in{r.phone && r.phone !== res.phone ? ` · ${r.phone}` : ''}</li>
               ))}
             </ul>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -444,11 +454,12 @@ function DeparturesDetail({ data, query = '' }) {
           <li key={res.reservationId} className="rounded-lg border border-border p-3">
             {res.confirmationCode && <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{res.confirmationCode}</p>}
             <p className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{res.guestName}</span><span className="shrink-0 rounded-md bg-warning-50 px-2 py-0.5 text-xs font-bold text-warning-700">{res.rooms.length} room{res.rooms.length === 1 ? '' : 's'}</span></p>
+            <PhoneLine phone={res.phone} />
             <p className="mt-0.5 text-sm text-text-muted">{res.expectedCheckoutAt ? `By ${formatTime(new Date(res.expectedCheckoutAt))}` : ''}{res.minutesLate > 0 ? ` · ${formatDuration(res.minutesLate * 60000)} late` : ''}</p>
             <p className="text-sm text-text-muted">{res.balanceDue > 0 ? `Booking balance: ${cash(res.balanceDue)}` : 'Paid in full'}</p>
             <ul className="mt-2 space-y-1">
               {res.rooms.map((r) => (
-                <li key={r.reservationRoomId} className="text-sm text-text-muted">Room {r.roomNumber || '—'} {r.reservationRoomId === data.departures.waiting.find(w => w.reservationRoomId === r.reservationRoomId)?.actualCheckIn ? '(checked in)' : 'awaiting check-out'}</li>
+                <li key={r.reservationRoomId} className="text-sm text-text-muted">Room {r.roomNumber || '—'} {r.reservationRoomId === data.departures.waiting.find(w => w.reservationRoomId === r.reservationRoomId)?.actualCheckIn ? '(checked in)' : 'awaiting check-out'}{r.phone && r.phone !== res.phone ? ` · ${r.phone}` : ''}</li>
               ))}
             </ul>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -462,10 +473,11 @@ function DeparturesDetail({ data, query = '' }) {
           <li key={res.reservationId} className="rounded-lg border border-border p-3">
             {res.confirmationCode && <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{res.confirmationCode}</p>}
             <p className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{res.guestName}</span><span className="shrink-0 rounded-md bg-success-50 px-2 py-0.5 text-xs font-bold text-success-700">{res.rooms.length} room{res.rooms.length === 1 ? '' : 's'}</span></p>
+            <PhoneLine phone={res.phone} />
             <p className="mt-0.5 text-sm text-text-muted">{res.actualCheckOut ? `Left at ${clock(res.actualCheckOut)}` : ''}</p>
             <ul className="mt-2 space-y-1">
               {res.rooms.map((r) => (
-                <li key={r.reservationRoomId} className="text-sm text-text-muted">Room {r.roomNumber || '—'} · checked out</li>
+                <li key={r.reservationRoomId} className="text-sm text-text-muted">Room {r.roomNumber || '—'} · checked out{r.phone && r.phone !== res.phone ? ` · ${r.phone}` : ''}</li>
               ))}
             </ul>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -478,8 +490,8 @@ function DeparturesDetail({ data, query = '' }) {
   );
 }
 
-function InHouseDetail({ rows: unsorted }) {
-  const rows = useSorted(unsorted, 'checkOutDate');
+function InHouseDetail({ rows: unsorted, query = '' }) {
+  const rows = useSorted(unsorted, 'checkOutDate').filter((row) => matchesQuery(row, query));
   const queryClient = useQueryClient();
   const [marking, setMarking] = useState(null);
   const presenceMutation = useMutation({
@@ -499,7 +511,7 @@ function InHouseDetail({ rows: unsorted }) {
   });
   const isUpdating = (stay) => marking === stay.reservationRoomId || presenceMutation.isPending && presenceMutation.variables?.reservationRoomId === stay.reservationRoomId;
   return (
-    <Group title="Checked-in guests" count={rows.length} empty="No guests are checked in.">
+    <Group title="Checked-in guests" count={rows.length} empty={query.trim() ? NO_MATCH : 'No guests are checked in.'}>
       {rows.map((stay) => {
         const out = stay.guestPresenceStatus === 'Out';
         return (
@@ -513,6 +525,7 @@ function InHouseDetail({ rows: unsorted }) {
               </span>
               {stay.confirmationCode && <p className="mt-0.5 text-xs font-bold uppercase tracking-wide text-primary-700">{stay.confirmationCode}</p>}
               <p className="mt-0.5 text-sm text-text-muted">Room {stay.roomNumber || '—'} · leaves {shortDate(stay.checkOutDate)}</p>
+              <PhoneLine phone={phoneOf(stay)} />
               {stay.balanceDue > 0 && <p className="text-sm text-text-muted">{`Booking balance: ${cash(stay.balanceDue)}`}</p>}
               {out && stay.guestOutAt && (
                 <p className="mt-0.5 text-xs text-warning-800 flex items-center gap-1">
@@ -561,10 +574,11 @@ function FreeDetail({ rooms }) {
   ));
 }
 
-function CollectedDetail({ money }) {
+function CollectedDetail({ money, query = '' }) {
+  const payments = money.payments.filter((payment) => matchesQuery(payment, query));
   return (
-    <Group title="Payments received today" count={money.payments.length} empty="No payments recorded yet today.">
-      {money.payments.map((payment) => (
+    <Group title="Payments received today" count={payments.length} empty={query.trim() ? NO_MATCH : 'No payments recorded yet today.'}>
+      {payments.map((payment) => (
         <Row key={payment.paymentId} to={reservationLink(payment)} title={`${cash(payment.amount)} · ${payment.method}`} code={payment.confirmationCode}
           lines={[`${clock(payment.at)} · ${payment.guestName}`, payment.receivedBy ? `Received by ${payment.receivedBy}` : '']} />
       ))}
@@ -572,18 +586,19 @@ function CollectedDetail({ money }) {
   );
 }
 
-function UnpaidDetail({ money }) {
-  const unpaidRows = useSorted(money.unpaidInHouse, 'checkOutDate');
+function UnpaidDetail({ money, query = '' }) {
+  const unpaidRows = useSorted(money.unpaidInHouse, 'checkOutDate').filter((row) => matchesQuery(row, query));
   // Collecting an in-house balance is a single payment on the booking, so it can be taken right here.
   const [paying, setPaying] = useState(null);
   return (
     <>
-      <Group title="In-house guests with a balance" count={money.unpaidInHouse.length} empty="Every in-house booking is paid in full.">
+      <Group title="In-house guests with a balance" count={unpaidRows.length} empty={query.trim() ? NO_MATCH : 'Every in-house booking is paid in full.'}>
         {unpaidRows.map((stay) => (
           <li key={stay.reservationId} className="rounded-lg border border-border p-3">
             <Link to={withBack(reservationLink(stay), 'unpaid')} className="block hover:text-primary-700">
               <span className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{stay.guestName}</span><span className="shrink-0 rounded-md bg-danger-50 px-2 py-0.5 text-xs font-bold text-danger-700">{cash(stay.balanceDue)}</span></span>
               <span className="mt-0.5 block text-sm text-text-muted">{stay.confirmationCode} · Room {stay.roomNumber || '—'} · leaves {shortDate(stay.checkOutDate)}</span>
+              <PhoneLine phone={stay.phone || stay.occupantPhone} />
             </Link>
             <div className="mt-2 flex flex-wrap gap-2">
               <button type="button" onClick={() => setPaying(stay)} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-text-inverted hover:bg-primary-700"><Wallet size={16} /> Take payment</button>
@@ -606,19 +621,20 @@ function UnpaidDetail({ money }) {
 
 // Guests who left still owing money. The amount is the booking's own balance, so a payment
 // recorded on the booking removes it from this list.
-function OwedAfterCheckoutDetail({ query }) {
+function OwedAfterCheckoutDetail({ owed, query = '' }) {
   // Collecting a debt is a single payment on the booking, so it can be taken right here.
   const [paying, setPaying] = useState(null);
-  if (query.isLoading) return <p className="flex items-center gap-2 text-sm text-text-muted"><Loader2 size={16} className="animate-spin" /> Loading…</p>;
-  if (query.isError) return <p className="text-sm text-danger-700">Could not load this list. Please try again.</p>;
-  const rows = query.data?.bookings || [];
+  if (owed.isLoading) return <SkeletonLines lines={4} label="Loading…" />;
+  if (owed.isError) return <p className="text-sm text-danger-700">Could not load this list. Please try again.</p>;
+  const rows = (owed.data?.bookings || []).filter((row) => matchesQuery(row, query));
   return (
-    <Group title="Checked out with money owed" count={rows.length} empty="No guest has left owing money.">
+    <Group title="Checked out with money owed" count={rows.length} empty={query.trim() ? NO_MATCH : 'No guest has left owing money.'}>
       {rows.map((row) => (
         <li key={row.reservationId} className="rounded-lg border border-border p-3">
           <Link to={`/reservations/${row.reservationId}`} className="block hover:text-primary-700">
             <span className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{row.guestName}</span><span className="shrink-0 rounded-md bg-danger-50 px-2 py-0.5 text-xs font-bold text-danger-700">{cash(row.balanceDue)}</span></span>
             <span className="mt-0.5 block text-sm text-text-muted">{row.confirmationCode} · Room {row.roomNumbers.join(', ') || '—'}{row.checkedOutAt ? ` · left ${shortDate(row.checkedOutAt)}` : ''}</span>
+            <PhoneLine phone={row.guestPhone} />
             <span className="mt-0.5 block text-sm text-text-muted">Reason: {row.reason || 'Not recorded'}</span>
             <span className="mt-0.5 block text-sm text-text-muted">Checked out by: {row.approvedBy || 'Not recorded'}</span>
           </Link>

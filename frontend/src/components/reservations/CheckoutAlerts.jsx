@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { AlarmClock, Loader2, ShieldAlert, X } from 'lucide-react';
+import { AlarmClock, Loader2, Phone, ShieldAlert, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../lib/axios';
 import useCheckoutAlerts from '../../hooks/useCheckoutAlerts';
@@ -33,6 +33,7 @@ function groupByReservation(alerts) {
       byRes[id] = {
         reservationId: alert.reservationId,
         guestName: alert.guestName,
+        phone: alert.phone || null,
         confirmationCode: alert.confirmationCode,
         balanceDue: alert.balanceDue || 0,
         escalated: Boolean(alert.escalated),
@@ -79,6 +80,7 @@ export default function CheckoutAlerts() {
                 <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${state.className}`}>{state.label}</span>
               </div>
               <p className="text-sm text-text">{group.guestName}</p>
+              {group.phone && <p className="flex items-center gap-1 text-sm text-text-muted"><Phone size={13} aria-hidden="true" /> {group.phone}</p>}
               {group.confirmationCode && <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{group.confirmationCode}</p>}
               {multi ? (
                 <ul className="mt-1 space-y-1">
