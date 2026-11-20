@@ -306,7 +306,7 @@ export const markAsNoShow = async (req: AuthRequest, res: Response) => {
     const reservationId = req.params.id as string;
     // Selected rooms only (some guests of the booking arrived, or not all rooms are missing).
     if (Array.isArray(req.body?.stayIds)) {
-      const result = await markRoomsNoShow(reservationId, { userId: req.user!.userId, propertyId: req.user!.propertyId } as any, req.body.stayIds, req.body?.reason);
+      const result = await markRoomsNoShow(reservationId, { userId: req.user!.userId, propertyId: req.user!.propertyId } as any, req.body.stayIds, req.body?.reason, req.body?.owingReason);
       return res.status(200).json({ success: true, data: result, message: `${result.rooms.join(', ')} marked as no-show and released.` });
     }
     const updated = await reservationService.markAsNoShow(

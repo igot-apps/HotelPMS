@@ -21,6 +21,7 @@ import ReceiptModal from '../components/reservations/ReceiptModal';
 import ThermalReceiptModal from '../components/reservations/ThermalReceiptModal';
 import { formatPaymentMethod } from '../utils/payment';
 import ReservationRecoveryPanel from '../components/reservations/ReservationRecoveryPanel';
+import GuestArrivedDialog from '../components/reservations/GuestArrivedDialog';
 import RefundPanel from '../components/reservations/RefundPanel';
 import { useAuthStore } from '../store/authStore';
 
@@ -39,6 +40,7 @@ export default function ReservationDetailsPage() {
 
   // States for Modals
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [arrivedStay, setArrivedStay] = useState(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
   const [isThermalReceiptOpen, setIsThermalReceiptOpen] = useState(false);
@@ -202,6 +204,11 @@ export default function ReservationDetailsPage() {
                 <p className="mt-2 text-sm text-text-muted">{new Date(rr.checkInDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })} → {new Date(rr.checkOutDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })}</p>
                 <p className="break-words text-sm text-text"><span className="text-text-muted">Occupant: </span>{rr.occupantName || 'Not assigned'}{rr.occupantPhone ? ` · ${rr.occupantPhone}` : ''}</p>
                 {rr.status === 'Reserved' && rr.room?.housekeepingStatus && !['Clean', 'Inspected'].includes(rr.room.housekeepingStatus) && <p className="mt-1 text-xs font-semibold text-warning-700">Room needs cleaning before check-in</p>}
+                {rr.status === 'NoShow' && ['Confirmed', 'InHouse', 'Completed'].includes(resData.status) && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" onClick={() => setArrivedStay(rr)} className={`${btn} bg-success-600 text-white hover:bg-success-700`}>Guest arrived · restore room</button>
+                  </div>
+                )}
                 {(canCheckIn || inRoom || (active && rr.status === 'Reserved')) && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {canCheckIn && <Link to={roomLink('checkin')} className={`${btn} bg-success-600 text-white hover:bg-success-700`}>Check in</Link>}
@@ -215,6 +222,7 @@ export default function ReservationDetailsPage() {
             );
           })}
         </ul>
+        {arrivedStay && <GuestArrivedDialog reservation={resData} stay={arrivedStay} onClose={() => setArrivedStay(null)} />}
         <div className="mt-4 border-t border-border pt-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">Whole booking</p>
           <div className="grid gap-2 sm:grid-cols-3">

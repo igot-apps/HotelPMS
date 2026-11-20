@@ -81,7 +81,7 @@ async function main() {
     await prisma.$executeRaw`UPDATE reservation_rooms SET status = 'NoShow', "actualCheckIn" = NULL WHERE "reservationRoomId" = ${s3.reservationRoomId}`;
     await prisma.room.update({ where: { roomId: rooms[2].roomId }, data: { operationalStatus: 'Available' } });
     await book('TAKE', [rooms[2]], 0, 1, 100, 0); // room 103 resold for tonight
-    await assert.rejects(() => restore(), /conflicting dates/);
+    await assert.rejects(() => restore(), /no longer free/);
     console.log('4 ok: late guest restored and checked in while room was free; restore refused once the room was resold');
 
     // 5. Departure: the two real stays check out → Completed (not No-show); the balance still shows as owed.
@@ -100,15 +100,72 @@ async function main() {
     await transitionStay(mixed.reservationRooms[0].reservationRoomId, 'CheckedOut', A, { overrideReason: 'Will pay later' });
     assert.equal((await status(mixed.reservationId)).status, 'Confirmed');
     await assert.rejects(() => markAsNoShow(mixed.reservationId, hotel.propertyId, desk.userId), /already stayed/);
-    await markRoomsNoShow(mixed.reservationId, A, [mixed.reservationRooms[1].reservationRoomId]);
+    // Completing the booking with money still owed needs a short reason, shown under "Owed after checkout".
+    await assert.rejects(() => markRoomsNoShow(mixed.reservationId, A, [mixed.reservationRooms[1].reservationRoomId]), /still owed/);
+    assert.equal((await status(mixed.reservationId)).reservationRooms[1].status, 'Reserved', 'nothing changed when the reason was missing');
+    await markRoomsNoShow(mixed.reservationId, A, [mixed.reservationRooms[1].reservationRoomId], 'Did not come', 'Guest promised to pay later.');
     assert.equal((await status(mixed.reservationId)).status, 'Completed');
-    console.log('6 ok: one room stayed, the other never came → whole no-show refused; room no-show completes the booking');
+    const owedMix = (await getOwedAfterCheckout(hotel.propertyId)).bookings.find(b => b.reservationId === mixed.reservationId);
+    assert.equal(owedMix?.reason, 'Guest promised to pay later.'); assert.equal(owedMix?.approvedBy, 'Ama Desk');
+    console.log('6 ok: one room stayed, the other never came → whole no-show refused; final room no-show asks why money is owed and shows it in "Owed after checkout"');
 
     // 7. Occupancy counts only rooms that were really used (no-show rooms excluded).
     const report: any = await getFullDashboardReport(hotel.propertyId, hotelDate(day(-1), 'Africa/Accra'), hotelDate(day(-1), 'Africa/Accra'));
     // Yesterday: GRP rooms 101 + 102, MIX room 101. Not: ONE (no-show), GRP 103 (no-show), MIX 102 (no-show).
     assert.equal(report.summary.actualOccupiedNights, 3);
     console.log('7 ok: occupancy for yesterday counts 3 used room-nights; the 3 no-show rooms are not counted');
+    // 8. Late arrival on a COMPLETED booking (room 101 stayed and left, room 102 no-show): restore room 102.
+    const restoreMix = async (reason: string, targetRoomId?: number) => {
+      const stayIds = [mixed.reservationRooms[1].reservationRoomId];
+      const p: any = await correctBooking(mixed.reservationId, A, { action: 'restore', stayIds, reason, preview: true, targetRoomId });
+      if (p.needsRoom && !targetRoomId) return p;
+      return correctBooking(mixed.reservationId, A, { action: 'restore', stayIds, reason, expectedVersion: p.version, targetRoomId });
+    };
+    const before = (await status(mixed.reservationId)).reservationRooms[0];
+    await restoreMix('Marked as no-show by mistake');
+    s = await status(mixed.reservationId);
+    assert.equal(s.status, 'Confirmed', 'completed booking is active again');
+    assert.deepEqual(s.reservationRooms.map(r => r.status), ['CheckedOut', 'Reserved']);
+    assert.equal(s.reservationRooms[0].updatedAt.getTime(), before.updatedAt.getTime(), 'the checked-out room is untouched');
+    assert.equal(Number(s.totalAmount), 200); assert.equal(Number(s.amountPaid), 0); assert.equal(s.payments.length, 0);
+    assert(!(await getOwedAfterCheckout(hotel.propertyId)).bookings.some(b => b.reservationId === mixed.reservationId), 'not "owed after checkout" while a room is still expected');
+    const trail = await prisma.auditLog.findMany({ where: { newData: { path: ['reservationId'], equals: mixed.reservationId } }, orderBy: { auditLogId: 'asc' }, include: { user: true } });
+    assert.deepEqual(trail.map(t => t.action).filter(a => ['RoomNoShow', 'CreditCheckoutApproved', 'Correction:restore'].includes(a)), ['CreditCheckoutApproved', 'RoomNoShow', 'CreditCheckoutApproved', 'Correction:restore'], 'room 101 left owing, room 102 no-show + owing reason, then restored');
+    const restoreLog = trail.at(-1)!;
+    assert.equal((restoreLog.newData as any).reason, 'Marked as no-show by mistake'); assert.equal(restoreLog.user?.fullName, 'Ama Desk');
+    console.log('8 ok: completed booking → room 102 restored to Reserved, booking Confirmed, room 101 untouched, money unchanged; no-show, owing reason and restore all kept in history');
+
+    // 9. Room taken meanwhile: no automatic restore; a free room of the same type is offered, price kept.
+    await markRoomsNoShow(mixed.reservationId, A, [mixed.reservationRooms[1].reservationRoomId], 'Gone again', 'Guest promised to pay later.');
+    await book('TAKE2', [rooms[1]], 0, 1, 100, 0); // room 102 resold for tonight
+    const offer: any = await restoreMix('Guest arrived late');
+    assert.equal(offer.needsRoom, true);
+    assert.deepEqual(offer.alternatives.map((r: any) => r.roomNumber), ['101', '104'], 'only free rooms of the same type (103 and 102 are taken tonight)');
+    assert.equal((await status(mixed.reservationId)).reservationRooms[1].status, 'NoShow', 'nothing restored automatically');
+    await assert.rejects(() => restoreMix('Guest arrived late', rooms[2].roomId), /not free/);
+    await restoreMix('Guest arrived late', rooms[3].roomId);
+    s = await status(mixed.reservationId);
+    assert.equal(s.reservationRooms[1].roomId, rooms[3].roomId); assert.equal(s.reservationRooms[1].roomNumberSnapshot, '104');
+    assert.equal(s.reservationRooms[1].status, 'Reserved'); assert.equal(Number(s.reservationRooms[1].agreedPricePerNight), 100); assert.equal(Number(s.totalAmount), 200);
+    assert.equal(s.reservationRooms[0].roomId, rooms[0].roomId); assert.equal(s.reservationRooms[0].status, 'CheckedOut');
+    assert.equal(await blocking(rooms[3].roomId, day(0), day(1)), 1, 'room 104 now held once');
+    assert.equal(await blocking(rooms[1].roomId, day(0), day(1)), 1, 'room 102 still held only by the other guest');
+    const moved = await prisma.auditLog.findFirst({ where: { action: 'Correction:restore', newData: { path: ['reservationId'], equals: mixed.reservationId } }, orderBy: { createdAt: 'desc' } });
+    assert.match((moved!.newData as any).value.result.roomLabel, /Room 102 → Room 104/);
+    console.log('9 ok: original room resold → choice of free same-type rooms, taken room refused, guest moved to 104 at the same price, history shows 102 → 104');
+
+    // 10. Booked dates already over (hotel date): restore refused, new reservation advised.
+    const ended = await book('END', [rooms[0], rooms[1]], -2, 0, 200, 200);
+    await prisma.reservationRoom.update({ where: { reservationRoomId: ended.reservationRooms[0].reservationRoomId }, data: { status: 'CheckedOut', actualCheckIn: day(-2), actualCheckOut: day(0) } });
+    await prisma.reservationRoom.update({ where: { reservationRoomId: ended.reservationRooms[1].reservationRoomId }, data: { status: 'NoShow' } });
+    await prisma.reservation.update({ where: { reservationId: ended.reservationId }, data: { status: 'Completed' } });
+    await assert.rejects(() => correctBooking(ended.reservationId, A, { action: 'restore', stayIds: [ended.reservationRooms[1].reservationRoomId], reason: 'Guest arrived late', preview: true }), /dates have ended.*new reservation/);
+    console.log('10 ok: checkout date reached on the hotel calendar → restore refused, staff told to create a new reservation');
+    // 11. Whole-booking restore (Correct or undo) follows the same rules: room 104 is now held tonight,
+    // so the single-room no-show booking ONE cannot be restored over it.
+    await assert.rejects(() => correctBooking(single.reservationId, A, { action: 'restore', reason: 'Guest arrived late', preview: true }), /conflicting dates/);
+    assert.equal((await status(single.reservationId)).status, 'NoShow');
+    console.log('11 ok: whole-booking restore uses the same remaining-night conflict check and refuses to double-book room 104');
     console.log('\nAll no-show checks passed.');
   } finally {
     await prisma.auditLog.deleteMany({ where: { userId: { in: userIds } } });

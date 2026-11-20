@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { AlertCircle, Loader2, X } from 'lucide-react';
 import { markAsNoShow } from '../../api/reservations';
 import { formatHotelTime, noShowAllowedFrom } from '../../lib/stayTiming';
+import { OWING_REASONS } from './CheckoutOwingDialog';
 
 const cash = (value) => `GHS ${Number(value || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const day = (value) => new Date(`${String(value).slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
@@ -32,13 +33,21 @@ export default function NoShowDialog({ reservation: res, onClose }) {
   const someoneStayed = noShowPartial(res);
   const [selected, setSelected] = useState(() => eligible.map((stay) => stay.reservationRoomId));
   const [reason, setReason] = useState('');
+  const [owingChoice, setOwingChoice] = useState('');
+  const [owingOther, setOwingOther] = useState('');
   const waiting = rooms.filter((stay) => stay.status === 'Reserved');
   // Whole booking: nobody stayed and every room still waiting is selected.
   const wholeBooking = !someoneStayed && selected.length > 0 && waiting.every((stay) => selected.includes(stay.reservationRoomId));
   const chosen = rooms.filter((stay) => selected.includes(stay.reservationRoomId));
   const balance = Math.max(0, Number(res.totalAmount || 0) - Number(res.amountPaid || 0));
+  // Everyone else has already left: marking these rooms checks the booking out. If money is still owed,
+  // record why, as at a normal checkout (shown under "Owed after checkout").
+  const others = rooms.filter((stay) => stay.status !== 'NoShow' && !selected.includes(stay.reservationRoomId));
+  const completesOwing = selected.length > 0 && others.length > 0 && others.every((stay) => stay.status === 'CheckedOut') && balance > 0.009;
+  const owingReason = owingChoice === 'Other' ? (owingOther.trim().length >= 5 ? `Other: ${owingOther.trim()}` : '') : owingChoice;
+  const canSave = selected.length > 0 && (!completesOwing || owingReason);
   const save = useMutation({
-    mutationFn: async () => (await markAsNoShow(res.reservationId, { reason: reason.trim(), ...(wholeBooking ? {} : { stayIds: selected }) })).data,
+    mutationFn: async () => (await markAsNoShow(res.reservationId, { reason: reason.trim(), ...(wholeBooking ? {} : { stayIds: selected }), ...(completesOwing ? { owingReason } : {}) })).data,
     onSuccess: (data) => {
       for (const key of ['reservations', 'reservation', 'rooms', 'availability', 'calendarReservations', 'dashboardGlance', 'operationalOverview', 'reservationStats', 'owedAfterCheckout', 'reservationCorrections']) client.invalidateQueries({ queryKey: [key] });
       toast.success(data?.message || 'Marked as no-show.');
@@ -50,7 +59,7 @@ export default function NoShowDialog({ reservation: res, onClose }) {
 
   return (
     <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="no-show-title">
-      <form onSubmit={(event) => { event.preventDefault(); if (selected.length && !save.isPending) save.mutate(); }} className="flex max-h-[92vh] w-full max-w-lg flex-col rounded-xl border border-border bg-surface shadow-xl">
+      <form onSubmit={(event) => { event.preventDefault(); if (canSave && !save.isPending) save.mutate(); }} className="flex max-h-[92vh] w-full max-w-lg flex-col rounded-xl border border-border bg-surface shadow-xl">
         <div className="flex items-start justify-between gap-3 border-b border-border p-4">
           <div>
             <h2 id="no-show-title" className="flex items-center gap-2 text-lg font-bold text-text"><AlertCircle size={20} className="text-orange-600" /> Mark no-show</h2>
@@ -83,14 +92,23 @@ export default function NoShowDialog({ reservation: res, onClose }) {
             </div>
           )}
           <p className="text-text-muted">Paid {cash(res.amountPaid)}{balance > 0.009 ? ` · balance ${cash(balance)} stays on the booking` : ''}. Payments are kept; nothing is refunded.</p>
-          <p className="text-xs text-text-muted">If the guest turns up later, restore the room from "Correct or undo actions" — only while it is still free.</p>
+          {completesOwing && (
+            <fieldset className="space-y-2 rounded-lg border border-danger-200 bg-danger-50 p-3">
+              <legend className="px-1 font-semibold text-danger-700">The other guests have left, so this checks the booking out with {cash(balance)} still owed. Why?</legend>
+              {OWING_REASONS.map((option) => (
+                <label key={option} className="flex min-h-10 cursor-pointer items-center gap-2 text-text"><input type="radio" name="no-show-owing" className="h-5 w-5" checked={owingChoice === option} onChange={() => setOwingChoice(option)} /> {option}</label>
+              ))}
+              {owingChoice === 'Other' && <input value={owingOther} onChange={(event) => setOwingOther(event.target.value)} maxLength={250} placeholder="At least 5 characters" aria-label="Other reason" className="min-h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-text" />}
+            </fieldset>
+          )}
+          <p className="text-xs text-text-muted">If the guest turns up later, open the reservation and use "Guest arrived" on the room.</p>
           <label className="block font-semibold text-text">Reason <span className="font-normal text-text-muted">(optional)</span>
             <input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={300} placeholder="e.g. Phone unreachable, no message from guest" className="mt-1 min-h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-text" />
           </label>
         </div>
         <div className="flex flex-wrap justify-end gap-2 border-t border-border p-4">
           <button type="button" onClick={onClose} className="min-h-11 rounded-lg border border-border px-4 text-sm text-text">Cancel</button>
-          <button disabled={!selected.length || save.isPending} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-orange-600 px-4 text-sm font-semibold text-white disabled:opacity-50">{save.isPending && <Loader2 size={16} className="animate-spin" />} Mark {selected.length} room{selected.length === 1 ? '' : 's'} as no-show</button>
+          <button disabled={!canSave || save.isPending} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-orange-600 px-4 text-sm font-semibold text-white disabled:opacity-50">{save.isPending && <Loader2 size={16} className="animate-spin" />} Mark {selected.length} room{selected.length === 1 ? '' : 's'} as no-show</button>
         </div>
       </form>
     </div>

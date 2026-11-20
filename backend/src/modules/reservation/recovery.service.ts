@@ -53,6 +53,29 @@ async function noConflict(tx: any, roomId: number, stayId: number, from: Date, t
   } });
   if (clash) throw new Error('The room is occupied or reserved for conflicting dates. Choose another room or correct the conflicting stay first.');
 }
+const dateOnly = (value: Date) => new Date(value).toISOString().slice(0, 10);
+// Restoring a stay (one no-show room or a whole cancelled/no-show booking): on or after the checkout date
+// (hotel calendar) no night is left, so a new reservation is needed. Otherwise only the nights still ahead
+// need the room; nights already passed cannot be used anyway. Returns the first night to check.
+function restoreFrom(stay: any, today: string, label: string) {
+  if (dateOnly(stay.checkOutDate) <= today) throw new Error(`${label}: the booked dates have ended (checkout was ${dateOnly(stay.checkOutDate)}). Create a new reservation for this guest instead.`);
+  return new Date(Math.max(new Date(stay.checkInDate).getTime(), new Date(`${today}T00:00:00.000Z`).getTime()));
+}
+async function hotelToday(tx: any, propertyId: number) {
+  const timeZone = (await tx.property.findUnique({ where: { propertyId }, select: { timezone: true } }))?.timezone || 'Africa/Accra';
+  return hotelDate(new Date(), timeZone);
+}
+// Room can hold this stay for the given nights: exists, active type, not under maintenance, no other live stay overlapping.
+async function roomFree(tx: any, roomId: number | null, stayId: number, propertyId: number, from: Date, to: Date) {
+  try { await availableInventory(tx, roomId, propertyId); await noConflict(tx, roomId as number, stayId, from, to); return true; }
+  catch { return false; }
+}
+async function sameTypeFreeRooms(tx: any, stay: any, propertyId: number, from: Date) {
+  const rooms = await tx.room.findMany({ where: { propertyId, roomTypeId: stay.roomTypeId, roomType: { isActive: true }, operationalStatus: { not: 'Maintenance' }, ...(stay.roomId ? { roomId: { not: stay.roomId } } : {}),
+    reservationRooms: { none: { status: { in: ['Reserved', 'CheckedIn'] }, reservation: { status: { in: ['Pending', 'Confirmed', 'InHouse'] } }, checkInDate: { lt: stay.checkOutDate }, checkOutDate: { gt: from } } } },
+    orderBy: { roomNumber: 'asc' }, select: { roomId: true, roomNumber: true, housekeepingStatus: true } });
+  return rooms.map((room: any) => ({ roomId: room.roomId, roomNumber: room.roomNumber, needsCleaning: !['Clean', 'Inspected'].includes(room.housekeepingStatus) }));
+}
 async function availableInventory(tx: any, roomId: number | null, propertyId: number, clean = false) {
   if (roomId === null) throw new Error('This stay has no active room. It cannot be restored or moved.');
   const room = await tx.room.findFirst({ where: { roomId, propertyId }, include: { roomType: true } });
@@ -229,7 +252,7 @@ export async function checkoutBooking(id: string, actor: Actor, overrideReason?:
 // Mark one or more rooms whose guest did not arrive as no-show and release only those rooms.
 // Other rooms (checked in, checked out or still expected), charges and payments are untouched; any
 // balance stays on the booking. Allowed only after the no-show time (check-in time + grace, hotel time).
-export async function markRoomsNoShow(id: string, actor: Actor, stayIds: unknown, reasonInput?: unknown) {
+export async function markRoomsNoShow(id: string, actor: Actor, stayIds: unknown, reasonInput?: unknown, owingReasonInput?: unknown) {
   return atomic(async tx => {
     const { res } = await booking(tx, id, actor);
     if (!['Confirmed', 'InHouse'].includes(res.status)) throw new Error('Only active reservations can have rooms marked as no-show.');
@@ -257,6 +280,14 @@ export async function markRoomsNoShow(id: string, actor: Actor, stayIds: unknown
     if (after.status === 'NoShow') await tx.reservation.update({ where: { reservationId: id }, data: { cancellationDate: new Date() } });
     await audit(tx, actor, id, 'RoomNoShow', note || 'No reason given', { status: res.status, rooms: selected.map((s: any) => ({ reservationRoomId: s.reservationRoomId, status: s.status })) },
       { status: after.status, rooms: labels, stayIds: ids, amountPaid: money(res.amountPaid), balanceDue: Math.max(0, money(money(res.totalAmount) - money(res.amountPaid))) });
+    // The last waiting room is gone and everyone else has left: the booking is now checked out. If money is
+    // still owed, record why, exactly like a checkout with a balance (no manager approval).
+    const balanceDue = Math.max(0, money(money(res.totalAmount) - money(res.amountPaid)));
+    if (after.status === 'Completed' && balanceDue > 0.009) {
+      const owingReason = typeof owingReasonInput === 'string' ? owingReasonInput.trim().replace(/\s+/g, ' ').slice(0, 300) : '';
+      if (owingReason.length < 5) throw new Error(`This completes the booking with GHS ${balanceDue.toFixed(2)} still owed. Choose why the guest is leaving without paying.`);
+      await audit(tx, actor, id, 'CreditCheckoutApproved', owingReason, { status: res.status }, { status: after.status, via: 'no-show', rooms: labels, balanceDue });
+    }
     return { reservationId: id, status: after.status, rooms: labels };
   });
 }
@@ -327,22 +358,52 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
       Object.assign(result, financialDecision(user, input.action, { ...context, timezone: hotel?.timezone }));
       if (!preview && !result.canApply) throw new Error(result.delegationReason);
     };
-    if (input.action === 'restore' && ['Confirmed', 'InHouse'].includes(res.status)) {
-      // Late arrival after a room was marked as no-show: put just those rooms back, if still free.
+    if (input.action === 'restore' && ['Confirmed', 'InHouse', 'Completed'].includes(res.status)) {
+      // Guest arrived after the room was marked as no-show (or it was marked by mistake): put just those
+      // rooms back as reserved. Other rooms, charges and payments are untouched; check-in stays a separate step.
       const ids = input.stayIds;
       if (!Array.isArray(ids) || !ids.length || ids.some((value: any) => !Number.isSafeInteger(value) || value < 1) || new Set(ids).size !== ids.length) throw new Error('Select the no-show rooms to restore.');
       const rooms = ids.map((value: number) => res.reservationRooms.find((room: any) => room.reservationRoomId === value));
       if (rooms.some((room: any) => !room || room.status !== 'NoShow')) throw new Error('Only rooms marked as no-show can be restored.');
-      await lockRooms(tx, rooms.map((r: any) => r.roomId).filter((id: any) => id !== null));
+      const targetId = input.targetRoomId === undefined || input.targetRoomId === null || input.targetRoomId === '' ? null : Number(input.targetRoomId);
+      if (targetId !== null && (rooms.length !== 1 || !Number.isSafeInteger(targetId) || targetId < 1)) throw new Error('Choose one room to give this guest.');
+      const today = await hotelToday(tx, actor.propertyId);
+      await lockRooms(tx, [...rooms.map((r: any) => r.roomId), targetId].filter((value: any) => value !== null));
+      const plans: { room: any; label: string; target: any }[] = [];
       for (const room of rooms) {
-        if (new Date(room.checkOutDate) <= new Date()) throw new Error('The booked dates for this room have passed. Create a new booking instead.');
-        await availableInventory(tx, room.roomId, actor.propertyId);
-        await noConflict(tx, room.roomId, room.reservationRoomId, room.checkInDate, room.checkOutDate);
+        const label = `Room ${room.roomNumberSnapshot || (room.roomId ? (await tx.room.findUnique({ where: { roomId: room.roomId } }))?.roomNumber : null) || '—'}`;
+        const from = restoreFrom(room, today, label);
+        if (targetId === null) {
+          const free = await roomFree(tx, room.roomId, room.reservationRoomId, actor.propertyId, from, room.checkOutDate);
+          if (!free) {
+            if (rooms.length > 1) throw new Error(`${label} is no longer free. Restore it on its own to choose another room.`);
+            // Original room taken (or under maintenance): offer free rooms of the same type for the remaining nights.
+            result.roomLabel = label;
+            result.needsRoom = true;
+            result.alternatives = await sameTypeFreeRooms(tx, room, actor.propertyId, from);
+            result.message = result.alternatives.length
+              ? `${label} is no longer free for the remaining nights. Choose another ${room.roomTypeNameSnapshot || 'room'} for the guest; the agreed price stays the same.`
+              : `${label} is no longer free and no other room of this type is free for the remaining nights. Create a new reservation or choose dates with the guest.`;
+            if (preview) return result;
+            throw new Error(result.message);
+          }
+          plans.push({ room, label, target: null });
+        } else {
+          const target = await tx.room.findFirst({ where: { roomId: targetId, propertyId: actor.propertyId }, include: { roomType: true } });
+          if (!target || target.roomTypeId !== room.roomTypeId) throw new Error('Choose a room of the same type as the original booking.');
+          if (!(await roomFree(tx, targetId, room.reservationRoomId, actor.propertyId, from, room.checkOutDate))) throw new Error(`Room ${target.roomNumber} is not free for the remaining nights. Choose another room.`);
+          plans.push({ room, label, target });
+        }
       }
-      result.stayIds = rooms.map((r: any) => r.reservationRoomId);
-      result.message = 'Put the selected no-show room(s) back as reserved so the guest can check in. Charges and payments stay unchanged.';
+      result.stayIds = plans.map(plan => plan.room.reservationRoomId);
+      result.roomLabel = plans.map(plan => plan.target ? `${plan.label} → Room ${plan.target.roomNumber}` : plan.label).join(', ');
+      if (plans.some(plan => plan.target)) result.movedTo = plans.filter(plan => plan.target).map(plan => ({ reservationRoomId: plan.room.reservationRoomId, fromRoom: plan.label, toRoom: `Room ${plan.target.roomNumber}` }));
+      result.message = `Put ${result.roomLabel} back as reserved so the guest can be checked in. Charges, payments and other rooms stay unchanged.`;
       if (preview) return result;
-      await tx.reservationRoom.updateMany({ where: { reservationId: id, reservationRoomId: { in: result.stayIds }, status: 'NoShow' }, data: { status: 'Reserved' } });
+      for (const plan of plans) {
+        await tx.reservationRoom.update({ where: { reservationRoomId: plan.room.reservationRoomId }, data: { status: 'Reserved',
+          ...(plan.target ? { roomId: plan.target.roomId, roomNumberSnapshot: plan.target.roomNumber, roomTypeNameSnapshot: plan.target.roomType.typeName } : {}) } });
+      }
       await derive(tx, id);
     } else if (input.action === 'restore') {
       if (!['Cancelled', 'NoShow'].includes(res.status)) throw new Error('Only cancelled or no-show reservations can be restored.');
@@ -351,9 +412,11 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
       if (Math.abs(recordedPaid - Number(res.amountPaid)) > 0.01) throw new Error('Payment history and balance differ. Reconcile before restoring.');
       if (!res.reservationRooms.length) throw new Error('This reservation has no room allocations.');
       await lockRooms(tx, res.reservationRooms.map((r: any) => r.roomId).filter((id: any) => id !== null));
+      const today = await hotelToday(tx, actor.propertyId);
       for (const room of res.reservationRooms) {
+        const from = restoreFrom(room, today, `Room ${room.roomNumberSnapshot || '—'}`);
         await availableInventory(tx, room.roomId, actor.propertyId);
-        await noConflict(tx, room.roomId, room.reservationRoomId, room.checkInDate, room.checkOutDate);
+        await noConflict(tx, room.roomId, room.reservationRoomId, from, room.checkOutDate);
         if (room.actualCheckIn) throw new Error('This reservation contains a previous stay. It needs a new booking instead of restoration.');
       }
       result.message = 'Restore reservation and all room allocations; retain existing payments and clear the unprocessed cancellation refund.';
