@@ -5,9 +5,11 @@ import App from './App.jsx';
 import './index.css';
 import './lib/toastSetup';
 import { enableDatePickers } from './lib/datePickers';
+import { disableWheelOnNumberInputs } from './lib/numberInputs';
 import ErrorBoundary from './components/ErrorBoundary';
 
 enableDatePickers();
+disableWheelOnNumberInputs();
 
 // Create a React Query client with Caching DISABLED
 const queryClient = new QueryClient({
