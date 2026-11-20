@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { defaultToday } from '../lib/period';
 import { useQuery } from '@tanstack/react-query';
 import { getReservationsByDateRange } from '../api/reservations';
 import { useAuthStore } from '../store/authStore';
@@ -9,9 +10,9 @@ export default function CalendarPage() {
   const user = useAuthStore((state) => state.user);
   const propertyId = user?.propertyId;
   
-  const today = new Date();
-  const [currentYear, setCurrentYear] = useState(today.getFullYear());
-  const [currentMonth, setCurrentMonth] = useState(today.getMonth()); // 0-indexed
+  const today = defaultToday(); // hotel today, YYYY-MM-DD
+  const [currentYear, setCurrentYear] = useState(Number(today.slice(0, 4)));
+  const [currentMonth, setCurrentMonth] = useState(Number(today.slice(5, 7)) - 1); // 0-indexed
 
   // Calculate first and last day of the month for the API
   const fromDate = new Date(currentYear, currentMonth, 1).toISOString().split('T')[0];

@@ -1,5 +1,6 @@
 import { Skeleton, SkeletonCards } from '../components/ui/Skeleton';
 import { useState } from 'react';
+import { addDays, defaultToday } from '../lib/period';
 import CashRangeSummary from '../components/reports/CashRangeSummary';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -23,15 +24,9 @@ export default function ReportsPage() {
   const isPropertySpecific = !!userPropertyId;
 
   // Default to Current Month
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date(); d.setDate(1);
-    return d.toISOString().split('T')[0];
-  });
+  const [startDate, setStartDate] = useState(() => `${defaultToday().slice(0, 8)}01`);
   
-  const [endDate, setEndDate] = useState(() => {
-    const d = new Date(); d.setMonth(d.getMonth() + 1, 0);
-    return d.toISOString().split('T')[0];
-  });
+  const [endDate, setEndDate] = useState(() => { const first = defaultToday().slice(0, 8) + '01'; return addDays(`${addDays(first, 31).slice(0, 8)}01`, -1); });
 
   // Initialize propertyId with user's property if they have one
   const [propertyId, setPropertyId] = useState(userPropertyId || '');
@@ -139,7 +134,7 @@ const currentPropertyName = user?.propertyName || 'All Properties';
               <div className="flex items-end gap-1.5 h-48 w-full overflow-x-auto pb-2">
                 {timeSeries.map((day, idx) => {
                   const heightPercent = (day.total / maxRev) * 100;
-                  const isToday = day.date === new Date().toISOString().split('T')[0];
+                  const isToday = day.date === defaultToday();
                   return (
                     <div key={idx} className="flex-1 min-w-[12px] flex flex-col items-center group relative h-full justify-end">
                       {/* Tooltip */}

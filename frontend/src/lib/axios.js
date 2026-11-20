@@ -1,6 +1,7 @@
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore'; // Adjust path if your store is elsewhere
+import { recordServerTime, setResync } from './serverClock';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000/api',
@@ -16,6 +17,7 @@ const api = axios.create({
 // ==========================================
 api.interceptors.request.use(
   (config) => {
+    config.sentAt = performance.now(); // to allow for network delay when reading the server's time
     // Public guest endpoints use their own token; never attach the hotel staff token there.
     const requestPath = new URL(config.url || '', config.baseURL || window.location.origin).pathname;
     const isPublicRequest = requestPath.startsWith('/public/');
@@ -37,9 +39,10 @@ api.interceptors.request.use(
 // 2. RESPONSE INTERCEPTOR (Global Error Handler)
 // ==========================================
 api.interceptors.response.use(
-  (response) => response, // If it's a 2xx status, just return it
+  (response) => { recordServerTime(response.headers?.date, response.config?.sentAt); return response; }, // 2xx: note the server's time, return it
   (error) => {
     if (error.response) {
+      recordServerTime(error.response.headers?.date, error.config?.sentAt);
       // The request was made and the server responded with a status code out of 2xx
       const { status, data } = error.response;
       // This is an expected confirmation step, shown inline by the occupant form.
@@ -121,5 +124,9 @@ api.interceptors.response.use(
     return Promise.reject(error); 
   }
 );
+
+// When server time is no longer trusted (the computer slept or its clock changed), ask the tiny health
+// endpoint once; its response carries the server's Date like any other.
+setResync(() => api.get(new URL('/health', api.defaults.baseURL).href, { skipErrorToast: true }).catch(() => {}));
 
 export default api;

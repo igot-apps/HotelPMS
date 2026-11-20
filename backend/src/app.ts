@@ -37,7 +37,8 @@ const app: Express = express();
 
 // Middleware
 app.use(helmet());
-app.use(cors());
+// The browser may read the Date header: the app uses it as the trusted clock (device clocks can be wrong).
+app.use(cors({ exposedHeaders: ['Date'] }));
 // Replace internal error text (database, code) with a friendly message before it reaches users.
 app.use(safeErrorResponses);
 

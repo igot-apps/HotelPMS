@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { serverNow } from '../../lib/serverClock';
+import { fromHotelInput, toHotelInput } from '../../lib/stayTiming';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../../lib/axios';
@@ -9,9 +11,9 @@ export default function RefundCompletionForm({ request, onCompleted, onBusyChang
   const [reference, setReference] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [providerConfirmed, setProviderConfirmed] = useState(false);
-  const [returnedAt, setReturnedAt] = useState(() => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 19); });
+  const [returnedAt, setReturnedAt] = useState(() => toHotelInput(serverNow(), undefined, true)); // hotel time
   const [error, setError] = useState('');
-  const mutation = useMutation({ mutationFn: () => api.post(`/reservations/refund-requests/${request.requestId}/complete`, { method, reference, moneyReturned: confirmed, providerConfirmed, returnedAt: new Date(returnedAt).toISOString() }), onMutate: () => onBusyChange?.(true), onSuccess: () => { invalidateCorrections(client); toast.success('Money returned recorded. Original payment preserved.'); onCompleted?.(); }, onError: e => setError(e.response?.data?.message || 'Could not record the refund. Your entries are still here. Try again.'), onSettled: () => onBusyChange?.(false) });
+  const mutation = useMutation({ mutationFn: () => api.post(`/reservations/refund-requests/${request.requestId}/complete`, { method, reference, moneyReturned: confirmed, providerConfirmed, returnedAt: fromHotelInput(returnedAt)?.toISOString() }), onMutate: () => onBusyChange?.(true), onSuccess: () => { invalidateCorrections(client); toast.success('Money returned recorded. Original payment preserved.'); onCompleted?.(); }, onError: e => setError(e.response?.data?.message || 'Could not record the refund. Your entries are still here. Try again.'), onSettled: () => onBusyChange?.(false) });
   const field = 'mt-1 min-h-11 w-full min-w-0 rounded-lg border border-border bg-surface p-2 text-sm text-text';
   return <form onSubmit={event => { event.preventDefault(); if (!mutation.isPending) mutation.mutate(); }} className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
     <h4 className="font-bold text-amber-900">Record GHS {Number(request.input.amount).toFixed(2)} returned</h4>

@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import BackButton from '../ui/BackButton';
+import ClockNotice from './ClockNotice';
 import api from '../../lib/axios';
 import { useAuthStore } from '../../store/authStore';
 
@@ -60,6 +61,7 @@ export default function AppLayout() {
         <main id="main-content" className="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:p-4 md:p-8" inert={isSidebarOpen ? true : undefined}>
           {/* Mobile back button on every page except the home page (and pages that have their own). */}
           {showBack && <div className="mb-3 md:hidden"><BackButton mobileOnly fallback={home} label="Back" /></div>}
+          <ClockNotice />
           <Outlet />
         </main>
       </div>

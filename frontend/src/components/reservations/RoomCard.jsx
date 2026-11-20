@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { roomStatusLabel } from '../../lib/statusLabels';
 import { LogIn, LogOut, Loader2, Clock, Pencil, History, CalendarMinus, AlertCircle } from 'lucide-react';
 import { expectedCheckoutAt, formatDuration, formatTime } from '../../lib/stayTiming';
+import { serverNow } from '../../lib/serverClock';
 
 export default function RoomCard({ 
   rr, 
@@ -189,13 +190,14 @@ export default function RoomCard({
       {/* Elapsed / actual stay time and late departure (display only — nights are charged by calendar date) */}
       {rr.actualCheckIn && (() => {
         const start = new Date(rr.actualCheckIn);
-        const end = rr.actualCheckOut ? new Date(rr.actualCheckOut) : new Date();
-        const due = expectedCheckoutAt(rr.checkOutDate, res.property?.checkOutTime);
+        const end = rr.actualCheckOut ? new Date(rr.actualCheckOut) : serverNow();
+        if (!end) return null;
+        const due = expectedCheckoutAt(rr.checkOutDate, res.property?.checkOutTime, res.property?.timezone);
         const late = rr.actualCheckOut && end > due ? end - due : 0;
         return (
           <div className="mt-2 space-y-1 text-xs">
             <p className="text-text-muted">{rr.actualCheckOut ? 'Stayed' : 'In room for'} <strong className="text-text">{formatDuration(end - start)}</strong></p>
-            {late >= 60000 && <p className="font-semibold text-warning-700">Departed {formatDuration(late)} after the {formatTime(due)} checkout time</p>}
+            {late >= 60000 && <p className="font-semibold text-warning-700">Departed {formatDuration(late)} after the {formatTime(due, res.property?.timezone)} checkout time</p>}
           </div>
         );
       })()}

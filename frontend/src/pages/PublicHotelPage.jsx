@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { addDays, defaultToday } from '../lib/period';
 import { SHOW_DISCOVER } from '../lib/platformConfig';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -42,12 +43,11 @@ export default function PublicHotelPage() {
   const roomResultsRef = useRef(null);
 
 // 🌟 Smart Date Initialization (Prevent past dates)
-const today = new Date();
-const tomorrow = new Date(today);
-tomorrow.setDate(tomorrow.getDate() + 1);
+const today = defaultToday(); // hotel today (server time once known)
+const tomorrow = addDays(today, 1);
 // Discovery, availability, and checkout share the same stay dates in the URL.
-const checkIn = searchParams.get('checkIn') ?? today.toISOString().slice(0, 10);
-const checkOut = searchParams.get('checkOut') ?? tomorrow.toISOString().slice(0, 10);
+const checkIn = searchParams.get('checkIn') ?? today;
+const checkOut = searchParams.get('checkOut') ?? tomorrow;
 const updateStayDate = (field, value) => {
   setSearchParams(current => {
     const next = new URLSearchParams(current);
@@ -151,7 +151,7 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
   }
 
   // Format today's date for the min attribute on date inputs
-  const minDate = today.toISOString().split('T')[0];
+  const minDate = today;
   const propertyPhotos = [...new Set([property.coverImage, ...(Array.isArray(property.galleryImages) ? property.galleryImages : [])].filter(Boolean))].slice(0, 3);
   const selectedPhoto = propertyPhotos[activePhoto] || propertyPhotos[0];
   const googleMapUrl = property.latitude != null && property.longitude != null

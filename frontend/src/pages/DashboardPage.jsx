@@ -1,5 +1,6 @@
 import { SkeletonCards } from '../components/ui/Skeleton';
 import { useState } from 'react';
+import { serverNow } from '../lib/serverClock';
 import CheckoutAlerts from '../components/reservations/CheckoutAlerts';
 import TodayAtAGlance from '../components/dashboard/TodayAtAGlance';
 import MyDayCard from '../components/dashboard/MyDayCard';
@@ -108,9 +109,9 @@ export default function DashboardPage() {
     refetchInterval: 60000,
   });
   const timeZone = data?.timeZone || 'Africa/Accra';
-  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', hourCycle: 'h23' }).format(new Date()));
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', hourCycle: 'h23' }).format(serverNow() ?? new Date()));
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-  const today = new Date().toLocaleDateString('en-GH', { timeZone, weekday: 'long', month: 'long', day: 'numeric' });
+  const today = (serverNow() ?? new Date()).toLocaleDateString('en-GH', { timeZone, weekday: 'long', month: 'long', day: 'numeric' });
   const tasks = data?.taskCounts || {};
   const stats = data?.roomStats || {};
   const propertyName = user?.propertyName || properties.find(p => p.propertyId === Number(propertyId))?.propertyName;

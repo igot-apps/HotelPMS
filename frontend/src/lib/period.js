@@ -1,11 +1,22 @@
+import { serverNow } from './serverClock.js';
+
 // Report periods as whole hotel days (YYYY-MM-DD), worked out in the hotel's time zone.
 export const MAX_PERIOD_DAYS = 92;
+export const HOTEL_TIME_ZONE = 'Africa/Accra';
 
-export function hotelToday(timeZone = 'Africa/Accra', now = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-GB', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
+// Today on the hotel's calendar from the server's clock; null while server time is unknown.
+export function hotelToday(timeZone = HOTEL_TIME_ZONE, now = serverNow()) {
+  if (!now) return null;
+  const format = (zone) => new Intl.DateTimeFormat('en-GB', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
+  let parts;
+  try { parts = format(timeZone || HOTEL_TIME_ZONE); } catch { parts = format(HOTEL_TIME_ZONE); }
   const get = (type) => parts.find((p) => p.type === type).value;
   return `${get('year')}-${get('month')}-${get('day')}`;
 }
+
+// Only for pre-filling dates and default report periods (never for decisions): server time when known,
+// otherwise this device's date until it arrives. The server checks every booking date itself.
+export const defaultToday = (timeZone) => hotelToday(timeZone) ?? hotelToday(timeZone, new Date());
 
 export const addDays = (date, days) => new Date(Date.parse(`${date}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
 export const daysBetween = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) + 1;

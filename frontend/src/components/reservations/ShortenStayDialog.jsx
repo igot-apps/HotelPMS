@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { hotelToday } from '../../lib/period';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { CalendarDays, CalendarMinus, Loader2, X } from 'lucide-react';
@@ -11,18 +12,17 @@ const DAY = 86400000;
 const addDays = (date, days) => new Date(new Date(`${date}T00:00:00Z`).getTime() + days * DAY).toISOString().slice(0, 10);
 const nightsBetween = (from, to) => Math.round((new Date(`${to}T00:00:00Z`) - new Date(`${from}T00:00:00Z`)) / DAY);
 const label = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
-const localToday = () => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
 
 // Shorten a stay to remove unused nights (same correction and rules as the Corrections panel),
 // then point staff to record the refund for any overpayment.
-export default function ShortenStayDialog({ room, reservationId, onClose }) {
+export default function ShortenStayDialog({ room, reservationId, timeZone, onClose }) {
   const queryClient = useQueryClient();
   const arrival = String(room.checkInDate).slice(0, 10);
   const current = String(room.checkOutDate).slice(0, 10);
-  const today = localToday();
-  const earliest = [today, addDays(arrival, 1)].sort().at(-1); // nights before today are already used
+  const today = hotelToday(timeZone); // server time; null until known
+  const earliest = today && [today, addDays(arrival, 1)].sort().at(-1); // nights before today are already used
   const latest = addDays(current, -1);
-  const possible = earliest <= latest;
+  const possible = Boolean(earliest) && earliest <= latest;
   const [date, setDate] = useState(possible ? earliest : current);
   const [preview, setPreview] = useState(null);
   const [credit, setCredit] = useState(null); // set once the stay is shortened

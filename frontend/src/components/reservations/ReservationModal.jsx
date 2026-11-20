@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { addDays, defaultToday } from '../../lib/period';
 import { X, Loader2, AlertCircle, Check, ChevronLeft, ChevronRight, CreditCard, UserPlus, Printer } from 'lucide-react';
 import { getAvailableRooms } from '../../api/rooms';
 import { getGuests, lookupGuestByPhone, createGuest, updateGuest } from '../../api/guests';
@@ -47,7 +48,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
   });
 
   // 🚨 DATE HELPERS: Prevent past dates
-  const today = new Date().toISOString().split('T')[0];
+  const today = defaultToday();
   const getMinCheckOut = (checkIn) => {
     if (!checkIn) return today;
     const nextDay = new Date(checkIn);
@@ -58,7 +59,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
   // 🌟 UPDATED: Auto-populate dates and smart-step advancement
   useEffect(() => {
     if (isOpen) {
-      const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+      const tomorrow = addDays(today, 1);
       
       const initialCheckIn = initialData?.checkInDate || today;
       const initialCheckOut = initialData?.checkOutDate || tomorrow;
@@ -275,11 +276,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
         toast.error('Choose both the check-in and check-out dates.');
         return;
       }
-      const todayDate = new Date();
-      todayDate.setHours(0,0,0,0);
-      const checkInDate = new Date(formData.checkInDate);
-      checkInDate.setHours(0,0,0,0);
-      if (checkInDate < todayDate) {
+      if (formData.checkInDate < defaultToday()) { // the server re-checks with its own date
         toast.error('Check-in date cannot be in the past.');
         return;
       }

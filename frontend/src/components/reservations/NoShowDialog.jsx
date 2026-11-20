@@ -3,20 +3,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { AlertCircle, Loader2, X } from 'lucide-react';
 import { getReservationById, markAsNoShow } from '../../api/reservations';
-import { formatHotelTime, noShowAllowedFrom } from '../../lib/stayTiming';
+import { formatHotelTime, noShowAllowedFrom, noShowRooms } from '../../lib/stayTiming';
 import { OWING_REASONS } from './CheckoutOwingDialog';
 
 const cash = (value) => `GHS ${Number(value || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const day = (value) => new Date(`${String(value).slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const roomNumber = (stay) => stay.room?.roomNumber || stay.roomNumberSnapshot || '—';
 
-// Rooms of a booking that can be marked as no-show now: still reserved and past the no-show time
-// (hotel check-in time + 6 hours on the arrival day, hotel time zone). Same rule as the server.
-export function noShowRooms(res, now = Date.now()) {
-  if (!['Confirmed', 'InHouse'].includes(res?.status)) return [];
-  return (res.reservationRooms || []).filter((stay) => stay.status === 'Reserved'
-    && now >= noShowAllowedFrom(stay.checkInDate || res.checkInDate, res.property?.checkInTime, res.property?.timezone).getTime());
-}
+// The eligibility rule lives with the other timing rules (testable without React).
+export { noShowRooms };
 
 // Mark exactly one room as no-show (opened from that room's own button). Only this room is released;
 // other rooms, charges and payments stay as they are. Pass the booking, or just its id (dashboard),

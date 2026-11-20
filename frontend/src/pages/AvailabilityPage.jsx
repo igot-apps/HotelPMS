@@ -1,6 +1,7 @@
 import { SkeletonCards } from '../components/ui/Skeleton';
 // AvailabilityPage.jsx
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { addDays, defaultToday } from '../lib/period';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAvailableRooms } from '../api/rooms';
 import { createReservation } from '../api/reservations';
@@ -36,7 +37,7 @@ export default function AvailabilityPage() {
   }), [checkInDate, checkOutDate, selectedRooms]);
 
   // 🌟 HELPER: Prevent past dates and invalid ranges
-  const today = new Date().toISOString().split('T')[0];
+  const today = defaultToday();
   const getMinCheckOut = (checkIn) => {
     if (!checkIn) return today;
     const nextDay = new Date(checkIn);
@@ -46,7 +47,7 @@ export default function AvailabilityPage() {
 
   // Set default dates (Today to Tomorrow)
   useEffect(() => {
-    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+    const tomorrow = addDays(today, 1);
     setCheckInDate(today);
     setCheckOutDate(tomorrow);
   }, []);

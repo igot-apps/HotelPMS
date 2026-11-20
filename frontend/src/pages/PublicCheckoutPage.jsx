@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { defaultToday } from '../lib/period';
 import { Link, useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Calendar, Tag, Loader2, CheckCircle2, CreditCard, ShieldCheck, AlertCircle, Clock, Lock } from 'lucide-react';
@@ -276,7 +277,7 @@ export default function PublicCheckoutPage() {
                       type="date"
                       value={checkIn}
                       onChange={(e) => updateStayDate('checkIn', e.target.value)}
-                      min={new Date().toISOString().split('T')[0]}
+                      min={defaultToday()}
                       className="block w-full min-w-0 max-w-full [min-inline-size:0] box-border px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
                     />
                   </div>

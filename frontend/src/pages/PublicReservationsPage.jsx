@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { serverNow } from '../lib/serverClock';
 import { SHOW_DISCOVER } from '../lib/platformConfig';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -98,8 +99,9 @@ export default function PublicReservationsPage() {
     },
     onError: error => { toast.error(error.response?.data?.message || 'Could not cancel the reservation. Please try again.'); client.invalidateQueries({ queryKey: ['guestReservations'] }); },
   });
-  const [holdNow, setHoldNow] = useState(Date.now());
-  useEffect(() => { const timer = setInterval(() => setHoldNow(Date.now()), 15000); return () => clearInterval(timer); }, []);
+  const clockNow = () => serverNow()?.getTime() ?? Date.now(); // countdown only; the server enforces the hold
+  const [holdNow, setHoldNow] = useState(clockNow);
+  useEffect(() => { const timer = setInterval(() => setHoldNow(clockNow()), 15000); return () => clearInterval(timer); }, []);
   const navigate = useNavigate();
   const location = useLocation();
   const [token, setToken] = useState(null);

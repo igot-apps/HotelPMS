@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { serverNow } from '../../lib/serverClock';
+import { fromHotelInput, toHotelInput } from '../../lib/stayTiming';
 import { useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/axios';
@@ -7,7 +9,7 @@ import { useAuthStore } from '../../store/authStore';
 import ReasonSelect from './ReasonSelect';
 import { RequestCard, CorrectionImpact } from './CorrectionRequests';
 import { invalidateCorrections } from '../../lib/correction-actions';
-const localNow = () => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 19); };
+const localNow = () => toHotelInput(serverNow(), undefined, true); // hotel time from the server; blank if unknown
 export default function RefundPanel({ reservation, embedded = false }) {
   const user = useAuthStore(state => state.user);
   const client = useQueryClient();
@@ -28,7 +30,7 @@ export default function RefundPanel({ reservation, embedded = false }) {
       preview: !apply, expectedVersion: apply ? preview?.version : undefined,
       ...(apply ? { recordDirectly: true } : {}),
       ...(apply && query.data?.nonRefundable ? { policyException } : {}),
-      ...(apply && recordsReturn ? { method: returnMethod, reference: returnReference, returnedAt: new Date(returnedAt).toISOString(), moneyReturned, providerConfirmed } : {}),
+      ...(apply && recordsReturn ? { method: returnMethod, reference: returnReference, returnedAt: fromHotelInput(returnedAt)?.toISOString(), moneyReturned, providerConfirmed } : {}),
     }, { skipErrorToast: true })).data.data,
     onSuccess: (result, apply) => {
       if (!apply) { setPreview(result); return; }

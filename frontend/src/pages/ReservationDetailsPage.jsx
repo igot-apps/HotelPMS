@@ -7,8 +7,10 @@ import { bookingLink } from '../lib/bookingLink';
 import { bookingStatusLabel, roomStatusLabel, roomStatusTone } from '../lib/statusLabels';
 
 import { hotelToday } from '../lib/period';
+import useServerClock from '../lib/useServerClock';
 // Today on the hotel's calendar (hotel time zone), not the computer's clock; falls back to the computer's date.
-const localToday = (timeZone) => { if (timeZone) { try { return hotelToday(timeZone); } catch { /* unknown zone */ } } const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+// Today on the hotel's calendar from the server's clock (never the computer's); null until server time is known.
+const localToday = (timeZone) => hotelToday(timeZone);
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getReservationById, getReservationStats, updateReservation } from '../api/reservations';
 import api from '../lib/axios';
@@ -27,6 +29,7 @@ import RefundPanel from '../components/reservations/RefundPanel';
 import { useAuthStore } from '../store/authStore';
 
 export default function ReservationDetailsPage() {
+  useServerClock(); // re-render when server time arrives or is lost
   const { id } = useParams();
   const location = useLocation();
   const fix = new URLSearchParams(location.search).get('fix');
@@ -191,7 +194,8 @@ export default function ReservationDetailsPage() {
           {resData.reservationRooms?.map((rr) => {
             const active = ['Confirmed', 'InHouse'].includes(resData.status);
             const roomLink = (action) => `${bookingLink(resData, action, rr.reservationRoomId)}&back=booking`;
-            const canCheckIn = active && rr.status === 'Reserved' && String(rr.checkInDate).slice(0, 10) <= localToday(resData.property?.timezone);
+            const today = localToday(resData.property?.timezone);
+            const canCheckIn = active && rr.status === 'Reserved' && Boolean(today) && String(rr.checkInDate).slice(0, 10) <= today;
             const inRoom = active && rr.status === 'CheckedIn';
             const btn = 'inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold';
             return (

@@ -1,5 +1,6 @@
 import { SkeletonCards } from '../components/ui/Skeleton';
 import { useState, useEffect, useRef } from 'react';
+import { addDays, defaultToday } from '../lib/period';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../lib/axios';
@@ -163,8 +164,8 @@ export default function DiscoverPage() {
   // GPS states
   const [userLocation, setUserLocation] = useState(null);
   const [locationStatus, setLocationStatus] = useState('checking');
-  const today = new Date().toISOString().split('T')[0];
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+  const today = defaultToday();
+  const tomorrow = addDays(today, 1);
   const hasInvalidDateRange = Boolean(checkIn && checkOut && checkOut <= checkIn);
 
   useEffect(() => { setCurrentPage(1); }, [checkIn, checkOut, availability]);

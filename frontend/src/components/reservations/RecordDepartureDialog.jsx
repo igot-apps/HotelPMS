@@ -4,6 +4,8 @@ import { AlertTriangle, History, Info, Loader2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../lib/axios';
 import { invalidateCorrections } from '../../lib/correction-actions';
+import { serverNow } from '../../lib/serverClock';
+import { fromHotelInput, toHotelInput } from '../../lib/stayTiming';
 
 export const EVIDENCE_TYPES = [
   ['key-returned', 'Key or keycard was returned'],
@@ -14,18 +16,17 @@ export const EVIDENCE_TYPES = [
 ];
 const field = 'mt-1 min-h-11 w-full min-w-0 rounded-lg border border-border bg-background p-2 text-sm text-text';
 const cash = (value) => `GHS ${Number(value || 0).toFixed(2)}`;
-const localInput = (date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
 // Forgotten checkout: record when the guest really left. Managers apply it; receptionists send it for approval.
 export default function RecordDepartureDialog({ stay, onClose }) {
   const queryClient = useQueryClient();
 
-  const [form, setForm] = useState({ departedAt: localInput(new Date()), evidenceType: '', evidenceNote: '', reason: 'Checkout was not recorded when the guest left.', contradictionNote: '' });
+  const [form, setForm] = useState({ departedAt: toHotelInput(serverNow()), evidenceType: '', evidenceNote: '', reason: 'Checkout was not recorded when the guest left.', contradictionNote: '' });
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const url = `/reservations/${stay.reservationId}`;
-  const body = () => ({ action: 'record-departure', stayIds: [stay.reservationRoomId], departedAt: new Date(form.departedAt).toISOString(), evidenceType: form.evidenceType, evidenceNote: form.evidenceNote, reason: form.reason, ...(form.contradictionNote.trim() ? { contradictionNote: form.contradictionNote.trim() } : {}) });
+  const body = () => ({ action: 'record-departure', stayIds: [stay.reservationRoomId], departedAt: fromHotelInput(form.departedAt)?.toISOString(), evidenceType: form.evidenceType, evidenceNote: form.evidenceNote, reason: form.reason, ...(form.contradictionNote.trim() ? { contradictionNote: form.contradictionNote.trim() } : {}) });
   const change = (key) => (event) => { setForm((current) => ({ ...current, [key]: event.target.value })); if (key !== 'contradictionNote') setPreview(null); setError(''); };
 
   const submit = async (event) => {
@@ -63,7 +64,7 @@ export default function RecordDepartureDialog({ stay, onClose }) {
         </div>
         <fieldset disabled={busy} className="min-w-0 space-y-3">
           <label className="block text-sm font-medium text-text">When did the guest actually leave?
-            <input required type="datetime-local" max={localInput(new Date())} value={form.departedAt} onChange={change('departedAt')} className={field} />
+            <input required type="datetime-local" max={toHotelInput(serverNow()) || undefined} value={form.departedAt} onChange={change('departedAt')} className={field} />
           </label>
           <label className="block text-sm font-medium text-text">Evidence
             <select required value={form.evidenceType} onChange={change('evidenceType')} className={field}>

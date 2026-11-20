@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Banknote, X, BedDouble, CalendarRange, Coins, Loader2, Receipt, Undo2, Users, Wallet } from 'lucide-react';
 import { Drawer } from './TodayAtAGlance';
 import { onlineCollected, staffRowsForPeriod } from '../../lib/staffRefunds';
-import { MAX_PERIOD_DAYS, PRESETS, daysBetween, hotelToday, periodLabel, presetRange, previousPeriod } from '../../lib/period';
+import { MAX_PERIOD_DAYS, PRESETS, daysBetween, defaultToday, periodLabel, presetRange, previousPeriod } from '../../lib/period';
 import api from '../../lib/axios';
 import { bookingLink } from '../../lib/bookingLink';
 
@@ -19,7 +19,7 @@ const get = (url, params) => async () => (await api.get(url, { params, skipError
 // "Right now" figures (money owed, rooms tonight) are current and do not follow the period.
 export default function ManagerDashboard() {
   const glance = useQuery({ queryKey: ['dashboardGlance'], queryFn: get('/dashboard/glance'), refetchInterval: 60000 });
-  const today = hotelToday(glance.data?.timeZone || 'Africa/Accra');
+  const today = defaultToday(glance.data?.timeZone || 'Africa/Accra'); // server time once the first response arrives
   const [params, setParams] = useSearchParams();
   const preset = PRESETS.some(([key]) => key === params.get('period')) ? params.get('period') : 'today';
   const range = preset === 'custom' && params.get('from') && params.get('to') ? { from: params.get('from'), to: params.get('to') } : presetRange(preset, today);

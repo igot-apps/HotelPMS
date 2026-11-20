@@ -34,8 +34,11 @@ import GuestArrivedDialog from '../components/reservations/GuestArrivedDialog';
 
 // The hotel's calendar day as YYYY-MM-DD, using the browser's local time.
 import { hotelToday } from '../lib/period';
+import { serverNow } from '../lib/serverClock';
+import useServerClock from '../lib/useServerClock';
 // Today on the hotel's calendar (hotel time zone), not the computer's clock; falls back to the computer's date.
-const localToday = (timeZone) => { if (timeZone) { try { return hotelToday(timeZone); } catch { /* unknown zone */ } } const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+// Today on the hotel's calendar from the server's clock (never the computer's); null until server time is known.
+const localToday = (timeZone) => hotelToday(timeZone);
 import {
   Search, Plus, CalendarDays, AlertCircle, XCircle,
   ChevronLeft, ChevronRight, Eye, X, Check,
@@ -123,6 +126,7 @@ const noShowHint = (res) => (noShowCount(res) ? ` · ${noShowCount(res)} not arr
 const BACK_LABELS = { overdue: 'Overdue checkouts', arrivals: 'Arrivals to check in', departures: 'Departures to check out', inHouse: 'Guests in house', free: 'Rooms free tonight', collected: 'Collected today', unpaid: 'Owed by guests in house', owedAfter: 'Owed after checkout', attention: 'Needs attention', dashboard: 'the dashboard', booking: 'the booking details' };
 
 export default function ReservationsPage() {
+  useServerClock(); // re-render when server time arrives or is lost
   const user = useAuthStore((state) => state.user);
   const permissions = useAuthStore((state) => state.permissions);
   const propertyId = user?.propertyId;
@@ -425,6 +429,7 @@ export default function ReservationsPage() {
   const startCheckOut = (room, res) => {
     // Before the scheduled departure date, ask how to handle the remaining nights.
     const today = localToday(res.property?.timezone);
+    if (!today) { toast.error('Still getting the time from the server. Try again in a moment.'); return; }
     if (today < String(room.checkOutDate).slice(0, 10)) {
       checkoutTargetRef.current = { room, reservation: res, lateText: '' };
       setEarlyCheckout({ room, reservation: res, today });
@@ -432,9 +437,9 @@ export default function ReservationsPage() {
     }
     const occupant = room.occupantName || 'Not assigned';
     // Past the hotel's checkout time: show how late and allow a note (no extra charge).
-    const due = expectedCheckoutAt(room.checkOutDate, res.property?.checkOutTime);
-    const late = Date.now() - due.getTime();
-    checkoutTargetRef.current = { room, reservation: res, lateText: late >= 60000 ? `Late departure: ${formatDuration(late)} after the ${formatTime(due)} checkout time. No extra night is charged.` : '' };
+    const due = expectedCheckoutAt(room.checkOutDate, res.property?.checkOutTime, res.property?.timezone);
+    const late = (serverNow()?.getTime() ?? due.getTime()) - due.getTime();
+    checkoutTargetRef.current = { room, reservation: res, lateText: late >= 60000 ? `Late departure: ${formatDuration(late)} after the ${formatTime(due, res.property?.timezone)} checkout time. No extra night is charged.` : '' };
     // Money still owed: when this is the last room still checked in, offer to take payment first or check
     // out with a reason. While other rooms of the booking stay checked in, the balance simply stays on the booking.
     const owing = Math.round((Number(res.totalAmount || 0) - Number(res.amountPaid || 0)) * 100) / 100;
