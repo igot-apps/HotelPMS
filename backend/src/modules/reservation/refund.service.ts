@@ -72,6 +72,8 @@ export async function refundPreviewInTransaction(tx: any, actor: Actor, id: stri
 }
 export async function requestRefund(actor: Actor, id: string, input: any) {
   const details = input.preview !== true && input.recordDirectly === true && input.mode !== 'SimulatedMoMo' ? completionDetails(input) : null;
+  // No payment chosen: one amount for the whole booking, split across its payments by the server.
+  if (input.paymentId === undefined || input.paymentId === null || input.paymentId === '') return refundWholeBooking(actor, id, input, details);
   return atomic(async tx => {
     // Front desk staff (managers and receptionists) record refunds directly; the refund record,
     // payment balance and audit log are the accountability, not a prior approval.
@@ -103,6 +105,60 @@ export async function requestRefund(actor: Actor, id: string, input: any) {
     const res = await locked(tx, actor, id);
     await recordReturn(tx, actor, user, res, request, result, details!);
     return { ...request, status: 'Completed' };
+  }).catch((error: any) => { if (error.code === 'P2002') throw fail('This refund or reference was already recorded. Refresh and check the return history.'); throw error; });
+}
+// Split a whole-booking refund across the payments taken at the hotel, newest payment first (online
+// payments are never refunded). Uses the same limits as a single-payment refund: what each payment has
+// left after earlier refunds and open requests, and the booking's refundable balance.
+async function splitPlan(tx: any, actor: Actor, id: string, input: any) {
+  const res = await locked(tx, actor, id);
+  if ((input.mode || 'Manual') !== 'Manual') throw fail('Simulated MoMo refunds have been removed. Record the money returned to the guest instead.');
+  const amount = Number(input.amount);
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 99999999.99 || cents(amount) / 100 !== amount) throw fail('Enter a positive refund amount with at most two decimal places.');
+  if (typeof input.reason !== 'string' || input.reason.trim().length < 5 || input.reason.trim().length > 500) throw fail('Choose a refund reason between 5 and 500 characters.');
+  const totals = balance(res);
+  const open = await tx.correctionRequest.findMany({ where: { propertyId: actor.propertyId, reservationId: id, action: 'refund', status: { in: ['Pending', 'Approved'] } } });
+  const held = open.reduce((sum: number, item: any) => sum + cents(item.input.amount), 0);
+  const sources = res.payments.filter((pay: any) => pay.status === 'Completed' && !pay.verifiedProvider).sort((a: any, b: any) => b.paymentId - a.paymentId).map((pay: any) => ({ pay,
+    available: cents(pay.amount) - res.refunds.filter((x: any) => x.paymentId === pay.paymentId).reduce((sum: number, x: any) => sum + cents(x.amount), 0)
+      - open.filter((x: any) => Number(x.input.paymentId) === pay.paymentId).reduce((sum: number, x: any) => sum + cents(x.input.amount), 0) }));
+  const maximum = Math.min(totals.eligible - held, sources.reduce((sum: number, source: any) => sum + Math.max(0, source.available), 0));
+  if (cents(amount) > maximum) throw fail(`Refund exceeds the available amount (GHS ${Math.max(0, maximum / 100).toFixed(2)}). Other pending or approved refunds also reserve this balance.`);
+  let left = cents(amount);
+  const parts: { paymentId: number; method: string; amount: number }[] = [];
+  for (const { pay, available } of sources) {
+    const take = Math.min(left, Math.max(0, available));
+    if (take > 0) { parts.push({ paymentId: pay.paymentId, method: pay.paymentMethod, amount: take / 100 }); left -= take; }
+    if (!left) break;
+  }
+  return { version: refundVersion(res), amount, parts, reason: input.reason.trim(), maximum: maximum / 100 };
+}
+async function refundWholeBooking(actor: Actor, id: string, input: any, details: ReturnType<typeof completionDetails> | null) {
+  return atomic(async tx => {
+    const user = await staff(tx, actor);
+    const plan = await splitPlan(tx, actor, id, input);
+    const from = plan.parts.map(part => `payment #${part.paymentId} (${part.method}) GHS ${part.amount.toFixed(2)}`).join(' and ');
+    if (input.preview === true) return { action: 'refund', version: plan.version, reservationId: id, amount: plan.amount, parts: plan.parts, mode: 'Manual', reason: plan.reason, maximum: plan.maximum,
+      message: `Record GHS ${plan.amount.toFixed(2)} returned to the guest, taken from ${from}. Only record this after the guest has received the money.` };
+    if (input.expectedVersion !== plan.version) throw fail('The booking changed. Preview the refund again.');
+    if (input.recordDirectly !== true || !details) throw fail('Refresh the page and use Record refund.');
+    const policyException = await hotelIsNonRefundable(tx, actor.propertyId);
+    if (policyException && input.policyException !== true) throw Object.assign(fail('This hotel is non-refundable. Confirm this refund is an exception to the policy.'), { code: 'NON_REFUNDABLE' });
+    // One refund record per payment, all in this transaction: either the whole amount is recorded or nothing is.
+    const refunds = [];
+    for (const [index, part] of plan.parts.entries()) {
+      const result = await preview(tx, actor, id, { ...input, mode: 'Manual', paymentId: part.paymentId, amount: part.amount });
+      const refundInput = { paymentId: result.paymentId, amount: result.amount, reason: result.reason, mode: 'Manual', recipientPhone: null, ...(plan.parts.length > 1 ? { splitOf: plan.amount } : {}), ...(policyException ? { policyException: true } : {}) };
+      const request = await tx.correctionRequest.create({ data: {
+        propertyId: actor.propertyId, reservationId: id, requestedBy: actor.userId,
+        action: 'refund', expectedVersion: result.version, input: refundInput,
+        status: 'Approved', reviewedBy: actor.userId, reviewedAt: new Date(),
+      } });
+      // A shared receipt reference is kept on every part (references are unique per method).
+      const partDetails = plan.parts.length > 1 && details.reference ? { ...details, reference: `${details.reference} (part ${index + 1} of ${plan.parts.length})`.slice(0, 200) } : details;
+      refunds.push(await recordReturn(tx, actor, user, await locked(tx, actor, id), request, result, partDetails));
+    }
+    return { status: 'Completed', reservationId: id, amount: plan.amount, parts: plan.parts, refunds };
   }).catch((error: any) => { if (error.code === 'P2002') throw fail('This refund or reference was already recorded. Refresh and check the return history.'); throw error; });
 }
 export async function refundOverview(actor: Actor, id: string) {
