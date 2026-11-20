@@ -37,7 +37,7 @@ export default function Topbar({ onMenuClick, isMenuOpen }) {
 
       {/* Right Side: User Profile */}
       <div className="shrink-0 flex items-center gap-2 sm:gap-4 ml-auto">
-        {user?.role === 'Receptionist' && <Link to="/refunds" aria-label={refunds.isError ? 'Refunds, count unavailable' : `Refunds, ${refunds.data?.ready || 0} approved and ready to return`} className="relative flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-border px-2.5 text-sm font-semibold text-primary-700 md:hidden"><HandCoins size={19} /><span>Refunds</span>{(refunds.data?.ready > 0 || refunds.isError) && <span className="absolute -right-1 -top-1 rounded-full bg-primary-100 px-1.5 text-xs font-bold text-primary-900">{refunds.isError ? '!' : refunds.data.ready > 99 ? '99+' : refunds.data.ready}</span>}</Link>}
+        {user?.role === 'Receptionist' && <Link to="/refunds" aria-label={refunds.isError ? 'Refunds, count unavailable' : `Refunds, ${refunds.data?.ready || 0} waiting to be returned`} className="relative flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-border px-2.5 text-sm font-semibold text-primary-700 md:hidden"><HandCoins size={19} /><span>Refunds</span>{(refunds.data?.ready > 0 || refunds.isError) && <span className="absolute -right-1 -top-1 rounded-full bg-primary-100 px-1.5 text-xs font-bold text-primary-900">{refunds.isError ? '!' : refunds.data.ready > 99 ? '99+' : refunds.data.ready}</span>}</Link>}
         <div className="text-right hidden sm:block max-w-40 truncate">
           <p className="text-sm font-semibold text-text">{user?.fullName || 'User'}</p>
           <p className="text-xs text-text-muted">{user?.role || 'Staff'}</p>

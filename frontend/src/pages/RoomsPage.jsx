@@ -83,14 +83,15 @@ export default function RoomsPage() {
   const rooms = roomsData || [];
   const filteredRooms = rooms.filter(room => {
     if (filter === 'all') return true;
-    if (filter === 'ready') return room.operationalStatus === 'Available' && ['Clean', 'Inspected'].includes(room.housekeepingStatus);
+    if (filter === 'ready') return room.operationalStatus === 'Available' && ['Clean', 'Inspected'].includes(room.housekeepingStatus) && !room.arrivingToday;
     if (filter === 'dirty') return room.housekeepingStatus?.toUpperCase() === 'DIRTY';
     return room.operationalStatus?.toUpperCase() === filter.toUpperCase();
   });
 
   const stats = {
     total: rooms.length,
-    ready: rooms.filter(r => r.operationalStatus === 'Available' && ['Clean', 'Inspected'].includes(r.housekeepingStatus)).length,
+    // Ready = clean, empty and not reserved for a guest arriving today.
+    ready: rooms.filter(r => r.operationalStatus === 'Available' && ['Clean', 'Inspected'].includes(r.housekeepingStatus) && !r.arrivingToday).length,
     occupied: rooms.filter(r => r.operationalStatus?.toUpperCase() === 'OCCUPIED').length,
     dirty: rooms.filter(r => r.housekeepingStatus?.toUpperCase() === 'DIRTY').length,
   };

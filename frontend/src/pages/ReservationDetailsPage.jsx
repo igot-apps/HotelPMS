@@ -5,7 +5,9 @@ import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { bookingLink } from '../lib/bookingLink';
 import { bookingStatusLabel, roomStatusLabel, roomStatusTone } from '../lib/statusLabels';
 
-const localToday = () => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+import { hotelToday } from '../lib/period';
+// Today on the hotel's calendar (hotel time zone), not the computer's clock; falls back to the computer's date.
+const localToday = (timeZone) => { if (timeZone) { try { return hotelToday(timeZone); } catch { /* unknown zone */ } } const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getReservationById, getReservationStats, updateReservation } from '../api/reservations';
 import api from '../lib/axios';
@@ -184,7 +186,7 @@ export default function ReservationDetailsPage() {
           {resData.reservationRooms?.map((rr) => {
             const active = ['Confirmed', 'InHouse'].includes(resData.status);
             const roomLink = (action) => `${bookingLink(resData, action, rr.reservationRoomId)}&back=booking`;
-            const canCheckIn = active && rr.status === 'Reserved' && String(rr.checkInDate).slice(0, 10) <= localToday();
+            const canCheckIn = active && rr.status === 'Reserved' && String(rr.checkInDate).slice(0, 10) <= localToday(resData.property?.timezone);
             const inRoom = active && rr.status === 'CheckedIn';
             const btn = 'inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold';
             return (
@@ -264,8 +266,8 @@ export default function ReservationDetailsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-text-muted font-mono text-xs">{p.gatewayReference || '-'}</td>
-                    <td className="px-4 py-3"><span className="px-2 py-1 rounded-md text-xs font-semibold bg-success-50 text-success-700">{p.status}</span></td>
-                    <td className="px-4 py-3 text-sm text-text">{p.gatewayReference?.startsWith('RES-') ? 'Online / Paystack' : p.receiver?.fullName || 'Unknown / former staff'}</td>
+                    <td className="px-4 py-3"><span className={`px-2 py-1 rounded-md text-xs font-semibold ${p.status === 'Completed' ? 'bg-success-50 text-success-700' : p.status === 'Refunded' ? 'bg-warning-50 text-warning-800' : 'bg-secondary-100 text-secondary-700 line-through'}`}>{p.status}</span></td>
+                    <td className="px-4 py-3 text-sm text-text">{p.verifiedProvider ? `Online · ${p.verifiedProvider} (verified)` : p.receiver?.fullName || 'Unknown / former staff'}</td>
                     <td className="px-4 py-3 text-sm font-bold text-text text-right">{fmt(p.amount)} GHS</td>
                   </tr>
                 ))}

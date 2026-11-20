@@ -7,6 +7,8 @@ export default function RoomCard({ room, onToggleHousekeeping, onToggleOperation
   const opStatus = room.operationalStatus?.toUpperCase();
   const hkStatus = room.housekeepingStatus?.toUpperCase();
   const activeStay = room.reservationRooms?.[0];
+  // Empty room already booked for a guest arriving today (not checked in yet).
+  const reservedTonight = Boolean(room.arrivingToday) && opStatus === 'AVAILABLE';
   const reservation = activeStay?.reservation;
   const occupantName = activeStay?.occupantName
     || reservation?.guestNameSnapshot
@@ -66,10 +68,15 @@ export default function RoomCard({ room, onToggleHousekeeping, onToggleOperation
               {room.roomType?.typeName || 'Standard Room'}
             </p>
           </div>
-          <span className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 ${statusBadgeClass}`}>
-            {statusIcon} {opStatus === 'AVAILABLE' ? (hkStatus === 'DIRTY' ? 'Not ready' : 'Ready') : opStatus}
+          <span className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 ${reservedTonight ? 'bg-warning-50 text-warning-800 ring-1 ring-warning-600/20' : statusBadgeClass}`}>
+            {statusIcon} {reservedTonight ? 'Reserved tonight' : opStatus === 'AVAILABLE' ? (hkStatus === 'DIRTY' ? 'Not ready' : 'Ready') : opStatus}
           </span>
         </div>
+        {reservedTonight && (
+          <p className="mb-3 rounded-lg border border-warning-200 bg-warning-50 px-3 py-2 text-xs text-warning-800">
+            Held for <span className="font-semibold">{room.arrivingToday.guestName}</span>{room.arrivingToday.confirmationCode ? ` · ${room.arrivingToday.confirmationCode}` : ''}. Do not give this room to another guest.
+          </p>
+        )}
 
         {/* Room Features */}
         <div className="flex items-center gap-4 text-text-muted mb-4">
@@ -125,7 +132,6 @@ export default function RoomCard({ room, onToggleHousekeeping, onToggleOperation
                     <span>{occupantPhone}</span>
                   </a>
                 )}
-                <p className="pt-1 text-[11px] text-text-muted">Check out the guest before setting this room to maintenance.</p>
                 {activeStay?.guestPresenceStatus === 'Out' && activeStay.guestOutAt && (
                   <p className="flex items-center gap-1.5 pt-1 text-xs text-warning-800">
                     <Clock size={12} /> Out since {new Date(activeStay.guestOutAt).toLocaleString()}
@@ -217,14 +223,13 @@ export default function RoomCard({ room, onToggleHousekeeping, onToggleOperation
         >
           <Sparkles size={14} /> {hkBtnText}
         </button>
-        <button
+        {opStatus !== 'OCCUPIED' && <button
           onClick={() => onToggleOperational(room)}
-          disabled={isUpdating || opStatus === 'OCCUPIED'}
-          title={opStatus === 'OCCUPIED' ? 'Check out the guest before setting this room to maintenance' : undefined}
+          disabled={isUpdating}
           className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-surface border border-border text-text hover:bg-secondary-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <ArrowRightLeft size={14} /> {opBtnText}
-        </button>
+        </button>}
       </div>
       {canManageOnline && (
         <div className="px-5 pb-4 bg-secondary-50/50">

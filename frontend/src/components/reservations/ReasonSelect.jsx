@@ -10,7 +10,7 @@ const suggestions = {
   'correct-date': ['Guest requested a longer stay.', 'Guest requested an earlier departure.', 'Departure date was entered incorrectly.'],
   transfer: ['Guest reported a maintenance problem.', 'Guest requested a different room.', 'Wrong room was assigned at check-in.'],
   'correct-payment': ['Payment amount was entered incorrectly.', 'Payment was recorded twice.', 'Payment was recorded against the wrong reservation.', 'Payment was recorded but no money was received.'],
-  'credit-checkout': ['Manager approved payment after departure.', 'Company account will settle the outstanding balance.', 'Guest and manager agreed on a payment arrangement.'],
+  'credit-checkout': ['Guest will pay the balance later.', 'Company account will settle the outstanding balance.', 'Guest and manager agreed on a payment arrangement.'],
 };
 
 export default function ReasonSelect({ action, value, onChange, className, disabled }) {

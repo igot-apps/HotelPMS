@@ -28,10 +28,12 @@ import CheckoutOwingDialog from '../components/reservations/CheckoutOwingDialog'
 import BulkRoomsDialog from '../components/reservations/BulkRoomsDialog';
 import { bookingStatusLabel, roomStatusLabel, roomStatusTone } from '../lib/statusLabels';
 import { expectedCheckoutAt, formatDuration, formatTime } from '../lib/stayTiming';
-import NoShowDialog, { noShowRooms } from '../components/reservations/NoShowDialog';
+import NoShowDialog, { noShowRooms, noShowPartial } from '../components/reservations/NoShowDialog';
 
 // The hotel's calendar day as YYYY-MM-DD, using the browser's local time.
-const localToday = () => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+import { hotelToday } from '../lib/period';
+// Today on the hotel's calendar (hotel time zone), not the computer's clock; falls back to the computer's date.
+const localToday = (timeZone) => { if (timeZone) { try { return hotelToday(timeZone); } catch { /* unknown zone */ } } const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
 import {
   Search, Plus, CalendarDays, AlertCircle, XCircle,
   ChevronLeft, ChevronRight, Eye, X, Check,
@@ -417,7 +419,7 @@ export default function ReservationsPage() {
   // Starts checkout for one room (early-checkout choice, late note) — shared by row, room card and dashboard links.
   const startCheckOut = (room, res) => {
     // Before the scheduled departure date, ask how to handle the remaining nights.
-    const today = localToday();
+    const today = localToday(res.property?.timezone);
     if (today < String(room.checkOutDate).slice(0, 10)) {
       checkoutTargetRef.current = { room, reservation: res, lateText: '' };
       setEarlyCheckout({ room, reservation: res, today });
@@ -467,7 +469,7 @@ export default function ReservationsPage() {
     // Checked-out bookings still owing money keep Take payment so the debt can be collected.
     if (!['Confirmed', 'InHouse'].includes(res.status) && !owesAfterCheckout(res)) return null;
     const stays = res.reservationRooms || [];
-    const arriving = stays.filter((stay) => stay.status === 'Reserved' && String(stay.checkInDate).slice(0, 10) <= localToday());
+    const arriving = stays.filter((stay) => stay.status === 'Reserved' && String(stay.checkInDate).slice(0, 10) <= localToday(res.property?.timezone));
     const inRoom = stays.filter((stay) => stay.status === 'CheckedIn');
     const balance = Math.max(0, Number(res.totalAmount || 0) - Number(res.amountPaid || 0));
     const base = compact ? 'min-h-11 flex-1 rounded-lg px-3 text-sm font-bold' : 'px-3 py-1.5 text-xs font-semibold rounded-md';
@@ -572,10 +574,10 @@ export default function ReservationsPage() {
           >
             <option value="all">All Statuses</option>
             <option value="Confirmed">Confirmed</option>
-            <option value="InHouse">In-House</option>
-            <option value="Completed">Completed</option>
+            <option value="InHouse">In house</option>
+            <option value="Completed">Checked out</option>
             <option value="Cancelled">Cancelled</option>
-            <option value="NoShow">No Show</option>
+            <option value="NoShow">No-show</option>
           </select>
         </div>
         <div className={`${showMobileFilters ? 'grid' : 'hidden'} md:grid grid-cols-1 md:grid-cols-3 gap-3 pt-3 border-t border-border`}>
@@ -584,10 +586,10 @@ export default function ReservationsPage() {
             <select value={status} onChange={(e) => handleFilterChange('status', e.target.value)} className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20">
               <option value="all">All Statuses</option>
               <option value="Confirmed">Confirmed</option>
-              <option value="InHouse">In-House</option>
-              <option value="Completed">Completed</option>
+              <option value="InHouse">In house</option>
+              <option value="Completed">Checked out</option>
               <option value="Cancelled">Cancelled</option>
-              <option value="NoShow">No Show</option>
+              <option value="NoShow">No-show</option>
             </select>
           </div>
           <div>
@@ -634,8 +636,9 @@ export default function ReservationsPage() {
           const balanceDue = Math.max(0, totalAmount - amountPaid);
           const refundedAmount = (res.refunds || []).filter(refund => !refund.isSimulated).reduce((sum, refund) => sum + Number(refund.amount), 0) + (res.payments || []).filter((payment) => payment.status === 'Refunded').reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
           const isPastCheckIn = canMarkNoShow(res);
+          const noShowPartialBooking = noShowPartial(res);
           const cardStatusClass = res.status === 'Confirmed' ? 'bg-primary-50 text-primary-700 ring-1 ring-primary-600/20' : res.status === 'InHouse' ? 'bg-success-50 text-success-700 ring-1 ring-success-600/20' : res.status === 'Cancelled' ? 'bg-danger-50 text-danger-700 ring-1 ring-danger-600/20' : res.status === 'NoShow' ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-600/20' : res.status === 'Expired' ? 'bg-warning-50 text-warning-700 ring-1 ring-warning-600/20' : 'bg-secondary-100 text-secondary-700';
-          const cardStatusLabel = res.status === 'InHouse' ? 'In-House' : res.status === 'NoShow' ? 'No Show' : res.status;
+          const cardStatusLabel = bookingStatusLabel(res.status);
 
           return (
             <article key={id} data-booking={id} className={`overflow-hidden rounded-xl border bg-surface shadow-sm transition-shadow ${isExpanded ? 'border-primary-400 ring-2 ring-primary-500/30' : 'border-border'}`}>
@@ -686,7 +689,7 @@ export default function ReservationsPage() {
                 {(isPastCheckIn || ['Pending', 'Confirmed'].includes(res.status) && !res.reservationRooms?.some(stay => stay.status === 'CheckedIn')) && (
                   <div className="mt-2 flex gap-2">
                     {isPastCheckIn && (
-                      <button onClick={() => setNoShowFor(res)} className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border border-orange-200 px-3 text-sm font-semibold text-orange-700 hover:bg-orange-50"><AlertCircle size={16} /> No-show</button>
+                      <button onClick={() => setNoShowFor(res)} className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border border-orange-200 px-3 text-sm font-semibold text-orange-700 hover:bg-orange-50"><AlertCircle size={16} /> {noShowPartialBooking ? 'No-show rooms' : 'No-show'}</button>
                     )}
                     {['Pending', 'Confirmed'].includes(res.status) && !res.reservationRooms?.some(stay => stay.status === 'CheckedIn') && (
                       <button onClick={() => askReservationAction(id, 'cancel', 'Cancel reservation?', `This will cancel reservation ${res.confirmationCode || `#${id.slice(0, 8)}`}. This can't be undone from here.`, { danger: true, confirmLabel: 'Cancel Reservation' })} className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border border-danger-200 px-3 text-sm font-semibold text-danger-700 hover:bg-danger-50"><XCircle size={16} /> Cancel booking</button>
@@ -781,6 +784,7 @@ export default function ReservationsPage() {
                   const isExpanded = expandedId === res.reservationId;
                   // No Show only once the guest can no longer be expected (same rule as the server).
                   const isPastCheckIn = canMarkNoShow(res);
+                  const noShowPartialBooking = noShowPartial(res);
 
                   // 🌟 UPDATED: Actions with No Show support
                   let actions = null;
@@ -803,7 +807,7 @@ export default function ReservationsPage() {
                             onClick={() => setNoShowFor(res)}
                             className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-orange-200 text-orange-600 hover:bg-orange-50 transition"
                           >
-                            <AlertCircle size={14} /> No Show
+                            <AlertCircle size={14} /> {noShowPartialBooking ? 'No-show rooms' : 'No Show'}
                           </button>
                         )}
                       </div>
@@ -815,7 +819,7 @@ export default function ReservationsPage() {
                         {roomsToggle}
                         {isPastCheckIn && (
                           <button onClick={() => setNoShowFor(res)} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-orange-200 text-orange-600 hover:bg-orange-50 transition">
-                            <AlertCircle size={14} /> No Show
+                            <AlertCircle size={14} /> {noShowPartialBooking ? 'No-show rooms' : 'No Show'}
                           </button>
                         )}
                       </div>

@@ -7,13 +7,15 @@ import { roomStatusLabel } from '../../lib/statusLabels';
 const field = 'mt-1 min-h-11 w-full min-w-0 rounded-lg border border-border bg-background px-3 py-2 text-sm text-text';
 const roomNo = (rr) => rr.room?.roomNumber || rr.roomNumberSnapshot || '—';
 const day = (value) => String(value).slice(0, 10);
-const localToday = () => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+import { hotelToday } from '../../lib/period';
+// Today on the hotel's calendar (hotel time zone), not the computer's clock; falls back to the computer's date.
+const localToday = (timeZone) => { if (timeZone) { try { return hotelToday(timeZone); } catch { /* unknown zone */ } } const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
 
 // Check in or check out several rooms of ONE booking together. Each room still goes through the
 // normal per-room server action (occupant, cleaning and balance checks), one after another.
 export default function BulkRoomsDialog({ mode, reservation, onDone, onClose, onTakePayment }) {
   const checkin = mode === 'checkin';
-  const today = localToday();
+  const today = localToday(reservation?.property?.timezone);
   const stays = reservation.reservationRooms || [];
   const eligible = stays.filter((rr) => (checkin ? rr.status === 'Reserved' && day(rr.checkInDate) <= today : rr.status === 'CheckedIn' && day(rr.checkOutDate) <= today));
   const early = checkin ? [] : stays.filter((rr) => rr.status === 'CheckedIn' && day(rr.checkOutDate) > today);

@@ -5,7 +5,7 @@ const OTHER = 'Other';
 export const OWING_REASONS = [
   'Guest promised to pay later.',
   'Guest disputed the outstanding amount.',
-  'Manager approved checkout with outstanding balance.',
+  'Company or sponsor will settle the balance.',
   OTHER,
 ];
 

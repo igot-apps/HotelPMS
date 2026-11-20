@@ -54,7 +54,7 @@ export default function ReservationRecoveryPanel({ reservation, embedded = false
         <option value="correct-date">Correct departure date and charges</option>
         <option value="transfer">Transfer guest to another room</option>
         <option value="correct-payment">Correct or void a manual payment</option>
-        <option value="credit-checkout">Approve checkout with outstanding balance</option>
+        <option value="credit-checkout">Checkout with outstanding balance</option>
       </select></label>
       {access.data && !canApply && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Only a manager can apply this correction. You can preview it, then ask a manager to do it.</p>}
       {form.action === 'correct-date' && !preview && <p className="text-sm text-text-muted">Extend or shorten directly. Shortening only removes nights the guest has not used yet; any overpayment becomes a refund to review.</p>}

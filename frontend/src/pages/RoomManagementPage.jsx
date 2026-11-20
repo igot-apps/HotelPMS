@@ -404,7 +404,7 @@ function TypesTab({ types, isLoading, onAdd, onEdit, onDelete, onManageAmenities
                     )}
                   </td>
                   <td className="px-6 py-4 text-sm text-text">{type.maxOccupancy} Guests</td>
-                  <td className="px-6 py-4 text-sm font-bold text-primary-600 text-right">GH₵ {parseFloat(type.basePrice || 0).toFixed(2)}</td>
+                  <td className="px-6 py-4 text-sm font-bold text-primary-600 text-right">GHS {parseFloat(type.basePrice || 0).toFixed(2)}</td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <RequirePermission permission="CanUpdateRoomType">
@@ -479,7 +479,7 @@ function RoomModal({ room, roomTypes, propertyId, onClose, onSave, isLoading }) 
             <label className="block text-sm font-semibold text-text mb-1.5">Room Type *</label>
             <select name="roomTypeId" value={formData.roomTypeId} onChange={handleChange} required className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20">
               <option value="">Select a type...</option>
-              {roomTypes.map(t => <option key={t.roomTypeId} value={t.roomTypeId}>{t.typeName} (GH₵ {parseFloat(t.basePrice).toFixed(2)})</option>)}
+              {roomTypes.map(t => <option key={t.roomTypeId} value={t.roomTypeId}>{t.typeName} (GHS {parseFloat(t.basePrice).toFixed(2)})</option>)}
             </select>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

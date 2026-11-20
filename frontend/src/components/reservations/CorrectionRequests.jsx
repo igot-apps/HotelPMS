@@ -63,11 +63,11 @@ export default function CorrectionRequests({ reservationId, onPendingChange }) {
   const query = useQuery({ queryKey: ['correctionRequests', user?.propertyId, user?.userId, reservationId || 'pending'], queryFn: async () => (await api.get('/reservations/correction-requests', { params: { reservationId } })).data.data, refetchInterval: 30000 });
   const requests = query.data || [];
   useEffect(() => { onPendingChange?.(Boolean(query.data?.some(request => request.status === 'Pending' && request.requestedBy === user?.userId))); }, [query.data, user?.userId, onPendingChange]);
-  if (!reservationId && !query.isLoading && !query.isError && !requests.length) return null;
+  if (!query.isLoading && !query.isError && !requests.length) return null;
   return <section className="min-w-0 space-y-3 rounded-xl border border-border bg-surface p-4 sm:p-6">
-    <h3 className="font-bold text-text">{reservationId ? 'Approval requests' : manager ? 'Corrections awaiting your approval' : 'Your pending correction requests'}{requests.length > 0 && ` (${requests.length})`}</h3>
+    <h3 className="font-bold text-text">{reservationId ? 'Earlier requests' : manager ? 'Corrections awaiting your approval' : 'Your pending correction requests'}{requests.length > 0 && ` (${requests.length})`}</h3>
     {query.isLoading && <p className="text-sm text-text-muted">Loading requests…</p>}
-    {query.isError && <div role="alert" className="text-sm text-danger-700">Could not load approval requests. <button onClick={() => query.refetch()} className="min-h-11 underline">Try again</button></div>}
+    {query.isError && <div role="alert" className="text-sm text-danger-700">Could not load earlier requests. <button onClick={() => query.refetch()} className="min-h-11 underline">Try again</button></div>}
     {!query.isLoading && !query.isError && !requests.length && <p className="text-sm text-text-muted">No approval requests for this reservation.</p>}
     {requests.map(request => <RequestCard key={`${request.requestId}-${request.status}`} request={request} manager={manager} />)}
   </section>;

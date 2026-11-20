@@ -130,6 +130,8 @@ describe('stay timing and availability', () => {
     const due = new Date('2026-11-13T11:00:00Z');
     expect(checkoutState(due, new Date('2026-11-11T11:00:00Z'))).toBe('upcoming');
     expect(checkoutState(due, new Date('2026-11-13T07:00:00Z'))).toBe('due');
+    // The evening before: within 24 hours, but tomorrow's departure is not due today.
+    expect(checkoutState(due, new Date('2026-11-12T21:30:00Z'))).toBe('upcoming');
     expect(checkoutState(due, new Date('2026-11-13T10:30:00Z'))).toBe('dueSoon');
     expect(checkoutState(due, new Date('2026-11-13T11:01:00Z'))).toBe('overdue');
   });
@@ -154,9 +156,9 @@ describe('checkout reminders and verification', () => {
     const byId = Object.fromEntries(result.alerts.map((a: any) => [a.reservationRoomId, a]));
     expect(byId[1]).toMatchObject({ state: 'overdue', escalated: true });
     expect(byId[2]).toMatchObject({ state: 'overdue', minutesLate: 30, escalated: false });
-    expect(byId[3]).toMatchObject({ state: 'due' });
+    expect(byId[3]).toBeUndefined(); // leaves tomorrow: not a reminder for today
     expect(byId[4]).toMatchObject({ state: 'overdue', escalated: true, verification: { result: 'unlocated' } });
-    expect(result.counts).toMatchObject({ overdue: 3, due: 1, escalated: 2 });
+    expect(result.counts).toMatchObject({ overdue: 3, due: 0, escalated: 2 });
   });
 
   test('verification records presence and keeps an audit entry', async () => {

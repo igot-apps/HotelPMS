@@ -17,13 +17,19 @@ export function noShowRooms(res, now = Date.now()) {
     && now >= noShowAllowedFrom(stay.checkInDate || res.checkInDate, res.property?.checkInTime, res.property?.timezone).getTime());
 }
 
+// True when at least one room already stayed, so the no-show can only cover the rooms still waiting.
+export function noShowPartial(res) {
+  return (res.reservationRooms || []).filter((stay) => stay.status !== 'Cancelled')
+    .some((stay) => stay.actualCheckIn || ['CheckedIn', 'CheckedOut'].includes(stay.status));
+}
+
 // One dialog for every no-show: pick the rooms whose guests did not arrive. Only those rooms are
 // released; other rooms, charges and payments stay as they are. Nothing is released automatically.
 export default function NoShowDialog({ reservation: res, onClose }) {
   const client = useQueryClient();
   const rooms = (res.reservationRooms || []).filter((stay) => stay.status !== 'Cancelled');
   const eligible = noShowRooms(res);
-  const someoneStayed = rooms.some((stay) => stay.actualCheckIn || ['CheckedIn', 'CheckedOut'].includes(stay.status));
+  const someoneStayed = noShowPartial(res);
   const [selected, setSelected] = useState(() => eligible.map((stay) => stay.reservationRoomId));
   const [reason, setReason] = useState('');
   const waiting = rooms.filter((stay) => stay.status === 'Reserved');

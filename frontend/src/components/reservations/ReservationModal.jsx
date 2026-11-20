@@ -170,7 +170,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
       setPhoneLookupResult(null);
       setMatchedGuestName('');
       setIsEditingMatchedName(false);
-      setPhoneLookupMessage('Guest added and selected for this reservation.');
+      setPhoneLookupMessage(`Selected guest: ${createdGuest.fullName}${createdGuest.phone ? ` · ${toPhoneInputValue(createdGuest.phone)}` : ''}`);
       setShowNameGuestSearch(false);
       setIsAddGuestOpen(false);
       setNewGuestData({ fullName: '', phone: '', email: '', idNumber: '' });
@@ -314,7 +314,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
         return;
       }
       if (raw && amount > exactTotal) {
-        toast.error(`Payment can't be more than the total due (GH₵ ${exactTotal.toFixed(2)}).`);
+        toast.error(`Payment can't be more than the total due (GHS ${exactTotal.toFixed(2)}).`);
         return;
       }
     }
@@ -482,8 +482,8 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                         </div>
                         <p className="text-xs text-text-muted mb-3">Floor {room.floor} · {room.roomType.typeName}</p>
                         <div className="border-t border-border pt-2 mt-auto">
-                          <p className="text-sm font-bold text-primary-600">GH₵ {formatCurrency(price)} / night</p>
-                          <p className="text-xs text-text-muted">{nights} night{nights > 1 ? 's' : ''} = GH₵ {formatCurrency(price * nights)}</p>
+                          <p className="text-sm font-bold text-primary-600">GHS {formatCurrency(price)} / night</p>
+                          <p className="text-xs text-text-muted">{nights} night{nights > 1 ? 's' : ''} = GHS {formatCurrency(price * nights)}</p>
                         </div>
                       </button>
                     );
@@ -681,7 +681,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                     <tfoot>
                       <tr className="bg-secondary-50/50 border-t border-border">
                         <td colSpan="3" className="px-4 py-3 text-right text-sm font-bold text-text">Total Due</td>
-                        <td className="px-4 py-3 text-right text-lg font-bold text-primary-600">GH₵ {formatCurrency(totalDue)}</td>
+                        <td className="px-4 py-3 text-right text-lg font-bold text-primary-600">GHS {formatCurrency(totalDue)}</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -698,7 +698,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                   <div className="space-y-3 pt-2 border-t border-border">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-xs font-semibold text-text-muted mb-1">Initial Payment Amount (GH₵) <span className="font-normal">(optional)</span></label>
+                        <label className="block text-xs font-semibold text-text-muted mb-1">Initial Payment Amount (GHS) <span className="font-normal">(optional)</span></label>
                         <div className="flex gap-2">
                           <input 
                             type="number" 
@@ -727,9 +727,8 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                         <label className="block text-xs font-semibold text-text-muted mb-1">Payment Method</label>
                         <select name="paymentMethod" value={formData.paymentMethod} onChange={handleChange} className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text outline-none focus:ring-2 focus:ring-primary-500/20">
                           <option value="Cash">Cash</option>
-                          <option value="Card">Card</option>
+                          <option value="Card">Credit/Debit Card</option>
                           <option value="MobileMoney">Mobile Money</option>
-                          <option value="Online">Online</option>
                         </select>
                       </div>
                       <div>
@@ -745,7 +744,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                         const isOverdue = remaining > 0.01; 
                         return (
                           <span className={`text-lg font-bold ${isOverdue ? 'text-danger-600' : 'text-success-600'}`}>
-                            GH₵ {formatCurrency(Math.max(0, remaining))}
+                            GHS {formatCurrency(Math.max(0, remaining))}
                           </span>
                         );
                       })()}

@@ -10,6 +10,7 @@ import { bookingLink } from '../../lib/bookingLink';
 import TakePaymentDialog from '../reservations/TakePaymentDialog';
 import { updateGuestPresence } from '../../api/reservations';
 import { useAuthStore } from '../../store/authStore';
+import { matchesQuery } from '../../lib/matchesQuery';
 
 const cash = (value) => `GHS ${Number(value || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const shortDate = (value) => new Date(value).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
@@ -37,6 +38,7 @@ export default function TodayAtAGlance() {
   const [open, setOpen] = useState(() => searchParams.get('panel'));
   const [sort, setSort] = useState('date');
   const [arrivalsQuery, setArrivalsQuery] = useState('');
+  const [departuresQuery, setDeparturesQuery] = useState('');
   // Coming back from the Reservations page: reopen the same list once, then tidy the URL.
   useEffect(() => {
     if (!searchParams.get('panel')) return;
@@ -70,7 +72,7 @@ export default function TodayAtAGlance() {
   const tiles = [
     { key: 'overdue', icon: AlarmClock, tone: overdue.length ? 'danger' : 'neutral', label: 'Overdue checkouts', value: overdue.length, hint: overdue.length ? `Longest: ${formatDuration(Math.max(...overdue.map((a) => a.minutesLate)) * 60000)} late` : `Checkout time ${data.checkOutTime}` },
     { key: 'arrivals', icon: LogIn, tone: missed.length ? 'warning' : 'primary', label: 'Expected arrivals', value: arrivingBookings, hint: [`Awaiting check-in: ${plural(arrivingBookings, 'reservation')} · ${plural(arrivingStays.length, 'room')}`, missed.length ? `${missed.length} past no-show time` : '', `Checked in today: ${plural(arrivedTodayRooms, 'room')}`, `${(data.arrivals.upcoming || []).length} in next 7 days`, data.arrivals.unpaidCount ? `${data.arrivals.unpaidCount} unpaid` : ''].filter(Boolean).join(' · ') },
-    { key: 'departures', icon: LogOut, tone: 'warning', label: 'Departures to check out', value: data.departures.waiting.length, hint: `${data.departures.departedToday.length} checked out today` },
+    { key: 'departures', icon: LogOut, tone: 'warning', label: 'Departures to check out', value: data.departures.waiting.length, hint: `Due today${overdue.length ? ` · includes ${overdue.length} overdue` : ''} · ${data.departures.departedToday.length} checked out today` },
     { key: 'inHouse', icon: Hotel, tone: 'primary', label: 'Guests in house', value: data.inHouse.length, hint: `${data.rooms.occupiedTonight} of ${data.rooms.total} rooms taken tonight` },
     { key: 'free', icon: BedDouble, tone: 'success', label: 'Rooms free tonight', value: data.rooms.freeTonight.length, hint: `${data.rooms.occupancyPercent}% occupancy` },
     // Hotel-wide takings (desk + online) are for the manager; receptionists see their own in "You today".
@@ -107,11 +109,17 @@ export default function TodayAtAGlance() {
                   <input value={arrivalsQuery} onChange={(event) => setArrivalsQuery(event.target.value)} placeholder="Search booking code, guest or room..." aria-label="Search expected arrivals" className="min-h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm text-text outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20" />
                 </div>
               )}
+              {open === 'departures' && (
+                <div className="relative min-w-0 flex-1">
+                  <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                  <input value={departuresQuery} onChange={(event) => setDeparturesQuery(event.target.value)} placeholder="Search booking code, guest, phone or room..." aria-label="Search departures" className="min-h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm text-text outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20" />
+                </div>
+              )}
             </div>
           )}>
           {open === 'overdue' && <OverdueDetail rows={overdue} />}
           {open === 'arrivals' && <ArrivalsDetail data={data} missed={missed} query={arrivalsQuery} />}
-          {open === 'departures' && <DeparturesDetail data={data} />}
+          {open === 'departures' && <DeparturesDetail data={data} query={departuresQuery} />}
           {open === 'inHouse' && <InHouseDetail rows={data.inHouse} />}
           {open === 'free' && <FreeDetail rooms={data.rooms.freeTonight} />}
           {open === 'collected' && <CollectedDetail money={data.money} />}
@@ -138,7 +146,8 @@ const BLOCKERS = {
 // "Fully booked" is good news (no space tonight); "can't book online" is a setup problem to fix.
 function AvailabilityBanners({ data }) {
   const isManager = useAuthStore((state) => state.user?.role) === 'Manager';
-  const blocker = BLOCKERS[data.onlineBlocker];
+  // Online booking switched off is a manager's choice, not a fault: only the manager sees that reminder.
+  const blocker = data.onlineBlocker === 'online-off' && !isManager ? null : BLOCKERS[data.onlineBlocker];
   return (
     <>
       {data.rooms.fullyBookedTonight && (
@@ -237,7 +246,7 @@ const SORTS = [['date', 'Date'], ['room', 'Room'], ['guest', 'Guest name']];
 const SORTABLE = ['overdue', 'arrivals', 'departures', 'inHouse', 'unpaid'];
 function useSorted(rows, dateKey) {
   const sort = useContext(SortContext);
-  const room = (row) => String(row.roomNumber ?? row.rooms?.[0] ?? '');
+  const room = (row) => String(row.roomNumber ?? row.rooms?.[0]?.roomNumber ?? row.rooms?.[0] ?? '');
   return [...rows].sort((a, b) => (sort === 'room' ? room(a).localeCompare(room(b), undefined, { numeric: true })
     : sort === 'guest' ? String(a.guestName || '').localeCompare(String(b.guestName || ''))
     : new Date(a[dateKey] || 0) - new Date(b[dateKey] || 0)));
@@ -288,13 +297,7 @@ function groupByReservation(stays) {
   }, {}));
 }
 
-// Popup search: confirmation code, guest name, phone number or room number.
-function matchesQuery(row, query) {
-  const text = query.trim().toLowerCase();
-  if (!text) return true;
-  const rooms = (row.rooms || []).map((room) => (typeof room === 'string' ? room : `${room.roomNumber || ''} ${room.phone || ''}`));
-  return [row.confirmationCode, row.guestName, row.phone, ...rooms].filter(Boolean).join(' ').toLowerCase().includes(text);
-}
+
 
 function ArrivalsDetail({ data, missed: missedUnsorted, query = '' }) {
   const missed = useSorted(missedUnsorted, 'checkInDate').filter((row) => matchesQuery(row, query));
@@ -380,7 +383,7 @@ function ArrivalsDetail({ data, missed: missedUnsorted, query = '' }) {
   );
 }
 
-function DeparturesDetail({ data }) {
+function DeparturesDetail({ data, query = '' }) {
   // Group by reservation, using check-out status fields for departures
   const groupWaiting = Object.values(data.departures.waiting.reduce((byRes, stay) => {
     const current = byRes[stay.reservationId];
@@ -389,16 +392,17 @@ function DeparturesDetail({ data }) {
         reservationId: stay.reservationId,
         guestName: stay.guestName,
         confirmationCode: stay.confirmationCode,
+        phone: stay.phone || null,
         expectedCheckoutAt: stay.expectedCheckoutAt,
         actualCheckOut: null,
         minutesLate: stay.minutesLate,
         balanceDue: stay.balanceDue || 0,
         amountPaid: stay.amountPaid || 0,
         source: stay.source,
-        rooms: [{ roomNumber: stay.roomNumber, reservationRoomId: stay.reservationRoomId }],
+        rooms: [{ roomNumber: stay.roomNumber, reservationRoomId: stay.reservationRoomId, phone: stay.occupantPhone || stay.phone || null }],
       };
     } else {
-      current.rooms.push({ roomNumber: stay.roomNumber, reservationRoomId: stay.reservationRoomId });
+      current.rooms.push({ roomNumber: stay.roomNumber, reservationRoomId: stay.reservationRoomId, phone: stay.occupantPhone || stay.phone || null });
     }
     return byRes;
   }, {}));
@@ -410,22 +414,27 @@ function DeparturesDetail({ data }) {
         reservationId: stay.reservationId,
         guestName: stay.guestName,
         confirmationCode: stay.confirmationCode,
+        phone: stay.phone || null,
         expectedCheckoutAt: null,
         actualCheckOut: stay.actualCheckOut,
         minutesLate: null,
         balanceDue: stay.balanceDue || 0,
         amountPaid: stay.amountPaid || 0,
         source: stay.source,
-        rooms: [{ roomNumber: stay.roomNumber, reservationRoomId: stay.reservationRoomId }],
+        rooms: [{ roomNumber: stay.roomNumber, reservationRoomId: stay.reservationRoomId, phone: stay.occupantPhone || stay.phone || null }],
       };
     } else {
-      current.rooms.push({ roomNumber: stay.roomNumber, reservationRoomId: stay.reservationRoomId });
+      current.rooms.push({ roomNumber: stay.roomNumber, reservationRoomId: stay.reservationRoomId, phone: stay.occupantPhone || stay.phone || null });
     }
     return byRes;
   }, {}));
 
-  const due = useSorted(groupWaiting, 'rooms?.[0]');
-  const left = useSorted(groupDeparted, 'actualCheckOut');
+  const due = useSorted(groupWaiting, 'expectedCheckoutAt').filter((row) => matchesQuery(row, query));
+  const left = useSorted(groupDeparted, 'actualCheckOut').filter((row) => matchesQuery(row, query));
+  const searching = query.trim().length > 0;
+  const noMatches = searching && !due.length && !left.length;
+
+  if (noMatches) return <p className="rounded-lg border border-dashed border-border p-3 text-sm text-text-muted">No matching departures</p>;
 
   return (
     <>
@@ -610,7 +619,7 @@ function OwedAfterCheckoutDetail({ query }) {
             <span className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{row.guestName}</span><span className="shrink-0 rounded-md bg-danger-50 px-2 py-0.5 text-xs font-bold text-danger-700">{cash(row.balanceDue)}</span></span>
             <span className="mt-0.5 block text-sm text-text-muted">{row.confirmationCode} · Room {row.roomNumbers.join(', ') || '—'}{row.checkedOutAt ? ` · left ${shortDate(row.checkedOutAt)}` : ''}</span>
             <span className="mt-0.5 block text-sm text-text-muted">Reason: {row.reason || 'Not recorded'}</span>
-            <span className="mt-0.5 block text-sm text-text-muted">Approved by: {row.approvedBy || 'Not recorded'}</span>
+            <span className="mt-0.5 block text-sm text-text-muted">Checked out by: {row.approvedBy || 'Not recorded'}</span>
           </Link>
           <div className="mt-2 flex flex-wrap gap-2">
             <button type="button" onClick={() => setPaying(row)} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-text-inverted hover:bg-primary-700"><Wallet size={16} /> Take payment</button>

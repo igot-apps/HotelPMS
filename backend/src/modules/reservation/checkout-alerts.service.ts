@@ -43,7 +43,7 @@ export async function checkoutAlerts(actor: Actor, now = new Date()) {
   const verifications = await latestVerifications(stays.map(s => s.reservationRoomId));
   const alerts = stays.map(stay => {
     const dueAt = checkoutDueAt(stay.checkOutDate, property?.checkOutTime, timeZone);
-    const state = checkoutState(dueAt, now);
+    const state = checkoutState(dueAt, now, timeZone);
     const late = state === 'overdue' ? minutesLate(dueAt, now) : 0;
     const verification = verifications.get(stay.reservationRoomId) || null;
     const res = stay.reservation;

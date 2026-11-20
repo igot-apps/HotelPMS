@@ -118,7 +118,7 @@ export default function RoomTypeModal({ isOpen, onClose, onSuccess, initialData 
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-semibold text-text mb-1.5">Base Price (GH₵) *</label>
+              <label className="block text-sm font-semibold text-text mb-1.5">Base Price (GHS) *</label>
               <input
                 type="number"
                 name="basePrice"

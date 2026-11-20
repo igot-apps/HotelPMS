@@ -1,4 +1,6 @@
 import * as roomRepository from './room.repository';
+import { prisma } from '../../shared/utils/prisma';
+import { hotelDate } from '../reports/daily-overview.service';
 
 
 
@@ -18,13 +20,30 @@ export const getRooms = async (
   page: number = 1,
   limit: number = 10
 ) => {
-  return roomRepository.findRooms(
+  const result: any = await roomRepository.findRooms(
     propertyId,
     roomTypeId,
     operationalStatus,
     page,
     limit
   );
+  // A clean empty room can still be booked for a guest arriving today. Show that on the room so staff
+  // do not give it to someone else (housekeeping readiness is not the same as free for tonight).
+  if (propertyId && result.rooms?.length) {
+    const property = await prisma.property.findUnique({ where: { propertyId }, select: { timezone: true } });
+    const today = new Date(`${hotelDate(new Date(), property?.timezone || 'Africa/Accra')}T00:00:00Z`);
+    const arriving = await prisma.reservationRoom.findMany({
+      where: { roomId: { in: result.rooms.map((room: any) => room.roomId) }, status: 'Reserved', reservation: { status: { in: ['Confirmed', 'InHouse'] } }, checkInDate: { lte: today }, checkOutDate: { gt: today } },
+      orderBy: { checkInDate: 'asc' },
+      select: { roomId: true, checkInDate: true, occupantName: true, reservation: { select: { reservationId: true, confirmationCode: true, guestNameSnapshot: true, platformGuest: { select: { fullName: true } }, propertyGuest: { select: { fullName: true } } } } },
+    });
+    for (const room of result.rooms) {
+      const stay = arriving.find(a => a.roomId === room.roomId);
+      room.arrivingToday = stay ? { reservationId: stay.reservation.reservationId, confirmationCode: stay.reservation.confirmationCode, checkInDate: stay.checkInDate,
+        guestName: stay.occupantName || stay.reservation.guestNameSnapshot || stay.reservation.platformGuest?.fullName || stay.reservation.propertyGuest?.fullName || 'Guest' } : null;
+    }
+  }
+  return result;
 };
 
 export const getRoomById = async (roomId: number) => {

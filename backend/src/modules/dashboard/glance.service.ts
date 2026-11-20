@@ -20,7 +20,7 @@ export async function getDashboardGlance(propertyId: number, role: string, now =
   const tomorrow = new Date(today.getTime() + DAY);
   const weekAhead = new Date(today.getTime() + 8 * DAY); // arrivals expected tomorrow up to 7 days ahead
   const { gte: start, lt: end } = dayBounds(date, timeZone);
-  const reservationInclude = { reservation: { select: { reservationId: true, confirmationCode: true, guestNameSnapshot: true, totalAmount: true, amountPaid: true, source: true, platformGuest: { select: { fullName: true } }, propertyGuest: { select: { fullName: true } } } }, room: { select: { roomNumber: true } } };
+  const reservationInclude = { reservation: { select: { reservationId: true, confirmationCode: true, guestNameSnapshot: true, guestPhoneSnapshot: true, totalAmount: true, amountPaid: true, source: true, platformGuest: { select: { fullName: true } }, propertyGuest: { select: { fullName: true } } } }, room: { select: { roomNumber: true } } };
 
   const [stays, rooms, payments, approvalsPending, refundsPending] = await Promise.all([
     prisma.reservationRoom.findMany({

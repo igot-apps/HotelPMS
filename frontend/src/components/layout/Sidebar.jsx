@@ -24,7 +24,7 @@ const operationItems = [
 const configItems = [
   { to: '/room-management', icon: Settings, label: 'Room Management', permission: 'CanCreateRoom' },
   { to: '/users', icon: Shield, label: 'Staff Management', permission: 'CanManageStaffAndRoles' },
-  { to: '/properties', icon: Building2, label: 'Properties' },
+  { to: '/properties', icon: Building2, label: 'Properties', managerOnly: true },
 ];
 
 // 🌟 NEW: Account / SaaS Items

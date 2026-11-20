@@ -27,12 +27,13 @@ export function checkoutDueAt(checkOutDate: Date, checkOutTime: string | null | 
 }
 
 export type CheckoutState = 'upcoming' | 'dueSoon' | 'due' | 'overdue';
-// upcoming: more than a day away · due: within the next day · dueSoon: within an hour · overdue: time has passed.
-export function checkoutState(dueAt: Date, now = new Date()): CheckoutState {
+// overdue: checkout time has passed · dueSoon: within an hour · due: later today (hotel calendar day) ·
+// upcoming: a later day (tomorrow's departures are not "due today", even within 24 hours).
+export function checkoutState(dueAt: Date, now = new Date(), timeZone = 'Africa/Accra'): CheckoutState {
   const minutes = (dueAt.getTime() - now.getTime()) / 60000;
   if (minutes <= 0) return 'overdue';
   if (minutes <= DUE_SOON_MINUTES) return 'dueSoon';
-  if (minutes <= 24 * 60) return 'due';
+  if (hotelDate(dueAt, timeZone) === hotelDate(now, timeZone)) return 'due';
   return 'upcoming';
 }
 

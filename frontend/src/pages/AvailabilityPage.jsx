@@ -338,9 +338,9 @@ export default function AvailabilityPage() {
                       {/* Pricing Display */}
                       <div className="border-t border-border pt-4 mt-auto">
                         <div className="flex items-baseline justify-between">
-                          <span className="text-xs text-text-muted">GH₵ {formatCurrency(basePrice)} × {nights} nights</span>
+                          <span className="text-xs text-text-muted">GHS {formatCurrency(basePrice)} × {nights} nights</span>
                           <span className={`text-xl font-bold ${isSelected ? 'text-primary-600' : 'text-text'}`}>
-                            GH₵ {formatCurrency(roomTotal)}
+                            GHS {formatCurrency(roomTotal)}
                           </span>
                         </div>
                       </div>
@@ -384,7 +384,7 @@ export default function AvailabilityPage() {
                 {selectedRooms.length} of {availableRooms.length} Rooms Selected
               </p>
               <p className="text-xs text-text-muted">
-                Total Estimated: GH₵ {formatCurrency(selectedTotal)}
+                Total Estimated: GHS {formatCurrency(selectedTotal)}
               </p>
             </div>
           </div>

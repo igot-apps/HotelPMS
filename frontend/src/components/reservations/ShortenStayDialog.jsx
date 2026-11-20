@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import api from '../../lib/axios';
 import { invalidateCorrections } from '../../lib/correction-actions';
 
-const cash = (value) => `GH₵ ${Number(value || 0).toFixed(2)}`;
+const cash = (value) => `GHS ${Number(value || 0).toFixed(2)}`;
 const DAY = 86400000;
 const addDays = (date, days) => new Date(new Date(`${date}T00:00:00Z`).getTime() + days * DAY).toISOString().slice(0, 10);
 const nightsBetween = (from, to) => Math.round((new Date(`${to}T00:00:00Z`) - new Date(`${from}T00:00:00Z`)) / DAY);
