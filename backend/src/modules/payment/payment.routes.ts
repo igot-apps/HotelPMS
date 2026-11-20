@@ -162,10 +162,12 @@ router.get('/', async (req: any, res: Response) => {
 // ============================================================
 router.get('/stats', async (req: any, res: Response) => {
   try {
-    const stats = await paymentService.getPaymentStatistics(req.user?.propertyId || 1);
-    res.json({ success: true, data: stats });
+    const propertyId = req.user?.propertyId;
+    if (!propertyId) return res.status(403).json({ success: false, message: 'Payment statistics are only available for a hotel account.' });
+    const stats = await paymentService.getPaymentStatistics(propertyId);
+    return res.json({ success: true, data: stats });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 });
 

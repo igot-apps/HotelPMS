@@ -119,6 +119,9 @@ export default function RoomCard({
           {roomStatusLabel(roomStatus)}
         </span>
       </div>
+      {roomStatus === 'Reserved' && rr.room?.operationalStatus === 'Occupied' && (
+        <p className="text-xs font-semibold text-danger-700">Room {rr.room.roomNumber} still has a guest checked in. Check them out (or verify their departure) first, or move this guest to another room.</p>
+      )}
       {roomStatus === 'Reserved' && rr.room?.housekeepingStatus && (
         ['Clean', 'Inspected'].includes(rr.room.housekeepingStatus)
           ? <p className="text-xs font-semibold text-success-700">Room is clean and ready</p>

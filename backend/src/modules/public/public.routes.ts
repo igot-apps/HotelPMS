@@ -6,6 +6,7 @@ import { verifyGuestPayment } from '../payment/guest-payment.service';
 import { initializeGuestPayment, checkGuestPaymentStatus } from '../payment/guest-payment-attempt.service';
 import { createHotelReservation } from '../reservation/booking-creation.service';
 import { expireOnlineHolds } from '../reservation/online-hold.service';
+import { onlineBookableRoom } from '../reservation/stay-timing';
 import { cancelGuestReservation } from '../reservation/guest-cancellation.service';
 import { publicPhotoReferences } from './public-images.routes';
 import { resolveWebsiteHostname } from '../property/website-domain.service';
@@ -77,17 +78,9 @@ const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): 
   return R * c;
 };
 
+// Same rule as the online booking itself (onlineBookableRoom): tonight's occupancy does not hide future dates.
 const availableRoomsForStay = (checkInDate: Date, checkOutDate: Date): Prisma.RoomWhereInput => ({
-  isOnlineBookable: true,
-  operationalStatus: 'Available',
-  reservationRooms: {
-    none: {
-      status: { in: ['Reserved', 'CheckedIn'] },
-      reservation: { status: { in: ['Pending', 'Confirmed', 'InHouse'] } },
-      checkInDate: { lt: checkOutDate },
-      checkOutDate: { gt: checkInDate },
-    },
-  },
+  ...onlineBookableRoom(checkInDate, checkOutDate),
 });
 
 // ============================================================

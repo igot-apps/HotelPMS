@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { prisma } from '../../shared/utils/prisma';
 import { expireOnlineHolds } from './online-hold.service';
 import { canBookOnline, OnlineBookingPausedError } from './public-booking-policy';
-import { overdueOccupancyClause } from './stay-timing';
+import { onlineBookableRoom, overdueOccupancyClause } from './stay-timing';
 
 // Allocation shares SERIALIZABLE transactions and room locks with recovery actions.
 export async function createHotelReservation(input: any, online = false): Promise<any> {
@@ -26,7 +26,7 @@ export async function createHotelReservation(input: any, online = false): Promis
         let selections = input.rooms;
         if (online) {
           if (!property.isOnlineBookingEnabled) throw new Error('Online booking is disabled.');
-          const candidate = await tx.room.findFirst({ where: { propertyId: property.propertyId, roomTypeId: Number(input.roomTypeId), roomType: { isActive: true }, operationalStatus: 'Available', isOnlineBookable: true, reservationRooms: { none: overlapping } }, orderBy: { roomId: 'asc' }, include: { roomType: true } });
+          const candidate = await tx.room.findFirst({ where: { propertyId: property.propertyId, roomTypeId: Number(input.roomTypeId), roomType: { isActive: true }, ...onlineBookableRoom(from, to, property.timezone || 'Africa/Accra') }, orderBy: { roomId: 'asc' }, include: { roomType: true } });
           if (!candidate) throw new Error('No room is available for the selected dates.');
           selections = [{ roomId: candidate.roomId, roomTypeId: candidate.roomTypeId, agreedPricePerNight: Number(candidate.roomType.basePrice) }];
         }
@@ -34,8 +34,8 @@ export async function createHotelReservation(input: any, online = false): Promis
         const allocations: any[] = [];
         for (const selected of [...selections].sort((a, b) => a.roomId - b.roomId)) {
           await tx.$queryRaw`SELECT "roomId" FROM rooms WHERE "roomId" = ${Number(selected.roomId)} FOR UPDATE`;
-          // Staff bookings also respect a guest still checked in past departure (online already requires an Available room).
-          const overdue = online ? null : overdueOccupancyClause(from, property.timezone || 'Africa/Accra');
+          // Staff bookings also respect a guest still checked in past departure (online uses the same rule via onlineBookableRoom).
+          const overdue = overdueOccupancyClause(from, property.timezone || 'Africa/Accra'); // re-checked under the room lock, staff and online alike
           const room = await tx.room.findFirst({ where: { roomId: Number(selected.roomId), propertyId: property.propertyId, roomTypeId: Number(selected.roomTypeId), roomType: { isActive: true }, operationalStatus: { not: 'Maintenance' }, reservationRooms: { none: overdue ? { OR: [overlapping, overdue] } : overlapping } }, include: { roomType: true } });
           if (!room && overdue && await tx.reservationRoom.findFirst({ where: { roomId: Number(selected.roomId), ...overdue } })) throw new Error('This room still has a checked-in guest past their departure date. Check them out or verify their departure first.');
           if (!room) throw new Error('A selected room is no longer available. Refresh availability.');

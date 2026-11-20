@@ -112,9 +112,12 @@ describe('discovery distance pagination', () => {
     expect(response.status).toBe(200);
     const ranking = (prisma.property.findMany as any).mock.calls[0][0];
     const roomWhere = ranking.where.NOT.roomTypes.some.rooms.some;
-    expect(roomWhere.operationalStatus).toBe('Available');
-    expect(roomWhere.reservationRooms.none.status.in).toEqual(['Reserved', 'CheckedIn']);
-    expect(roomWhere.reservationRooms.none.checkInDate.lt.getTime() - roomWhere.reservationRooms.none.checkOutDate.gt.getTime()).toBe(86400000);
+    // Rooms occupied tonight are not hidden for other dates; only maintenance, overlapping stays and overdue guests block.
+    expect(roomWhere.operationalStatus).toEqual({ not: 'Maintenance' });
+    const [overlap, overdue] = roomWhere.reservationRooms.none.OR;
+    expect(overlap.status.in).toEqual(['Reserved', 'CheckedIn']);
+    expect(overlap.checkInDate.lt.getTime() - overlap.checkOutDate.gt.getTime()).toBe(86400000);
+    expect(overdue.status).toBe('CheckedIn');
     expect(response.body.data.hotels[0].availabilityStatus).toBe('unavailable');
     expect(response.body.data.hotels[0].availabilityCheckIn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });

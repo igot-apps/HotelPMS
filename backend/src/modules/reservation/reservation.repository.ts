@@ -333,38 +333,6 @@ export const updateGuestPresence = async (
   });
 };
 
-// ============================================================
-// 🌟 NEW: Check if room is already booked during the extended dates
-// ============================================================
-export const findConflictingReservationRoom = async (
-  roomId: number,
-  excludeReservationRoomId: number,
-  newCheckOutDate: Date,
-  currentCheckOutDate: Date
-) => {
-  return prisma.reservationRoom.findFirst({
-    where: {
-      roomId,
-      reservationRoomId: { not: excludeReservationRoomId },
-      checkInDate: { lt: newCheckOutDate },
-      checkOutDate: { gt: currentCheckOutDate },
-      reservation: {
-        status: { in: ['Confirmed', 'InHouse'] }, // 🌟 UPDATED to InHouse
-      }
-    },
-    include: {
-      room: { select: { roomNumber: true } },
-      reservation: {
-        select: {
-          reservationId: true,
-          guestNameSnapshot: true,
-          propertyGuest: { select: { fullName: true } },
-          platformGuest: { select: { fullName: true } }
-        }
-      }
-    }
-  });
-};
 
 // ============================================================
 // 🌟 NEW: Update the check-out date for a specific room (and track original)
@@ -388,32 +356,6 @@ export const updateReservationRoomCheckOutDate = async (
   });
 };
 
-// ============================================================
-// 🚨 SAFETY: Check if a room is already occupied by another active reservation
-// ============================================================
-export const findConflictingCheckIn = async (roomId: number, excludeReservationRoomId: number) => {
-  return prisma.reservationRoom.findFirst({
-    where: {
-      roomId,
-      status: 'CheckedIn', // Room status is still 'CheckedIn'
-      reservationRoomId: { not: excludeReservationRoomId },
-      reservation: {
-        status: { in: ['Confirmed', 'InHouse'] } // 🌟 UPDATED to InHouse
-      }
-    },
-    include: {
-      room: { select: { roomNumber: true } },
-      reservation: { 
-        select: { 
-          reservationId: true,
-          guestNameSnapshot: true,
-          propertyGuest: { select: { fullName: true } },
-          platformGuest: { select: { fullName: true } }
-        } 
-      }
-    }
-  });
-};
 
 // ============================================================
 // 🌟 PHASE 2: DERIVE RESERVATION STATUS FROM ROOMS

@@ -163,7 +163,7 @@ async function main() {
     console.log('10 ok: checkout date reached on the hotel calendar → restore refused, staff told to create a new reservation');
     // 11. Whole-booking restore (Correct or undo) follows the same rules: room 104 is now held tonight,
     // so the single-room no-show booking ONE cannot be restored over it.
-    await assert.rejects(() => correctBooking(single.reservationId, A, { action: 'restore', reason: 'Guest arrived late', preview: true }), /conflicting dates/);
+    await assert.rejects(() => correctBooking(single.reservationId, A, { action: 'restore', reason: 'Guest arrived late', preview: true }), /Room 104 is already reserved for Guest MIX .* Move one of the two bookings/);
     assert.equal((await status(single.reservationId)).status, 'NoShow');
     console.log('11 ok: whole-booking restore uses the same remaining-night conflict check and refuses to double-book room 104');
     // 12. Room buttons always send one room. Two-room booking, nobody arrived: first room → booking stays

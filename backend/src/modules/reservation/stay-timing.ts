@@ -50,6 +50,15 @@ export function overdueOccupancyClause(from: Date, timeZone = 'Africa/Accra', no
   return { status: 'CheckedIn', reservation: { status: { in: ['Confirmed', 'InHouse'] as any[] } }, checkOutDate: { lte: from } };
 }
 
+// Rooms a guest can book online for these nights: bookable online, not under maintenance, no live stay
+// overlapping the nights, and (for stays starting today) no guest still checked in past their departure.
+// Being occupied tonight never hides a room for future dates.
+export function onlineBookableRoom(from: Date, to: Date, timeZone = 'Africa/Accra', now = new Date()): any {
+  const overlapping = { status: { in: ['Reserved', 'CheckedIn'] }, reservation: { status: { in: ['Pending', 'Confirmed', 'InHouse'] } }, checkInDate: { lt: to }, checkOutDate: { gt: from } };
+  const overdue = overdueOccupancyClause(from, timeZone, now);
+  return { isOnlineBookable: true, operationalStatus: { not: 'Maintenance' }, reservationRooms: { none: overdue ? { OR: [overlapping, overdue] } : overlapping } };
+}
+
 // A guest can still arrive on their arrival day; only call them a no-show this many hours
 // after the hotel's check-in time (e.g. 14:00 + 6 h = 20:00), or any time after that day.
 export const NO_SHOW_GRACE_HOURS = 6;

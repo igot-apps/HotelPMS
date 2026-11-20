@@ -45,13 +45,29 @@ async function lockRooms(tx: any, ids: number[]) {
     await tx.$queryRaw`SELECT "roomId" FROM rooms WHERE "roomId" = ${id} FOR UPDATE`;
   }
 }
+const shortDate = (value: Date) => new Date(value).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+// Throws a clear, actionable message naming the stay that blocks the room. The blocking stay is in the
+// same room, so always the same hotel.
 async function noConflict(tx: any, roomId: number, stayId: number, from: Date, to: Date, occupying = false) {
   const clash = await tx.reservationRoom.findFirst({ where: {
     roomId, reservationRoomId: { not: stayId }, status: { in: ['Reserved', 'CheckedIn'] },
     reservation: { status: { in: ['Pending', 'Confirmed', 'InHouse'] } },
     OR: [{ checkInDate: { lt: to }, checkOutDate: { gt: from } }, ...(occupying ? [{ status: 'CheckedIn' }] : [])],
-  } });
-  if (clash) throw new Error('The room is occupied or reserved for conflicting dates. Choose another room or correct the conflicting stay first.');
+  }, orderBy: [{ status: 'asc' }, { checkInDate: 'asc' }], include: { room: { select: { roomNumber: true } }, reservation: { select: { confirmationCode: true, guestNameSnapshot: true } } } });
+  if (!clash) return;
+  const room = `Room ${clash.room?.roomNumber || clash.roomNumberSnapshot || ''}`.trim();
+  const who = `${clash.occupantName || clash.reservation?.guestNameSnapshot || 'another guest'} (${clash.reservation?.confirmationCode || 'another booking'})`;
+  const dates = `${shortDate(clash.checkInDate)} – ${shortDate(clash.checkOutDate)}`;
+  const details = { roomNumber: clash.room?.roomNumber || clash.roomNumberSnapshot, confirmationCode: clash.reservation?.confirmationCode, status: clash.status, checkInDate: clash.checkInDate, checkOutDate: clash.checkOutDate };
+  const message = clash.status === 'CheckedIn'
+    ? `${room} is still occupied by ${who}, booked ${dates}. Check that guest out (or verify their departure) first, or move this guest to another room.`
+    : `${room} is already reserved for ${who}, ${dates}. Move one of the two bookings to another room, or correct its dates, first.`;
+  throw Object.assign(new Error(message), { statusCode: 409, code: 'ROOM_CONFLICT', details });
+}
+// Check-in is allowed from the arrival day (hotel calendar), at any hour; earlier arrivals need the booking's dates changed.
+async function arrivalDue(tx: any, propertyId: number, stay: any) {
+  const today = await hotelToday(tx, propertyId);
+  if (dateOnly(stay.checkInDate) > today) throw Object.assign(new Error(`Room ${stay.room?.roomNumber || stay.roomNumberSnapshot || ''} arrives on ${shortDate(stay.checkInDate)}; it cannot be checked in before its arrival date. If the guest is here early, change the booking's arrival date first.`), { statusCode: 409, code: 'ARRIVAL_NOT_DUE' });
 }
 const dateOnly = (value: Date) => new Date(value).toISOString().slice(0, 10);
 // Restoring a stay (one no-show room or a whole cancelled/no-show booking): on or after the checkout date
@@ -193,6 +209,7 @@ export async function transitionStay(stayId: number, status: string, actor: Acto
     let reason = 'Normal room lifecycle transition';
     let creditReason = '';
     if (status === 'CheckedIn' && stay.status === 'Reserved') {
+      await arrivalDue(tx, actor.propertyId, stay);
       const occupant = occupantDetails(details.occupantName, details.occupantPhone);
       occupantConfirmation = await confirmOccupant(tx, actor.propertyId, stay, occupant, details.duplicateOccupantConfirmation, true);
       const room = await availableInventory(tx, stay.roomId, actor.propertyId);
@@ -299,6 +316,7 @@ export async function checkinBooking(id: string, actor: Actor) {
     await lockRooms(tx, res.reservationRooms.map((r: any) => r.roomId).filter((id: any) => id !== null));
     for (const stay of res.reservationRooms) {
       if (stay.status !== 'Reserved') throw new Error('Use individual room actions for a partially processed stay.');
+      await arrivalDue(tx, actor.propertyId, stay);
       if (!stay.occupantName?.trim()) throw new Error('Confirm the actual occupant for each room. Open the room assignments and check in each room separately.');
       const occupant = occupantDetails(stay.occupantName, stay.occupantPhone);
       await confirmOccupant(tx, actor.propertyId, stay, occupant, undefined, true);
