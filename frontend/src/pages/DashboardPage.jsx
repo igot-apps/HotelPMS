@@ -1,3 +1,4 @@
+import { SkeletonCards } from '../components/ui/Skeleton';
 import { useState } from 'react';
 import CheckoutAlerts from '../components/reservations/CheckoutAlerts';
 import TodayAtAGlance from '../components/dashboard/TodayAtAGlance';
@@ -177,7 +178,7 @@ export default function DashboardPage() {
 
     {error && <div role="alert" className="rounded-xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-700">Could not refresh the dashboard. {data ? 'The figures below are from the last successful update.' : 'Use Refresh to try again.'}</div>}
     {!propertyId && <p className="rounded-xl border border-border bg-surface p-6 text-text-muted">Select a hotel to view its operations.</p>}
-    {isLoading && <p role="status" className="flex items-center justify-center gap-3 rounded-xl border border-border bg-surface p-10 text-text-muted"><Loader2 className="animate-spin" size={24} /> Loading front desk overview…</p>}
+    {isLoading && <SkeletonCards count={4} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" cardClassName="h-28" label="Loading front desk overview…" />}
     {data?.totalRooms === 0 && <SetupChecklist />}
     {propertyId && <CheckoutAlerts />}
     {data && !frontDesk && <>

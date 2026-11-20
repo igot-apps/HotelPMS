@@ -1,3 +1,4 @@
+import { SkeletonRows } from '../components/ui/Skeleton';
 import ResponsiveTable from '../components/ui/ResponsiveTable';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -157,7 +158,7 @@ export default function PlatformPropertiesPage() {
 
       <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
         {isLoading ? (
-          <div className="p-12 text-center text-sm text-text-muted">Loading platform properties…</div>
+          <SkeletonRows label="Loading platform properties…" />
         ) : isError ? (
           <div className="p-12 text-center text-sm font-semibold text-danger-600">Could not load platform properties.</div>
         ) : properties.length === 0 ? (

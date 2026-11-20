@@ -1,3 +1,4 @@
+import { SkeletonRows } from '../components/ui/Skeleton';
 import ResponsiveTable from '../components/ui/ResponsiveTable';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -82,7 +83,7 @@ export default function PropertiesPage() {
       {/* Data Table */}
       <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
         {isLoading ? (
-          <div className="p-12 text-center text-text-muted animate-pulse">Loading properties...</div>
+          <SkeletonRows rows={3} label="Loading properties…" />
         ) : error ? (
           <div className="p-12 text-center text-danger-600 flex flex-col items-center gap-2">
             <AlertCircle size={24} /> <p className="font-semibold">Failed to load properties</p>

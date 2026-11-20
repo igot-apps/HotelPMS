@@ -1,3 +1,4 @@
+import { SkeletonTableRows } from '../components/ui/Skeleton';
 import ResponsiveTable from '../components/ui/ResponsiveTable';
 // frontend/src/pages/UsersPage.jsx
 import { useState } from 'react';
@@ -142,7 +143,7 @@ export default function UsersPage() {
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan="5" className="p-12 text-center text-text-muted animate-pulse">Loading staff...</td></tr>
+                <SkeletonTableRows colSpan="5" rows={4} label="Loading staff…" />
               ) : filteredUsers.length === 0 ? (
                 <tr><td colSpan="5" className="p-12 text-center text-text-muted">No staff members found.</td></tr>
               ) : (

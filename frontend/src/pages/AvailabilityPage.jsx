@@ -1,3 +1,4 @@
+import { SkeletonCards } from '../components/ui/Skeleton';
 // AvailabilityPage.jsx
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -225,9 +226,7 @@ export default function AvailabilityPage() {
       {hasSearched && (
         <div className="space-y-4">
           {isLoading ? (
-            <div className="bg-surface border border-border rounded-xl p-12 text-center text-text-muted animate-pulse">
-              Searching available rooms...
-            </div>
+            <SkeletonCards count={3} className="space-y-4" cardClassName="h-32" label="Searching available rooms…" />
           ) : error ? (
             <div className="bg-surface border border-border rounded-xl p-12 text-center text-danger-600">
               <AlertCircle size={24} className="mx-auto mb-2" />

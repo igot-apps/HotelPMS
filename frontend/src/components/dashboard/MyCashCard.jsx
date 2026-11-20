@@ -1,3 +1,4 @@
+import { SkeletonLines } from '../ui/Skeleton';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -37,7 +38,7 @@ export default function MyCashCard() {
   return (
     <section aria-labelledby="my-cash-title" className="rounded-xl border border-border bg-surface p-4 shadow-sm">
       <h2 id="my-cash-title" className="mb-3 flex items-center gap-2 text-sm font-bold text-text"><Banknote size={17} className="text-primary-600" /> Your cash today</h2>
-      {isLoading ? <p className="text-sm text-text-muted">Loading…</p> : (
+      {isLoading ? <SkeletonLines lines={3} label="Loading your cash…" /> : (
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-1 text-sm">
             <p className="text-text-muted">Cash you should have</p>

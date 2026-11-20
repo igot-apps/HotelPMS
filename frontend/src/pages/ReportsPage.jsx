@@ -1,3 +1,4 @@
+import { Skeleton, SkeletonCards } from '../components/ui/Skeleton';
 import { useState } from 'react';
 import CashRangeSummary from '../components/reports/CashRangeSummary';
 import { useSearchParams } from 'react-router-dom';
@@ -108,10 +109,7 @@ const currentPropertyName = user?.propertyName || 'All Properties';
 
       {/* Loading / Error States */}
       {isLoading && (
-        <div className="bg-surface border border-border rounded-xl p-12 flex flex-col items-center justify-center gap-3 text-text-muted">
-          <Loader2 className="animate-spin text-primary-500" size={32} />
-          <p className="font-semibold">Crunching the numbers...</p>
-        </div>
+        <div className="space-y-6"><SkeletonCards count={5} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4" cardClassName="h-28" label="Loading reports…" /><Skeleton className="h-72 rounded-xl" /></div>
       )}
 
       {isError && (

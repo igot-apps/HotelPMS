@@ -1,3 +1,4 @@
+import { Skeleton } from '../components/ui/Skeleton';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRooms, updateRoomStatus, getOnlineRoomAccess, setRoomOnlineBooking } from '../api/rooms';
@@ -147,7 +148,7 @@ export default function RoomsPage() {
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {Array(8).fill(0).map((_, i) => (
-            <div key={i} className="h-64 bg-surface rounded-2xl border border-border animate-pulse"></div>
+            <Skeleton key={i} className="h-64 rounded-2xl" />
           ))}
         </div>
       ) : error ? (

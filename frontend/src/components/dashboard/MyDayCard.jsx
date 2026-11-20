@@ -1,3 +1,4 @@
+import { SkeletonCards } from '../ui/Skeleton';
 import { useQuery } from '@tanstack/react-query';
 import { Coins, LogIn, LogOut, Plus, UserCheck } from 'lucide-react';
 import api from '../../lib/axios';
@@ -22,7 +23,7 @@ export default function MyDayCard() {
   return (
     <section aria-labelledby="my-day-title" className="rounded-xl border border-border bg-surface p-4 shadow-sm">
       <h2 id="my-day-title" className="mb-3 flex items-center gap-2 text-sm font-bold text-text"><UserCheck size={17} className="text-primary-600" /> You today</h2>
-      {isLoading ? <p className="text-sm text-text-muted">Loading…</p> : (
+      {isLoading ? <SkeletonCards count={4} className="grid grid-cols-2 gap-3 lg:grid-cols-4" cardClassName="h-16" label="Loading your day…" /> : (
         <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {items.map(({ icon: Icon, label, value, hint }) => (
             <li key={label} className="min-w-0 rounded-lg border border-border bg-background p-3">

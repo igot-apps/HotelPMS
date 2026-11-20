@@ -1,3 +1,4 @@
+import { Skeleton, SkeletonTableRows } from '../components/ui/Skeleton';
 import RefundPaymentSummary from '../components/reservations/RefundPaymentSummary';
 import RefundSummary from '../components/reservations/RefundSummary';
 import RefundApprovalBadge from '../components/reservations/RefundApprovalBadge';
@@ -611,7 +612,7 @@ export default function ReservationsPage() {
       {/* Mobile reservation cards */}
       <div className={`md:hidden space-y-3 ${isPlaceholderData ? 'opacity-60 pointer-events-none' : ''}`}>
         {isLoading ? (
-          [0, 1, 2].map((item) => <div key={item} className="h-48 rounded-xl border border-border bg-surface animate-pulse" />)
+          [0, 1, 2].map((item) => <Skeleton key={item} className="h-48 rounded-xl" />)
         ) : isError ? (
           <div className="rounded-xl border border-border bg-surface p-8 text-center">
             <AlertCircle size={28} className="mx-auto mb-2 text-danger-600" />
@@ -738,7 +739,7 @@ export default function ReservationsPage() {
             </thead>
             <tbody className={isPlaceholderData ? 'opacity-60 pointer-events-none transition-opacity' : 'transition-opacity'}>
               {isLoading ? (
-                <tr><td colSpan="7" className="p-12 text-center text-text-muted"><Loader2 className="mx-auto mb-2 animate-spin" size={22} /> Loading...</td></tr>
+                <SkeletonTableRows colSpan="7" cols={5} label="Loading reservations…" />
               ) : isError ? (
                 <tr>
                   <td colSpan="7" className="p-12 text-center">

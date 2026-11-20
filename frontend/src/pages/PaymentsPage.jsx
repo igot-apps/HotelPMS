@@ -1,3 +1,4 @@
+import { SkeletonTableRows } from '../components/ui/Skeleton';
 import ResponsiveTable from '../components/ui/ResponsiveTable';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -237,7 +238,7 @@ export default function PaymentsPage() {
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan="6" className="p-12 text-center text-text-muted animate-pulse">Loading transactions...</td></tr>
+                <SkeletonTableRows colSpan="6" cols={5} label="Loading transactions…" />
               ) : payments.length === 0 ? (
                 <tr><td colSpan="6" className="p-12 text-center text-text-muted flex flex-col items-center gap-2"><CreditCard size={24} /> <p className="font-semibold">No payments found</p></td></tr>
               ) : (

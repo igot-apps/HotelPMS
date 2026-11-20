@@ -1,3 +1,4 @@
+import { SkeletonCards } from '../components/ui/Skeleton';
 import { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -470,10 +471,7 @@ export default function DiscoverPage() {
 
         {/* Loading / Error / Empty States */}
         {isLoading && (
-          <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <Loader2 className="animate-spin text-primary-500" size={40} />
-            <p className="text-text-muted font-semibold">Searching hotels...</p>
-          </div>
+          <SkeletonCards count={6} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 lg:gap-7" cardClassName="h-80 rounded-2xl" label="Searching hotels…" />
         )}
 
         {!isLoading && !isError && hotels.length === 0 && (

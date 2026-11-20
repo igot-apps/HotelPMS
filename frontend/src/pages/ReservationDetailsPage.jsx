@@ -1,3 +1,4 @@
+import { Skeleton } from '../components/ui/Skeleton';
 import ResponsiveTable from '../components/ui/ResponsiveTable';
 import BackButton from '../components/ui/BackButton';
 import { useEffect, useState } from 'react';
@@ -109,7 +110,7 @@ export default function ReservationDetailsPage() {
     });
   };
 
-  if (isLoadingRes) return <div className="p-8 text-center text-text-muted">Loading reservation details...</div>;
+  if (isLoadingRes) return <div role="status" className="space-y-4"><span className="sr-only">Loading reservation details…</span><Skeleton className="h-8 w-64" /><Skeleton className="h-28 rounded-xl" /><div className="grid gap-4 lg:grid-cols-3"><Skeleton className="h-64 rounded-xl lg:col-span-2" /><Skeleton className="h-64 rounded-xl" /></div></div>;
   if (!resData) return <div className="p-8 text-center text-danger-600">Reservation not found.</div>;
 
   // ✅ CALCULATED ON-DEMAND from the single source of truth

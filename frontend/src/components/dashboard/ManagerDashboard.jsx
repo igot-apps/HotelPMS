@@ -1,3 +1,4 @@
+import { SkeletonLines } from '../ui/Skeleton';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -484,5 +485,5 @@ function DailyBars({ days }) {
 }
 
 function Loading() {
-  return <p className="flex items-center gap-2 text-sm text-text-muted"><Loader2 size={16} className="animate-spin" /> Loading…</p>;
+  return <SkeletonLines lines={4} />;
 }

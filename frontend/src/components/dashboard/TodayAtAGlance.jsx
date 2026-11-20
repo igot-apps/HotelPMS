@@ -1,3 +1,4 @@
+import { SkeletonCards } from '../ui/Skeleton';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -53,7 +54,7 @@ export default function TodayAtAGlance() {
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
-  if (isLoading) return <p role="status" className="flex items-center gap-2 rounded-xl border border-border bg-surface p-6 text-sm text-text-muted"><Loader2 size={18} className="animate-spin" /> Loading today at a glance…</p>;
+  if (isLoading) return <SkeletonCards count={4} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" cardClassName="h-24" label="Loading today at a glance…" />;
   if (isError || !data) return <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Could not load today's figures. They refresh every minute.</p>;
 
   const overdue = (alerts.data?.alerts || []).filter((alert) => alert.state === 'overdue');

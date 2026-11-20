@@ -1,3 +1,4 @@
+import { SkeletonRows } from '../components/ui/Skeleton';
 import ResponsiveTable from '../components/ui/ResponsiveTable';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -103,7 +104,7 @@ export default function GuestsPage() {
       {/* Data Table */}
       <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
         {isLoading ? (
-          <div className="p-12 text-center text-text-muted animate-pulse">Loading guests...</div>
+          <SkeletonRows label="Loading guests…" />
         ) : error ? (
           <div className="p-12 text-center text-danger-600 flex flex-col items-center gap-2">
             <AlertCircle size={24} /> <p className="font-semibold">Failed to load guests</p>

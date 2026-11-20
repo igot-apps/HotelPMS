@@ -1,3 +1,4 @@
+import { SkeletonTableRows } from '../components/ui/Skeleton';
 import ResponsiveTable from '../components/ui/ResponsiveTable';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -302,7 +303,7 @@ function RoomsTab({ rooms, isLoading, onAdd, onEdit, onDelete, onStatusChange, r
           </thead>
           <tbody>
             {isLoading ? (
-              <tr> <td colSpan="5" className="p-12 text-center text-text-muted animate-pulse">Loading rooms...</td> </tr>
+              <SkeletonTableRows colSpan="5" label="Loading rooms…" />
             ) : rooms.length === 0 ? (
               <tr> 
                 <td colSpan="5" className="p-12 text-center text-text-muted">
@@ -381,7 +382,7 @@ function TypesTab({ types, isLoading, onAdd, onEdit, onDelete, onManageAmenities
           </thead>
           <tbody>
             {isLoading ? (
-              <tr> <td colSpan="5" className="p-12 text-center text-text-muted animate-pulse">Loading room types...</td> </tr>
+              <SkeletonTableRows colSpan="5" rows={3} label="Loading room types…" />
             ) : types.length === 0 ? (
               <tr> <td colSpan="5" className="p-12 text-center text-text-muted">No room types found. Click "Add Room Type" to create one.</td> </tr>
             ) : (
