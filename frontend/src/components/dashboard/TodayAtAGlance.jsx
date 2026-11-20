@@ -104,7 +104,7 @@ export default function TodayAtAGlance() {
               {SEARCHABLE[open] && (
                 <div className="relative min-w-0 flex-1">
                   <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-                  <input type="search" value={query} onChange={(event) => setQueries((current) => ({ ...current, [open]: event.target.value }))} placeholder="Search booking code, guest, phone or room..." aria-label={`Search ${SEARCHABLE[open]}`} className="min-h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm text-text outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20" />
+                  <input type="search" value={query} onChange={(event) => setQueries((current) => ({ ...current, [open]: event.target.value }))} placeholder="Search booking code, room or phone..." aria-label={`Search ${SEARCHABLE[open]}`} className="min-h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm text-text outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20" />
                 </div>
               )}
             </div>
