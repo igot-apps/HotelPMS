@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Search, BedDouble, Users, CalendarDays, BarChart3, Sparkles,
-  LogOut, Settings, Building2, X, Shield, Crown, HandCoins
+  LogOut, Settings, Building2, X, Shield, Crown, HandCoins, History
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
@@ -19,6 +19,7 @@ const operationItems = [
   { to: '/housekeeping', icon: Sparkles, label: 'Housekeeping', housekeeping: true },
   { to: '/guests', icon: Users, label: 'Guests' },
   { to: '/reports', icon: BarChart3, label: 'Reports', permission: 'CanViewFinancialReports' },
+  { to: '/activity', icon: History, label: 'Activity Log', managerOnly: true },
 ];
 
 const configItems = [

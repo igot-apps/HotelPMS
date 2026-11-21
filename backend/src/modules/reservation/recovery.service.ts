@@ -445,7 +445,7 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
           : 'Record the actual departure and check the guest out. The guest left on or after the booked departure day, so charges are unchanged and no night is added.',
       });
       if (preview) return result;
-      if (signals.contradictions.length && contradictionNote.length < 10) throw new Error('Some records suggest the guest was still here after this time. Explain why the departure time is still correct (at least 10 characters).');
+      // Conflicting records do not block it: they are kept with the correction (Activity Log), and the evidence explains the date.
       await lockRooms(tx, [stay.roomId].filter(roomId => roomId !== null));
       await releaseOccupiedRoom(tx, stay);
       await tx.reservationRoom.update({ where: { reservationRoomId: stay.reservationRoomId }, data: {

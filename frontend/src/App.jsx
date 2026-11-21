@@ -26,6 +26,7 @@ import { SHOW_DISCOVER } from './lib/platformConfig';
 // Protected Pages (Staff PMS)
 import DashboardPage from './pages/DashboardPage';
 import ReportsPage from './pages/ReportsPage';
+import ActivityLogPage from './pages/ActivityLogPage';
 import RefundsPage from './pages/RefundsPage';
 import RoomsPage from './pages/RoomsPage';
 import HousekeepingPage from './pages/HousekeepingPage';
@@ -119,6 +120,7 @@ function App() {
           <Route path="/reservations/:id" element={<ReservationDetailsPage />} />
           <Route path="/payments" element={<Navigate to="/reservations" replace />} />
           <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/activity" element={<ActivityLogPage />} />
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/availability" element={<AvailabilityPage />} />
           <Route path="/room-management" element={<RoomManagementPage />} />

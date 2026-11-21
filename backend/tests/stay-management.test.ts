@@ -82,8 +82,8 @@ describe('forgotten checkout (record actual departure)', () => {
     const preview = await correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-10T10:00:00Z'), preview: true });
     expect(preview.contradictions).toHaveLength(1);
     expect(preview.information.join(' ')).toMatch(/not proof/);
-    await expect(correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-10T10:00:00Z'), expectedVersion: preview.version })).rejects.toThrow('Explain why');
-    await expect(correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-10T10:00:00Z', { contradictionNote: 'Guest came back only to collect luggage.' }), expectedVersion: preview.version })).resolves.toMatchObject({ applied: true });
+    // Recorded with the correction, but no extra explanation is asked for.
+    await expect(correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-10T10:00:00Z'), expectedVersion: preview.version })).resolves.toMatchObject({ applied: true, contradictions: preview.contradictions });
   });
 
   test('housekeeping or payments after the claimed departure alone do not block it', async () => {

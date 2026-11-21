@@ -1,32 +1,38 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, History, Info, Loader2, X } from 'lucide-react';
+import { AlertTriangle, History, Loader2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../lib/axios';
 import { invalidateCorrections } from '../../lib/correction-actions';
 import { serverNow } from '../../lib/serverClock';
 import { fromHotelInput, toHotelInput } from '../../lib/stayTiming';
 
+// Older records may still hold 'room-found-empty' or 'security-record'; the server still accepts them.
 export const EVIDENCE_TYPES = [
   ['key-returned', 'Key or keycard was returned'],
-  ['room-found-empty', 'Housekeeping found the room empty'],
   ['guest-confirmed', 'Guest confirmed by phone or message'],
-  ['security-record', 'Security log or camera'],
   ['other', 'Other (explain below)'],
 ];
 const field = 'mt-1 min-h-11 w-full min-w-0 rounded-lg border border-border bg-background p-2 text-sm text-text';
+// Only the date is asked. Today means now; an earlier day means the end of that day, so records made
+// during that day do not count as "still here later". The charged nights depend only on the date.
+const departureMoment = (date) => {
+  if (!date) return null;
+  const now = serverNow() || new Date();
+  return date >= toHotelInput(now).slice(0, 10) ? now : fromHotelInput(`${date}T23:59`);
+};
 const cash = (value) => `GHS ${Number(value || 0).toFixed(2)}`;
 
 // Forgotten checkout: record when the guest really left. Managers apply it; receptionists send it for approval.
 export default function RecordDepartureDialog({ stay, onClose }) {
   const queryClient = useQueryClient();
 
-  const [form, setForm] = useState({ departedAt: toHotelInput(serverNow()), evidenceType: '', evidenceNote: '', reason: 'Checkout was not recorded when the guest left.', contradictionNote: '' });
+  const [form, setForm] = useState({ departedAt: toHotelInput(serverNow()).slice(0, 10), evidenceType: '', evidenceNote: '', reason: 'Checkout was not recorded when the guest left.', contradictionNote: '' });
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const url = `/reservations/${stay.reservationId}`;
-  const body = () => ({ action: 'record-departure', stayIds: [stay.reservationRoomId], departedAt: fromHotelInput(form.departedAt)?.toISOString(), evidenceType: form.evidenceType, evidenceNote: form.evidenceNote, reason: form.reason, ...(form.contradictionNote.trim() ? { contradictionNote: form.contradictionNote.trim() } : {}) });
+  const body = () => ({ action: 'record-departure', stayIds: [stay.reservationRoomId], departedAt: departureMoment(form.departedAt)?.toISOString(), evidenceType: form.evidenceType, evidenceNote: form.evidenceNote, reason: form.reason, ...(form.contradictionNote.trim() ? { contradictionNote: form.contradictionNote.trim() } : {}) });
   const change = (key) => (event) => { setForm((current) => ({ ...current, [key]: event.target.value })); if (key !== 'contradictionNote') setPreview(null); setError(''); };
 
   const submit = async (event) => {
@@ -49,8 +55,7 @@ export default function RecordDepartureDialog({ stay, onClose }) {
     } finally { setBusy(false); }
   };
 
-  const needsExplanation = preview?.contradictions?.length > 0;
-  const ready = form.evidenceType && form.evidenceNote.trim().length >= 10 && form.reason.trim().length >= 5 && (!needsExplanation || form.contradictionNote.trim().length >= 10);
+  const ready = form.evidenceType && form.evidenceNote.trim().length >= 10 && form.reason.trim().length >= 5;
 
   return (
     <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="record-departure-title">
@@ -64,7 +69,7 @@ export default function RecordDepartureDialog({ stay, onClose }) {
         </div>
         <fieldset disabled={busy} className="min-w-0 space-y-3">
           <label className="block text-sm font-medium text-text">When did the guest actually leave?
-            <input required type="datetime-local" max={toHotelInput(serverNow()) || undefined} value={form.departedAt} onChange={change('departedAt')} className={field} />
+            <input required type="date" min={stay.actualCheckIn ? toHotelInput(new Date(stay.actualCheckIn)).slice(0, 10) : undefined} max={toHotelInput(serverNow()).slice(0, 10) || undefined} value={form.departedAt} onChange={change('departedAt')} className={field} />
           </label>
           <label className="block text-sm font-medium text-text">Evidence
             <select required value={form.evidenceType} onChange={change('evidenceType')} className={field}>
@@ -82,18 +87,11 @@ export default function RecordDepartureDialog({ stay, onClose }) {
 
         {preview && (
           <div className="space-y-2 rounded-lg border border-border bg-background p-3 text-sm">
-            <p className="text-text">{preview.message}</p>
-            <p className="flex justify-between"><span className="text-text-muted">Nights charged</span><strong className="text-text">{preview.nightsCharged} (departure {preview.newCheckOutDate})</strong></p>
-            <p className="flex justify-between"><span className="text-text-muted">Booking total</span><span>{preview.newTotal !== preview.oldTotal && <s className="mr-2 text-text-muted">{cash(preview.oldTotal)}</s>}<strong className="text-text">{cash(preview.newTotal)}</strong></span></p>
-            {preview.credit > 0 && <p className="flex justify-between"><span className="text-text-muted">Overpaid (refund through Refunds)</span><strong className="text-success-700">{cash(preview.credit)}</strong></p>}
-            {preview.balanceDue > 0 && <p className="flex justify-between"><span className="text-text-muted">Balance still owed</span><strong className="text-danger-700">{cash(preview.balanceDue)}</strong></p>}
-            {preview.contradictions?.map((line) => <p key={line} className="flex gap-2 text-danger-700"><AlertTriangle size={15} className="mt-0.5 shrink-0" />{line}</p>)}
-            {preview.information?.map((line) => <p key={line} className="flex gap-2 text-text-muted"><Info size={15} className="mt-0.5 shrink-0" />{line}</p>)}
-            {needsExplanation && (
-              <label className="block font-medium text-danger-700">Records suggest the guest was still here later. Explain why this time is correct
-                <textarea required minLength={10} maxLength={500} rows={2} value={form.contradictionNote} onChange={change('contradictionNote')} className={field} />
-              </label>
-            )}
+            <p className="flex justify-between"><span className="text-text-muted">Nights charged</span><strong className="text-text">{preview.nightsCharged}</strong></p>
+            {preview.newTotal !== preview.oldTotal && <p className="flex justify-between"><span className="text-text-muted">New booking total</span><strong className="text-text">{cash(preview.newTotal)}</strong></p>}
+            {preview.credit > 0 && <p className="flex justify-between"><span className="text-text-muted">Overpaid (refund later)</span><strong className="text-success-700">{cash(preview.credit)}</strong></p>}
+            {preview.balanceDue > 0 && <p className="flex justify-between"><span className="text-text-muted">Still owed</span><strong className="text-danger-700">{cash(preview.balanceDue)}</strong></p>}
+            {preview.contradictions?.length > 0 && <p className="flex gap-2 text-warning-700"><AlertTriangle size={15} className="mt-0.5 shrink-0" />The guest was recorded as still here after this date. This is kept in the Activity Log.</p>}
           </div>
         )}
 

@@ -1,9 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
-import { AlarmClock, Loader2, Phone, ShieldAlert, X } from 'lucide-react';
-import toast from 'react-hot-toast';
-import api from '../../lib/axios';
+import { AlarmClock, Phone, ShieldAlert, X } from 'lucide-react';
 import useCheckoutAlerts from '../../hooks/useCheckoutAlerts';
 import { formatDuration, formatTime } from '../../lib/stayTiming';
 import RecordDepartureDialog from './RecordDepartureDialog';
@@ -116,72 +113,33 @@ export default function CheckoutAlerts() {
   );
 }
 
+// Past checkout time: call the guest if needed, then act. Each action is recorded by its own flow (Activity Log).
 function VerifyDepartureDialog({ alert, onClose, onRecordEarlier }) {
-  const queryClient = useQueryClient();
-  const [result, setResult] = useState('');
-  const [note, setNote] = useState('');
-  const [saved, setSaved] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const search = `/reservations?search=${encodeURIComponent(alert.confirmationCode || alert.reservationId)}`;
-
-  const save = async (event) => {
-    event.preventDefault();
-    if (busy || !result) return;
-    setBusy(true);
-    setError('');
-    try {
-      await api.post(`/reservations/rooms/${alert.reservationRoomId}/verify-departure`, { result, note }, { skipErrorToast: true });
-      queryClient.invalidateQueries({ queryKey: ['checkoutAlerts'] });
-      queryClient.invalidateQueries({ queryKey: ['rooms'] });
-      toast.success('Verification recorded.');
-      if (result === 'departed') setSaved(result); else onClose();
-    } catch (err) {
-      setError(err.response?.data?.message || 'Could not record the verification.');
-    } finally { setBusy(false); }
-  };
-
-  const option = (value, title, text) => (
-    <label className={`flex cursor-pointer gap-3 rounded-lg border p-3 text-sm ${result === value ? 'border-primary-500 bg-primary-50/60' : 'border-border'}`}>
-      <input type="radio" name="verify-result" className="mt-1 accent-primary-600" checked={result === value} disabled={busy} onChange={() => setResult(value)} />
-      <span><span className="block font-semibold text-text">{title}</span><span className="text-text-muted">{text}</span></span>
-    </label>
+  const action = (to, title, text, primary = false) => (
+    <Link to={to} onClick={onClose} className={`block rounded-lg border p-3 text-sm ${primary ? 'border-primary-500 bg-primary-50/60' : 'border-border'}`}>
+      <span className="block font-semibold text-text">{title}</span><span className="text-text-muted">{text}</span>
+    </Link>
   );
-
   return (
     <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="verify-title">
-      <form onSubmit={save} className="max-h-[90dvh] w-full max-w-md space-y-4 overflow-y-auto rounded-xl border border-border bg-surface p-4 shadow-xl sm:p-6">
+      <div className="max-h-[90dvh] w-full max-w-md space-y-4 overflow-y-auto rounded-xl border border-border bg-surface p-4 shadow-xl sm:p-6">
         <div className="flex items-start justify-between gap-3">
-          <h2 id="verify-title" className="text-lg font-bold text-text">Verify Room {alert.roomNumber || '—'}</h2>
-          <button type="button" aria-label="Close" disabled={busy} onClick={onClose} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border text-text"><X size={18} /></button>
-        </div>
-        {saved ? (
-          <div className="space-y-3 text-sm">
-            <p className="text-text">Recorded that {alert.guestName} has left. Now close the stay:</p>
-            <div className="flex flex-wrap gap-2">
-              <Link to={`${bookingLink(alert)}&back=dashboard`} className="min-h-11 rounded-lg bg-primary-600 px-4 py-2 font-semibold text-white">View reservation</Link>
-              <button type="button" onClick={onRecordEarlier} className="min-h-11 rounded-lg border border-border px-4 py-2 font-semibold text-text">They left earlier — record actual departure</button>
-            </div>
+          <div>
+            <h2 id="verify-title" className="text-lg font-bold text-text">Room {alert.roomNumber || '—'} · {alert.guestName}</h2>
+            <p className="text-sm text-text-muted">Past checkout time. What should happen?</p>
           </div>
-        ) : (
-          <>
-            <p className="text-sm text-text-muted">Is {alert.guestName} still here? This is recorded and the reminder stays until the room is checked out or extended.</p>
-            <div className="space-y-2">
-              {option('present', 'Guest is still in the room', 'Then extend the stay or check them out when they leave.')}
-              {option('departed', 'Guest has left', 'Then check out now, or record an earlier departure.')}
-              {option('unlocated', 'Guest cannot be found', 'The manager is alerted. Describe what was checked.')}
-            </div>
-            <label className="block text-sm font-medium text-text">Note{result === 'unlocated' ? '' : ' (optional)'}
-              <textarea maxLength={300} rows={2} value={note} disabled={busy} onChange={(event) => setNote(event.target.value)} placeholder="e.g. Knocked twice, no answer; luggage still in room" className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm text-text" />
-            </label>
-            {error && <p role="alert" className="rounded-lg bg-danger-50 p-3 text-sm text-danger-700">{error}</p>}
-            <div className="flex justify-end gap-2">
-              <button type="button" disabled={busy} onClick={onClose} className="min-h-11 rounded-lg border border-border px-4 py-2 text-sm text-text">Cancel</button>
-              <button disabled={busy || !result || (result === 'unlocated' && note.trim().length < 5)} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy && <Loader2 size={16} className="animate-spin" />} Save</button>
-            </div>
-          </>
-        )}
-      </form>
+          <button type="button" aria-label="Close" onClick={onClose} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border text-text"><X size={18} /></button>
+        </div>
+        {alert.phone && <a href={`tel:${alert.phone.replace(/[^\d+]/g, '')}`} className="flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold text-primary-700"><Phone size={16} aria-hidden="true" /> Call {alert.phone}</a>}
+        <div className="space-y-2">
+          {action(`${bookingLink(alert, 'extend')}&back=dashboard`, 'Extend stay', 'The guest is staying longer.', true)}
+          {action(`${bookingLink(alert, 'checkout')}&back=dashboard`, 'Check out now', 'The guest has left or is leaving now. The room is freed.')}
+          <button type="button" onClick={onRecordEarlier} className="block w-full rounded-lg border border-border p-3 text-left text-sm">
+            <span className="block font-semibold text-text">Guest left earlier</span><span className="text-text-muted">Record the day they actually left.</span>
+          </button>
+        </div>
+        <div className="flex justify-end"><button type="button" onClick={onClose} className="min-h-11 rounded-lg border border-border px-4 py-2 text-sm text-text">Cancel</button></div>
+      </div>
     </div>
   );
 }
