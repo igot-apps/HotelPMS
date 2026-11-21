@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { addDays, defaultToday } from '../../lib/period';
+import useServerClock from '../../lib/useServerClock';
 import { X, Loader2, AlertCircle, Check, ChevronLeft, ChevronRight, CreditCard, UserPlus, Printer } from 'lucide-react';
 import { getAvailableRooms } from '../../api/rooms';
 import { getGuests, lookupGuestByPhone, createGuest, updateGuest } from '../../api/guests';
@@ -48,7 +49,9 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
   });
 
   // 🚨 DATE HELPERS: Prevent past dates
+  useServerClock(); // re-render when the server's date arrives
   const today = defaultToday();
+  const autoDatesRef = useRef(null); // the default dates filled in on open, before any change
   const getMinCheckOut = (checkIn) => {
     if (!checkIn) return today;
     const nextDay = new Date(checkIn);
@@ -63,6 +66,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
       
       const initialCheckIn = initialData?.checkInDate || today;
       const initialCheckOut = initialData?.checkOutDate || tomorrow;
+      autoDatesRef.current = initialData?.checkInDate ? null : { checkInDate: initialCheckIn, checkOutDate: initialCheckOut };
       
       setFormData({
         propertyGuestId: '', // 🌟 CHANGED
@@ -90,6 +94,15 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
       getGuests({ limit: 100 }).then(res => setGuests(res.data.data || [])).catch(err => console.error(err));
     }
   }, [isOpen, initialData]);
+
+  // Opened before the server's date was known (fresh page load): move untouched default dates to the server's date.
+  useEffect(() => {
+    const auto = autoDatesRef.current;
+    if (!isOpen || !auto || auto.checkInDate === today) return;
+    const next = { checkInDate: today, checkOutDate: addDays(today, 1) };
+    setFormData(prev => (prev.checkInDate === auto.checkInDate && prev.checkOutDate === auto.checkOutDate ? { ...prev, ...next } : prev));
+    autoDatesRef.current = next;
+  }, [today, isOpen]);
 
   // 🌟 UPDATED: Auto-select the rooms when Step 2 loads
   useEffect(() => {

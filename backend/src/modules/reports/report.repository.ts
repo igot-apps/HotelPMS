@@ -44,7 +44,9 @@ export const getFinancialSummary = async (
   });
 
   // 3. Calculate Occupancy & Room Nights for ADR/RevPAR
-  const daysInRange = calculateNights(startDate, endDate) + 1;
+  // The period runs from the start of the first hotel day to the last millisecond of the last one,
+  // so rounding the span gives the number of days (adding 1 counted an extra day).
+  const daysInRange = Math.max(1, Math.round((endDate.getTime() + 1 - startDate.getTime()) / (1000 * 60 * 60 * 24)));
   
   // ✅ Room has direct propertyId
   const totalRooms = await prisma.room.count({ where: { propertyId } });
@@ -185,11 +187,12 @@ export const getCategoryBreakdowns = async (
   const roomTypeRevenue = await prisma.reservationRoom.findMany({
     where: {
       // ✅ Filter via reservation relation
+      status: { not: 'NoShow' }, // same rule as the summary: an expired room was never occupied
       checkInDate: { lte: endDate },
       checkOutDate: { gte: startDate },
-      reservation: { 
-        status: { notIn: ['Cancelled'] }, 
-        propertyId 
+      reservation: {
+        status: { notIn: ['Cancelled'] },
+        propertyId
       },
     },
     select: {

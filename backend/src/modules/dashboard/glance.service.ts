@@ -26,11 +26,11 @@ export async function getDashboardGlance(propertyId: number, role: string, now =
 
   const [stays, rooms, payments, approvalsPending, refundsPending] = await Promise.all([
     prisma.reservationRoom.findMany({
-      where: { reservation: { propertyId, status: { in: ACTIVE } }, OR: [
-        { status: 'CheckedIn' },
-        { status: 'Reserved', checkInDate: { lt: weekAhead } }, // today, overdue and the next 7 days
-        { status: 'CheckedOut', actualCheckOut: { gte: start, lt: end } },
-        { status: 'CheckedIn', actualCheckIn: { gte: start, lt: end } },
+      where: { reservation: { propertyId }, OR: [
+        { status: 'CheckedIn', reservation: { status: { in: ACTIVE } } },
+        { status: 'Reserved', checkInDate: { lt: weekAhead }, reservation: { status: { in: ACTIVE } } }, // today, overdue and the next 7 days
+        // A checkout that completes the booking moves it to Completed; it still departed today.
+        { status: 'CheckedOut', actualCheckOut: { gte: start, lt: end }, reservation: { status: { in: [...ACTIVE, 'Completed'] } } },
       ] },
       include: reservationInclude, orderBy: [{ checkOutDate: 'asc' }, { reservationRoomId: 'asc' }],
     }),

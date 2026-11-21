@@ -90,3 +90,12 @@ test('a deactivated hotel or expired subscription is reported before other reaso
   db.property.findUnique.mockResolvedValue({ timezone: 'Africa/Accra', checkOutTime: '11:00', checkInTime: '14:00', isOnlineBookingEnabled: true, isActive: true, status: 'Active', subscriptionStatus: 'Active', trialEndsAt: null, subscriptionEndsAt: new Date('2026-11-01') });
   expect((await getDashboardGlance(3, 'Manager', new Date('2026-11-16T12:00:00Z'))).onlineBlocker).toBe('subscription-expired');
 });
+
+test('a checkout that completes the booking still counts as checked out today', async () => {
+  await getDashboardGlance(3, 'Manager', new Date('2026-11-16T12:00:00Z'));
+  const { where } = db.reservationRoom.findMany.mock.calls[0][0];
+  const checkedOut = where.OR.find((branch: any) => branch.status === 'CheckedOut');
+  expect(checkedOut.reservation.status.in).toEqual(expect.arrayContaining(['Confirmed', 'InHouse', 'Completed']));
+  // Waiting arrivals and in-house guests still come only from open bookings.
+  for (const branch of where.OR.filter((b: any) => b.status !== 'CheckedOut')) expect(branch.reservation.status.in).not.toContain('Completed');
+});

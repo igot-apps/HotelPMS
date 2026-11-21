@@ -417,7 +417,7 @@ export default function ReservationsPage() {
     const othersInRoom = (res.reservationRooms || []).filter((stay) => stay.reservationRoomId !== room.reservationRoomId && stay.status === 'CheckedIn');
     if (owing > 0.01 && !othersInRoom.length) { openOwingCheckout(owing); return; }
     const code = res.confirmationCode || `#${res.reservationId.slice(0, 8)}`;
-    const balanceNote = owing > 0.01 ? `\n\nBooking balance: GHS ${owing.toFixed(2)}. This belongs to the whole booking ${code}, not to this room. It stays on the booking while Room ${othersInRoom.map((stay) => stay.room?.roomNumber || stay.roomNumberSnapshot).join(', ')} ${othersInRoom.length === 1 ? 'is' : 'are'} still checked in.` : '';
+    const balanceNote = owing > 0.01 ? `\n\nBooking balance: GHS ${owing.toFixed(2)}. This belongs to the whole booking ${code}, not to this room. It stays on the booking while Room ${othersInRoom.map((stay) => stay.room?.roomNumber || stay.roomNumberSnapshot).join(', ')} ${othersInRoom.length === 1 ? 'is' : 'are'} still checked in.` : owing < -0.01 && !othersInRoom.length ? `\n\nThe guest has paid GHS ${(-owing).toFixed(2)} more than the booking total. Refund or settle this credit separately.` : '';
     askRoomAction(
       room.reservationRoomId,
       'CheckedOut',
@@ -614,7 +614,7 @@ export default function ReservationsPage() {
           const rooms = res.reservationRooms?.map((room) => room.room?.roomNumber || room.roomNumberSnapshot || 'Removed').join(', ') || 'Not assigned';
           const totalAmount = parseFloat(res.totalAmount || 0);
           const amountPaid = parseFloat(res.amountPaid || 0);
-          const balanceDue = Math.max(0, totalAmount - amountPaid);
+          const balanceDue = ['Cancelled', 'NoShow', 'Expired'].includes(res.status) ? 0 : Math.max(0, totalAmount - amountPaid); // a closed booking owes nothing
           const refundedAmount = (res.refunds || []).filter(refund => !refund.isSimulated).reduce((sum, refund) => sum + Number(refund.amount), 0) + (res.payments || []).filter((payment) => payment.status === 'Refunded').reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
           const cardStatusClass = res.status === 'Confirmed' ? 'bg-primary-50 text-primary-700 ring-1 ring-primary-600/20' : res.status === 'InHouse' ? 'bg-success-50 text-success-700 ring-1 ring-success-600/20' : res.status === 'Cancelled' ? 'bg-danger-50 text-danger-700 ring-1 ring-danger-600/20' : res.status === 'NoShow' ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-600/20' : res.status === 'Expired' ? 'bg-warning-50 text-warning-700 ring-1 ring-warning-600/20' : 'bg-secondary-100 text-secondary-700';
           const cardStatusLabel = bookingStatusLabel(res.status, res.reservationRooms);
@@ -820,7 +820,7 @@ export default function ReservationsPage() {
                   // ✅ NEW: Calculated on-demand from the single source of truth
                   const totalAmount = parseFloat(res.totalAmount || 0);
                   const amountPaid = parseFloat(res.amountPaid || 0);
-                  const balanceDue = Math.max(0, totalAmount - amountPaid);
+                  const balanceDue = ['Cancelled', 'NoShow', 'Expired'].includes(res.status) ? 0 : Math.max(0, totalAmount - amountPaid); // a closed booking owes nothing
                   const hasBalance = balanceDue > 0.01;
                   const refundedAmount = (res.refunds || []).filter(refund => !refund.isSimulated).reduce((sum, refund) => sum + Number(refund.amount), 0) + (res.payments || [])
                     .filter((payment) => payment.status === 'Refunded')

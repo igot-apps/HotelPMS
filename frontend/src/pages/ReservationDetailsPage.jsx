@@ -132,7 +132,7 @@ export default function ReservationDetailsPage() {
   const fmt = (val) => parseFloat(val || 0).toFixed(2);
   const totalAmount = parseFloat(resData?.totalAmount || 0);
   const amountPaid = parseFloat(resData?.amountPaid || 0);
-  const balanceDue = Math.max(0, totalAmount - amountPaid); // 🌟 NO MORE stale DB column
+  const balanceDue = ['Cancelled', 'NoShow', 'Expired'].includes(resData?.status) ? 0 : Math.max(0, totalAmount - amountPaid); // a closed booking owes nothing
   const approvedRefunds = refundOverview?.requests?.filter(request => request.status === 'Approved') || [];
   const approvedRefundTotal = approvedRefunds.reduce((sum, request) => sum + Number(request.input?.amount || 0), 0);
   const pendingRefunds = refundOverview?.requests?.filter(request => request.status === 'Pending') || [];

@@ -1,6 +1,7 @@
 import { Skeleton, SkeletonCards } from '../components/ui/Skeleton';
 import { useState } from 'react';
 import { addDays, defaultToday } from '../lib/period';
+import useServerClock from '../lib/useServerClock';
 import CashRangeSummary from '../components/reports/CashRangeSummary';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -24,9 +25,13 @@ export default function ReportsPage() {
   const isPropertySpecific = !!userPropertyId;
 
   // Default to Current Month
-  const [startDate, setStartDate] = useState(() => `${defaultToday().slice(0, 8)}01`);
-  
-  const [endDate, setEndDate] = useState(() => { const first = defaultToday().slice(0, 8) + '01'; return addDays(`${addDays(first, 31).slice(0, 8)}01`, -1); });
+  // Worked out from the server's date (re-rendered when it arrives) until the user picks dates.
+  useServerClock();
+  const monthStart = `${defaultToday().slice(0, 8)}01`;
+  const [pickedStart, setStartDate] = useState(null);
+  const [pickedEnd, setEndDate] = useState(null);
+  const startDate = pickedStart ?? monthStart;
+  const endDate = pickedEnd ?? addDays(`${addDays(monthStart, 31).slice(0, 8)}01`, -1);
 
   // Initialize propertyId with user's property if they have one
   const [propertyId, setPropertyId] = useState(userPropertyId || '');
@@ -159,7 +164,7 @@ const currentPropertyName = user?.propertyName || 'All Properties';
             {/* Payment Methods Breakdown */}
             <div className="bg-surface border border-border rounded-xl p-6 shadow-sm">
               <h3 className="text-sm font-bold text-text mb-6 flex items-center gap-2">
-                <PieChart size={16} className="text-success-500" /> Revenue by Payment Method
+                <PieChart size={16} className="text-success-500" /> Payments by Method <span className="font-normal text-text-muted">(before refunds)</span>
               </h3>
               <div className="space-y-4">
                 {categories.byMethod.length === 0 ? (
