@@ -57,7 +57,7 @@ export async function getDashboardGlance(propertyId: number, role: string, now =
     return { ...row(stay), nightsUsed: Math.min(nights(stay.checkInDate, today), nights(stay.checkInDate, stay.checkOutDate)), expectedCheckoutAt: dueAt, minutesLate: minutesLate(dueAt, now) };
   });
   const arrivalsWaiting = stays.filter(s => s.status === 'Reserved' && s.checkInDate < tomorrow).map(stay => {
-    // A late arrival can still check in until the checkout date; after that the room expires automatically.
+    // A late arrival can still check in until the departure date; after that the room expires automatically.
     return { ...row(stay), late: stay.checkInDate < today, amountPaid: money(stay.reservation.amountPaid), daysMissed: nights(stay.checkInDate, today), nightsLeft: nights(stay.checkInDate < today ? today : stay.checkInDate, stay.checkOutDate) };
   });
   // Expected over the next 7 days (not today), soonest first.

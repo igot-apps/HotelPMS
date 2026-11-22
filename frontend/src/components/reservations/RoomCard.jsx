@@ -37,7 +37,7 @@ export default function RoomCard({
         </div>
       );
     } else if (roomStatus === 'NoShow') {
-      // Expired automatically: the guest never arrived before the checkout date.
+      // Expired automatically: the guest never arrived before the departure date.
       roomActionBtn = (
         <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-orange-700"><AlertCircle size={14} /> Expired — create a new booking</p>
       );

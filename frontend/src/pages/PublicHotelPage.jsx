@@ -236,7 +236,7 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
             </div>
           </div>
           <div className="min-w-0 w-full">
-            <label htmlFor="hotel-check-out" className="block text-xs font-bold text-text-muted uppercase mb-1.5">Check Out</label>
+            <label htmlFor="hotel-check-out" className="block text-xs font-bold text-text-muted uppercase mb-1.5">Departure</label>
             <div className="flex w-full min-w-0 max-w-full">
             <input 
               id="hotel-check-out"
@@ -254,7 +254,7 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
           <button type="submit" className="w-full md:w-auto px-8 py-3 bg-primary-600 text-text-inverted font-bold rounded-xl hover:bg-primary-700 transition flex items-center justify-center gap-2 shadow-lg shadow-primary-600/20">
             <Calendar size={18} /> Check Availability
           </button>
-          {hasInvalidDates && <p id="hotel-date-error" role="alert" className="text-sm text-danger-600 md:col-span-3">Choose check-in and check-out dates. Check-out must be after check-in.</p>}
+          {hasInvalidDates && <p id="hotel-date-error" role="alert" className="text-sm text-danger-600 md:col-span-3">Choose arrival and departure dates. Departure must be after arrival.</p>}
         </form>
         </details>}
       </div>

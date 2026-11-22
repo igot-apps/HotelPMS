@@ -86,7 +86,7 @@ export const getAvailableRooms = async (req: AuthRequest, res: Response) => {
     const { checkInDate, checkOutDate, roomTypeId } = req.query;
     
     if (!checkInDate || !checkOutDate) {
-      return res.status(400).json({ success: false, message: 'Check-in and check-out dates are required' });
+      return res.status(400).json({ success: false, message: 'Arrival and departure dates are required' });
     }
 
     // 🚨 CRITICAL FIX: Force the propertyId from the logged-in user's token!

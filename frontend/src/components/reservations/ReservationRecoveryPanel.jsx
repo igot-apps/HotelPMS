@@ -48,11 +48,12 @@ export default function ReservationRecoveryPanel({ reservation, embedded = false
   const change = event => { setPreview(null); if (event.target.name === 'action') setStayIds([]); setForm(current => ({ ...current, ...(event.target.name === 'action' ? { reason: '', stayId: '' } : {}), [event.target.name]: event.target.value })); };
   const inputClass = 'mt-1 min-h-11 min-w-0 max-w-full w-full rounded-lg border border-border bg-background p-2 text-sm text-text';
   const stays = reservation.reservationRooms || [];
+  const expired = ['NoShow', 'Expired'].includes(reservation.status);
   const eligibleStays = stays.filter(stay => form.action === 'undo-checkout' ? stay.status === 'CheckedOut' : form.action === 'correct-date' ? ['Reserved', 'CheckedIn'].includes(stay.status) : stay.status === 'CheckedIn');
   return <section className={embedded ? "min-w-0 space-y-4" : "min-w-0 space-y-4 rounded-xl border border-border bg-surface p-4 sm:p-6"}>
     {!embedded && <h3 className="text-lg font-bold text-text">Correct or undo actions</h3>}
     {access.isError && <p role="alert" className="text-sm text-danger-700">Could not load correction access. <button onClick={() => access.refetch()} className="min-h-11 underline">Try again</button></p>}
-    <form onSubmit={event => { event.preventDefault(); if (multiRoom && (!stayIds.length || stayIds.some(id => !eligibleStays.some(stay => stay.reservationRoomId === id)))) { setPreview(null); toast.error('Select at least one eligible room.'); return; } mutation.mutate(Boolean(preview)); }} className="space-y-4">
+    {expired ? <p className="rounded-lg border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800">This reservation has expired and cannot be changed. Create a new booking if the guest arrives.</p> : <form onSubmit={event => { event.preventDefault(); if (multiRoom && (!stayIds.length || stayIds.some(id => !eligibleStays.some(stay => stay.reservationRoomId === id)))) { setPreview(null); toast.error('Select at least one eligible room.'); return; } mutation.mutate(Boolean(preview)); }} className="space-y-4">
       {pendingRequest && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">You already have a request awaiting manager approval. To change it, withdraw the request below, then submit a new one.</p>}
       <fieldset disabled={mutation.isPending || !access.data || pendingRequest} className="min-w-0 space-y-4">
       <label className="block text-sm text-text">Action<select name="action" value={form.action} onChange={change} className={inputClass} disabled={mutation.isPending}>
@@ -77,8 +78,8 @@ export default function ReservationRecoveryPanel({ reservation, embedded = false
       {preview && <CorrectionImpact preview={preview} />}
       <div className="flex flex-wrap gap-2"><button disabled={Boolean(preview && !canApply)} className="min-h-11 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{mutation.isPending ? 'Checking…' : preview ? canApply ? 'Confirm correction' : 'Manager only' : 'Preview correction'}</button>{preview && <button type="button" onClick={() => setPreview(null)} className="min-h-11 rounded-lg border border-border px-4 py-2 text-sm">Back to edit</button>}</div>
       </fieldset>
-    </form>
-    <CorrectionRequests reservationId={id} onPendingChange={setPendingRequest} />
+    </form>}
+    {!expired && <CorrectionRequests reservationId={id} onPendingChange={setPendingRequest} />}
     {Number(reservation.refundDue) > 0 && reservation.status !== 'Cancelled' && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">GHS {Number(reservation.refundDue).toFixed(2)} credit requires refund review. No refund has been sent automatically.</p>}
     <details><summary className="cursor-pointer font-semibold text-text">Correction history ({history.length})</summary><div className="mt-3 space-y-3">{history.length === 0 && <p className="text-sm text-text-muted">No recorded corrections yet.</p>}{history.map(item => <details key={item.auditLogId} className="rounded-lg border border-border p-3 text-sm text-text"><summary>{item.action} · {item.user?.fullName || (item.newData?.guestId ? 'Guest' : item.action === 'OnlinePaymentHoldExpired' ? 'System' : 'Former staff')} · {new Date(item.createdAt).toLocaleString()}</summary><p className="mt-2">{item.newData?.reason}</p><p className="mt-2 text-xs">Previous rooms: {(item.oldData?.value?.reservationRooms || []).map(room => room.roomNumberSnapshot || room.roomId).join(', ') || 'See original stay record'}</p><p className="mt-1 text-xs">Updated rooms: {(item.newData?.value?.reservation?.reservationRooms || []).map(room => room.roomNumberSnapshot || room.roomId).join(', ') || 'No room assignment change'}</p>{item.newData?.value?.result?.replacementPaymentId && <p className="mt-1 text-xs">Replacement payment #{item.newData.value.result.replacementPaymentId}</p>}</details>)}</div></details>
   </section>;

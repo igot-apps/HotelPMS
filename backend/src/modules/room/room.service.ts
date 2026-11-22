@@ -64,7 +64,7 @@ export const getAvailableRooms = async (
   const checkOut = new Date(checkOutDate);
   
   if (checkIn >= checkOut) {
-    throw new Error('Check-in date must be before check-out date');
+    throw new Error('Arrival date must be before departure date');
   }
   
   return roomRepository.findAvailableRooms(

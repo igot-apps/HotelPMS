@@ -286,7 +286,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
     if (currentStep === 1) {
       // Step 1: dates and at least one room.
       if (!formData.checkInDate || !formData.checkOutDate) {
-        toast.error('Choose both the check-in and check-out dates.');
+        toast.error('Choose both the arrival and departure dates.');
         return;
       }
       if (formData.checkInDate < defaultToday()) { // the server re-checks with its own date
@@ -294,7 +294,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
         return;
       }
       if (nights <= 0) {
-        toast.error('Check-out date must be after check-in date.');
+        toast.error('Departure date must be after arrival date.');
         return;
       }
       if (formData.selectedRooms.length === 0) {
@@ -442,7 +442,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-text mb-1.5">Check-out Date *</label>
+                    <label className="block text-sm font-semibold text-text mb-1.5">Departure Date *</label>
                     <input 
                       type="date" 
                       name="checkOutDate" 
@@ -659,7 +659,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                     <p className="font-semibold text-text">{formatDate(formData.checkInDate)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-text-muted">Check-out</p>
+                    <p className="text-xs text-text-muted">Departure date</p>
                     <p className="font-semibold text-text">{formatDate(formData.checkOutDate)}</p>
                   </div>
                 </div>

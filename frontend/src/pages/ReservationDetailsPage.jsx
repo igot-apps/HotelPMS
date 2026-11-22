@@ -12,7 +12,7 @@ import useServerClock from '../lib/useServerClock';
 // Today on the hotel's calendar from the server's clock (never the computer's); null until server time is known.
 const localToday = (timeZone) => hotelToday(timeZone);
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { cancelReservation, getReservationById, getReservationStats, updateReservation } from '../api/reservations';
+import { cancelReservation, extendReservationRoom, getReservationById, getReservationStats, updateReservation } from '../api/reservations';
 import toast from 'react-hot-toast';
 import api from '../lib/axios';
 import { recordPayment } from '../api/payments';
@@ -25,6 +25,9 @@ import ThermalReceiptModal from '../components/reservations/ThermalReceiptModal'
 import { formatPaymentMethod } from '../utils/payment';
 import ReservationRecoveryPanel from '../components/reservations/ReservationRecoveryPanel';
 import RefundPanel from '../components/reservations/RefundPanel';
+import ExtendStayDialog from '../components/reservations/ExtendStayDialog';
+import ShortenStayDialog from '../components/reservations/ShortenStayDialog';
+import MoveRoomDialog from '../components/reservations/MoveRoomDialog';
 import { useAuthStore } from '../store/authStore';
 
 export default function ReservationDetailsPage() {
@@ -48,6 +51,9 @@ export default function ReservationDetailsPage() {
   const [isThermalReceiptOpen, setIsThermalReceiptOpen] = useState(false);
   const [isPrintMenuOpen, setIsPrintMenuOpen] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [extendRoom, setExtendRoom] = useState(null);
+  const [shortenRoom, setShortenRoom] = useState(null);
+  const [moveRoom, setMoveRoom] = useState(null);
   // Same cancellation as the Reservations list (server applies the refund policy and all checks).
   const cancelMutation = useMutation({
     mutationFn: () => cancelReservation(id),
@@ -104,6 +110,16 @@ export default function ReservationDetailsPage() {
       setIsPaymentModalOpen(false);
       setPaymentData({ amount: '', paymentMethod: 'Cash', gatewayReference: '', notes: '' });
     },
+  });
+
+  const extendMutation = useMutation({
+    mutationFn: (newCheckOutDate) => extendReservationRoom(extendRoom.reservationRoomId, newCheckOutDate),
+    onSuccess: () => {
+      ['reservation', 'reservations', 'rooms', 'availability', 'calendarReservations', 'operationalOverview'].forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
+      setExtendRoom(null);
+      toast.success('Stay extended successfully.');
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not extend the stay.'),
   });
 
   const handleSaveEdit = (e) => {
@@ -225,14 +241,14 @@ export default function ReservationDetailsPage() {
                 <p className="break-words text-sm text-text"><span className="text-text-muted">Occupant: </span>{rr.occupantName || 'Not assigned'}{rr.occupantPhone ? ` · ${rr.occupantPhone}` : ''}</p>
                 {rr.status === 'Reserved' && rr.room?.operationalStatus === 'Occupied' && <p className="mt-1 text-xs font-semibold text-danger-700">Room {rr.room.roomNumber} still has a guest checked in. Check them out (or verify their departure) first, or move this guest to another room.</p>}
                 {rr.status === 'Reserved' && rr.room?.housekeepingStatus && !['Clean', 'Inspected'].includes(rr.room.housekeepingStatus) && <p className="mt-1 text-xs font-semibold text-warning-700">Room needs cleaning before check-in</p>}
-                {rr.status === 'NoShow' && <p className="mt-1 text-xs font-semibold text-orange-700">Expired: the guest did not arrive before the checkout date. Create a new booking if they come.</p>}
+                {rr.status === 'NoShow' && <p className="mt-1 text-xs font-semibold text-orange-700">Expired: the guest did not arrive before the departure date. Create a new booking if they come.</p>}
                 {(canCheckIn || inRoom || (active && rr.status === 'Reserved')) && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {canCheckIn && <Link to={roomLink('checkin')} className={`${btn} bg-success-600 text-white hover:bg-success-700`}>Check in</Link>}
                     {inRoom && <Link to={roomLink('checkout')} className={`${btn} bg-primary-600 text-white hover:bg-primary-700`}>Check out</Link>}
-                    {inRoom && <Link to={roomLink('extend')} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Extend</Link>}
-                    {inRoom && <Link to={roomLink('shorten')} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Shorten</Link>}
-                    <Link to={`/reservations/${resData.reservationId}?fix=transfer&stay=${rr.reservationRoomId}#corrections`} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Move to another room</Link>
+                    {inRoom && <button type="button" onClick={() => setExtendRoom(rr)} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Extend</button>}
+                    {inRoom && <button type="button" onClick={() => setShortenRoom(rr)} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Shorten</button>}
+                    {inRoom && <button type="button" onClick={() => setMoveRoom(rr)} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Move to another room</button>}
                   </div>
                 )}
               </li>
@@ -316,6 +332,10 @@ export default function ReservationDetailsPage() {
           <ReservationRecoveryPanel key={`${fix || 'none'}-${fixStay || ''}`} reservation={resData} embedded initialAction={fix || undefined} initialStayId={fixStay || undefined} />
         </ActionDialog>
       )}
+
+      {extendRoom && <ExtendStayDialog room={extendRoom} busy={extendMutation.isPending} onClose={() => setExtendRoom(null)} onConfirm={(date) => extendMutation.mutate(date)} />}
+      {shortenRoom && <ShortenStayDialog room={shortenRoom} reservationId={resData.reservationId} timeZone={resData.property?.timezone} onClose={() => setShortenRoom(null)} />}
+      {moveRoom && <MoveRoomDialog room={moveRoom} reservation={resData} onClose={() => setMoveRoom(null)} />}
 
       {/* ========================================== */}
       {/* 1. Record Payment Modal                    */}

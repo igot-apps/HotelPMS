@@ -108,14 +108,14 @@ router.get('/discover', async (req: any, res: Response) => {
     }
 
     if (Boolean(checkIn) !== Boolean(checkOut)) {
-      return res.status(400).json({ success: false, message: 'Provide both check-in and check-out dates to search availability.' });
+      return res.status(400).json({ success: false, message: 'Provide both arrival and departure dates to search availability.' });
     }
     const checkInDate = checkIn ? new Date(`${String(checkIn)}T00:00:00.000Z`) : null;
     const checkOutDate = checkOut ? new Date(`${String(checkOut)}T00:00:00.000Z`) : null;
     if (checkInDate && checkOutDate && (
       Number.isNaN(checkInDate.getTime()) || Number.isNaN(checkOutDate.getTime()) || checkOutDate <= checkInDate
     )) {
-      return res.status(400).json({ success: false, message: 'Check-out must be after check-in.' });
+      return res.status(400).json({ success: false, message: 'Departure must be after arrival.' });
     }
 
     const where: any = {

@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { AlarmClock, AlertTriangle, BedDouble, ChevronRight, Clock, Coins, Eye, Hotel, Loader2, LogIn, LogOut, Phone, Plus, Receipt, Search, Sparkles, Wallet, X } from 'lucide-react';
+import { AlertTriangle, BedDouble, ChevronRight, Clock, Coins, Eye, Hotel, Loader2, LogIn, LogOut, Phone, Plus, Receipt, Search, Sparkles, Wallet, X } from 'lucide-react';
 import api from '../../lib/axios';
 import useCheckoutAlerts from '../../hooks/useCheckoutAlerts';
 import { formatDuration, formatTime } from '../../lib/stayTiming';
@@ -20,7 +20,6 @@ const reservationLink = (row, action) => bookingLink(row, action);
 // Which dashboard list a link was opened from, so the Reservations page can offer "Back to <list>".
 const PanelContext = createContext(null);
 const withBack = (to, panel) => (panel && to.startsWith('/reservations') ? `${to}${to.includes('?') ? '&' : '?'}back=${panel}` : to);
-const RESULT = { present: 'still in the room', departed: 'has left', unlocated: 'could not be found' };
 
 // The front desk's key questions for today. Each tile answers one question; click it for the details.
 export default function TodayAtAGlance() {
@@ -66,15 +65,14 @@ export default function TodayAtAGlance() {
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const attention = data.rooms.needsCleaning.length + data.rooms.maintenance.length;
   const tiles = [
-    { key: 'overdue', icon: AlarmClock, tone: overdue.length ? 'danger' : 'neutral', label: 'Overdue checkouts', value: overdue.length, hint: overdue.length ? `Longest: ${formatDuration(Math.max(...overdue.map((a) => a.minutesLate)) * 60000)} late` : `Checkout time ${data.checkOutTime}` },
     { key: 'arrivals', icon: LogIn, tone: 'primary', label: 'Expected arrivals', value: arrivingBookings, hint: [`Awaiting check-in: ${plural(arrivingBookings, 'reservation')} · ${plural(arrivingStays.length, 'room')}`, `Checked in today: ${plural(arrivedTodayRooms, 'room')}`, `${(data.arrivals.upcoming || []).length} in next 7 days`, data.arrivals.unpaidCount ? `${data.arrivals.unpaidCount} unpaid` : ''].filter(Boolean).join(' · ') },
-    { key: 'departures', icon: LogOut, tone: 'warning', label: 'Departures to check out', value: data.departures.waiting.length, hint: `Due today${overdue.length ? ` · includes ${overdue.length} overdue` : ''} · ${data.departures.departedToday.length} checked out today` },
+    { key: 'departures', icon: LogOut, tone: overdue.length ? 'danger' : 'warning', label: "Today's departures", value: <span className="grid grid-cols-2 gap-4"><span><strong className="block text-2xl text-text">{Math.max(0, data.departures.waiting.length - overdue.length)}</strong><span className="block text-xs font-semibold text-text-muted">To check out</span></span><span className="border-l border-border pl-4"><strong className={`block text-2xl ${overdue.length ? 'text-danger-700' : 'text-text'}`}>{overdue.length}</strong><span className={`block text-xs font-semibold ${overdue.length ? 'text-danger-700' : 'text-text-muted'}`}>Overstays</span></span></span>, hint: `${data.departures.departedToday.length} checked out today` },
     { key: 'inHouse', icon: Hotel, tone: 'primary', label: 'Guests in house', value: data.inHouse.length, hint: `${data.rooms.occupiedTonight} of ${data.rooms.total} rooms taken tonight` },
     { key: 'free', icon: BedDouble, tone: 'success', label: 'Rooms free tonight', value: data.rooms.freeTonight.length, hint: `${data.rooms.occupancyPercent}% occupancy` },
     // Hotel-wide takings (desk + online) are for the manager; receptionists see their own in "You today".
     data.money.collectedToday !== null && { key: 'collected', icon: Coins, tone: 'success', label: 'Collected today', value: cash(data.money.collectedToday), hint: `${cash(data.money.collectedAtDesk)} at the desk · ${cash(data.money.collectedOnline)} online · ${data.money.payments.length} payment${data.money.payments.length === 1 ? '' : 's'}` },
-    { key: 'unpaid', icon: Wallet, tone: data.money.unpaidInHouse.length ? 'warning' : 'neutral', label: 'Owed by guests in house', value: cash(data.money.inHouseOutstanding), hint: `${data.money.unpaidInHouse.length} booking${data.money.unpaidInHouse.length === 1 ? '' : 's'}${data.money.refundsPending ? ` · ${data.money.refundsPending} refund${data.money.refundsPending === 1 ? '' : 's'} pending` : ''}` },
-    { key: 'owedAfter', icon: Receipt, tone: owedAfter.data?.bookings?.length ? 'danger' : 'neutral', label: 'Owed after checkout', value: owedAfter.isError ? '—' : cash(owedAfter.data?.total), hint: owedAfter.isError ? 'Could not load' : `${owedAfter.data?.bookings?.length || 0} guest${owedAfter.data?.bookings?.length === 1 ? '' : 's'} left owing` },
+    { key: 'unpaid', icon: Wallet, tone: data.money.unpaidInHouse.length ? 'danger' : 'neutral', label: 'Owed by guests in house', value: cash(data.money.inHouseOutstanding), valueDanger: data.money.inHouseOutstanding > 0, hint: `${data.money.unpaidInHouse.length} booking${data.money.unpaidInHouse.length === 1 ? '' : 's'}${data.money.refundsPending ? ` · ${data.money.refundsPending} refund${data.money.refundsPending === 1 ? '' : 's'} pending` : ''}` },
+    { key: 'owedAfter', icon: Receipt, tone: owedAfter.data?.bookings?.length ? 'danger' : 'neutral', label: 'Owed after checkout', value: owedAfter.isError ? '—' : cash(owedAfter.data?.total), valueDanger: Number(owedAfter.data?.total || 0) > 0, hint: owedAfter.isError ? 'Could not load' : `${owedAfter.data?.bookings?.length || 0} guest${owedAfter.data?.bookings?.length === 1 ? '' : 's'} left owing` },
     { key: 'attention', icon: Sparkles, tone: attention ? 'warning' : 'neutral', label: 'Needs attention', value: attention, hint: `${data.rooms.needsCleaning.length} to clean · ${data.rooms.maintenance.length} maintenance${data.approvalsPending ? ` · ${data.approvalsPending} approvals` : ''}` },
   ].filter(Boolean);
 
@@ -109,7 +107,6 @@ export default function TodayAtAGlance() {
               )}
             </div>
           )}>
-          {open === 'overdue' && <OverdueDetail rows={overdue} query={query} />}
           {open === 'arrivals' && <ArrivalsDetail data={data} query={query} />}
           {open === 'departures' && <DeparturesDetail data={data} query={query} />}
           {open === 'inHouse' && <InHouseDetail rows={data.inHouse} query={query} />}
@@ -168,11 +165,11 @@ const TONES = {
   neutral: 'border-border bg-surface text-text-muted',
 };
 
-function Tile({ icon: Icon, tone, label, value, hint, onClick }) {
+function Tile({ icon: Icon, tone, label, value, valueDanger = false, hint, onClick }) {
   return (
     <button type="button" onClick={onClick} className={`group flex min-h-28 flex-col justify-between rounded-xl border p-4 text-left shadow-sm transition hover:shadow-md focus-visible:ring-2 focus-visible:ring-primary-500 ${TONES[tone]}`}>
       <span className="flex items-center justify-between gap-2 text-sm font-semibold"><span className="flex items-center gap-2"><Icon size={17} />{label}</span><ChevronRight size={16} className="opacity-50 transition group-hover:translate-x-0.5 group-hover:opacity-100" /></span>
-      <span className="mt-2 block break-words text-2xl font-bold text-text">{value}</span>
+      <div className={`mt-2 block break-words text-2xl font-bold ${valueDanger ? 'text-danger-700' : 'text-text'}`}>{value}</div>
       <span className="mt-1 block text-xs text-text-muted">{hint}</span>
     </button>
   );
@@ -218,7 +215,7 @@ function Row({ to, title, code, lines = [], badge, badgeTone = 'neutral', action
     <li className="rounded-lg border border-border transition hover:border-primary-300">
       <Link to={withBack(to, panel)} className="block rounded-lg p-3 hover:bg-primary-50/30">
         {code && <span className="block text-xs font-bold uppercase tracking-wide text-primary-700">{code}</span>}<span className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{title}</span>{badge && <span className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-bold ${TONES[badgeTone]}`}>{badge}</span>}</span>
-        {lines.filter(Boolean).map((line) => <span key={line} className="mt-0.5 block text-sm text-text-muted">{line}</span>)}
+        {lines.filter(Boolean).map((line, index) => { const text = typeof line === 'string' ? line : line.text; return <span key={`${text}-${index}`} className={`mt-0.5 block text-sm ${typeof line === 'object' && line.danger ? 'font-semibold text-danger-700' : 'text-text-muted'}`}>{text}</span>; })}
       </Link>
       {shown.length > 0 && (
         <div className="flex flex-wrap gap-2 px-3 pb-3">
@@ -235,9 +232,9 @@ function Row({ to, title, code, lines = [], badge, badgeTone = 'neutral', action
 // Sorting for the lists in a pop-up (chosen in the pop-up header).
 const SortContext = createContext('date');
 const SORTS = [['date', 'Date'], ['room', 'Room'], ['guest', 'Guest name']];
-const SORTABLE = ['overdue', 'arrivals', 'departures', 'inHouse', 'unpaid'];
+const SORTABLE = ['arrivals', 'departures', 'inHouse', 'unpaid'];
 // Pop-ups with a search box (booking code, guest, phone or room), with the name read out to screen readers.
-const SEARCHABLE = { overdue: 'overdue checkouts', arrivals: 'expected arrivals', departures: 'departures', inHouse: 'guests in house', collected: 'payments received today', unpaid: 'guests owing money', owedAfter: 'guests who left owing' };
+const SEARCHABLE = { arrivals: 'expected arrivals', departures: "today's departures", inHouse: 'guests in house', collected: 'payments received today', unpaid: 'guests owing money', owedAfter: 'guests who left owing' };
 const NO_MATCH = 'No matches for this search.';
 // The room occupant's phone when recorded, otherwise the booker's.
 const phoneOf = (row) => row.occupantPhone || row.phone || row.guestPhone || null;
@@ -252,26 +249,6 @@ function useSorted(rows, dateKey) {
     : new Date(a[dateKey] || 0) - new Date(b[dateKey] || 0)));
 }
 const stayDates = (stay) => `${shortDate(stay.checkInDate)} → ${shortDate(stay.checkOutDate)} · ${stay.nightsBooked ?? ''}${stay.nightsBooked ? ` night${stay.nightsBooked === 1 ? '' : 's'}` : ''}`.replace(/ · $/, '');
-
-function OverdueDetail({ rows: unsorted, query = '' }) {
-  const rows = useSorted(unsorted, 'expectedCheckoutAt').filter((row) => matchesQuery(row, query));
-  return (
-    <Group title="Guests past checkout time" count={rows.length} empty={query.trim() ? NO_MATCH : 'No checkouts are overdue.'}>
-      {rows.map((alert) => (
-        <Row key={alert.reservationRoomId} to={reservationLink(alert)}
-          actions={[{ label: 'View reservation', to: reservationLink(alert), icon: 'view' }]}
-          title={`Room ${alert.roomNumber || '—'} · ${alert.guestName}`} code={alert.confirmationCode} badge={`${formatDuration(alert.minutesLate * 60000)} late`} badgeTone="danger"
-          lines={[
-            alert.phone ? `Phone: ${alert.phone}` : '',
-            `Expected out ${formatTime(new Date(alert.expectedCheckoutAt))} on ${new Date(alert.expectedCheckoutAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`,
-            alert.verification ? `Last check: guest ${RESULT[alert.verification.result]} · ${clock(alert.verification.at)}${alert.verification.by ? ` by ${alert.verification.by}` : ''}` : 'Not verified yet — use Verify in Checkout reminders',
-            alert.balanceDue > 0 ? `Booking balance: ${cash(alert.balanceDue)}` : 'Paid in full',
-            alert.escalated ? 'Escalated to the manager' : '',
-          ]} />
-      ))}
-    </Group>
-  );
-}
 
 // Group stays by reservationId and build a card with guest info, dates, balance, and room list.
 function groupByReservation(stays) {
@@ -318,7 +295,7 @@ function ArrivalsDetail({ data, query = '' }) {
             <p className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{res.guestName}</span><span className="shrink-0 rounded-md bg-primary-50 px-2 py-0.5 text-xs font-bold text-primary-700">{res.rooms.length} room{res.rooms.length === 1 ? '' : 's'}</span></p>
             <PhoneLine phone={res.phone} />
             <p className="mt-0.5 text-sm text-text-muted">{shortDate(res.checkInDate)} → {shortDate(res.checkOutDate)} · {res.nightsBooked} night{res.nightsBooked === 1 ? '' : 's'}</p>
-            <p className="text-sm text-text-muted">{res.balanceDue > 0 ? `Booking balance: ${cash(res.balanceDue)}` : 'Paid in full'}</p>
+            <p className={`text-sm ${res.balanceDue > 0 ? 'font-semibold text-danger-700' : 'text-text-muted'}`}>{res.balanceDue > 0 ? `Owes: ${cash(res.balanceDue)}` : 'Paid in full'}</p>
             <ul className="mt-2 space-y-1">
               {res.rooms.map((r) => (
                 <li key={r.reservationRoomId} className="text-sm text-text-muted">Room {r.roomNumber || 'unassigned'} · {r.checkInStatus === 'checked-in' ? 'Checked in' : 'Awaiting check-in'}{r.phone && r.phone !== res.phone ? ` · ${r.phone}` : ''}</li>
@@ -337,7 +314,7 @@ function ArrivalsDetail({ data, query = '' }) {
             <p className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{res.guestName}</span><span className="shrink-0 rounded-md bg-primary-50 px-2 py-0.5 text-xs font-bold text-primary-700">{res.rooms.length} room{res.rooms.length === 1 ? '' : 's'}</span></p>
             <PhoneLine phone={res.phone} />
             <p className="mt-0.5 text-sm text-text-muted">Arrives {shortDate(res.checkInDate)} · {shortDate(res.checkOutDate)}</p>
-            <p className="text-sm text-text-muted">{res.balanceDue > 0 ? `Booking balance: ${cash(res.balanceDue)}` : 'Paid in full'}</p>
+            <p className={`text-sm ${res.balanceDue > 0 ? 'font-semibold text-danger-700' : 'text-text-muted'}`}>{res.balanceDue > 0 ? `Owes: ${cash(res.balanceDue)}` : 'Paid in full'}</p>
             <ul className="mt-2 space-y-1">
               {res.rooms.map((r) => (
                 <li key={r.reservationRoomId} className="text-sm text-text-muted">Room {r.roomNumber || 'unassigned'}{r.phone && r.phone !== res.phone ? ` · ${r.phone}` : ''}</li>
@@ -418,22 +395,21 @@ function DeparturesDetail({ data, query = '' }) {
   }, {}));
 
   const due = useSorted(groupWaiting, 'expectedCheckoutAt').filter((row) => matchesQuery(row, query));
+  const overdueDue = due.filter((row) => row.minutesLate > 0);
+  const upcomingDue = due.filter((row) => !(row.minutesLate > 0));
   const left = useSorted(groupDeparted, 'actualCheckOut').filter((row) => matchesQuery(row, query));
   const searching = query.trim().length > 0;
   const noMatches = searching && !due.length && !left.length;
 
   if (noMatches) return <p className="rounded-lg border border-dashed border-border p-3 text-sm text-text-muted">No matching departures</p>;
 
-  return (
-    <>
-      <Group title="Due to check out" count={due.length} empty="No one else is due to leave today.">
-        {due.map((res) => (
-          <li key={res.reservationId} className="rounded-lg border border-border p-3">
+  const waitingRows = (rows, overdue = false) => rows.map((res) => (
+          <li key={res.reservationId} className={`rounded-lg border p-3 ${overdue ? 'border-danger-200 bg-danger-50/40' : 'border-border'}`}>
             {res.confirmationCode && <p className="text-xs font-bold uppercase tracking-wide text-primary-700">{res.confirmationCode}</p>}
-            <p className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{res.guestName}</span><span className="shrink-0 rounded-md bg-warning-50 px-2 py-0.5 text-xs font-bold text-warning-700">{res.rooms.length} room{res.rooms.length === 1 ? '' : 's'}</span></p>
+            <p className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{res.guestName}</span><span className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-bold ${overdue ? 'bg-danger-100 text-danger-700' : 'bg-warning-50 text-warning-700'}`}>{overdue ? `${formatDuration(res.minutesLate * 60000)} late` : `${res.rooms.length} room${res.rooms.length === 1 ? '' : 's'}`}</span></p>
             <PhoneLine phone={res.phone} />
             <p className="mt-0.5 text-sm text-text-muted">{res.expectedCheckoutAt ? `By ${formatTime(new Date(res.expectedCheckoutAt))}` : ''}{res.minutesLate > 0 ? ` · ${formatDuration(res.minutesLate * 60000)} late` : ''}</p>
-            <p className="text-sm text-text-muted">{res.balanceDue > 0 ? `Booking balance: ${cash(res.balanceDue)}` : 'Paid in full'}</p>
+            <p className={`text-sm ${res.balanceDue > 0 ? 'font-semibold text-danger-700' : 'text-text-muted'}`}>{res.balanceDue > 0 ? `Owes: ${cash(res.balanceDue)}` : 'Paid in full'}</p>
             <ul className="mt-2 space-y-1">
               {res.rooms.map((r) => (
                 <li key={r.reservationRoomId} className="text-sm text-text-muted">Room {r.roomNumber || '—'} {r.reservationRoomId === data.departures.waiting.find(w => w.reservationRoomId === r.reservationRoomId)?.actualCheckIn ? '(checked in)' : 'awaiting check-out'}{r.phone && r.phone !== res.phone ? ` · ${r.phone}` : ''}</li>
@@ -443,7 +419,15 @@ function DeparturesDetail({ data, query = '' }) {
               <Link to={withBack(reservationLink(res), 'departures')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white hover:bg-primary-700"><Eye size={16} /> View reservation</Link>
             </div>
           </li>
-        ))}
+  ));
+
+  return (
+    <>
+      <Group title="Overstays" count={overdueDue.length} empty="No overstays.">
+        {waitingRows(overdueDue, true)}
+      </Group>
+      <Group title="Expected to leave later today" count={upcomingDue.length} empty="No other guests are expected to leave today.">
+        {waitingRows(upcomingDue)}
       </Group>
       <Group title="Checked out today" count={left.length} empty="No checkouts yet today.">
         {left.map((res) => (
@@ -503,7 +487,7 @@ function InHouseDetail({ rows: unsorted, query = '' }) {
               {stay.confirmationCode && <p className="mt-0.5 text-xs font-bold uppercase tracking-wide text-primary-700">{stay.confirmationCode}</p>}
               <p className="mt-0.5 text-sm text-text-muted">Room {stay.roomNumber || '—'} · leaves {shortDate(stay.checkOutDate)}</p>
               <PhoneLine phone={phoneOf(stay)} />
-              {stay.balanceDue > 0 && <p className="text-sm text-text-muted">{`Booking balance: ${cash(stay.balanceDue)}`}</p>}
+              {stay.balanceDue > 0 && <p className="text-sm font-semibold text-danger-700">Owes: {cash(stay.balanceDue)}</p>}
               {out && stay.guestOutAt && (
                 <p className="mt-0.5 text-xs text-warning-800 flex items-center gap-1">
                   <Clock size={12} /> Out since {new Date(stay.guestOutAt).toLocaleString()}

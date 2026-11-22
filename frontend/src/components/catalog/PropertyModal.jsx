@@ -208,18 +208,20 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
   if (!isOpen) return null;
 
   return (
-    <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto py-10">
-      <div className="bg-surface w-full max-w-3xl rounded-2xl shadow-xl border border-border">
-        <div className="p-6 border-b border-border flex justify-between items-center">
-          <h2 className="text-xl font-bold text-text">{initialData ? 'Edit Property Settings' : 'Add New Property'}</h2>
+    <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 backdrop-blur-sm sm:p-6">
+      <div className="flex max-h-[94dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-xl">
+        <div className="flex shrink-0 items-center justify-between border-b border-border p-5 sm:p-6">
+          <div><h2 className="text-xl font-bold text-text">{initialData ? 'Edit Property Settings' : 'Add New Property'}</h2><p className="mt-1 text-sm text-text-muted">Work through each section. All settings remain available below.</p></div>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition"><X size={20} /></button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="min-h-0 flex-1 space-y-6 overflow-y-auto p-4 sm:p-6">
       {/* Basic Info */}
-          <div>
-            <h3 className="text-sm font-bold text-text mb-4 uppercase tracking-wider text-text-muted">Basic Information</h3>
+          <section className="rounded-xl border border-border bg-background/40 p-4 sm:p-5">
+            <h3 className="text-base font-bold text-text">Property details</h3>
+            <p className="mb-5 mt-1 text-sm text-text-muted">Identity, address, map location and guest contact details.</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2 border-b border-border pb-2 text-xs font-bold uppercase tracking-wide text-text-muted">Identity</div>
               <div>
                 <label className="block text-sm font-semibold text-text mb-1.5">Property Name *</label>
                 <input type="text" name="propertyName" value={formData.propertyName} onChange={handleChange} required className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
@@ -246,6 +248,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
                 <label className="block text-sm font-semibold text-text mb-1.5">Country</label>
                 <input type="text" name="country" value={formData.country} onChange={handleChange} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
               </div>
+              <div className="md:col-span-2 mt-2 border-b border-border pb-2 text-xs font-bold uppercase tracking-wide text-text-muted">Address and map location</div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-semibold text-text mb-1.5">Street address / directions</label>
                 <input type="text" name="address" value={formData.address} onChange={handleChange} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
@@ -281,6 +284,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
                 <div className="mt-2 flex flex-wrap gap-3 text-sm"><a href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer" className="font-semibold text-primary-700 underline">Find hotel on Google Maps ↗</a>{formData.latitude && formData.longitude && isWithinGhanaBounds(Number(formData.latitude), Number(formData.longitude)) && <a href={googleMapsUrl(formData.latitude, formData.longitude)} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary-700 underline">Check saved pin ↗</a>}</div>
                 {locationError && <p role="alert" className="text-xs text-danger-600 mt-2">{locationError}</p>}
               </div>
+              <div className="md:col-span-2 mt-2 border-b border-border pb-2 text-xs font-bold uppercase tracking-wide text-text-muted">Guest contact and operating times</div>
               <div>
                 <label className="block text-sm font-semibold text-text mb-1.5">Primary contact phone</label>
                 <input type="tel" name="primaryPhone" value={formData.primaryPhone} onChange={handleChange} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
@@ -301,16 +305,18 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
                 </div>
               </div>
             </div>
-          </div>
+          </section>
 
           {/* Public Website Settings */}
-          <div className="pt-6 mt-6 border-t border-border">
-            <h3 className="text-sm font-bold text-text mb-1 uppercase tracking-wider flex items-center gap-2">
-              <Globe size={16} className="text-primary-600" /> Public Website Profile
+          <section className="rounded-xl border border-border bg-background/40 p-4 sm:p-5">
+            <h3 className="flex items-center gap-2 text-base font-bold text-text">
+              <Globe size={17} className="text-primary-600" /> Booking rules
             </h3>
+            <p className="mb-5 mt-1 text-sm text-text-muted">Control public bookings and what happens when a guest cancels.</p>
+            <div className="grid gap-4 md:grid-cols-2">
             
             {/* Online Booking Toggle */}
-            <div className="flex items-start justify-between gap-4 p-4 bg-primary-50 border border-primary-100 rounded-lg mb-6">
+            <div className="flex items-start justify-between gap-4 p-4 bg-primary-50 border border-primary-100 rounded-lg">
               <div className="flex-1">
                 <label className="text-sm font-bold text-text">Accept Online Bookings</label>
                 <p className="text-xs text-text-muted mt-0.5">Allow guests to discover your hotel and book available rooms on the public website.</p>
@@ -327,7 +333,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
             </div>
 
             {/* Refund policy */}
-            <div className="flex items-start justify-between gap-4 p-4 bg-warning-50 border border-warning-100 rounded-lg mb-6">
+            <div className="flex items-start justify-between gap-4 p-4 bg-warning-50 border border-warning-100 rounded-lg">
               <div className="flex-1">
                 <label htmlFor="isNonRefundable" className="text-sm font-bold text-text">Non-refundable bookings</label>
                 <p className="text-xs text-text-muted mt-0.5">
@@ -341,9 +347,14 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
               </label>
             </div>
+            </div>
+          </section>
 
+          <section className="rounded-xl border border-border bg-background/40 p-4 sm:p-5">
+            <h3 className="flex items-center gap-2 text-base font-bold text-text"><Globe size={17} className="text-primary-600" /> Public website profile</h3>
+            <p className="mb-5 mt-1 text-sm text-text-muted">Choose the photos and description guests see online.</p>
             {/* Property image gallery */}
-            <section className="mb-6 overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-teal-50">
+            <div className="mb-6 overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-teal-50">
               <div className="flex flex-col gap-3 border-b border-emerald-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div><h4 className="flex items-center gap-2 font-semibold text-text"><ImagePlus size={18} className="text-primary-600" /> Show guests your property</h4><p className="mt-1 text-sm text-text-muted">Add up to 3 photos of your rooms, facilities, or surroundings.</p></div>
                 <span className="w-fit rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-700 shadow-sm">{formData.galleryImages.length} / {MAX_GALLERY_IMAGES} photos</span>
@@ -372,13 +383,17 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
                 {formData.galleryImages.length === 0 && <p className="mt-3 text-xs text-text-muted">The first photo you add will be used as the cover on your public hotel page. Photos are resized before saving.</p>}
                 {imageError && <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{imageError}</p>}
               </div>
-            </section>
+            </div>
 
             <div className="mb-4">
               <label className="block text-sm font-semibold text-text mb-1.5">About this property</label>
               <textarea name="publicDescription" value={formData.publicDescription} onChange={handleChange} rows={3} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
             </div>
-            
+          </section>
+
+          <section className="rounded-xl border border-border bg-background/40 p-4 sm:p-5">
+            <h3 className="flex items-center gap-2 text-base font-bold text-text"><Smartphone size={17} className="text-primary-600" /> Tax and online payments</h3>
+            <p className="mb-5 mt-1 text-sm text-text-muted">Set the hotel tax, manage the payment connection, then save all changes.</p>
             <div className="mb-4">
               <label className="block text-sm font-semibold text-text mb-1.5">Tax Percentage (%)</label>
               <input type="number" name="taxPercentage" step="0.01" value={formData.taxPercentage} onChange={handleChange} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
@@ -423,10 +438,10 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
                 <p className="text-xs text-success-700 mt-1">A property-specific Paystack {initialData.paystackMode === 'test' ? 'test' : 'live'} key is configured. The key itself is never shown here.</p>
               )}
             </div>
-          </div>
+          </section>
 
           {/* Footer Buttons */}
-          <div className="flex justify-end gap-3 pt-4 border-t border-border">
+          <div className="sticky bottom-0 -mx-4 -mb-4 flex justify-end gap-3 border-t border-border bg-surface/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:-mb-6 sm:px-6">
             <button type="button" onClick={onClose} className="px-5 py-2.5 text-sm font-semibold text-text bg-surface border border-border rounded-lg hover:bg-secondary-50 transition">Cancel</button>
             <button type="submit" disabled={isLoading} className="px-5 py-2.5 text-sm font-semibold text-text-inverted bg-primary-600 rounded-lg hover:bg-primary-700 transition disabled:opacity-50 flex items-center gap-2">
               {isLoading && <Loader2 className="animate-spin" size={16} />}

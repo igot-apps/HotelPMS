@@ -224,7 +224,7 @@ export const extendReservationRoom = async (req: AuthRequest, res: Response) => 
     }
 
     if (!newCheckOutDate) {
-      return res.status(400).json({ success: false, message: 'New check-out date is required' });
+      return res.status(400).json({ success: false, message: 'New departure date is required' });
     }
 
     const updatedRoom = await reservationService.extendReservationRoom(

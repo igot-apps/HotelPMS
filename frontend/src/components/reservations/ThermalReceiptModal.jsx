@@ -91,7 +91,7 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
             </div>
             <div className="flex justify-between text-[11px] mb-1">
               <span>Check-in: {formatDate(reservation.checkInDate)}</span>
-              <span>Check-out: {formatDate(latestCheckOutDate)}</span>
+              <span>Departure: {formatDate(latestCheckOutDate)}</span>
             </div>
             <div className="text-[11px] font-bold mb-1">
               TOTAL NIGHTS: {nights}

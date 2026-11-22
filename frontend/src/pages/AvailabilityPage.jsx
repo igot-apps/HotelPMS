@@ -104,7 +104,7 @@ export default function AvailabilityPage() {
     if (checkInDate && checkOutDate) {
       // 🌟 Double-check validation before searching
       if (new Date(checkInDate) >= new Date(checkOutDate)) {
-        toast.error('Check-out date must be after check-in date.');
+        toast.error('Departure date must be after arrival date.');
         return;
       }
       setHasSearched(true);
@@ -201,7 +201,7 @@ export default function AvailabilityPage() {
           </div>
           <div>
             <label className="block text-sm font-semibold text-text mb-1.5">
-              <Calendar size={16} className="inline mr-1.5" /> Check-out Date
+              <Calendar size={16} className="inline mr-1.5" /> Departure Date
             </label>
             <input 
               type="date" 
@@ -363,7 +363,7 @@ export default function AvailabilityPage() {
             <div>
               <p className="text-lg font-bold text-text">Search for Available Rooms</p>
               <p className="text-sm text-text-muted mt-1">
-                Select your check-in and check-out dates above to see real-time room availability.
+                Select your arrival and departure dates above to see real-time room availability.
               </p>
             </div>
           </div>

@@ -1,3 +1,5 @@
+// Must load first: when ENABLE_TEST_CLOCK=true (never in production) it shifts the server's clock.
+import { testClockEnabled } from './shared/utils/test-clock';
 import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import { finalErrorHandler, safeErrorResponses } from './shared/middleware/safe-errors';
@@ -25,6 +27,7 @@ import amenityRoutes from './modules/amenity/amenity.routes';
 import publicRoutes from './modules/public/public.routes';
 import publicImagesRoutes from './modules/public/public-images.routes';
 import publicAuthRoutes from './modules/public/public-auth.routes';
+import testClockRoutes from './shared/test-clock.routes';
 import { expireOnlineHolds } from './modules/reservation/online-hold.service';
 import { expireUnarrivedStays } from './modules/reservation/recovery.service';
 import { activateReadyWebsiteDomains } from './modules/property/domain-auto-activation.service';
@@ -40,6 +43,8 @@ const app: Express = express();
 app.use(helmet());
 // The browser may read the Date header: the app uses it as the trusted clock (device clocks can be wrong).
 app.use(cors({ exposedHeaders: ['Date'] }));
+// Test clock: the screens read the time from this header, so it must follow the shifted clock.
+if (testClockEnabled) app.use((_req, res, next) => { res.setHeader('Date', new Date().toUTCString()); next(); });
 // Replace internal error text (database, code) with a friendly message before it reaches users.
 app.use(safeErrorResponses);
 
@@ -104,6 +109,7 @@ app.use('/api/amenities', amenityRoutes);
 app.use('/api/paystack', paystackRoutes); // 🌟 Mount Paystack Routes
 app.use('/api/public/images', publicImagesRoutes);
 app.use('/api/public/auth', publicAuthRoutes); // 🌟 Mount Public Auth Routes
+app.use('/api/test-clock', testClockRoutes); // reports enabled:false unless ENABLE_TEST_CLOCK=true
 app.use('/api/public', publicRoutes); // 🌟 Mount Public Routes
 
 // 404 handler
@@ -127,7 +133,7 @@ if (require.main === module) {
   const releaseHolds = () => expireOnlineHolds().catch(() => console.error('Could not release expired online booking holds; will retry.'));
   void releaseHolds();
   setInterval(releaseHolds, 30000).unref();
-  // Rooms whose guest never arrived expire on their checkout date, even when nobody is signed in.
+  // Rooms whose guest never arrived expire on their departure date, even when nobody is signed in.
   const expireStays = () => expireUnarrivedStays().catch(error => console.error('Could not expire unarrived reservations; will retry.', error));
   void expireStays();
   setInterval(expireStays, 5 * 60 * 1000).unref();

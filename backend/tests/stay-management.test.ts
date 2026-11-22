@@ -29,7 +29,7 @@ function fixture(overrides: any = {}) {
     user: { findFirst: mock().mockResolvedValue(overrides.user || manager) },
     reservation: { findUniqueOrThrow: mock().mockResolvedValue(res), findUnique: mock().mockResolvedValue(res), update: mock() },
     reservationRoom: { update: mock(), findFirst: mock().mockResolvedValue(null), findMany: mock().mockResolvedValue([{ ...stay, status: 'CheckedOut' }]) },
-    room: { findUnique: mock().mockResolvedValue({ roomNumber: '204' }), update: mock() },
+    room: { findUnique: mock().mockResolvedValue({ roomNumber: '204' }), findFirst: mock().mockResolvedValue({ roomId: 9, roomNumber: '204', operationalStatus: 'Occupied', housekeepingStatus: 'Clean', roomType: { isActive: true, typeName: 'Deluxe' } }), update: mock() },
     property: { findUnique: mock().mockResolvedValue({ timezone: 'Africa/Accra', checkOutTime: '11:00' }) },
     auditLog: { findMany: mock().mockResolvedValue(overrides.checks || []), count: mock().mockResolvedValue(overrides.housekeeping || 0), create: mock() },
     payment: { count: mock().mockResolvedValue(overrides.payments || 0) },
@@ -40,6 +40,29 @@ const departure = (departedAt: string, extra: any = {}) => ({ action: 'record-de
 
 beforeEach(() => { jest.clearAllMocks(); });
 afterEach(() => { jest.useRealTimers(); });
+
+describe('expired reservation corrections', () => {
+  test('blocks every correction, including manual payment correction previews', async () => {
+    const { tx } = fixture({ res: { status: 'NoShow' }, stay: { status: 'NoShow' } });
+    await expect(correctBookingInTransaction(tx, 'R1', actor, {
+      action: 'correct-payment', paymentId: 1, newAmount: 0, reason: 'Payment was entered incorrectly.', preview: true,
+    })).rejects.toMatchObject({ code: 'RESERVATION_EXPIRED', statusCode: 409 });
+  });
+});
+
+describe('room transfer readiness', () => {
+  test('requires confirmation for a room needing cleaning, then marks it clean with an audit record', async () => {
+    const { tx } = fixture();
+    tx.room.findFirst.mockResolvedValue({ roomId: 10, roomNumber: '205', roomTypeId: 2, operationalStatus: 'Available', housekeepingStatus: 'Dirty', roomType: { isActive: true, typeName: 'Deluxe' } });
+    const move = { action: 'transfer', stayId: 5, targetRoomId: 10, reason: 'Guest requested a quieter room.' };
+    await expect(correctBookingInTransaction(tx, 'R1', actor, { ...move, preview: true })).rejects.toMatchObject({ code: 'ROOM_NOT_CLEAN' });
+    const preview = await correctBookingInTransaction(tx, 'R1', actor, { ...move, uncleanRoomConfirmed: true, preview: true });
+    expect(preview).toMatchObject({ targetMarkedClean: true, targetRoomLabel: 'Room 205' });
+    await correctBookingInTransaction(tx, 'R1', actor, { ...move, uncleanRoomConfirmed: true, expectedVersion: preview.version });
+    expect(tx.room.update).toHaveBeenCalledWith({ where: { roomId: 10 }, data: { operationalStatus: 'Occupied', housekeepingStatus: 'Clean' } });
+    expect(tx.auditLog.create).toHaveBeenCalledWith({ data: expect.objectContaining({ userId: actor.userId, entityType: 'Room', action: 'HousekeepingStatusChanged' }) });
+  });
+});
 
 describe('forgotten checkout (record actual departure)', () => {
   test('ends the stay on the departure day, keeps consumed nights and turns the rest into a refund', async () => {

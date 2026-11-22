@@ -85,7 +85,7 @@ export default function ShortenStayDialog({ room, reservationId, timeZone, onClo
               Leave on the earliest date: {label(earliest)}
             </button>
             <label className="block text-sm font-semibold text-text">
-              Or pick the new check-out date
+              Or pick the new departure date
               <span className="mt-1.5 flex min-h-12 items-center gap-2 rounded-lg border border-border bg-background px-3 focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/20">
                 <CalendarDays size={18} className="shrink-0 text-text-muted" />
                 <input type="date" required min={earliest} max={latest} value={date} disabled={busy} onChange={(event) => { setDate(event.target.value); setPreview(null); setError(''); }}

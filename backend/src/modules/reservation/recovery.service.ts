@@ -67,19 +67,19 @@ async function noConflict(tx: any, roomId: number, stayId: number, from: Date, t
 }
 export const EXPIRED_MESSAGE = 'Sorry, this reservation has expired. Please create a new booking.';
 const expiredError = () => Object.assign(new Error(EXPIRED_MESSAGE), { statusCode: 409, code: 'RESERVATION_EXPIRED' });
-// Check-in is allowed from the arrival day (hotel calendar), at any hour, until the checkout date: a late
-// arrival can still check in for the nights left. From the checkout date the reservation has expired.
+// Check-in is allowed from the arrival day (hotel calendar), at any hour, until the departure date: a late
+// arrival can still check in for the nights left. From the departure date the reservation has expired.
 async function arrivalDue(tx: any, propertyId: number, stay: any) {
   const today = await hotelToday(tx, propertyId);
   if (dateOnly(stay.checkOutDate) <= today) throw expiredError();
   if (dateOnly(stay.checkInDate) > today) throw Object.assign(new Error(`Room ${stay.room?.roomNumber || stay.roomNumberSnapshot || ''} arrives on ${shortDate(stay.checkInDate)}; it cannot be checked in before its arrival date. If the guest is here early, change the booking's arrival date first.`), { statusCode: 409, code: 'ARRIVAL_NOT_DUE' });
 }
 const dateOnly = (value: Date) => new Date(value).toISOString().slice(0, 10);
-// Restoring a whole cancelled booking: on or after the checkout date
+// Restoring a whole cancelled booking: on or after the departure date
 // (hotel calendar) no night is left, so a new reservation is needed. Otherwise only the nights still ahead
 // need the room; nights already passed cannot be used anyway. Returns the first night to check.
 function restoreFrom(stay: any, today: string, label: string) {
-  if (dateOnly(stay.checkOutDate) <= today) throw new Error(`${label}: the booked dates have ended (checkout was ${dateOnly(stay.checkOutDate)}). Create a new reservation for this guest instead.`);
+  if (dateOnly(stay.checkOutDate) <= today) throw new Error(`${label}: the booked dates have ended (departure was ${dateOnly(stay.checkOutDate)}). Create a new reservation for this guest instead.`);
   return new Date(Math.max(new Date(stay.checkInDate).getTime(), new Date(`${today}T00:00:00.000Z`).getTime()));
 }
 async function hotelToday(tx: any, propertyId: number) {
@@ -134,7 +134,7 @@ async function departureSignals(tx: any, stay: any, departedAt: Date) {
 
 async function derive(tx: any, id: string) {
   const rooms = await tx.reservationRoom.findMany({ where: { reservationId: id } });
-  // Expired rooms (stored as 'NoShow': the guest never arrived before the checkout date) do not keep the
+  // Expired rooms (stored as 'NoShow': the guest never arrived before the departure date) do not keep the
   // booking open. The booking is only expired ('NoShow') when every remaining room expired (nobody stayed);
   // a booking where some guests stayed completes normally.
   const active = rooms.filter((r: any) => r.status !== 'Cancelled' && r.status !== 'NoShow');
@@ -216,11 +216,15 @@ export async function transitionStay(stayId: number, status: string, actor: Acto
           });
         }
         occupantConfirmation = { ...occupantConfirmation, uncleanRoomConfirmed: room.housekeepingStatus };
+        await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Room', action: 'HousekeepingStatusChanged',
+          oldData: { roomId: stay.roomId, status: room.housekeepingStatus },
+          newData: { roomId: stay.roomId, propertyId: actor.propertyId, status: 'Clean', reason: 'Staff confirmed the room was ready during check-in', reservationId: res.reservationId },
+        } });
       }
       await noConflict(tx, stay.roomId, stayId, stay.checkInDate, stay.checkOutDate, true);
       data = { status, actualCheckIn: new Date(), actualCheckOut: null, ...occupant,
         guestPresenceStatus: 'InRoom', guestOutAt: null, expectedReturnAt: null };
-      await tx.room.update({ where: { roomId: stay.roomId }, data: { operationalStatus: 'Occupied' } });
+      await tx.room.update({ where: { roomId: stay.roomId }, data: { operationalStatus: 'Occupied', ...(!['Clean', 'Inspected'].includes(room.housekeepingStatus) ? { housekeepingStatus: 'Clean' } : {}) } });
     } else if (status === 'CheckedOut' && stay.status === 'CheckedIn') {
       // The balance belongs to the whole booking. While other rooms of the booking are still checked in,
       // one room may leave without the money-owed reason; the last occupied room applies the usual rule.
@@ -308,6 +312,7 @@ export async function correctBooking(id: string, actor: Actor, input: any) {
 export async function correctBookingInTransaction(tx: any, id: string, actor: Actor, input: any, requestPreview = false) {
   const reason = reasonText(input.reason);
     const { res, user } = await booking(tx, id, actor);
+    if (['NoShow', 'Expired'].includes(res.status)) throw expiredError();
     if (!canCorrect(user, input.action) && !(requestPreview && input.preview === true && user.role.roleName === 'Receptionist')) throw new Error('Manager approval is required for this correction.');
     const multi = ['undo-checkin', 'undo-checkout', 'correct-date', 'credit-checkout'].includes(input.action);
     let selected: any[] = [];
@@ -331,7 +336,6 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
       if (!preview && !result.canApply) throw new Error(result.delegationReason);
     };
     if (input.action === 'restore') {
-      if (res.status === 'NoShow') throw new Error(EXPIRED_MESSAGE);
       if (res.status !== 'Cancelled') throw new Error('Only cancelled reservations can be restored.');
       if (res.payments.some((p: any) => p.status === 'Refunded') || res.refundStatus === 'Processed' || await tx.refund.count({ where: { reservationId: id } })) throw new Error('Payments have already been refunded. Create a new booking instead.');
       const recordedPaid = res.payments.filter((p: any) => p.status === 'Completed').reduce((sum: number, p: any) => sum + Number(p.amount), 0);
@@ -462,15 +466,26 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
       const targetId = Number(input.targetRoomId);
       if (!Number.isSafeInteger(targetId) || targetId < 1 || targetId === stay.roomId) throw new Error('Choose a different room.');
       await lockRooms(tx, [stay.roomId, targetId].filter((id: any) => id !== null));
-      const target = await availableInventory(tx, targetId, actor.propertyId, true);
+      const target = await availableInventory(tx, targetId, actor.propertyId);
       if (target.operationalStatus !== 'Available') throw new Error('Target room is not available.');
+      const targetNeedsCleaning = !['Clean', 'Inspected'].includes(target.housekeepingStatus);
+      if (targetNeedsCleaning && input.uncleanRoomConfirmed !== true) {
+        throw Object.assign(new Error(`Room ${target.roomNumber} needs cleaning. Confirm that you checked the room and it is ready before moving the guest.`), {
+          statusCode: 409, code: 'ROOM_NOT_CLEAN', details: { roomNumber: target.roomNumber, housekeepingStatus: target.housekeepingStatus },
+        });
+      }
       if (res.reservationRooms.some((r: any) => r.roomId === targetId)) throw new Error('This room is already assigned to this reservation.');
       await noConflict(tx, targetId, stay.reservationRoomId, stay.checkInDate, stay.checkOutDate, true);
-      result.message = `Move to Room ${target.roomNumber}. Keep the agreed nightly price. The original assignment is preserved in correction history; the old room is marked as needing cleaning.`;
+      result.message = `Move to Room ${target.roomNumber}. Keep the agreed nightly price. The original assignment is preserved in correction history; the old room is marked as needing cleaning.${targetNeedsCleaning ? ' Staff confirmation marks the new room clean.' : ''}`;
       result.targetRoomLabel = `Room ${target.roomNumber}`;
+      result.targetMarkedClean = targetNeedsCleaning;
       if (preview) return result;
       await releaseOccupiedRoom(tx, stay);
-      await tx.room.update({ where: { roomId: targetId }, data: { operationalStatus: 'Occupied' } });
+      await tx.room.update({ where: { roomId: targetId }, data: { operationalStatus: 'Occupied', ...(targetNeedsCleaning ? { housekeepingStatus: 'Clean' } : {}) } });
+      if (targetNeedsCleaning) await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Room', action: 'HousekeepingStatusChanged',
+        oldData: { roomId: targetId, status: target.housekeepingStatus },
+        newData: { roomId: targetId, propertyId: actor.propertyId, status: 'Clean', reason: 'Staff confirmed the room was ready during guest transfer', reservationId: id },
+      } });
       await tx.reservationRoom.update({ where: { reservationRoomId: stay.reservationRoomId }, data: { roomId: targetId, roomTypeId: target.roomTypeId, roomNumberSnapshot: target.roomNumber, roomTypeNameSnapshot: target.roomType.typeName, ratePlanId: null } });
     } else if (input.action === 'credit-checkout') {
       if (selected.some(stay => stay.status !== 'CheckedIn' || stay.roomId === null) || res.status !== 'InHouse') throw new Error('Choose checked-in rooms.');
@@ -518,7 +533,7 @@ export async function correctionHistory(id: string, actor: Actor) {
   return prisma.auditLog.findMany({ where: { entityType: 'Reservation', newData: { path: ['reservationId'], equals: id } }, orderBy: { createdAt: 'desc' }, take: 100, include: { user: { select: { fullName: true } } } });
 }
 
-// Automatic reservation expiry. A room whose guest never checked in expires on its checkout date (hotel
+// Automatic reservation expiry. A room whose guest never checked in expires on its departure date (hotel
 // calendar, server time): it is stored as 'NoShow' and shown to staff as "Expired". Rooms that were checked
 // in, checked out or cancelled are untouched; payments, charges, refunds and balances are never changed.
 // Runs on a background timer and lazily (per hotel) before the screens that list stays.
@@ -558,7 +573,7 @@ async function expireBooking(id: string) {
     const after = await tx.reservation.findUniqueOrThrow({ where: { reservationId: id } });
     if (after.status === 'NoShow') await tx.reservation.update({ where: { reservationId: id }, data: { cancellationDate: new Date() } });
     const balanceDue = Math.max(0, money(money(res.totalAmount) - money(res.amountPaid)));
-    await audit(tx, null, id, 'RoomExpired', 'Guest did not arrive before the checkout date; reservation expired automatically',
+    await audit(tx, null, id, 'RoomExpired', 'Guest did not arrive before the departure date; reservation expired automatically',
       { status: res.status, rooms: stays.map((s: any) => ({ reservationRoomId: s.reservationRoomId, status: s.status })) },
       { status: after.status, rooms: labels, stayIds: ids, amountPaid: money(res.amountPaid), balanceDue });
     // Everyone else has left, so the booking is now checked out with money still owed: record it like a

@@ -88,7 +88,7 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
                   <p className="font-semibold">{formatDate(reservation.checkInDate)}</p>
                 </div>
                 <div>
-                  <p className="text-gray-600 text-xs">Check-out</p>
+                  <p className="text-gray-600 text-xs">Departure date</p>
                   <p className="font-semibold">{formatDate(latestCheckOutDate)}</p>
                 </div>
                 <div>

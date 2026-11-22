@@ -138,7 +138,7 @@ export default function BulkRoomsDialog({ mode, reservation, onDone, onClose, on
           )}
           {!checkin && balance > 0.01 && (
             <div className="rounded-lg border border-warning-100 bg-warning-50 p-3 text-sm text-warning-700">
-              <p><strong>Booking balance: GHS {balance.toFixed(2)}</strong> — this belongs to the whole booking {code}, not to one room.</p>
+              <p className="text-danger-700"><strong>Owes: GHS {balance.toFixed(2)}</strong> — this belongs to the whole booking {code}, not to one room.</p>
               {finalCheckout
                 ? <p className="mt-1">These are the last rooms still checked in, so the guest leaves owing this amount.</p>
                 : <p className="mt-1">Other rooms stay checked in, so the balance simply stays on the booking.</p>}

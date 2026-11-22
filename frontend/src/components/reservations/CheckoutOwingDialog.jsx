@@ -5,7 +5,6 @@ const OTHER = 'Other';
 export const OWING_REASONS = [
   'Guest promised to pay later.',
   'Guest disputed the outstanding amount.',
-  'Company or sponsor will settle the balance.',
   OTHER,
 ];
 
@@ -16,7 +15,6 @@ const field = 'w-full rounded-lg border border-border bg-background px-4 py-2.5 
 export default function CheckoutOwingDialog({ roomNumber, guestName, code, balanceDue, lateText, onTakePayment, onCheckOut, onClose }) {
   const [choice, setChoice] = useState('');
   const [otherText, setOtherText] = useState('');
-  const [departureNote, setDepartureNote] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -30,7 +28,7 @@ export default function CheckoutOwingDialog({ roomNumber, guestName, code, balan
     setError('');
     setSaving(true);
     try {
-      await onCheckOut(reason, departureNote.trim().slice(0, 300));
+      await onCheckOut(reason);
     } catch (err) {
       setError(err.response?.data?.message || 'Could not check out this guest. Please try again.');
     } finally {
@@ -75,11 +73,7 @@ export default function CheckoutOwingDialog({ roomNumber, guestName, code, balan
           </fieldset>
 
           {lateText && (
-            <div>
-              <p className="mb-1.5 text-xs text-warning-700">{lateText}</p>
-              <label className="block text-xs font-semibold text-text-muted mb-1.5">Late departure note <span className="font-normal">(optional)</span></label>
-              <input type="text" value={departureNote} onChange={(e) => setDepartureNote(e.target.value)} maxLength={300} className={field} />
-            </div>
+            <p className="text-xs text-warning-700">{lateText}</p>
           )}
 
           <p className="text-xs text-text-muted">The GHS {Number(balanceDue || 0).toFixed(2)} stays on this booking and appears under “Owed after checkout” until it is paid.</p>

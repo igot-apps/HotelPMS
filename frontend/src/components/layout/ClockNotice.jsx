@@ -3,6 +3,7 @@ import { Clock, X } from 'lucide-react';
 import { CLOCK_NOTICE_MS, deviceClockOffset } from '../../lib/serverClock';
 import useServerClock from '../../lib/useServerClock';
 import { formatDuration } from '../../lib/stayTiming';
+import { useTestClock } from '../../lib/testClock';
 
 const KEY = 'clockNoticeDismissed';
 const read = () => { try { return sessionStorage.getItem(KEY) === '1'; } catch { return false; } };
@@ -12,8 +13,9 @@ const read = () => { try { return sessionStorage.getItem(KEY) === '1'; } catch {
 export default function ClockNotice() {
   useServerClock();
   const [dismissed, setDismissed] = useState(read);
+  const testClock = useTestClock();
   const offset = deviceClockOffset();
-  if (dismissed || offset === null || Math.abs(offset) < CLOCK_NOTICE_MS) return null;
+  if (testClock.enabled || dismissed || offset === null || Math.abs(offset) < CLOCK_NOTICE_MS) return null;
   const close = () => { try { sessionStorage.setItem(KEY, '1'); } catch { /* private mode */ } setDismissed(true); };
   return (
     <div role="status" className="mb-3 flex items-start gap-2 rounded-lg border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800">

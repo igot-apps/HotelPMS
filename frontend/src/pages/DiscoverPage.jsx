@@ -255,7 +255,7 @@ export default function DiscoverPage() {
   const handleSearch = (e) => {
     e.preventDefault();
     if (hasInvalidDateRange) {
-      toast.error('Check-out must be after check-in.');
+      toast.error('Departure must be after arrival.');
       return;
     }
     const params = new URLSearchParams();
@@ -373,9 +373,9 @@ export default function DiscoverPage() {
                   </div>
                 </div>
                 <div className="md:col-span-6 lg:col-span-2 min-w-0">
-                  <label htmlFor="discover-check-out" className="block text-xs font-bold text-text-muted mb-1 px-1 text-left">Check-out</label>
+                  <label htmlFor="discover-check-out" className="block text-xs font-bold text-text-muted mb-1 px-1 text-left">Departure</label>
                   <div className="relative flex w-full min-w-0 max-w-full">
-                    <input id="discover-check-out" aria-label="Check-out date" type="date" value={checkOut} min={checkIn || tomorrow} onChange={(e) => setCheckOut(e.target.value)} aria-invalid={hasInvalidDateRange} aria-describedby={hasInvalidDateRange ? 'discover-date-error' : undefined} className={`responsive-date-input px-3 py-3 bg-background border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition ${hasInvalidDateRange ? 'border-danger-500' : 'border-border'}`} />
+                    <input id="discover-check-out" aria-label="Departure date" type="date" value={checkOut} min={checkIn || tomorrow} onChange={(e) => setCheckOut(e.target.value)} aria-invalid={hasInvalidDateRange} aria-describedby={hasInvalidDateRange ? 'discover-date-error' : undefined} className={`responsive-date-input px-3 py-3 bg-background border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition ${hasInvalidDateRange ? 'border-danger-500' : 'border-border'}`} />
                   </div>
                 </div>
                 <div className="md:col-span-12 lg:col-span-2 flex items-end">
@@ -387,7 +387,7 @@ export default function DiscoverPage() {
               <p className="mt-3 text-left text-xs text-text-muted">Availability updates as you choose your dates. Room availability can change until your booking is confirmed.</p>
               {hasInvalidDateRange && (
                 <p id="discover-date-error" role="alert" className="mt-2 text-left text-sm font-medium text-danger-600">
-                  Check-out must be after check-in.
+                  Departure must be after arrival.
                 </p>
               )}
           </form>}

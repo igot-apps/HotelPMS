@@ -95,7 +95,7 @@ export default function ManagerDashboard() {
         <div className="rounded-xl border border-border bg-background p-3">
           <p className="mb-2 text-xs font-bold uppercase tracking-wide text-text-muted">Right now</p>
           <div className="flex flex-wrap gap-2">
-            <NowChip to="/reservations?status=InHouse" icon={Wallet} tone={owedInHouse > 0 ? 'warning' : 'neutral'} text={`Owed by guests still here: ${cash(owedInHouse)}`} />
+            <NowChip to="/reservations?status=InHouse" icon={Wallet} tone={owedInHouse > 0 ? 'danger' : 'neutral'} text={`Owed by guests still here: ${cash(owedInHouse)}`} />
             <NowChip onClick={() => setOwedOpen(true)} icon={Receipt} tone={owedAfterTotal > 0 ? 'danger' : 'neutral'} text={`Owed by guests who left: ${cash(owedAfterTotal)} (${owedAfterCount})`} />
             <NowChip to="/rooms" icon={BedDouble} tone="neutral" text={glance.data ? `Rooms taken tonight: ${glance.data.rooms.occupiedTonight} of ${glance.data.rooms.total}` : 'Rooms taken tonight: —'} />
             {todo.map(({ to: link, icon, text }) => <NowChip key={text} to={link} icon={icon} tone="warning" text={text} />)}
