@@ -1,9 +1,8 @@
 import { Skeleton } from '../components/ui/Skeleton';
 import ResponsiveTable from '../components/ui/ResponsiveTable';
 import BackButton from '../components/ui/BackButton';
-import { useEffect, useState } from 'react';
-import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
-import { bookingLink } from '../lib/bookingLink';
+import { useEffect, useRef, useState } from 'react';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { bookingStatusLabel, roomStatusLabel, roomStatusTone } from '../lib/statusLabels';
 
 import { hotelToday } from '../lib/period';
@@ -12,7 +11,7 @@ import useServerClock from '../lib/useServerClock';
 // Today on the hotel's calendar from the server's clock (never the computer's); null until server time is known.
 const localToday = (timeZone) => hotelToday(timeZone);
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { cancelReservation, extendReservationRoom, getReservationById, getReservationStats, updateReservation } from '../api/reservations';
+import { cancelReservation, extendReservationRoom, getReservationById, getReservationStats, updateOccupantName, updateReservation, updateReservationRoomStatus } from '../api/reservations';
 import toast from 'react-hot-toast';
 import api from '../lib/axios';
 import { recordPayment } from '../api/payments';
@@ -28,8 +27,13 @@ import RefundPanel from '../components/reservations/RefundPanel';
 import ExtendStayDialog from '../components/reservations/ExtendStayDialog';
 import ShortenStayDialog from '../components/reservations/ShortenStayDialog';
 import MoveRoomDialog from '../components/reservations/MoveRoomDialog';
+import RoomOccupantDialog from '../components/reservations/RoomOccupantDialog';
+import EarlyCheckoutDialog from '../components/reservations/EarlyCheckoutDialog';
+import CheckoutOwingDialog from '../components/reservations/CheckoutOwingDialog';
 import ReservationPaymentStatus from '../components/reservations/ReservationPaymentStatus';
 import { useAuthStore } from '../store/authStore';
+import { expectedCheckoutAt, formatDuration, formatTime } from '../lib/stayTiming';
+import { serverNow } from '../lib/serverClock';
 
 export default function ReservationDetailsPage() {
   useServerClock(); // re-render when server time arrives or is lost
@@ -55,6 +59,11 @@ export default function ReservationDetailsPage() {
   const [extendRoom, setExtendRoom] = useState(null);
   const [shortenRoom, setShortenRoom] = useState(null);
   const [moveRoom, setMoveRoom] = useState(null);
+  const [occupantDialog, setOccupantDialog] = useState(null);
+  const [earlyCheckout, setEarlyCheckout] = useState(null);
+  const [owingCheckout, setOwingCheckout] = useState(null);
+  const [checkoutConfirm, setCheckoutConfirm] = useState(null);
+  const handledAction = useRef('');
   // Same cancellation as the Reservations list (server applies the refund policy and all checks).
   const cancelMutation = useMutation({
     mutationFn: () => cancelReservation(id),
@@ -123,6 +132,53 @@ export default function ReservationDetailsPage() {
     onError: (err) => toast.error(err.response?.data?.message || 'Could not extend the stay.'),
   });
 
+  const refreshRoomData = () => {
+    ['reservation', 'reservations', 'rooms', 'availability', 'calendarReservations', 'dashboardActive', 'operationalOverview', 'dashboardGlance', 'owedAfterCheckout', 'checkoutAlerts', 'myDay'].forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
+  };
+
+  const roomActionMutation = useMutation({
+    mutationFn: ({ roomId, status, ...details }) => updateReservationRoomStatus(roomId, { status, ...details }, { skipErrorToast: true }),
+    onSuccess: () => {
+      refreshRoomData();
+      setOccupantDialog(null);
+      setCheckoutConfirm(null);
+      toast.success('Room status updated');
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not update the room. Please try again.'),
+  });
+
+  const occupantMutation = useMutation({
+    mutationFn: ({ roomId, ...details }) => updateOccupantName(roomId, details.occupantName, details.occupantPhone, details.duplicateOccupantConfirmation),
+    onSuccess: () => {
+      refreshRoomData();
+      setOccupantDialog(null);
+      toast.success('Occupant details updated');
+    },
+  });
+
+  const completeCheckout = async (room, details = {}) => {
+    await roomActionMutation.mutateAsync({ roomId: room.reservationRoomId, status: 'CheckedOut', ...details });
+  };
+
+  const startCheckout = (room) => {
+    const today = localToday(resData.property?.timezone);
+    if (!today) return toast.error('Still getting the hotel time. Try again in a moment.');
+    if (today < String(room.checkOutDate).slice(0, 10)) {
+      setEarlyCheckout({ room, reservation: resData, today });
+      return;
+    }
+    const due = expectedCheckoutAt(room.checkOutDate, resData.property?.checkOutTime, resData.property?.timezone);
+    const late = (serverNow()?.getTime() ?? due.getTime()) - due.getTime();
+    const lateText = late >= 60000 ? `Late departure: ${formatDuration(late)} after the ${formatTime(due, resData.property?.timezone)} checkout time. No extra night is charged.` : '';
+    const balance = Math.round((Number(resData.totalAmount || 0) - Number(resData.amountPaid || 0)) * 100) / 100;
+    const otherCheckedInRooms = (resData.reservationRooms || []).filter((stay) => stay.reservationRoomId !== room.reservationRoomId && stay.status === 'CheckedIn');
+    if (balance > 0.01 && !otherCheckedInRooms.length) {
+      setOwingCheckout({ room, balanceDue: balance, lateText });
+      return;
+    }
+    setCheckoutConfirm({ room, lateText, balance, otherCheckedInRooms });
+  };
+
   const handleSaveEdit = (e) => {
     e.preventDefault();
     updateMutation.mutate(editData);
@@ -141,6 +197,26 @@ export default function ReservationDetailsPage() {
       notes: paymentData.notes || null,
     });
   };
+
+  useEffect(() => {
+    if (!resData) return;
+    const params = new URLSearchParams(location.search);
+    const action = params.get('do');
+    const key = `${location.search}:${resData.reservationId}`;
+    if (!action || handledAction.current === key) return;
+    const room = resData.reservationRooms?.find((stay) => stay.reservationRoomId === Number(params.get('stay')));
+    handledAction.current = key;
+    if (action === 'checkin' && room?.status === 'Reserved') setOccupantDialog({ room, reservation: resData, mode: 'checkin' });
+    else if (action === 'checkout' && room?.status === 'CheckedIn') startCheckout(room);
+    else if (action === 'extend' && room?.status === 'CheckedIn') setExtendRoom(room);
+    else if (action === 'shorten' && room?.status === 'CheckedIn') setShortenRoom(room);
+    else if (action === 'pay') {
+      navigate({ search: '', hash: 'payments' }, { replace: true });
+      return;
+    }
+    navigate({ search: '', hash: location.hash }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resData, location.search]);
 
   if (isLoadingRes) return <div role="status" className="space-y-4"><span className="sr-only">Loading reservation details…</span><Skeleton className="h-8 w-64" /><Skeleton className="h-28 rounded-xl" /><div className="grid gap-4 lg:grid-cols-3"><Skeleton className="h-64 rounded-xl lg:col-span-2" /><Skeleton className="h-64 rounded-xl" /></div></div>;
   if (!resData) return <div className="p-8 text-center text-danger-600">Reservation not found.</div>;
@@ -225,7 +301,6 @@ export default function ReservationDetailsPage() {
         <ul className="grid gap-3 md:grid-cols-2">
           {resData.reservationRooms?.map((rr) => {
             const active = ['Confirmed', 'InHouse'].includes(resData.status);
-            const roomLink = (action) => `${bookingLink(resData, action, rr.reservationRoomId)}&back=booking`;
             const today = localToday(resData.property?.timezone);
             const canCheckIn = active && rr.status === 'Reserved' && Boolean(today) && String(rr.checkInDate).slice(0, 10) <= today;
             const inRoom = active && rr.status === 'CheckedIn';
@@ -246,11 +321,12 @@ export default function ReservationDetailsPage() {
                 {rr.status === 'NoShow' && <p className="mt-1 text-xs font-semibold text-orange-700">Expired: the guest did not arrive before the departure date. Create a new booking if they come.</p>}
                 {(canCheckIn || inRoom || (active && rr.status === 'Reserved')) && (
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {canCheckIn && <Link to={roomLink('checkin')} className={`${btn} bg-success-600 text-white hover:bg-success-700`}>Check in</Link>}
-                    {inRoom && <Link to={roomLink('checkout')} className={`${btn} bg-primary-600 text-white hover:bg-primary-700`}>Check out</Link>}
+                    {canCheckIn && <button type="button" onClick={() => setOccupantDialog({ room: rr, reservation: resData, mode: 'checkin' })} className={`${btn} bg-success-600 text-white hover:bg-success-700`}>Check in</button>}
+                    {inRoom && <button type="button" onClick={() => startCheckout(rr)} className={`${btn} bg-primary-600 text-white hover:bg-primary-700`}>Check out</button>}
                     {inRoom && <button type="button" onClick={() => setExtendRoom(rr)} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Extend</button>}
                     {inRoom && <button type="button" onClick={() => setShortenRoom(rr)} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Shorten</button>}
                     {inRoom && <button type="button" onClick={() => setMoveRoom(rr)} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Move to another room</button>}
+                    {['Reserved', 'CheckedIn'].includes(rr.status) && <button type="button" onClick={() => setOccupantDialog({ room: rr, reservation: resData, mode: 'edit' })} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Edit occupant</button>}
                   </div>
                 )}
               </li>
@@ -278,8 +354,7 @@ export default function ReservationDetailsPage() {
         <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
           <button
             onClick={() => setIsPaymentModalOpen(true)}
-            // 🌟 FIXED: 'CheckedIn' → 'InHouse'
-            disabled={balanceDue <= 0 && resData.status !== 'InHouse'}
+            disabled={balanceDue <= 0}
             className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus size={16} /> Record Payment
@@ -338,6 +413,20 @@ export default function ReservationDetailsPage() {
       {extendRoom && <ExtendStayDialog room={extendRoom} busy={extendMutation.isPending} onClose={() => setExtendRoom(null)} onConfirm={(date) => extendMutation.mutate(date)} />}
       {shortenRoom && <ShortenStayDialog room={shortenRoom} reservationId={resData.reservationId} timeZone={resData.property?.timezone} policyAllowsShortening={resData.property?.allowEarlyDepartureChargeReduction} onClose={() => setShortenRoom(null)} />}
       {moveRoom && <MoveRoomDialog room={moveRoom} reservation={resData} onClose={() => setMoveRoom(null)} />}
+      {occupantDialog && <RoomOccupantDialog key={`${occupantDialog.room.reservationRoomId}-${occupantDialog.mode}`} {...occupantDialog} busy={roomActionMutation.isPending || occupantMutation.isPending} onClose={() => setOccupantDialog(null)} onSubmit={(details) => occupantDialog.mode === 'checkin' ? roomActionMutation.mutateAsync({ roomId: occupantDialog.room.reservationRoomId, status: 'CheckedIn', ...details }) : occupantMutation.mutateAsync({ roomId: occupantDialog.room.reservationRoomId, ...details })} />}
+      {earlyCheckout && <EarlyCheckoutDialog key={earlyCheckout.room.reservationRoomId} {...earlyCheckout} onClose={() => setEarlyCheckout(null)} onCheckOut={async () => { await completeCheckout(earlyCheckout.room); setEarlyCheckout(null); }} />}
+      {owingCheckout && <CheckoutOwingDialog key={owingCheckout.room.reservationRoomId} roomNumber={owingCheckout.room.room?.roomNumber || owingCheckout.room.roomNumberSnapshot} guestName={owingCheckout.room.occupantName || resData.guestNameSnapshot || resData.propertyGuest?.fullName || 'Guest'} code={resData.confirmationCode} balanceDue={owingCheckout.balanceDue} lateText={owingCheckout.lateText} onClose={() => setOwingCheckout(null)} onTakePayment={() => { setOwingCheckout(null); openPanel('payments'); }} onCheckOut={async (overrideReason, departureNote) => { await completeCheckout(owingCheckout.room, { overrideReason, departureNote }); toast.success(`Checked out. GHS ${Number(owingCheckout.balanceDue).toFixed(2)} is still owed.`); setOwingCheckout(null); }} />}
+      {checkoutConfirm && (
+        <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="checkout-confirm-title">
+          <section className="w-full max-w-md rounded-xl border border-border bg-surface p-5 shadow-xl">
+            <h2 id="checkout-confirm-title" className="text-lg font-bold text-text">Check out Room {checkoutConfirm.room.room?.roomNumber || checkoutConfirm.room.roomNumberSnapshot}?</h2>
+            <p className="mt-2 text-sm text-text-muted">Occupant: {checkoutConfirm.room.occupantName || 'Not assigned'}. Only this room will be checked out.</p>
+            {checkoutConfirm.lateText && <p className="mt-3 text-sm font-semibold text-warning-700">{checkoutConfirm.lateText}</p>}
+            {checkoutConfirm.balance > 0.01 && checkoutConfirm.otherCheckedInRooms.length > 0 && <p className="mt-3 text-sm text-text-muted">The booking still owes GHS {checkoutConfirm.balance.toFixed(2)}. The balance remains on the booking while the other room{checkoutConfirm.otherCheckedInRooms.length === 1 ? '' : 's'} stay checked in.</p>}
+            <div className="mt-5 flex justify-end gap-2"><button type="button" disabled={roomActionMutation.isPending} onClick={() => setCheckoutConfirm(null)} className="min-h-11 rounded-lg border border-border px-4 text-sm font-semibold text-text">Cancel</button><button type="button" disabled={roomActionMutation.isPending} onClick={() => completeCheckout(checkoutConfirm.room).catch(() => {})} className="min-h-11 rounded-lg bg-primary-600 px-4 text-sm font-semibold text-white disabled:opacity-50">{roomActionMutation.isPending ? 'Checking out…' : 'Check out room'}</button></div>
+          </section>
+        </div>
+      )}
 
       {/* ========================================== */}
       {/* 1. Record Payment Modal                    */}

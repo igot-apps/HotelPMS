@@ -18,7 +18,6 @@ import { useAuthStore } from '../store/authStore';
 import ReservationModal from '../components/reservations/ReservationModal';
 import BookingPaymentNotice from '../components/reservations/BookingPaymentNotice';
 import { createWalkInBooking } from '../lib/createWalkInBooking';
-import RoomCard from '../components/reservations/RoomCard'; // 🌟 NEW: Extracted component
 import RoomOccupantDialog from '../components/reservations/RoomOccupantDialog';
 import EarlyCheckoutDialog from '../components/reservations/EarlyCheckoutDialog';
 import ExtendStayDialog from '../components/reservations/ExtendStayDialog';
@@ -39,7 +38,7 @@ const localToday = (timeZone) => hotelToday(timeZone);
 import {
   Search, Plus, CalendarDays, AlertCircle, XCircle,
   ChevronLeft, ChevronRight, Eye, X,
-  ChevronDown, ChevronUp, BedDouble, Loader2, Clock, Undo2, SlidersHorizontal, LogIn, LogOut, Wallet
+  Loader2, Undo2, SlidersHorizontal
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -299,8 +298,6 @@ export default function ReservationsPage() {
     },
   });
 
-  const updatingOccupantId = updateOccupantMutation.isPending ? updateOccupantMutation.variables?.id : null;
-
   const createMutation = useMutation({
     mutationFn: async (payload) => {
       return createWalkInBooking(payload, { createReservation, recordPayment });
@@ -394,8 +391,6 @@ export default function ReservationsPage() {
   const handleFilterChange = (key, value) => updateParams({ [key]: value, page: 1 });
   const clearFilters = () => { updateParams({ search: '', status: '', fromDate: '', toDate: '', page: 1 }); setLocalSearch(''); };
 
-  const activeRoomActionId = roomActionMutation.isPending ? roomActionMutation.variables?.id : null;
-
   // Starts checkout for one room (early-checkout choice, late note) — shared by row, room card and dashboard links.
   const startCheckOut = (room, res) => {
     // Before the scheduled departure date, ask how to handle the remaining nights.
@@ -444,63 +439,6 @@ export default function ReservationsPage() {
       </ul>
     );
   };
-  const owesAfterCheckout = (res) => res.status === 'Completed' && Number(res.totalAmount || 0) - Number(res.amountPaid || 0) > 0.01;
-  const rowActions = (res, compact = false) => {
-    // Checked-out bookings still owing money keep Take payment so the debt can be collected.
-    if (!['Confirmed', 'InHouse'].includes(res.status) && !owesAfterCheckout(res)) return null;
-    const stays = res.reservationRooms || [];
-    const arriving = stays.filter((stay) => stay.status === 'Reserved' && String(stay.checkInDate).slice(0, 10) <= localToday(res.property?.timezone));
-    const inRoom = stays.filter((stay) => stay.status === 'CheckedIn');
-    const balance = Math.max(0, Number(res.totalAmount || 0) - Number(res.amountPaid || 0));
-    const base = compact ? 'min-h-11 flex-1 rounded-lg px-3 text-sm font-bold' : 'px-3 py-1.5 text-xs font-semibold rounded-md';
-    const openRooms = () => setExpandedId(res.reservationId);
-    return (
-      <>
-        {arriving.length > 0 && (
-          <button type="button" onClick={() => { openRooms(); if (arriving.length === 1) setOccupantDialog({ room: arriving[0], reservation: res, mode: 'checkin' }); else setBulkRooms({ mode: 'checkin', reservation: res }); }} className={`${base} inline-flex items-center justify-center gap-1.5 bg-success-600 text-white hover:bg-success-700`}>
-            <LogIn size={compact ? 16 : 14} /> {arriving.length === 1 ? (stays.length > 1 ? `Check in Room ${arriving[0].room?.roomNumber || arriving[0].roomNumberSnapshot}` : 'Check in') : `Check in ${arriving.length} rooms`}
-          </button>
-        )}
-        {inRoom.length > 0 && (
-          <button type="button" onClick={() => { openRooms(); if (inRoom.length === 1) startCheckOut(inRoom[0], res); else setBulkRooms({ mode: 'checkout', reservation: res }); }} className={`${base} inline-flex items-center justify-center gap-1.5 bg-primary-600 text-white hover:bg-primary-700`}>
-            <LogOut size={compact ? 16 : 14} /> {inRoom.length === 1 ? (stays.length > 1 ? `Check out Room ${inRoom[0].room?.roomNumber || inRoom[0].roomNumberSnapshot}` : 'Check out') : `Check out ${inRoom.length} rooms`}
-          </button>
-        )}
-        {balance > 0.01 && (
-          <button type="button" onClick={() => setPaymentFor(res)} className={`${base} inline-flex items-center justify-center gap-1.5 border border-warning-300 bg-warning-50 text-warning-800 hover:bg-warning-100`}>
-            <Wallet size={compact ? 16 : 14} /> Take payment
-          </button>
-        )}
-      </>
-    );
-  };
-
-  const renderRoomAssignments = (res, compact = false) => (
-    <section id={`${compact ? 'mobile' : 'desktop'}-rooms-${res.reservationId}`} className={compact ? 'rooms-reveal mt-4 rounded-xl border-2 border-primary-200 bg-primary-50/40 p-4' : ''}>
-      <div className="flex items-center gap-2 mb-4">
-        <BedDouble size={18} className="text-primary-600" />
-        <h4 className="min-w-0 flex-1 text-sm font-bold text-text">Assigned rooms <span className="font-semibold text-primary-700">· {res.confirmationCode || `#${res.reservationId.slice(0, 8)}`}</span></h4>
-        <span className="shrink-0 whitespace-nowrap text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full font-semibold">{res.reservationRooms?.length || 0} {res.reservationRooms?.length === 1 ? 'room' : 'rooms'}</span>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {(res.reservationRooms || []).map((rr) => (
-          <RoomCard
-            key={rr.reservationRoomId}
-            rr={rr}
-            res={res}
-            isThisRoomBusy={activeRoomActionId === rr.reservationRoomId}
-            isUpdatingOccupant={updatingOccupantId === rr.reservationRoomId}
-            onCheckIn={room => setOccupantDialog({ room, reservation: res, mode: 'checkin' })}
-            onCheckOut={(room) => startCheckOut(room, res)}
-            onExtend={(room) => setExtendRoom(room)}
-            onShorten={(room) => setShortenStay({ room, reservationId: res.reservationId, reservation: res })}
-            onEditOccupant={room => setOccupantDialog({ room, reservation: res, mode: 'edit' })}
-          />
-        ))}
-      </div>
-    </section>
-  );
-
   return (
     <div className="space-y-6">
       {backPanel && (
@@ -641,21 +579,15 @@ export default function ReservationsPage() {
                 <RefundApprovalBadge reservation={res} />
                 <div className="mt-3"><ReservationPaymentStatus reservation={res} showTotal /></div>
 
-                {(['Confirmed', 'InHouse'].includes(res.status) || owesAfterCheckout(res)) && <div className="mt-4 flex flex-wrap gap-2">{rowActions(res, true)}</div>}
                 <div className="mt-2 flex gap-2">
-                  {res.reservationRooms?.length > 0 && (
-                    <button type="button" onClick={() => setExpandedId(isExpanded ? null : id)} aria-expanded={isExpanded} aria-controls={`mobile-rooms-${id}`} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50">
-                      {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />} {isExpanded ? 'Hide rooms' : `${res.reservationRooms.length === 1 ? 'View room' : `Manage ${res.reservationRooms.length} rooms`}`}
-                    </button>
-                  )}
                   {['Cancelled', 'Expired'].includes(res.status) && res.refundStatus === 'Pending' && permissions?.includes('CanCancelReservation') && (
                     <Link to={`/reservations/${id}#refunds`} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-danger-200 bg-danger-50 px-3 text-sm font-semibold text-danger-700">
                       <Undo2 size={16} /> Manage refund {parseFloat(res.refundDue || 0).toFixed(2)} GHS
                     </Link>
                   )}
                   {['Cancelled', 'Expired'].includes(res.status) && Number(res.refundDue) <= 0 && res.refunds?.length > 0 && <Link to={`/reservations/${id}#refunds`} className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg border border-border px-3 text-sm font-semibold text-primary-700">Refund history</Link>}
-                  <Link to={`/reservations/${id}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50">
-                    <Eye size={16} />Details
+                  <Link to={`/reservations/${id}`} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-3 text-sm font-semibold text-primary-700 hover:bg-primary-100">
+                    <Eye size={16} /> Open reservation
                   </Link>
                 </div>
 
@@ -668,7 +600,6 @@ export default function ReservationsPage() {
                   </div>
                 )}
 
-                {isExpanded && res.reservationRooms?.length > 0 && renderRoomAssignments(res, true)}
               </div>
             </article>
           );
@@ -757,33 +688,6 @@ export default function ReservationsPage() {
 
                   // 🌟 UPDATED: Actions with No Show support
                   let actions = null;
-                  const roomsToggle = (
-                    <button
-                      onClick={() => setExpandedId(isExpanded ? null : res.reservationId)}
-                      aria-expanded={isExpanded} aria-controls={`desktop-rooms-${res.reservationId}`}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-border text-text hover:bg-secondary-50 transition"
-                    >
-                      {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {isExpanded ? 'Hide rooms' : `${(res.reservationRooms?.length || 0) === 1 ? 'View room' : `Manage ${res.reservationRooms?.length || 0} rooms`}`}
-                    </button>
-                  );
-                  if (res.status === 'Confirmed') {
-                    actions = (
-                      <div className="flex flex-wrap items-center justify-end gap-2">
-                        {rowActions(res)}
-                        {roomsToggle}
-                      </div>
-                    );
-                  } else if (res.status === 'InHouse') {
-                    actions = (
-                      <div className="flex flex-wrap items-center justify-end gap-2">
-                        {rowActions(res)}
-                        {roomsToggle}
-                      </div>
-                    );
-                  } else if (owesAfterCheckout(res)) {
-                    actions = <div className="flex flex-wrap items-center justify-end gap-2">{rowActions(res)}</div>;
-                  }
-
                   if (['Cancelled', 'Expired'].includes(res.status) && res.refundStatus === 'Pending' && permissions?.includes('CanCancelReservation')) {
                     actions = (
                       <Link to={`/reservations/${res.reservationId}#refunds`} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-danger-200 text-danger-600 hover:bg-danger-50 transition"><Undo2 size={14} /> Manage refund</Link>
@@ -816,16 +720,6 @@ export default function ReservationsPage() {
                     <Fragment key={res.reservationId}>
                       <tr data-booking={res.reservationId} className={`transition-colors ${isExpanded ? 'bg-primary-50/70' : 'border-b border-border last:border-0 hover:bg-secondary-50/50'}`}>
                         <td className={`px-2 py-4 ${isExpanded ? 'shadow-[inset_4px_0_0_0_theme(colors.primary.600)]' : ''}`}>
-                          {res.reservationRooms?.length > 0 && (
-                            <button
-                              onClick={() => setExpandedId(isExpanded ? null : res.reservationId)}
-                              className="p-1.5 rounded-lg hover:bg-secondary-100 text-text-muted transition"
-                              aria-expanded={isExpanded}
-                              aria-label={isExpanded ? `Collapse rooms for reservation ${res.reservationId}` : `Expand rooms for reservation ${res.reservationId}`}
-                            >
-                              {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                            </button>
-                          )}
                         </td>
                      <td className="px-6 py-4">
                        {/* 1. Confirmation Code */}
@@ -854,21 +748,12 @@ export default function ReservationsPage() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Link to={`/reservations/${res.reservationId}`} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition" aria-label={`View details for reservation ${res.reservationId}`}><Eye size={16} /></Link>
-                            {actions || <span className="text-xs text-text-muted">-</span>}
+                            <Link to={`/reservations/${res.reservationId}`} className="inline-flex items-center gap-1 rounded-md border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 hover:bg-primary-100" aria-label={`Open reservation ${res.reservationId}`}><Eye size={14} /> Open reservation</Link>
+                            {actions}
                           </div>
                         </td>
                       </tr>
 
-                      {isExpanded && (
-                        <tr className="bg-primary-50/70">
-                          <td colSpan="7" className="border-b-2 border-primary-200 px-6 pb-6 pt-1 shadow-[inset_4px_0_0_0_theme(colors.primary.600)]">
-                            <div className="rooms-reveal rounded-xl border border-primary-200 bg-surface p-5 shadow-sm">
-                              {renderRoomAssignments(res)}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
                     </Fragment>
                   );
                 })
