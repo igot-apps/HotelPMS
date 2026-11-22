@@ -393,6 +393,10 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
       if (selected.some(stay => !['Reserved', 'CheckedIn'].includes(stay.status)) || !['Confirmed', 'InHouse'].includes(res.status)) throw new Error('Only active reserved or checked-in stays can have their departure date corrected.');
       const date = new Date(`${input.newCheckOutDate}T00:00:00.000Z`);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(input.newCheckOutDate || '') || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== input.newCheckOutDate || selected.some(stay => date <= stay.checkInDate)) throw new Error('Choose a valid departure date after every selected room arrival.');
+      if (selected.some(stay => date < stay.checkOutDate)) {
+        const policy = await tx.property.findUnique({ where: { propertyId: actor.propertyId }, select: { allowEarlyDepartureChargeReduction: true } });
+        if (policy?.allowEarlyDepartureChargeReduction === false) throw new Error("Your hotel's early-departure policy keeps the original booking charges. The guest can check out early without shortening the charged stay.");
+      }
       // Consumed nights can't be removed: a checked-in guest has used every night before today
       // (hotel calendar), so the earliest departure is today — and never before the first night.
       const hotelTz = (await tx.property.findUnique({ where: { propertyId: actor.propertyId }, select: { timezone: true } }))?.timezone || 'Africa/Accra';

@@ -15,7 +15,7 @@ const label = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB'
 
 // Shorten a stay to remove unused nights (same correction and rules as the Corrections panel),
 // then point staff to record the refund for any overpayment.
-export default function ShortenStayDialog({ room, reservationId, timeZone, onClose }) {
+export default function ShortenStayDialog({ room, reservationId, timeZone, policyAllowsShortening = false, onClose }) {
   const queryClient = useQueryClient();
   const arrival = String(room.checkInDate).slice(0, 10);
   const current = String(room.checkOutDate).slice(0, 10);
@@ -65,7 +65,9 @@ export default function ShortenStayDialog({ room, reservationId, timeZone, onClo
           <button type="button" aria-label="Close" disabled={busy} onClick={onClose} className="flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-border text-text"><X size={18} /></button>
         </div>
 
-        {credit !== null ? (
+        {!policyAllowsShortening ? (
+          <p className="rounded-lg bg-warning-50 p-3 text-sm text-warning-800">Your hotel's early-departure policy keeps the original booking charges. The guest can still check out early.</p>
+        ) : credit !== null ? (
           <div className="space-y-3 text-sm">
             <p className="rounded-lg bg-success-50 p-3 text-success-800">Stay shortened. The guest has overpaid <strong>{cash(credit)}</strong> for unused nights.</p>
             <p className="text-text-muted">Give the guest their money back, then record it in the reservation's Refunds section. No approval is needed.</p>

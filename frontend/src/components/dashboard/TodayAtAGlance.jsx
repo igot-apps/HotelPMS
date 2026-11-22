@@ -487,7 +487,7 @@ function InHouseDetail({ rows: unsorted, query = '' }) {
               {stay.confirmationCode && <p className="mt-0.5 text-xs font-bold uppercase tracking-wide text-primary-700">{stay.confirmationCode}</p>}
               <p className="mt-0.5 text-sm text-text-muted">Room {stay.roomNumber || '—'} · leaves {shortDate(stay.checkOutDate)}</p>
               <PhoneLine phone={phoneOf(stay)} />
-              {stay.balanceDue > 0 && <p className="text-sm font-semibold text-danger-700">Owes: {cash(stay.balanceDue)}</p>}
+              <p className={`text-sm font-semibold ${stay.balanceDue > 0 ? 'text-danger-700' : 'text-success-700'}`}>{stay.balanceDue > 0 ? `Owes: ${cash(stay.balanceDue)}` : 'Paid in full'}</p>
               {out && stay.guestOutAt && (
                 <p className="mt-0.5 text-xs text-warning-800 flex items-center gap-1">
                   <Clock size={12} /> Out since {new Date(stay.guestOutAt).toLocaleString()}

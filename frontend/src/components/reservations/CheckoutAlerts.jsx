@@ -96,7 +96,7 @@ export default function CheckoutAlerts() {
                 </>
               )}
               {group.escalated && <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-danger-700"><ShieldAlert size={13} /> {isManager ? 'Needs manager attention' : 'Escalated to the manager'}</p>}
-              {group.balanceDue > 0 && <p className="mt-1 text-xs font-semibold text-danger-700">Reservation balance: GHS {group.balanceDue.toFixed(2)}</p>}
+              <p className={`mt-1 text-xs font-semibold ${group.balanceDue > 0 ? 'text-danger-700' : 'text-success-700'}`}>{group.balanceDue > 0 ? `Owes: GHS ${group.balanceDue.toFixed(2)}` : 'Paid in full'}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Link to={`${bookingLink(group)}&back=dashboard`} className="min-h-10 rounded-lg bg-primary-600 px-3 py-2 text-xs font-semibold text-white">View reservation</Link>
                 {group.rooms.map((room) => (

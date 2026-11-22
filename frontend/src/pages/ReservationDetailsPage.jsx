@@ -28,6 +28,7 @@ import RefundPanel from '../components/reservations/RefundPanel';
 import ExtendStayDialog from '../components/reservations/ExtendStayDialog';
 import ShortenStayDialog from '../components/reservations/ShortenStayDialog';
 import MoveRoomDialog from '../components/reservations/MoveRoomDialog';
+import ReservationPaymentStatus from '../components/reservations/ReservationPaymentStatus';
 import { useAuthStore } from '../store/authStore';
 
 export default function ReservationDetailsPage() {
@@ -165,6 +166,7 @@ export default function ReservationDetailsPage() {
               <CalendarDays size={14} />
               {new Date(resData.checkInDate).toLocaleDateString()} → {new Date(resData.checkOutDate).toLocaleDateString()}
             </p>
+            <div className="mt-2"><ReservationPaymentStatus reservation={resData} compact /></div>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -334,7 +336,7 @@ export default function ReservationDetailsPage() {
       )}
 
       {extendRoom && <ExtendStayDialog room={extendRoom} busy={extendMutation.isPending} onClose={() => setExtendRoom(null)} onConfirm={(date) => extendMutation.mutate(date)} />}
-      {shortenRoom && <ShortenStayDialog room={shortenRoom} reservationId={resData.reservationId} timeZone={resData.property?.timezone} onClose={() => setShortenRoom(null)} />}
+      {shortenRoom && <ShortenStayDialog room={shortenRoom} reservationId={resData.reservationId} timeZone={resData.property?.timezone} policyAllowsShortening={resData.property?.allowEarlyDepartureChargeReduction} onClose={() => setShortenRoom(null)} />}
       {moveRoom && <MoveRoomDialog room={moveRoom} reservation={resData} onClose={() => setMoveRoom(null)} />}
 
       {/* ========================================== */}

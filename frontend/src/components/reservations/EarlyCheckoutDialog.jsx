@@ -23,6 +23,7 @@ export default function EarlyCheckoutDialog({ room, reservation, today, onCheckO
   const arrivedToday = today <= arrival;
   const newCheckOutDate = arrivedToday ? addDays(arrival, 1) : today;
   const canShorten = newCheckOutDate < scheduled;
+  const policyAllowsShortening = reservation.property?.allowEarlyDepartureChargeReduction === true;
   const correction = { action: 'correct-date', stayIds: [room.reservationRoomId], newCheckOutDate, reason: REASON };
   const url = `/reservations/${reservation.reservationId}`;
 
@@ -90,7 +91,7 @@ export default function EarlyCheckoutDialog({ room, reservation, today, onCheckO
 
         <div className="space-y-2">
           {option('keep', 'Keep original charges', 'Guest pays the full agreed booking amount.')}
-          {option('shorten', 'Shorten stay and recalculate charges', !canShorten ? 'Not available: only one night is booked, and at least one night is always charged.' : arrivedToday ? `Charge one night only (departure ${dateLabel(newCheckOutDate)}) and recalculate the balance.` : `Change departure to today (${dateLabel(today)}) and recalculate the balance.`, !canShorten)}
+          {option('shorten', 'Shorten stay and recalculate charges', !policyAllowsShortening ? "Not available: your hotel's early-departure policy keeps the original booking charges." : !canShorten ? 'Not available: only one night is booked, and at least one night is always charged.' : arrivedToday ? `Charge one night only (departure ${dateLabel(newCheckOutDate)}) and recalculate the balance.` : `Change departure to today (${dateLabel(today)}) and recalculate the balance.`, !policyAllowsShortening || !canShorten)}
         </div>
 
         {choice === 'shorten' && preview && (

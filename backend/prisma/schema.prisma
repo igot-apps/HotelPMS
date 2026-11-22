@@ -97,6 +97,7 @@ model Property {
   paystackSecretKey      String?   @db.Text
   refundSimulationEnabled Boolean @default(false)
   isNonRefundable     Boolean @default(true) // hotel keeps the money on cancellation; refunds only as a recorded exception
+  allowEarlyDepartureChargeReduction Boolean @default(false) // if false, early checkout keeps the original agreed charges
   housekeepingEnabled Boolean @default(false)
   smsSimulationEnabled Boolean @default(false)
 

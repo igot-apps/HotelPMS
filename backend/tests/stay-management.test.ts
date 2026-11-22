@@ -203,6 +203,15 @@ describe('checkout reminders and verification', () => {
 });
 
 describe('shortening only removes unused nights', () => {
+  test('hotel policy can keep the original charges when a guest leaves early', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-12T10:00:00Z'), doNotFake: ['nextTick', 'setImmediate'] });
+    const { tx } = fixture({ stay: { checkOutDate: day('2026-11-14') }, res: { totalAmount: 500, amountPaid: 500 } });
+    tx.property.findUnique.mockResolvedValue({ timezone: 'Africa/Accra', allowEarlyDepartureChargeReduction: false });
+    await expect(correctBookingInTransaction(tx, 'R1', actor, {
+      action: 'correct-date', stayIds: [5], newCheckOutDate: '2026-11-12', reason: 'Guest is leaving early.', preview: true,
+    })).rejects.toThrow('early-departure policy keeps the original booking charges');
+  });
+
   test('booked 5 nights, used 3: a receptionist can shorten to today but not to 2 nights', async () => {
     jest.useFakeTimers({ now: new Date('2026-11-12T10:00:00Z'), doNotFake: ['nextTick', 'setImmediate'] });
     const { tx } = fixture({ user: receptionist, stay: { checkOutDate: day('2026-11-14') }, res: { totalAmount: 500, amountPaid: 500 } });

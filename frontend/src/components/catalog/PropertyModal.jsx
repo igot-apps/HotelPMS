@@ -67,7 +67,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
     propertyName: '', propertyCode: '', businessName: '', legalName: '', propertyType: 'Hotel', address: '', area: '', city: '', region: '', country: 'Ghana',
     latitude: '', longitude: '', checkInTime: '14:00', checkOutTime: '11:00',
     primaryEmail: '', primaryPhone: '', primaryPhoneWhatsappOnly: false, coverImage: '', galleryImages: [], publicDescription: '',
-    cancellationPolicy: '', houseRules: '', taxPercentage: 0.00, isOnlineBookingEnabled: false, isNonRefundable: true,
+    cancellationPolicy: '', houseRules: '', taxPercentage: 0.00, isOnlineBookingEnabled: false, isNonRefundable: true, allowEarlyDepartureChargeReduction: false,
     paystackSecretKey: '',
   });
   const [locationLoading, setLocationLoading] = useState(false);
@@ -105,6 +105,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
         taxPercentage: initialData.taxPercentage ? parseFloat(initialData.taxPercentage) : 0.00,
         isOnlineBookingEnabled: initialData.isOnlineBookingEnabled || false,
         isNonRefundable: initialData.isNonRefundable !== false,
+        allowEarlyDepartureChargeReduction: initialData.allowEarlyDepartureChargeReduction === true,
         paystackSecretKey: '',
       });
     } else {
@@ -112,7 +113,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
         propertyName: '', propertyCode: '', businessName: '', legalName: '', propertyType: 'Hotel', address: '', area: '', city: '', region: '', country: 'Ghana',
         latitude: '', longitude: '', checkInTime: '14:00', checkOutTime: '11:00',
         primaryEmail: '', primaryPhone: '', primaryPhoneWhatsappOnly: false, coverImage: '', galleryImages: [], publicDescription: '',
-        cancellationPolicy: '', houseRules: '', taxPercentage: 0.00, isOnlineBookingEnabled: false, isNonRefundable: true,
+        cancellationPolicy: '', houseRules: '', taxPercentage: 0.00, isOnlineBookingEnabled: false, isNonRefundable: true, allowEarlyDepartureChargeReduction: false,
         paystackSecretKey: '',
       });
     }
@@ -345,6 +346,20 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
               <label className="relative inline-flex shrink-0 min-h-11 items-center cursor-pointer">
                 <input id="isNonRefundable" type="checkbox" name="isNonRefundable" checked={formData.isNonRefundable} onChange={handleChange} className="sr-only peer" />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+              </label>
+            </div>
+            <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-surface p-4 md:col-span-2">
+              <div className="flex-1">
+                <label htmlFor="allowEarlyDepartureChargeReduction" className="text-sm font-bold text-text">Reduce charges when a guest leaves early</label>
+                <p className="mt-0.5 text-xs text-text-muted">
+                  {formData.allowEarlyDepartureChargeReduction
+                    ? 'On: staff may shorten an active stay and remove charges for unused nights.'
+                    : 'Off: guests may check out early, but the original agreed booking charges remain.'}
+                </p>
+              </div>
+              <label className="relative inline-flex min-h-11 shrink-0 cursor-pointer items-center">
+                <input id="allowEarlyDepartureChargeReduction" type="checkbox" name="allowEarlyDepartureChargeReduction" checked={formData.allowEarlyDepartureChargeReduction} onChange={handleChange} className="peer sr-only" />
+                <div className="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-primary-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:ring-4 peer-focus:ring-primary-300"></div>
               </label>
             </div>
             </div>

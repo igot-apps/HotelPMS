@@ -1,5 +1,5 @@
 import { Skeleton, SkeletonTableRows } from '../components/ui/Skeleton';
-import RefundPaymentSummary from '../components/reservations/RefundPaymentSummary';
+import ReservationPaymentStatus from '../components/reservations/ReservationPaymentStatus';
 import RefundSummary from '../components/reservations/RefundSummary';
 import RefundApprovalBadge from '../components/reservations/RefundApprovalBadge';
 import { useState, useEffect, useRef, Fragment } from 'react';
@@ -38,7 +38,7 @@ import useServerClock from '../lib/useServerClock';
 const localToday = (timeZone) => hotelToday(timeZone);
 import {
   Search, Plus, CalendarDays, AlertCircle, XCircle,
-  ChevronLeft, ChevronRight, Eye, X, Check,
+  ChevronLeft, ChevronRight, Eye, X,
   ChevronDown, ChevronUp, BedDouble, Loader2, Clock, Undo2, SlidersHorizontal, LogIn, LogOut, Wallet
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -220,7 +220,7 @@ export default function ReservationsPage() {
     if (action === 'checkin' && stay?.status === 'Reserved') setOccupantDialog({ room: stay, reservation: res, mode: 'checkin' });
     if (action === 'checkout' && stay?.status === 'CheckedIn') startCheckOut(stay, res);
     if (action === 'extend' && stay?.status === 'CheckedIn') setExtendRoom(stay);
-    if (action === 'shorten' && stay?.status === 'CheckedIn') setShortenStay({ room: stay, reservationId: res.reservationId });
+    if (action === 'shorten' && stay?.status === 'CheckedIn') setShortenStay({ room: stay, reservationId: res.reservationId, reservation: res });
     if (action === 'pay') setPaymentFor(res);
     if (action) updateParams({ do: null, stay: null });
     setTimeout(() => [...document.querySelectorAll(`[data-booking="${open}"]`)].find((el) => el.offsetParent !== null)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 50);
@@ -493,7 +493,7 @@ export default function ReservationsPage() {
             onCheckIn={room => setOccupantDialog({ room, reservation: res, mode: 'checkin' })}
             onCheckOut={(room) => startCheckOut(room, res)}
             onExtend={(room) => setExtendRoom(room)}
-            onShorten={(room) => setShortenStay({ room, reservationId: res.reservationId })}
+            onShorten={(room) => setShortenStay({ room, reservationId: res.reservationId, reservation: res })}
             onEditOccupant={room => setOccupantDialog({ room, reservation: res, mode: 'edit' })}
           />
         ))}
@@ -611,10 +611,6 @@ export default function ReservationsPage() {
           const guestName = res.guestNameSnapshot || res.platformGuest?.fullName || res.propertyGuest?.fullName || 'Guest name unavailable';
           const phone = res.guestPhoneSnapshot || res.platformGuest?.phone || res.propertyGuest?.phone;
           const rooms = res.reservationRooms?.map((room) => room.room?.roomNumber || room.roomNumberSnapshot || 'Removed').join(', ') || 'Not assigned';
-          const totalAmount = parseFloat(res.totalAmount || 0);
-          const amountPaid = parseFloat(res.amountPaid || 0);
-          const balanceDue = ['Cancelled', 'NoShow', 'Expired'].includes(res.status) ? 0 : Math.max(0, totalAmount - amountPaid); // a closed booking owes nothing
-          const refundedAmount = (res.refunds || []).filter(refund => !refund.isSimulated).reduce((sum, refund) => sum + Number(refund.amount), 0) + (res.payments || []).filter((payment) => payment.status === 'Refunded').reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
           const cardStatusClass = res.status === 'Confirmed' ? 'bg-primary-50 text-primary-700 ring-1 ring-primary-600/20' : res.status === 'InHouse' ? 'bg-success-50 text-success-700 ring-1 ring-success-600/20' : res.status === 'Cancelled' ? 'bg-danger-50 text-danger-700 ring-1 ring-danger-600/20' : res.status === 'NoShow' ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-600/20' : res.status === 'Expired' ? 'bg-warning-50 text-warning-700 ring-1 ring-warning-600/20' : 'bg-secondary-100 text-secondary-700';
           const cardStatusLabel = bookingStatusLabel(res.status, res.reservationRooms);
 
@@ -643,7 +639,7 @@ export default function ReservationsPage() {
                 </div>
 
                 <RefundApprovalBadge reservation={res} />
-                {['Cancelled', 'Expired'].includes(res.status) ? <div className="mt-3"><RefundPaymentSummary returned={refundedAmount} remaining={res.refundDue} paid={res.amountPaid} requests={res.correctionRequests} simulated={(res.refunds || []).filter(r => r.isSimulated).reduce((sum,r) => sum + Number(r.amount),0)} /></div> : <div className="mt-3 flex items-center justify-between gap-3"><div><p className="text-xs text-text-muted">Total</p><p className="font-bold text-text">{totalAmount.toFixed(2)} GHS</p></div>{balanceDue > 0.01 ? <span className="rounded-md bg-danger-50 px-2 py-1 text-right text-xs font-bold text-danger-700">Due {balanceDue.toFixed(2)} GHS</span> : <span className="inline-flex items-center gap-1 text-xs font-semibold text-success-700"><Check size={14} /> Paid</span>}</div>}
+                <div className="mt-3"><ReservationPaymentStatus reservation={res} showTotal /></div>
 
                 {(['Confirmed', 'InHouse'].includes(res.status) || owesAfterCheckout(res)) && <div className="mt-4 flex flex-wrap gap-2">{rowActions(res, true)}</div>}
                 <div className="mt-2 flex gap-2">
@@ -816,15 +812,6 @@ export default function ReservationsPage() {
 
                   if (['Cancelled', 'Expired'].includes(res.status) && Number(res.refundDue) <= 0 && res.refunds?.length > 0) actions = <Link to={`/reservations/${res.reservationId}#refunds`} className="inline-flex min-h-11 items-center rounded-lg border border-border px-3 text-xs font-semibold text-primary-700">Refund history</Link>;
 
-                  // ✅ NEW: Calculated on-demand from the single source of truth
-                  const totalAmount = parseFloat(res.totalAmount || 0);
-                  const amountPaid = parseFloat(res.amountPaid || 0);
-                  const balanceDue = ['Cancelled', 'NoShow', 'Expired'].includes(res.status) ? 0 : Math.max(0, totalAmount - amountPaid); // a closed booking owes nothing
-                  const hasBalance = balanceDue > 0.01;
-                  const refundedAmount = (res.refunds || []).filter(refund => !refund.isSimulated).reduce((sum, refund) => sum + Number(refund.amount), 0) + (res.payments || [])
-                    .filter((payment) => payment.status === 'Refunded')
-                    .reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
-
                   return (
                     <Fragment key={res.reservationId}>
                       <tr data-booking={res.reservationId} className={`transition-colors ${isExpanded ? 'bg-primary-50/70' : 'border-b border-border last:border-0 hover:bg-secondary-50/50'}`}>
@@ -863,7 +850,7 @@ export default function ReservationsPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 text-right">
-                          {['Cancelled', 'Expired'].includes(res.status) ? <RefundPaymentSummary returned={refundedAmount} remaining={res.refundDue} paid={res.amountPaid} requests={res.correctionRequests} simulated={(res.refunds || []).filter(r => r.isSimulated).reduce((sum,r) => sum + Number(r.amount),0)} align="right" /> : <><p className="text-sm font-bold text-text">{totalAmount.toFixed(2)} GHS</p>{hasBalance ? <span className="inline-block text-xs font-bold text-danger-600 bg-danger-50 px-2 py-0.5 rounded mt-1">Due: {balanceDue.toFixed(2)} GHS</span> : <span className="inline-flex items-center gap-1 text-xs font-bold text-success-600 bg-success-50 px-2 py-0.5 rounded mt-1"><Check size={10} /> Paid</span>}</>}
+                          <ReservationPaymentStatus reservation={res} showTotal align="right" compact />
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
@@ -958,7 +945,7 @@ export default function ReservationsPage() {
           }}
         />
       )}
-      {shortenStay && <ShortenStayDialog key={shortenStay.room.reservationRoomId} {...shortenStay} onClose={() => setShortenStay(null)} />}
+      {shortenStay && <ShortenStayDialog key={shortenStay.room.reservationRoomId} {...shortenStay} policyAllowsShortening={shortenStay.reservation?.property?.allowEarlyDepartureChargeReduction} onClose={() => setShortenStay(null)} />}
       {extendRoom && (
         <ExtendStayDialog
           room={extendRoom}
