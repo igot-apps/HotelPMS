@@ -365,9 +365,9 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
             <div className="w-16 h-16 bg-success-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <Check size={32} className="text-success-600" />
             </div>
-            <h2 className="text-xl font-bold text-text">Reservation Created!</h2>
+            <h2 className="text-xl font-bold text-text">Booking created!</h2>
             <p className="text-text-muted mt-2">
-              Reservation <span className="font-bold text-text">{createdReservation.confirmationCode || `#${createdReservation.reservationId?.slice(0, 8).toUpperCase()}`}</span> has been successfully saved.
+              Booking <span className="font-bold text-text">{createdReservation.confirmationCode || `#${createdReservation.reservationId?.slice(0, 8).toUpperCase()}`}</span> has been successfully saved.
             </p>
             <div className="flex gap-3 justify-center mt-6">
               <button
@@ -409,7 +409,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
       <div className="bg-surface w-full max-w-4xl rounded-2xl shadow-xl border border-border overflow-hidden max-h-[90vh] flex flex-col">
         <div className="p-6 border-b border-border">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-text">New Reservation</h2>
+            <h2 className="text-xl font-bold text-text">New booking</h2>
             <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition">
               <X size={20} />
             </button>
@@ -776,7 +776,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
             </button>
           ) : (
             <button type="submit" onClick={handleSubmit} disabled={isLoading} className="px-5 py-2.5 text-sm font-semibold text-text-inverted bg-success-600 rounded-lg hover:bg-success-700 transition disabled:opacity-50 flex items-center gap-2">
-              {isLoading && <Loader2 className="animate-spin" size={16} />} <Check size={16} /> Save Reservation
+              {isLoading && <Loader2 className="animate-spin" size={16} />} <Check size={16} /> Save booking
             </button>
           )}
         </div>

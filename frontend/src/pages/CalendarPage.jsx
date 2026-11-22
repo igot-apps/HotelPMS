@@ -74,7 +74,7 @@ export default function CalendarPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-text tracking-tight flex items-center gap-2"><CalendarDays size={24} /> Calendar View</h1>
-          <p className="text-text-muted text-sm mt-1">Visual overview of reservations for the month.</p>
+          <p className="text-text-muted text-sm mt-1">Visual overview of bookings for the month.</p>
         </div>
         <div className="flex items-center gap-2 bg-surface p-1 rounded-xl border border-border shadow-sm">
           <button onClick={prevMonth} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition"><ChevronLeft size={20} /></button>
@@ -85,7 +85,7 @@ export default function CalendarPage() {
 
       {/* Calendar Grid */}
       <p className="text-sm text-text-muted md:hidden">Swipe the calendar sideways to view all days.</p>
-      <div role="region" aria-label="Reservation calendar; scroll horizontally for more days" tabIndex={0} className="bg-surface border border-border rounded-xl overflow-x-auto shadow-sm">
+      <div role="region" aria-label="Booking calendar; scroll horizontally for more days" tabIndex={0} className="bg-surface border border-border rounded-xl overflow-x-auto shadow-sm">
         <div className="min-w-[700px]">
         {/* Days of Week Header */}
         <div className="grid grid-cols-7 bg-secondary-50/50 border-b border-border">

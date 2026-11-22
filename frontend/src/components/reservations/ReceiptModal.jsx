@@ -67,7 +67,7 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
             </div>
 
             <div className="mb-6 rounded-lg border-2 border-gray-800 px-4 py-2 text-center">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-600">Reservation Reference</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-600">Booking code</p>
               <p className="text-xl font-bold tracking-wider text-gray-900">{receiptReference}</p>
             </div>
 

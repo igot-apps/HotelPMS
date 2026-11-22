@@ -88,7 +88,7 @@ export default function RoomCard({
     <div className={`bg-surface p-4 rounded-xl border shadow-sm flex flex-col gap-3 ${
       isRoomComplete ? 'border-secondary-200 opacity-75' : 'border-border'
     }`}>
-      <Link to={`/reservations/${res.reservationId}`} className="text-xs font-semibold text-primary-600 hover:underline">Open reservation / correct or undo actions</Link>
+      <Link to={`/reservations/${res.reservationId}`} className="text-xs font-semibold text-primary-600 hover:underline">Open booking / correct or undo actions</Link>
       {/* Room Header */}
       <div className="flex justify-between items-start">
         <div>

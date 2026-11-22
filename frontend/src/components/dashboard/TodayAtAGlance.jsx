@@ -302,7 +302,7 @@ function ArrivalsDetail({ data, query = '' }) {
               ))}
             </ul>
             <div className="mt-2 flex flex-wrap gap-2">
-              <Link to={withBack(reservationLink(res), 'arrivals')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white hover:bg-primary-700"><Eye size={16} /> View reservation</Link>
+              <Link to={withBack(reservationLink(res), 'arrivals')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white hover:bg-primary-700"><Eye size={16} /> View booking</Link>
             </div>
           </li>
         ))}
@@ -321,7 +321,7 @@ function ArrivalsDetail({ data, query = '' }) {
               ))}
             </ul>
             <div className="mt-2 flex flex-wrap gap-2">
-              <Link to={withBack(reservationLink(res), 'arrivals')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white hover:bg-primary-700"><Eye size={16} /> View reservation</Link>
+              <Link to={withBack(reservationLink(res), 'arrivals')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white hover:bg-primary-700"><Eye size={16} /> View booking</Link>
             </div>
           </li>
         ))}
@@ -339,7 +339,7 @@ function ArrivalsDetail({ data, query = '' }) {
               ))}
             </ul>
             <div className="mt-2 flex flex-wrap gap-2">
-              <Link to={withBack(reservationLink(res), 'arrivals')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50"><Eye size={16} /> View reservation</Link>
+              <Link to={withBack(reservationLink(res), 'arrivals')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50"><Eye size={16} /> View booking</Link>
             </div>
           </li>
         ))}
@@ -416,7 +416,7 @@ function DeparturesDetail({ data, query = '' }) {
               ))}
             </ul>
             <div className="mt-2 flex flex-wrap gap-2">
-              <Link to={withBack(reservationLink(res), 'departures')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white hover:bg-primary-700"><Eye size={16} /> View reservation</Link>
+              <Link to={withBack(reservationLink(res), 'departures')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white hover:bg-primary-700"><Eye size={16} /> View booking</Link>
             </div>
           </li>
   ));
@@ -442,7 +442,7 @@ function DeparturesDetail({ data, query = '' }) {
               ))}
             </ul>
             <div className="mt-2 flex flex-wrap gap-2">
-              <Link to={withBack(reservationLink(res), 'departures')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white hover:bg-primary-700"><Eye size={16} /> View reservation</Link>
+              <Link to={withBack(reservationLink(res), 'departures')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white hover:bg-primary-700"><Eye size={16} /> View booking</Link>
             </div>
           </li>
         ))}
@@ -512,7 +512,7 @@ function InHouseDetail({ rows: unsorted, query = '' }) {
                 {isUpdating(stay) ? <Loader2 size={13} className="animate-spin" /> : out ? <LogIn size={13} /> : <LogOut size={13} />}
                 {out ? 'Mark Returned' : 'Mark Guest Out'}
               </button>
-              <Link to={withBack(reservationLink(stay), 'inHouse')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-primary-200 bg-primary-50 px-3 text-sm font-semibold text-primary-700 hover:bg-primary-100"><Eye size={16} /> View reservation</Link>
+              <Link to={withBack(reservationLink(stay), 'inHouse')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-primary-200 bg-primary-50 px-3 text-sm font-semibold text-primary-700 hover:bg-primary-100"><Eye size={16} /> View booking</Link>
             </div>
           </li>
         );
@@ -563,7 +563,7 @@ function UnpaidDetail({ money, query = '' }) {
             </Link>
             <div className="mt-2 flex flex-wrap gap-2">
               <button type="button" onClick={() => setPaying(stay)} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-text-inverted hover:bg-primary-700"><Wallet size={16} /> Take payment</button>
-              <Link to={withBack(reservationLink(stay), 'unpaid')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50"><Eye size={16} /> View reservation</Link>
+              <Link to={withBack(reservationLink(stay), 'unpaid')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50"><Eye size={16} /> View booking</Link>
             </div>
           </li>
         ))}
@@ -601,7 +601,7 @@ function OwedAfterCheckoutDetail({ owed, query = '' }) {
           </Link>
           <div className="mt-2 flex flex-wrap gap-2">
             <button type="button" onClick={() => setPaying(row)} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-text-inverted hover:bg-primary-700"><Wallet size={16} /> Take payment</button>
-            <Link to={withBack(reservationLink(row), 'owedAfter')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50"><Eye size={16} /> View reservation</Link>
+            <Link to={withBack(reservationLink(row), 'owedAfter')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50"><Eye size={16} /> View booking</Link>
           </div>
         </li>
       ))}

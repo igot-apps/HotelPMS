@@ -65,7 +65,7 @@ export default function PublicNavbar() {
               {isAuthenticated ? (
                 <>
                   <Link to="/public/reservations" className="text-sm font-semibold text-text-muted hover:text-primary-600 transition flex items-center gap-1.5">
-                    <Calendar size={16} /> My Reservations
+                    <Calendar size={16} /> My Bookings
                   </Link>
                   <div className="flex items-center gap-3 pl-4 border-l border-border">
                     <Link to="/public/profile" title="My profile" className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-text transition hover:bg-secondary-50 hover:text-primary-600">
@@ -99,7 +99,7 @@ export default function PublicNavbar() {
               {isAuthenticated ? (
                 <>
                   <Link to="/public/reservations" onClick={() => setIsOpen(false)} className="block px-3 py-2.5 text-base font-medium text-text hover:bg-secondary-50 rounded-lg transition flex items-center gap-2">
-                    <Calendar size={18} className="text-primary-600" /> My Reservations
+                    <Calendar size={18} className="text-primary-600" /> My Bookings
                   </Link>
                   <div className="pt-3 border-t border-border">
                     <Link to="/public/profile" onClick={() => setIsOpen(false)} className="px-3 py-2.5 text-base font-medium text-text hover:bg-secondary-50 rounded-lg transition flex items-center gap-2">

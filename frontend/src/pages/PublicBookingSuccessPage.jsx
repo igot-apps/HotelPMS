@@ -66,10 +66,10 @@ export default function PublicBookingSuccessPage() {
           {review ? <AlertTriangle size={32} className="text-warning-600" /> : <CheckCircle2 size={34} className="text-success-600" />}
         </div>
         <h1 className="mb-2 text-2xl font-bold text-text">{review ? bookingReleased ? 'Payment received · Booking not confirmed' : 'Payment received · Review needed' : 'You\'re booked!'}</h1>
-        <p className="mb-6 text-text-muted">{review ? bookingReleased ? 'This booking was already released when your payment arrived, so your room is not confirmed. Online payments are non-refundable. Contact the hotel with your reservation code.' : 'Your booking is confirmed. An extra payment was received; online payments are non-refundable, so do not pay again and contact the hotel about it.' : `Your stay at ${property?.propertyName || 'the hotel'} is confirmed. Keep your reservation code below.`}</p>
+        <p className="mb-6 text-text-muted">{review ? bookingReleased ? 'This booking was already released when your payment arrived, so your room is not confirmed. Online payments are non-refundable. Contact the hotel with your booking code.' : 'Your booking is confirmed. An extra payment was received; online payments are non-refundable, so do not pay again and contact the hotel about it.' : `Your stay at ${property?.propertyName || 'the hotel'} is confirmed. Keep your booking code below.`}</p>
 
         <div className="mb-6 rounded-xl border border-dashed border-primary-200 bg-primary-50/50 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Reservation code</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Booking code</p>
           <p className="mt-1 text-2xl font-black uppercase tracking-[0.16em] text-primary-700">{transactionData?.confirmationCode || '—'}</p>
           <p className="mt-1 text-xs text-text-muted">{review ? 'Keep this code when contacting the hotel about your payment.' : 'Show this code at check-in.'}</p>
         </div>
@@ -98,7 +98,7 @@ export default function PublicBookingSuccessPage() {
 
       <div className="mb-6 space-y-2 rounded-lg border border-primary-100 bg-primary-50/60 p-4 text-left text-sm text-primary-900">
         <p className="flex items-start gap-2 font-semibold"><Clock size={16} className="mt-0.5 shrink-0" /> Your room is held for 10 minutes from when you booked.</p>
-        <p className="pl-6">To try again, open <strong>My Reservations</strong> and tap <strong>Pay</strong> on this booking. If the time has run out, choose a room again.</p>
+        <p className="pl-6">To try again, open <strong>My Bookings</strong> and tap <strong>Pay</strong> on this booking. If the time has run out, choose a room again.</p>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row">

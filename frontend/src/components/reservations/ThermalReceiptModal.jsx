@@ -71,7 +71,7 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
 
             {/* Receipt Meta */}
             <div className="mb-2 border-2 border-black px-2 py-1.5 text-center">
-              <p className="text-[9px] font-bold uppercase tracking-widest">Reservation Reference</p>
+              <p className="text-[9px] font-bold uppercase tracking-widest">Booking code</p>
               <p className="text-[16px] font-bold tracking-wider">{receiptReference}</p>
             </div>
             <div className="text-[10px] mb-1">

@@ -291,7 +291,7 @@ function OwedAfterCheckoutDrawer({ query, onClose }) {
                   <span className="flex items-start justify-between gap-2"><span className="font-semibold text-text">{row.guestName}</span><span className="shrink-0 rounded-md bg-danger-50 px-2 py-0.5 text-xs font-bold text-danger-700">{cash(row.balanceDue)}</span></span>
                   <span className="mt-0.5 block text-sm text-text-muted">{row.confirmationCode}{row.roomNumbers?.length ? ` · Room ${row.roomNumbers.join(', ')}` : ''}</span>
                   <span className="mt-0.5 block text-sm text-text-muted">{row.checkedOutAt ? `Left ${new Date(row.checkedOutAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'Departure date not recorded'}</span>
-                  <span className="mt-1 block text-xs font-semibold text-primary-700">Open reservation →</span>
+                  <span className="mt-1 block text-xs font-semibold text-primary-700">Open booking →</span>
                 </Link>
               </li>
             ))}
@@ -388,7 +388,7 @@ function RefundGroup({ title, refunds, empty }) {
             <p className="text-text-muted">Returned via {r.method} on {r.returnedOn} {time(r.returnedAt)}</p>
             {r.recordedLate && <p className="font-semibold text-warning-700">Recorded later: {r.recordedOn} {time(r.recordedAt)}</p>}
             {r.policyException && <p className="mt-1 inline-block rounded-md border border-warning-200 bg-warning-50 px-2 py-0.5 text-xs font-semibold text-warning-700">Policy exception</p>}
-            <Link to={`/reservations/${r.reservationId}#refunds`} className="mt-2 flex min-h-10 items-center justify-center rounded-lg border border-border text-sm font-semibold text-primary-700 hover:bg-secondary-50">Open reservation</Link>
+            <Link to={`/reservations/${r.reservationId}#refunds`} className="mt-2 flex min-h-10 items-center justify-center rounded-lg border border-border text-sm font-semibold text-primary-700 hover:bg-secondary-50">Open booking</Link>
           </li>
         ))}</ul>
       )}

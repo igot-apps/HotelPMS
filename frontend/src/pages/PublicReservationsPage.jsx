@@ -260,7 +260,7 @@ const retryPaymentMutation = useMutation({
         <div className="flex flex-col items-start gap-3 mb-8 sm:flex-row sm:items-center">
           {!hotelWebsite && <BackButton fallback="/discover" label="Back" />}
           <div>
-            <h1 className="text-2xl font-bold text-text">My Reservations</h1>
+            <h1 className="text-2xl font-bold text-text">My Bookings</h1>
             <p className="text-sm text-text-muted">View and manage your upcoming and past stays.</p>
           </div>
         </div>
@@ -268,7 +268,7 @@ const retryPaymentMutation = useMutation({
         {isError && (
           <div className="text-center py-16 bg-surface border border-border rounded-2xl">
             <XCircle size={48} className="mx-auto text-danger-500 mb-4" />
-            <h3 className="text-xl font-bold text-text mb-2">Failed to load reservations</h3>
+            <h3 className="text-xl font-bold text-text mb-2">Failed to load bookings</h3>
             <button onClick={() => window.location.reload()} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">Retry</button>
           </div>
         )}
@@ -278,7 +278,7 @@ const retryPaymentMutation = useMutation({
             <div className="w-16 h-16 bg-secondary-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Search size={32} className="text-text-muted" />
             </div>
-            <h3 className="text-xl font-bold text-text mb-2">No reservations yet</h3>
+            <h3 className="text-xl font-bold text-text mb-2">No bookings yet</h3>
             {SHOW_DISCOVER && (
               <Link to="/discover" className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition">
                 <Calendar size={18} /> Discover Hotels
@@ -401,7 +401,7 @@ const retryPaymentMutation = useMutation({
                             <CheckCircle2 size={14} className="inline mr-1" /> Payment Complete
                           </span>
                         )}
-                        {!released && ['Pending', 'Confirmed'].includes(res.status) && !res.reservationRooms?.some(stay => stay.status !== 'Reserved' || stay.actualCheckIn) && <button type="button" onClick={() => { setCancelReason(''); cancelMutation.reset(); setCancelTarget(res); }} className="min-h-11 w-full rounded-lg border border-danger-200 px-4 py-2 text-sm font-semibold text-danger-700 hover:bg-danger-50 sm:w-auto">Cancel reservation</button>}
+                        {!released && ['Pending', 'Confirmed'].includes(res.status) && !res.reservationRooms?.some(stay => stay.status !== 'Reserved' || stay.actualCheckIn) && <button type="button" onClick={() => { setCancelReason(''); cancelMutation.reset(); setCancelTarget(res); }} className="min-h-11 w-full rounded-lg border border-danger-200 px-4 py-2 text-sm font-semibold text-danger-700 hover:bg-danger-50 sm:w-auto">Cancel booking</button>}
                         {['Pending', 'Confirmed', 'Cancelled', 'Expired'].includes(res.status) && <button type="button" disabled={statusMutation.isPending || retryPaymentMutation.isPending} onClick={() => statusMutation.mutate(res)} className="min-h-11 w-full rounded-lg border border-border px-4 py-2 text-sm font-semibold text-primary-700 disabled:opacity-50 sm:w-auto">{statusMutation.isPending && statusMutation.variables?.reservationId === res.reservationId ? 'Checking…' : 'Check payment status'}</button>}
                       </div>
                     </div>
@@ -419,12 +419,12 @@ const retryPaymentMutation = useMutation({
       </div>
       {cancelTarget && <div className="mobile-dialog-overlay fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
         <form role="dialog" aria-modal="true" aria-labelledby="guest-cancel-title" onSubmit={event => { event.preventDefault(); cancelMutation.mutate(); }} className="w-full max-w-lg space-y-5 rounded-2xl border border-border bg-surface p-5 sm:p-6 shadow-xl">
-          <div><h2 id="guest-cancel-title" className="text-xl font-bold text-text">Cancel this reservation?</h2><p className="mt-2 break-words text-sm text-text-muted">{cancelTarget.property?.propertyName} · {cancelTarget.confirmationCode}</p></div>
+          <div><h2 id="guest-cancel-title" className="text-xl font-bold text-text">Cancel this booking?</h2><p className="mt-2 break-words text-sm text-text-muted">{cancelTarget.property?.propertyName} · {cancelTarget.confirmationCode}</p></div>
           <p className="text-sm text-text">Your room allocation will be released. {Number(cancelTarget.amountPaid) > 0 ? '' : 'No payment has been recorded.'}</p>
           {Number(cancelTarget.amountPaid) > 0 && <p role="alert" className="rounded-lg border border-warning-100 bg-warning-50 p-3 text-sm font-semibold text-warning-700">Online payments are non-refundable. If you cancel, the GHS {Number(cancelTarget.amountPaid).toFixed(2)} you paid will not be returned.</p>}
           {cancelTarget.property?.cancellationPolicy && <div className="rounded-lg border border-border bg-background p-3 text-sm text-text"><p className="mb-1 font-semibold">Hotel cancellation policy</p><p className="whitespace-pre-wrap">{cancelTarget.property.cancellationPolicy}</p></div>}
           <ReasonSelect action="guest-cancel" value={cancelReason} onChange={setCancelReason} disabled={cancelMutation.isPending} className="mt-1 w-full rounded-lg border border-border bg-background p-3 text-text" />
-          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button type="button" disabled={cancelMutation.isPending} onClick={() => setCancelTarget(null)} className="min-h-11 rounded-lg border border-border px-4 py-2 font-semibold text-text disabled:opacity-50">Keep reservation</button><button disabled={cancelMutation.isPending} className="min-h-11 rounded-lg bg-danger-600 px-4 py-2 font-semibold text-white disabled:opacity-50">{cancelMutation.isPending ? 'Cancelling…' : 'Confirm cancellation'}</button></div>
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button type="button" disabled={cancelMutation.isPending} onClick={() => setCancelTarget(null)} className="min-h-11 rounded-lg border border-border px-4 py-2 font-semibold text-text disabled:opacity-50">Keep booking</button><button disabled={cancelMutation.isPending} className="min-h-11 rounded-lg bg-danger-600 px-4 py-2 font-semibold text-white disabled:opacity-50">{cancelMutation.isPending ? 'Cancelling…' : 'Confirm cancellation'}</button></div>
         </form>
       </div>}
     </div>

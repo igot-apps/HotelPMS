@@ -8,7 +8,6 @@ import MyCashCard from '../components/dashboard/MyCashCard';
 import BookingSearch from '../components/dashboard/BookingSearch';
 import ManagerDashboard from '../components/dashboard/ManagerDashboard';
 import RefundSummary from '../components/reservations/RefundSummary';
-import RequirePermission from '../components/RequirePermission';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getOperationalOverview } from '../api/dashboard';
@@ -16,8 +15,8 @@ import { getProperties } from '../api/properties';
 import { useAuthStore } from '../store/authStore';
 import {
   UserPlus, UserMinus, BedDouble, Sparkles, AlertTriangle,
-  Calendar, Search, RefreshCw, LayoutGrid, ArrowRight, Plus,
-  Loader2, Building2, CheckCircle2
+  Search, RefreshCw, LayoutGrid, ArrowRight, Plus,
+  Building2, CheckCircle2
 } from 'lucide-react';
 
 // ==========================================
@@ -162,20 +161,18 @@ export default function DashboardPage() {
       </section>
     )}
     {managerView ? <ManagerDashboard /> : <>
+    <section aria-labelledby="quick-actions-title" className="rounded-xl border border-border bg-surface p-4 shadow-sm">
+      <h2 id="quick-actions-title" className="mb-3 flex items-center gap-2 text-sm font-bold text-text"><LayoutGrid size={17} className="text-primary-600" /> Quick Actions</h2>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <QuickLink to="/availability" icon={Search} label="Check availability" variant="secondary" />
+        <QuickLink to="/reservations?new=1" icon={Plus} label="New booking" variant="primary" />
+      </div>
+    </section>
+
     {frontDesk && <TodayAtAGlance />}
     {frontDesk && <MyDayCard />}
     {frontDesk && <MyCashCard />}
     {user?.role === 'Receptionist' && <RefundSummary />}
-
-    <section aria-labelledby="quick-actions-title" className="rounded-xl border border-border bg-surface p-4 shadow-sm">
-      <h2 id="quick-actions-title" className="mb-3 flex items-center gap-2 text-sm font-bold text-text"><LayoutGrid size={17} className="text-primary-600" /> Quick Actions</h2>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <QuickLink to="/reservations?new=1" icon={Plus} label="New booking" variant="primary" />
-        <QuickLink to="/availability" icon={Search} label="Check availability" variant="secondary" />
-        <RequirePermission permission="CanCreateReservation"><QuickLink to="/reservations" icon={Calendar} label="Reservations & payments" color="success" /></RequirePermission>
-        <QuickLink to="/rooms" icon={BedDouble} label="Rooms & housekeeping" color="warning" />
-      </div>
-    </section>
 
     {error && <div role="alert" className="rounded-xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-700">Could not refresh the dashboard. {data ? 'The figures below are from the last successful update.' : 'Use Refresh to try again.'}</div>}
     {!propertyId && <p className="rounded-xl border border-border bg-surface p-6 text-text-muted">Select a hotel to view its operations.</p>}
@@ -211,7 +208,7 @@ function TaskQueue({ title, icon: Icon, reservations, departure }) {
       <div className="flex flex-wrap items-start justify-between gap-2"><p className="font-bold text-text">{res.guest.fullName}</p>{res.overdue && <span className="rounded-md bg-danger-50 px-2 py-1 text-xs font-bold text-danger-700">Overdue</span>}</div>
       <div className="mt-2 space-y-1 text-sm text-text-muted">{res.reservationRooms.map(stay => <p key={stay.reservationRoomId}>Room {stay.room?.roomNumber || stay.roomNumberSnapshot || 'unassigned'} · {departure ? 'Departure' : 'Arrival'} {new Date(departure ? stay.checkOutDate : stay.checkInDate).toLocaleDateString('en-GH', { timeZone: 'UTC', day: 'numeric', month: 'short' })}</p>)}</div>
       {departure && <p className={`mt-2 text-sm font-semibold ${res.balanceDue > 0 ? 'text-danger-700' : 'text-success-700'}`}>{res.balanceDue > 0 ? `Owes: GHS ${res.balanceDue.toFixed(2)}` : 'Booking paid in full'}</p>}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3"><span className="break-all text-xs text-text-muted">{res.confirmationCode || res.reservationId}</span><Link to={`/reservations?search=${encodeURIComponent(res.confirmationCode || res.reservationId)}`} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary-50 px-3 py-2 text-sm font-semibold text-primary-700">Open reservation <ArrowRight size={14} /></Link></div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3"><span className="break-all text-xs text-text-muted">{res.confirmationCode || res.reservationId}</span><Link to={`/reservations?search=${encodeURIComponent(res.confirmationCode || res.reservationId)}`} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary-50 px-3 py-2 text-sm font-semibold text-primary-700">Open booking <ArrowRight size={14} /></Link></div>
     </li>)}</ul>}
   </section>;
 }

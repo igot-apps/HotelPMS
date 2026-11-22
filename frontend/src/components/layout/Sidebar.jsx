@@ -13,7 +13,7 @@ import BrandMark from '../ui/BrandMark';
 const operationItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/availability', icon: Search, label: 'Check Availability' },
-  { to: '/reservations', icon: CalendarDays, label: 'Reservations', permission: 'CanCreateReservation' },
+  { to: '/reservations', icon: CalendarDays, label: 'Bookings', permission: 'CanCreateReservation' },
   { to: '/refunds', icon: HandCoins, label: 'Refunds', staffOnly: true },
   { to: '/rooms', icon: BedDouble, label: 'Rooms & Inventory' },
   { to: '/housekeeping', icon: Sparkles, label: 'Housekeeping', housekeeping: true },

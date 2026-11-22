@@ -229,8 +229,8 @@ export default function ReservationDetailsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resData, location.search]);
 
-  if (isLoadingRes) return <div role="status" className="space-y-4"><span className="sr-only">Loading reservation details…</span><Skeleton className="h-8 w-64" /><Skeleton className="h-28 rounded-xl" /><div className="grid gap-4 lg:grid-cols-3"><Skeleton className="h-64 rounded-xl lg:col-span-2" /><Skeleton className="h-64 rounded-xl" /></div></div>;
-  if (!resData) return <div className="p-8 text-center text-danger-600">Reservation not found.</div>;
+  if (isLoadingRes) return <div role="status" className="space-y-4"><span className="sr-only">Loading booking details…</span><Skeleton className="h-8 w-64" /><Skeleton className="h-28 rounded-xl" /><div className="grid gap-4 lg:grid-cols-3"><Skeleton className="h-64 rounded-xl lg:col-span-2" /><Skeleton className="h-64 rounded-xl" /></div></div>;
+  if (!resData) return <div className="p-8 text-center text-danger-600">Booking not found.</div>;
 
   // ✅ CALCULATED ON-DEMAND from the single source of truth
   const fmt = (val) => parseFloat(val || 0).toFixed(2);
@@ -248,7 +248,7 @@ export default function ReservationDetailsPage() {
         <div className="min-w-0 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
           <BackButton fallback="/reservations" label="Back" />
           <div>
-            <h1 className="text-2xl font-bold text-text">Reservation {resData.confirmationCode || `#${resData.reservationId.slice(0, 8).toUpperCase()}`}</h1>
+            <h1 className="text-2xl font-bold text-text">Booking {resData.confirmationCode || `#${resData.reservationId.slice(0, 8).toUpperCase()}`}</h1>
             <p className="text-sm text-text-muted flex items-center gap-2 mt-1">
               <CalendarDays size={14} />
               {new Date(resData.checkInDate).toLocaleDateString()} → {new Date(resData.checkOutDate).toLocaleDateString()}
@@ -308,7 +308,7 @@ export default function ReservationDetailsPage() {
           <h2 id="booking-rooms-title" className="flex items-center gap-2 font-bold text-text"><BedDouble size={18} /> Rooms in this booking <span className="text-sm font-normal text-text-muted">({resData.reservationRooms?.length || 0})</span></h2>
           <p className="text-xs text-text-muted">Room buttons change only that room. Payments and refunds are for the whole booking.</p>
         </div>
-        {!resData.reservationRooms?.length && <p className="text-sm text-text-muted">No rooms assigned to this reservation.</p>}
+        {!resData.reservationRooms?.length && <p className="text-sm text-text-muted">No rooms assigned to this booking.</p>}
         <ul className="grid gap-3 md:grid-cols-2">
           {resData.reservationRooms?.map((rr) => {
             const active = ['Confirmed', 'InHouse'].includes(resData.status);
@@ -463,7 +463,7 @@ export default function ReservationDetailsPage() {
             <div className="flex items-center justify-between p-6 border-b border-border">
               <div>
                 <h2 className="text-xl font-bold text-text">Record Payment</h2>
-                <p className="text-xs text-text-muted mt-1">Reservation {resData.confirmationCode || `#${resData.reservationId.slice(0, 8).toUpperCase()}`} • Balance: {fmt(balanceDue)} GHS</p>
+                <p className="text-xs text-text-muted mt-1">Booking {resData.confirmationCode || `#${resData.reservationId.slice(0, 8).toUpperCase()}`} • Balance: {fmt(balanceDue)} GHS</p>
               </div>
               <button onClick={() => setIsPaymentModalOpen(false)} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted"><X size={20} /></button>
             </div>
@@ -512,7 +512,7 @@ export default function ReservationDetailsPage() {
         <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-surface w-full max-w-md rounded-2xl shadow-xl border border-border overflow-hidden">
             <div className="flex items-center justify-between p-6 border-b border-border">
-              <h2 className="text-xl font-bold text-text">Edit Reservation</h2>
+              <h2 className="text-xl font-bold text-text">Edit booking</h2>
               <button onClick={() => setIsEditModalOpen(false)} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted"><X size={20} /></button>
             </div>
             <form onSubmit={handleSaveEdit} className="p-6 space-y-4">
@@ -546,10 +546,10 @@ export default function ReservationDetailsPage() {
         {confirmCancel && (
           <div role="dialog" aria-modal="true" aria-labelledby="cancel-title" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !cancelMutation.isPending && setConfirmCancel(false)}>
             <div className="w-full max-w-md rounded-xl bg-surface p-5 shadow-xl" onClick={(event) => event.stopPropagation()}>
-              <h2 id="cancel-title" className="text-lg font-bold text-text">Cancel reservation?</h2>
-              <p className="mt-2 text-sm text-text-muted">This will cancel reservation {resData.confirmationCode || `#${id.slice(0, 8)}`}. This can't be undone from here.</p>
+              <h2 id="cancel-title" className="text-lg font-bold text-text">Cancel booking?</h2>
+              <p className="mt-2 text-sm text-text-muted">This will cancel booking {resData.confirmationCode || `#${id.slice(0, 8)}`}. This can't be undone from here.</p>
               <div className="mt-5 flex flex-wrap justify-end gap-2">
-                <button type="button" disabled={cancelMutation.isPending} onClick={() => setConfirmCancel(false)} className="min-h-11 rounded-lg border border-border px-4 text-sm font-semibold text-text hover:bg-secondary-50 disabled:opacity-50">Keep reservation</button>
+                <button type="button" disabled={cancelMutation.isPending} onClick={() => setConfirmCancel(false)} className="min-h-11 rounded-lg border border-border px-4 text-sm font-semibold text-text hover:bg-secondary-50 disabled:opacity-50">Keep booking</button>
                 <button type="button" disabled={cancelMutation.isPending} onClick={() => cancelMutation.mutate()} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-danger-600 px-4 text-sm font-semibold text-white hover:bg-danger-700 disabled:opacity-50">
                   {cancelMutation.isPending && <Loader2 size={16} className="animate-spin" />} Cancel Reservation
                 </button>

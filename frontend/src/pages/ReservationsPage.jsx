@@ -451,7 +451,7 @@ export default function ReservationsPage() {
       <BookingPaymentNotice reservation={paymentRecoveryReservation} onDismiss={() => setPaymentRecoveryReservation(null)} />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-text tracking-tight">Reservations</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-text tracking-tight">Bookings</h1>
           <p className="text-text-muted text-sm mt-1">Total matching: <span className="font-bold text-text">{pagination.total}</span></p>
         </div>
         <button onClick={() => setIsModalOpen(true)} className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm">
@@ -533,14 +533,14 @@ export default function ReservationsPage() {
         ) : isError ? (
           <div className="rounded-xl border border-border bg-surface p-8 text-center">
             <AlertCircle size={28} className="mx-auto mb-2 text-danger-600" />
-            <p className="font-semibold text-text">Couldn't load reservations</p>
+            <p className="font-semibold text-text">Couldn't load bookings</p>
             <p className="mt-1 text-sm text-text-muted">{error?.response?.data?.message || error?.message || 'Something went wrong'}</p>
             <button onClick={() => refetch()} className="mt-4 px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-semibold">Try again</button>
           </div>
         ) : reservations.length === 0 ? (
           <div className="rounded-xl border border-border bg-surface p-8 text-center text-text-muted">
             <CalendarDays size={28} className="mx-auto mb-2" />
-            <p className="font-semibold text-text">No reservations found</p>
+            <p className="font-semibold text-text">No bookings found</p>
             {hasActiveFilters ? <button onClick={clearFilters} className="mt-2 text-sm font-semibold text-primary-600">Clear filters and try again</button> : <p className="mt-1 text-sm">New bookings will show up here</p>}
           </div>
         ) : reservations.map((res) => {
@@ -587,7 +587,7 @@ export default function ReservationsPage() {
                   )}
                   {['Cancelled', 'Expired'].includes(res.status) && Number(res.refundDue) <= 0 && res.refunds?.length > 0 && <Link to={`/reservations/${id}#refunds`} className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg border border-border px-3 text-sm font-semibold text-primary-700">Refund history</Link>}
                   <Link to={`/reservations/${id}`} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-3 text-sm font-semibold text-primary-700 hover:bg-primary-100">
-                    <Eye size={16} /> Open reservation
+                    <Eye size={16} /> Open booking
                   </Link>
                 </div>
 
@@ -595,7 +595,7 @@ export default function ReservationsPage() {
                 {['Pending', 'Confirmed'].includes(res.status) && !res.reservationRooms?.some(stay => stay.status === 'CheckedIn') && (
                   <div className="mt-2 flex gap-2">
                     {['Pending', 'Confirmed'].includes(res.status) && !res.reservationRooms?.some(stay => stay.status === 'CheckedIn') && (
-                      <button onClick={() => askReservationAction(id, 'cancel', 'Cancel reservation?', `This will cancel reservation ${res.confirmationCode || `#${id.slice(0, 8)}`}. This can't be undone from here.`, { danger: true, confirmLabel: 'Cancel Reservation' })} className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border border-danger-200 px-3 text-sm font-semibold text-danger-700 hover:bg-danger-50"><XCircle size={16} /> Cancel booking</button>
+                      <button onClick={() => askReservationAction(id, 'cancel', 'Cancel booking?', `This will cancel booking ${res.confirmationCode || `#${id.slice(0, 8)}`}. This can't be undone from here.`, { danger: true, confirmLabel: 'Cancel booking' })} className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border border-danger-200 px-3 text-sm font-semibold text-danger-700 hover:bg-danger-50"><XCircle size={16} /> Cancel booking</button>
                     )}
                   </div>
                 )}
@@ -640,13 +640,13 @@ export default function ReservationsPage() {
             </thead>
             <tbody className={isPlaceholderData ? 'opacity-60 pointer-events-none transition-opacity' : 'transition-opacity'}>
               {isLoading ? (
-                <SkeletonTableRows colSpan="7" cols={5} label="Loading reservations…" />
+                <SkeletonTableRows colSpan="7" cols={5} label="Loading bookings…" />
               ) : isError ? (
                 <tr>
                   <td colSpan="7" className="p-12 text-center">
                     <div className="flex flex-col items-center gap-2 text-danger-600">
                       <AlertCircle size={24} />
-                      <p className="font-semibold">Couldn't load reservations</p>
+                      <p className="font-semibold">Couldn't load bookings</p>
                       <p className="text-xs text-text-muted">{error?.response?.data?.message || error?.message || 'Something went wrong'}</p>
                       <button onClick={() => refetch()} className="mt-1 text-xs font-semibold text-primary-600 hover:underline">Try again</button>
                     </div>
@@ -657,7 +657,7 @@ export default function ReservationsPage() {
                   <td colSpan="7" className="p-12 text-center text-text-muted">
                     <div className="flex flex-col items-center gap-2">
                       <CalendarDays size={24} />
-                      <p className="font-semibold">No reservations found</p>
+                      <p className="font-semibold">No bookings found</p>
                       {hasActiveFilters ? (
                         <button onClick={clearFilters} className="text-xs font-semibold text-primary-600 hover:underline">
                           Clear filters and try again
@@ -704,7 +704,7 @@ export default function ReservationsPage() {
                             res.reservationId, 'cancel',
                             'Cancel reservation?',
                             `This will cancel reservation #${res.reservationId}. This can't be undone from here.`,
-                            { danger: true, confirmLabel: 'Cancel Reservation' },
+                            { danger: true, confirmLabel: 'Cancel booking' },
                           )}
                           className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md border border-danger-200 text-danger-600 hover:bg-danger-50 transition"
                         >
@@ -748,7 +748,7 @@ export default function ReservationsPage() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Link to={`/reservations/${res.reservationId}`} className="inline-flex items-center gap-1 rounded-md border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 hover:bg-primary-100" aria-label={`Open reservation ${res.reservationId}`}><Eye size={14} /> Open reservation</Link>
+                            <Link to={`/reservations/${res.reservationId}`} className="inline-flex items-center gap-1 rounded-md border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 hover:bg-primary-100" aria-label={`Open booking ${res.reservationId}`}><Eye size={14} /> Open booking</Link>
                             {actions}
                           </div>
                         </td>
