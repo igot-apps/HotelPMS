@@ -170,8 +170,8 @@ export default function DashboardPage() {
     <section aria-labelledby="quick-actions-title" className="rounded-xl border border-border bg-surface p-4 shadow-sm">
       <h2 id="quick-actions-title" className="mb-3 flex items-center gap-2 text-sm font-bold text-text"><LayoutGrid size={17} className="text-primary-600" /> Quick Actions</h2>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <QuickLink to="/reservations?new=1" icon={Plus} label="New booking (walk-in or reservation)" color="primary" />
-        <QuickLink to="/availability" icon={Search} label="See free rooms by date" color="secondary" />
+        <QuickLink to="/reservations?new=1" icon={Plus} label="New booking" variant="primary" />
+        <QuickLink to="/availability" icon={Search} label="Check availability" variant="secondary" />
         <RequirePermission permission="CanCreateReservation"><QuickLink to="/reservations" icon={Calendar} label="Reservations & payments" color="success" /></RequirePermission>
         <QuickLink to="/rooms" icon={BedDouble} label="Rooms & housekeeping" color="warning" />
       </div>
@@ -220,7 +220,8 @@ function OpCard({ icon: Icon, label, value, subtext, color }) {
   const colors = { primary: 'bg-primary-50 text-primary-600', warning: 'bg-warning-50 text-warning-600', success: 'bg-success-50 text-success-600', danger: 'bg-danger-50 text-danger-600' };
   return <div className="rounded-xl border border-border bg-surface p-4 sm:p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><p className="text-sm font-semibold text-text-muted">{label}</p><span className={`rounded-lg p-2 ${colors[color]}`}><Icon size={19} /></span></div><p className="mt-2 text-3xl font-bold text-text">{value}</p><p className="mt-2 text-xs leading-relaxed text-text-muted">{subtext}</p></div>;
 }
-function QuickLink({ to, icon: Icon, label, color }) {
+function QuickLink({ to, icon: Icon, label, color, variant }) {
   const colors = { primary: 'bg-primary-50 text-primary-600', secondary: 'bg-secondary-50 text-secondary-600', success: 'bg-success-50 text-success-600', warning: 'bg-warning-50 text-warning-600' };
-  return <Link to={to} className={`flex min-h-14 items-center gap-3 rounded-xl border border-border p-3 transition hover:border-primary-300 ${colors[color]}`}><Icon size={20} className="shrink-0" /><span className="min-w-0 flex-1 text-sm font-semibold text-text">{label}</span><ArrowRight size={16} className="shrink-0" /></Link>;
+  const emphasis = variant === 'primary' ? 'border-primary-600 bg-primary-600 text-white shadow-sm hover:bg-primary-700' : variant === 'secondary' ? 'border-primary-200 bg-primary-50 text-primary-700 hover:border-primary-400 hover:bg-primary-100' : `border-border ${colors[color]}`;
+  return <Link to={to} className={`flex min-h-14 items-center gap-3 rounded-xl border p-3 transition hover:border-primary-300 ${emphasis}`}><Icon size={20} className="shrink-0" /><span className={`min-w-0 flex-1 text-sm font-semibold ${variant === 'primary' ? 'text-white' : 'text-text'}`}>{label}</span><ArrowRight size={16} className="shrink-0" /></Link>;
 }

@@ -1,11 +1,8 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { bookingLink } from '../../lib/bookingLink';
 import { BedDouble, Users, Sparkles, AlertTriangle, Wrench, ArrowRightLeft, Phone, UserRound, Clock, LogIn, LogOut, Loader2, Globe, GlobeLock } from 'lucide-react';
 
 export default function RoomCard({ room, onToggleHousekeeping, onToggleOperational, isUpdating, isPresenceUpdating, onSetGuestPresence, canManageOnline, isOnlineUpdating, onToggleOnline, canCheckOut }) {
-  const [isMarkingOut, setIsMarkingOut] = useState(false);
-  const [expectedReturnInput, setExpectedReturnInput] = useState('');
   const opStatus = room.operationalStatus?.toUpperCase();
   const hkStatus = room.housekeepingStatus?.toUpperCase();
   const activeStay = room.reservationRooms?.[0];
@@ -169,48 +166,14 @@ export default function RoomCard({ room, onToggleHousekeeping, onToggleOperation
                     {isPresenceUpdating ? <Loader2 size={13} className="animate-spin" /> : <LogIn size={13} />}
                     Mark Returned
                   </button>
-                ) : isMarkingOut ? (
-                  <div className="space-y-2">
-                    <label className="block text-[11px] font-medium text-text-muted">Expected return (optional)</label>
-                    <input
-                      type="datetime-local"
-                      min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
-                      value={expectedReturnInput}
-                      onChange={(event) => setExpectedReturnInput(event.target.value)}
-                      className="w-full rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-text"
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        disabled={isPresenceUpdating}
-                        onClick={() => {
-                          onSetGuestPresence(activeStay.reservationRoomId, 'out', expectedReturnInput ? new Date(expectedReturnInput).toISOString() : undefined);
-                          setIsMarkingOut(false);
-                          setExpectedReturnInput('');
-                        }}
-                        className="inline-flex items-center gap-1.5 rounded-md bg-warning-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-warning-700 disabled:opacity-60"
-                      >
-                        {isPresenceUpdating ? <Loader2 size={13} className="animate-spin" /> : <LogOut size={13} />}
-                        Confirm Out
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isPresenceUpdating}
-                        onClick={() => { setIsMarkingOut(false); setExpectedReturnInput(''); }}
-                        className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-text-muted hover:bg-secondary-50"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
                 ) : (
                   <button
                     type="button"
                     disabled={isPresenceUpdating}
-                    onClick={() => setIsMarkingOut(true)}
+                    onClick={() => onSetGuestPresence(activeStay.reservationRoomId, 'out')}
                     className="inline-flex items-center gap-1.5 rounded-md border border-warning-300 bg-surface px-2.5 py-1.5 text-xs font-semibold text-warning-800 hover:bg-warning-50 disabled:opacity-60"
                   >
-                    <LogOut size={13} /> Mark Guest Out
+                    {isPresenceUpdating ? <Loader2 size={13} className="animate-spin" /> : <LogOut size={13} />} Mark Guest Out
                   </button>
                 )}
                 {activeStay.presenceUpdatedByUser?.fullName && (

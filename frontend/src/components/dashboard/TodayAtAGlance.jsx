@@ -507,12 +507,12 @@ function InHouseDetail({ rows: unsorted, query = '' }) {
                 type="button"
                 disabled={isUpdating(stay)}
                 onClick={() => { setMarking(stay.reservationRoomId); presenceMutation.mutate({ reservationRoomId: stay.reservationRoomId, action: out ? 'returned' : 'out' }); }}
-                className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold ${out ? 'bg-success-600 text-white hover:bg-success-700' : 'border border-warning-300 bg-surface text-warning-800 hover:bg-warning-50'} disabled:opacity-60`}
+                className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold ${out ? 'bg-success-600 text-white hover:bg-success-700' : 'border border-warning-300 bg-warning-50 text-warning-800 hover:bg-warning-100'} disabled:opacity-60`}
               >
                 {isUpdating(stay) ? <Loader2 size={13} className="animate-spin" /> : out ? <LogIn size={13} /> : <LogOut size={13} />}
                 {out ? 'Mark Returned' : 'Mark Guest Out'}
               </button>
-              <Link to={withBack(reservationLink(stay), 'inHouse')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50"><Eye size={16} /> View reservation</Link>
+              <Link to={withBack(reservationLink(stay), 'inHouse')} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-primary-200 bg-primary-50 px-3 text-sm font-semibold text-primary-700 hover:bg-primary-100"><Eye size={16} /> View reservation</Link>
             </div>
           </li>
         );

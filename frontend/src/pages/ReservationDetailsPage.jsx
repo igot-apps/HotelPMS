@@ -11,7 +11,7 @@ import useServerClock from '../lib/useServerClock';
 // Today on the hotel's calendar from the server's clock (never the computer's); null until server time is known.
 const localToday = (timeZone) => hotelToday(timeZone);
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { cancelReservation, extendReservationRoom, getReservationById, getReservationStats, updateOccupantName, updateReservation, updateReservationRoomStatus } from '../api/reservations';
+import { cancelReservation, extendReservationRoom, getReservationById, getReservationStats, updateGuestPresence, updateOccupantName, updateReservation, updateReservationRoomStatus } from '../api/reservations';
 import toast from 'react-hot-toast';
 import api from '../lib/axios';
 import { recordPayment } from '../api/payments';
@@ -63,6 +63,7 @@ export default function ReservationDetailsPage() {
   const [earlyCheckout, setEarlyCheckout] = useState(null);
   const [owingCheckout, setOwingCheckout] = useState(null);
   const [checkoutConfirm, setCheckoutConfirm] = useState(null);
+  const [presenceDialog, setPresenceDialog] = useState(null);
   const handledAction = useRef('');
   // Same cancellation as the Reservations list (server applies the refund policy and all checks).
   const cancelMutation = useMutation({
@@ -154,6 +155,16 @@ export default function ReservationDetailsPage() {
       setOccupantDialog(null);
       toast.success('Occupant details updated');
     },
+  });
+
+  const presenceMutation = useMutation({
+    mutationFn: ({ roomId, action, expectedReturnAt }) => updateGuestPresence(roomId, action, expectedReturnAt),
+    onSuccess: (_response, variables) => {
+      refreshRoomData();
+      setPresenceDialog(null);
+      toast.success(variables.action === 'out' ? 'Guest marked temporarily out.' : 'Guest marked back in the room.');
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not update the guest’s presence.'),
   });
 
   const completeCheckout = async (room, details = {}) => {
@@ -312,10 +323,15 @@ export default function ReservationDetailsPage() {
                     <p className="text-base font-bold text-text">Room {rr.room?.roomNumber || rr.roomNumberSnapshot || 'Removed'}</p>
                     <p className="text-xs text-text-muted">{rr.roomType?.typeName || rr.room?.roomType?.typeName || rr.roomTypeNameSnapshot || 'Room type removed'} · {fmt(rr.agreedPricePerNight)} GHS per night</p>
                   </div>
-                  <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${roomStatusTone(rr.status)}`}>{roomStatusLabel(rr.status)}</span>
+                  <div className="flex flex-wrap justify-end gap-1.5">
+                    <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${roomStatusTone(rr.status)}`}>{roomStatusLabel(rr.status)}</span>
+                    {rr.status === 'CheckedIn' && <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${rr.guestPresenceStatus === 'Out' ? 'bg-warning-100 text-warning-800' : 'bg-success-100 text-success-800'}`}>{rr.guestPresenceStatus === 'Out' ? 'Temporarily out' : 'In room'}</span>}
+                  </div>
                 </div>
                 <p className="mt-2 text-sm text-text-muted">{new Date(rr.checkInDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })} → {new Date(rr.checkOutDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })}</p>
                 <p className="break-words text-sm text-text"><span className="text-text-muted">Occupant: </span>{rr.occupantName || 'Not assigned'}{rr.occupantPhone ? ` · ${rr.occupantPhone}` : ''}</p>
+                {rr.status === 'CheckedIn' && rr.guestPresenceStatus === 'Out' && <div className="mt-1 text-xs text-warning-800"><p>{rr.guestOutAt ? `Out since ${new Date(rr.guestOutAt).toLocaleString()}` : 'Guest is temporarily out'}</p>{rr.expectedReturnAt && <p className="text-text-muted">Expected back {new Date(rr.expectedReturnAt).toLocaleString()}</p>}</div>}
+                {rr.status === 'CheckedIn' && rr.guestPresenceStatus !== 'Out' && rr.guestReturnedAt && <p className="mt-1 text-xs text-success-700">Back in room since {new Date(rr.guestReturnedAt).toLocaleString()}</p>}
                 {rr.status === 'Reserved' && rr.room?.operationalStatus === 'Occupied' && <p className="mt-1 text-xs font-semibold text-danger-700">Room {rr.room.roomNumber} still has a guest checked in. Check them out (or verify their departure) first, or move this guest to another room.</p>}
                 {rr.status === 'Reserved' && rr.room?.housekeepingStatus && !['Clean', 'Inspected'].includes(rr.room.housekeepingStatus) && <p className="mt-1 text-xs font-semibold text-warning-700">Room needs cleaning before check-in</p>}
                 {rr.status === 'NoShow' && <p className="mt-1 text-xs font-semibold text-orange-700">Expired: the guest did not arrive before the departure date. Create a new booking if they come.</p>}
@@ -326,6 +342,7 @@ export default function ReservationDetailsPage() {
                     {inRoom && <button type="button" onClick={() => setExtendRoom(rr)} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Extend</button>}
                     {inRoom && <button type="button" onClick={() => setShortenRoom(rr)} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Shorten</button>}
                     {inRoom && <button type="button" onClick={() => setMoveRoom(rr)} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Move to another room</button>}
+                    {inRoom && (rr.guestPresenceStatus === 'Out' ? <button type="button" disabled={presenceMutation.isPending} onClick={() => presenceMutation.mutate({ roomId: rr.reservationRoomId, action: 'returned' })} className={`${btn} bg-success-600 text-white hover:bg-success-700 disabled:opacity-50`}>{presenceMutation.isPending && presenceMutation.variables?.roomId === rr.reservationRoomId ? 'Updating…' : 'Mark back in room'}</button> : <button type="button" disabled={presenceMutation.isPending} onClick={() => setPresenceDialog({ room: rr })} className={`${btn} border border-warning-300 bg-surface text-warning-800 hover:bg-warning-50 disabled:opacity-50`}>Mark temporarily out</button>)}
                     {['Reserved', 'CheckedIn'].includes(rr.status) && <button type="button" onClick={() => setOccupantDialog({ room: rr, reservation: resData, mode: 'edit' })} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Edit occupant</button>}
                   </div>
                 )}
@@ -416,6 +433,15 @@ export default function ReservationDetailsPage() {
       {occupantDialog && <RoomOccupantDialog key={`${occupantDialog.room.reservationRoomId}-${occupantDialog.mode}`} {...occupantDialog} busy={roomActionMutation.isPending || occupantMutation.isPending} onClose={() => setOccupantDialog(null)} onSubmit={(details) => occupantDialog.mode === 'checkin' ? roomActionMutation.mutateAsync({ roomId: occupantDialog.room.reservationRoomId, status: 'CheckedIn', ...details }) : occupantMutation.mutateAsync({ roomId: occupantDialog.room.reservationRoomId, ...details })} />}
       {earlyCheckout && <EarlyCheckoutDialog key={earlyCheckout.room.reservationRoomId} {...earlyCheckout} onClose={() => setEarlyCheckout(null)} onCheckOut={async () => { await completeCheckout(earlyCheckout.room); setEarlyCheckout(null); }} />}
       {owingCheckout && <CheckoutOwingDialog key={owingCheckout.room.reservationRoomId} roomNumber={owingCheckout.room.room?.roomNumber || owingCheckout.room.roomNumberSnapshot} guestName={owingCheckout.room.occupantName || resData.guestNameSnapshot || resData.propertyGuest?.fullName || 'Guest'} code={resData.confirmationCode} balanceDue={owingCheckout.balanceDue} lateText={owingCheckout.lateText} onClose={() => setOwingCheckout(null)} onTakePayment={() => { setOwingCheckout(null); openPanel('payments'); }} onCheckOut={async (overrideReason, departureNote) => { await completeCheckout(owingCheckout.room, { overrideReason, departureNote }); toast.success(`Checked out. GHS ${Number(owingCheckout.balanceDue).toFixed(2)} is still owed.`); setOwingCheckout(null); }} />}
+      {presenceDialog && (
+        <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="presence-dialog-title">
+          <section className="w-full max-w-md rounded-xl border border-border bg-surface p-5 shadow-xl">
+            <h2 id="presence-dialog-title" className="text-lg font-bold text-text">Mark temporarily out</h2>
+            <p className="mt-2 text-sm text-text-muted">Room {presenceDialog.room.room?.roomNumber || presenceDialog.room.roomNumberSnapshot} remains occupied and the guest stays checked in. This does not check them out or change any charges.</p>
+            <div className="mt-5 flex justify-end gap-2"><button type="button" disabled={presenceMutation.isPending} onClick={() => setPresenceDialog(null)} className="min-h-11 rounded-lg border border-border px-4 text-sm font-semibold text-text">Cancel</button><button type="button" disabled={presenceMutation.isPending} onClick={() => presenceMutation.mutate({ roomId: presenceDialog.room.reservationRoomId, action: 'out' })} className="min-h-11 rounded-lg bg-warning-600 px-4 text-sm font-semibold text-white disabled:opacity-50">{presenceMutation.isPending ? 'Updating…' : 'Confirm temporarily out'}</button></div>
+          </section>
+        </div>
+      )}
       {checkoutConfirm && (
         <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="checkout-confirm-title">
           <section className="w-full max-w-md rounded-xl border border-border bg-surface p-5 shadow-xl">
