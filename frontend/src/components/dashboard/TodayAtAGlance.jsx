@@ -19,7 +19,7 @@ const clock = (value) => new Date(value).toLocaleTimeString('en-US', { hour: 'nu
 const reservationLink = (row, action) => bookingLink(row, action);
 // Which dashboard list a link was opened from, so the Reservations page can offer "Back to <list>".
 const PanelContext = createContext(null);
-const withBack = (to, panel) => (panel && to.startsWith('/reservations') ? `${to}${to.includes('?') ? '&' : '?'}back=${panel}` : to);
+const withBack = (to, panel) => (panel && (to.startsWith('/bookings') || to.startsWith('/reservations')) ? `${to}${to.includes('?') ? '&' : '?'}back=${panel}` : to);
 
 // The front desk's key questions for today. Each tile answers one question; click it for the details.
 export default function TodayAtAGlance() {
@@ -36,7 +36,6 @@ export default function TodayAtAGlance() {
   });
   const [searchParams, setSearchParams] = useSearchParams();
   const [open, setOpen] = useState(() => searchParams.get('panel'));
-  const [sort, setSort] = useState('date');
   // Each pop-up has its own search text.
   const [queries, setQueries] = useState({});
   const query = queries[open] || '';
@@ -88,17 +87,9 @@ export default function TodayAtAGlance() {
       </div>
       {open && (
         <PanelContext.Provider value={open}>
-        <SortContext.Provider value={sort}>
         <Drawer title={tiles.find((tile) => tile.key === open)?.label || ''} onClose={() => setOpen(null)}
           toolbar={(SORTABLE.includes(open) || SEARCHABLE[open]) && (
             <div className="flex flex-wrap items-center gap-3">
-              {SORTABLE.includes(open) && (
-              <label className="flex items-center gap-2 text-sm text-text-muted">Sort by
-                <select value={sort} onChange={(event) => setSort(event.target.value)} className="min-h-10 rounded-lg border border-border bg-background px-2 text-sm text-text">
-                  {SORTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
-              </label>
-              )}
               {SEARCHABLE[open] && (
                 <div className="relative min-w-0 flex-1">
                   <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
@@ -116,7 +107,6 @@ export default function TodayAtAGlance() {
           {open === 'owedAfter' && <OwedAfterCheckoutDetail owed={owedAfter} query={query} />}
           {open === 'attention' && <AttentionDetail data={data} />}
         </Drawer>
-        </SortContext.Provider>
         </PanelContext.Provider>
       )}
     </section>
@@ -230,8 +220,6 @@ function Row({ to, title, code, lines = [], badge, badgeTone = 'neutral', action
 }
 
 // Sorting for the lists in a pop-up (chosen in the pop-up header).
-const SortContext = createContext('date');
-const SORTS = [['date', 'Date'], ['room', 'Room'], ['guest', 'Guest name']];
 const SORTABLE = ['arrivals', 'departures', 'inHouse', 'unpaid'];
 // Pop-ups with a search box (booking code, guest, phone or room), with the name read out to screen readers.
 const SEARCHABLE = { arrivals: 'expected arrivals', departures: "today's departures", inHouse: 'guests in house', collected: 'payments received today', unpaid: 'guests owing money', owedAfter: 'guests who left owing' };
@@ -242,11 +230,7 @@ function PhoneLine({ phone }) {
   return phone ? <span className="mt-0.5 flex items-center gap-1 text-sm text-text-muted"><Phone size={13} aria-hidden="true" /> {phone}</span> : null;
 }
 function useSorted(rows, dateKey) {
-  const sort = useContext(SortContext);
-  const room = (row) => String(row.roomNumber ?? row.rooms?.[0]?.roomNumber ?? row.rooms?.[0] ?? '');
-  return [...rows].sort((a, b) => (sort === 'room' ? room(a).localeCompare(room(b), undefined, { numeric: true })
-    : sort === 'guest' ? String(a.guestName || '').localeCompare(String(b.guestName || ''))
-    : new Date(a[dateKey] || 0) - new Date(b[dateKey] || 0)));
+  return [...rows].sort((a, b) => new Date(a[dateKey] || 0) - new Date(b[dateKey] || 0));
 }
 const stayDates = (stay) => `${shortDate(stay.checkInDate)} → ${shortDate(stay.checkOutDate)} · ${stay.nightsBooked ?? ''}${stay.nightsBooked ? ` night${stay.nightsBooked === 1 ? '' : 's'}` : ''}`.replace(/ · $/, '');
 
@@ -529,7 +513,7 @@ function FreeDetail({ rooms }) {
       {list.map((room) => (
         <Row key={room.roomId} to="/rooms" title={`Room ${room.roomNumber}`} badge={room.housekeepingStatus === 'Dirty' ? 'Needs cleaning' : 'Ready'} badgeTone={room.housekeepingStatus === 'Dirty' ? 'warning' : 'success'}
           lines={[room.isOnlineBookable === false ? 'Hidden from online booking' : '']}
-          actions={[{ label: `Book Room ${room.roomNumber}`, to: `/reservations?new=1&room=${room.roomId}`, tone: 'success', icon: 'book' }]} />
+          actions={[{ label: `Book Room ${room.roomNumber}`, to: `/bookings?new=1&room=${room.roomId}`, tone: 'success', icon: 'book' }]} />
       ))}
     </Group>
   ));

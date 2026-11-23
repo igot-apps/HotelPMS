@@ -165,7 +165,7 @@ export default function DashboardPage() {
       <h2 id="quick-actions-title" className="mb-3 flex items-center gap-2 text-sm font-bold text-text"><LayoutGrid size={17} className="text-primary-600" /> Quick Actions</h2>
       <div className="grid gap-3 sm:grid-cols-2">
         <QuickLink to="/availability" icon={Search} label="Check availability" variant="secondary" />
-        <QuickLink to="/reservations?new=1" icon={Plus} label="New booking" variant="primary" />
+        <QuickLink to="/bookings?new=1" icon={Plus} label="New booking" variant="primary" />
       </div>
     </section>
 

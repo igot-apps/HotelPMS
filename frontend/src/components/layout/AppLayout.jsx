@@ -24,7 +24,7 @@ export default function AppLayout() {
   const accessToken = useAuthStore((state) => state.accessToken);
   const role = useAuthStore((state) => state.user?.role);
   const home = role === 'Housekeeper' ? '/housekeeping' : '/dashboard';
-  const showBack = location.pathname !== home && !/^\/reservations\/[^/]+$/.test(location.pathname);
+  const showBack = location.pathname !== home && !/^\/bookings\/[^/]+$/.test(location.pathname);
 
   useEffect(() => {
     let isCurrent = true;

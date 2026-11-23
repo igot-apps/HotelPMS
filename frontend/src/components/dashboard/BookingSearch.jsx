@@ -11,7 +11,7 @@ export default function BookingSearch() {
     event.preventDefault();
     const text = query.trim();
     if (!text) return;
-    navigate(`/reservations?search=${encodeURIComponent(text)}&back=dashboard`);
+    navigate(`/bookings?search=${encodeURIComponent(text)}&back=dashboard`);
   };
   return (
     <form role="search" onSubmit={submit} className="flex w-full gap-2">

@@ -31,6 +31,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
   const [phoneLookup, setPhoneLookup] = useState('');
   const [phoneLookupResult, setPhoneLookupResult] = useState(null);
   const [phoneLookupMessage, setPhoneLookupMessage] = useState('');
+  const [guestRequired, setGuestRequired] = useState(false);
   const [isPhoneLookupLoading, setIsPhoneLookupLoading] = useState(false);
   const [isResolvingPhoneGuest, setIsResolvingPhoneGuest] = useState(false);
   const [matchedGuestName, setMatchedGuestName] = useState('');
@@ -38,13 +39,14 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
   const [showNameGuestSearch, setShowNameGuestSearch] = useState(false);
   const phoneLookupRequestRef = useRef(0);
   const lastAutoLookupRef = useRef('');
+  const guestPhoneInputRef = useRef(null);
   const [newGuestData, setNewGuestData] = useState({
     fullName: '', phone: '', email: '', idNumber: ''
   });
 
   // 🌟 CHANGED: guestId → propertyGuestId
   const [formData, setFormData] = useState({
-    propertyGuestId: '', checkInDate: '', checkOutDate: '', source: 'Walk-in', notes: '',
+    propertyGuestId: '', checkInDate: '', checkOutDate: '', source: 'Walk-in',
     selectedRooms: [], recordPayment: true, amountPaid: '', paymentMethod: 'Cash', gatewayReference: '',
   });
 
@@ -73,7 +75,6 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
         checkInDate: initialCheckIn, 
         checkOutDate: initialCheckOut, 
         source: 'Walk-in', 
-        notes: '',
         selectedRooms: [], 
         recordPayment: true, 
         amountPaid: '', 
@@ -305,6 +306,11 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
     if (currentStep === 2 && !formData.propertyGuestId) {
       // Step 2: the guest.
       toast.error('Choose the guest: enter their phone number, or tap "Guest has no phone number".');
+      setGuestRequired(true);
+      requestAnimationFrame(() => {
+        guestPhoneInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        guestPhoneInputRef.current?.focus();
+      });
       return;
     }
     setCurrentStep(prev => prev + 1);
@@ -338,7 +344,6 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
       source: formData.source,
       checkInDate: formData.checkInDate, 
       checkOutDate: formData.checkOutDate, 
-      notes: formData.notes,
       rooms: formData.selectedRooms.map(room => ({
         roomId: room.roomId, 
         roomTypeId: room.roomTypeId, 
@@ -512,11 +517,13 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                 <div className="flex gap-2">
                   <input
                     id="reservation-guest-phone"
+                    ref={guestPhoneInputRef}
                     type="tel"
                     inputMode="numeric"
                     maxLength={10}
                     value={phoneLookup}
                     onChange={(e) => {
+                      setGuestRequired(false);
                       phoneLookupRequestRef.current += 1;
                       lastAutoLookupRef.current = '';
                       setIsPhoneLookupLoading(false);
@@ -528,9 +535,12 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                     }}
                     onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
                     placeholder="e.g. 0241234567" autoFocus
-                    className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text placeholder:text-text-muted focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition"
+                    aria-invalid={guestRequired}
+                    aria-describedby={guestRequired ? 'reservation-guest-required' : undefined}
+                    className={`w-full px-4 py-2.5 bg-background border rounded-lg text-text placeholder:text-text-muted outline-none transition focus:ring-2 ${guestRequired ? 'border-danger-500 ring-2 ring-danger-500/20 focus:border-danger-500 focus:ring-danger-500/20' : 'border-border focus:ring-primary-500/20 focus:border-primary-500'}`}
                   />
                 </div>
+                {guestRequired && <p id="reservation-guest-required" className="mt-2 text-sm font-medium text-danger-700">Enter the guest’s phone number or choose “Guest has no phone number”.</p>}
                 {isPhoneLookupLoading && (
                   <p className="mt-2 inline-flex items-center gap-2 text-xs text-text-muted">
                     <Loader2 size={14} className="animate-spin" /> Checking for an existing guest…
@@ -628,14 +638,9 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
               <div>
                 <label className="block text-sm font-semibold text-text mb-1.5">Booking Source <span className="font-normal text-text-muted">(optional)</span></label>
                 <select name="source" value={formData.source} onChange={handleChange} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition">
-                  <option value="Walk-in">Walk-in</option>
-                  <option value="Phone">Phone</option>
-                  <option value="Direct">Direct</option>
+                  <option value="Walk-in">Walk-in — guest booked in person</option>
+                  <option value="Phone">Phone — guest booked by calling</option>
                 </select>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-text mb-1.5">Notes <span className="font-normal text-text-muted">(optional)</span></label>
-                <textarea name="notes" value={formData.notes} onChange={handleChange} rows="2" maxLength={500} placeholder="e.g. late arrival, extra bed" className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition resize-none" placeholder="Special requests..." />
               </div>
             </div>
           )}

@@ -3,7 +3,7 @@ import ReservationPaymentStatus from '../components/reservations/ReservationPaym
 import RefundSummary from '../components/reservations/RefundSummary';
 import RefundApprovalBadge from '../components/reservations/RefundApprovalBadge';
 import { useState, useEffect, useRef, Fragment } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   getReservations,
@@ -123,11 +123,13 @@ export default function ReservationsPage() {
   const propertyId = user?.propertyId;
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [localSearch, setLocalSearch] = useState(searchParams.get('search') || '');
   const [createdReservation, setCreatedReservation] = useState(null);
-  const [paymentRecoveryReservation, setPaymentRecoveryReservation] = useState(null);
+  const [paymentRecoveryReservation, setPaymentRecoveryReservation] = useState(() => location.state?.paymentRecoveryReservation || null);
   const [expandedId, setExpandedId] = useState(null);
   const [pendingConfirm, setPendingConfirm] = useState(null);
   const [earlyCheckout, setEarlyCheckout] = useState(null);
@@ -789,7 +791,7 @@ export default function ReservationsPage() {
       <ReservationModal
         isOpen={isModalOpen}
         initialData={newBookingInitial}
-        onClose={() => { setIsModalOpen(false); setNewBookingInitial(null); setCreatedReservation(null); createMutation.reset(); }}
+        onClose={() => { setIsModalOpen(false); setNewBookingInitial(null); setCreatedReservation(null); createMutation.reset(); if (createdReservation) navigate('/bookings', { replace: true }); }}
         onSubmit={(data) => createMutation.mutate(data)}
         isLoading={createMutation.isPending}
         createdReservation={createdReservation}

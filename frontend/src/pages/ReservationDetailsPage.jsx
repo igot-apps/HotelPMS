@@ -246,7 +246,7 @@ export default function ReservationDetailsPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div className="min-w-0 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-          <BackButton fallback="/reservations" label="Back" />
+          <BackButton fallback="/bookings" label="Back" />
           <div>
             <h1 className="text-2xl font-bold text-text">Booking {resData.confirmationCode || `#${resData.reservationId.slice(0, 8).toUpperCase()}`}</h1>
             <p className="text-sm text-text-muted flex items-center gap-2 mt-1">

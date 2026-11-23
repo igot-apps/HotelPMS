@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import AppLayout from './components/layout/AppLayout';
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -41,6 +41,11 @@ import UsersPage from './pages/UsersPage';
 import BillingPage from './pages/BillingPage';
 import GuestProfilePage from './pages/GuestProfilePage';
 import SuperAdminPage from './pages/SuperAdminPage';
+
+function LegacyBookingRedirect() {
+  const location = useLocation();
+  return <Navigate to={{ pathname: location.pathname.replace(/^\/reservations/, '/bookings'), search: location.search, hash: location.hash }} replace state={location.state} />;
+}
 
 function App() {
   return (
@@ -116,9 +121,11 @@ function App() {
           <Route path="/rooms" element={<RoomsPage />} />
           <Route path="/housekeeping" element={<HousekeepingPage />} />
           <Route path="/guests" element={<GuestsPage />} />
-          <Route path="/reservations" element={<ReservationsPage />} />
-          <Route path="/reservations/:id" element={<ReservationDetailsPage />} />
-          <Route path="/payments" element={<Navigate to="/reservations" replace />} />
+          <Route path="/bookings" element={<ReservationsPage />} />
+          <Route path="/bookings/:id" element={<ReservationDetailsPage />} />
+          <Route path="/reservations" element={<LegacyBookingRedirect />} />
+          <Route path="/reservations/:id" element={<LegacyBookingRedirect />} />
+          <Route path="/payments" element={<Navigate to="/bookings" replace />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/activity" element={<ActivityLogPage />} />
           <Route path="/calendar" element={<CalendarPage />} />

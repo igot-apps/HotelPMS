@@ -4,5 +4,5 @@ export function bookingLink(row, action, stayId = row?.reservationRoomId) {
   const params = new URLSearchParams();
   if (action) params.set('do', action);
   if (action && action !== 'pay' && stayId) params.set('stay', String(stayId));
-  return `/reservations/${row.reservationId}?${params.toString()}`;
+  return `/bookings/${row.reservationId}?${params.toString()}`;
 }

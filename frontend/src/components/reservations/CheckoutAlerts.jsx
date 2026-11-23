@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlarmClock, Phone, ShieldAlert, X } from 'lucide-react';
+import { AlarmClock, Phone, X } from 'lucide-react';
 import useCheckoutAlerts from '../../hooks/useCheckoutAlerts';
 import { formatDuration, formatTime } from '../../lib/stayTiming';
 import RecordDepartureDialog from './RecordDepartureDialog';
 import { bookingLink } from '../../lib/bookingLink';
 
 const STATE = {
-  overdue: { label: 'Overdue', className: 'bg-danger-50 text-danger-700', rank: 2 },
+  overdue: { label: 'Overstayed', className: 'bg-danger-50 text-danger-700', rank: 2 },
   dueSoon: { label: 'Due soon', className: 'bg-warning-50 text-warning-800', rank: 1 },
   due: { label: 'Due today', className: 'bg-primary-50 text-primary-700', rank: 0 },
 };
@@ -20,6 +20,8 @@ const fullCheckout = (value) => {
   const rest = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   return `${day}, ${rest} · ${formatTime(date)}`;
 };
+
+const expectedCheckoutToday = (value) => `Guest is expected to check out today at ${formatTime(new Date(value))}`;
 
 // One reminder per reservation: its rooms share the booking and its total balance.
 function groupByReservation(alerts) {
@@ -55,14 +57,13 @@ export default function CheckoutAlerts() {
   const [recording, setRecording] = useState(null);
   if (isError) return <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Could not refresh checkout reminders.</p>;
   if (!data?.alerts?.length) return null;
-  const isManager = data.role === 'Manager';
   const groups = groupByReservation(data.alerts);
 
   return (
     <section className="rounded-xl border border-warning-200 bg-surface p-4 shadow-sm sm:p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 font-bold text-text"><AlarmClock size={18} className="text-warning-600" /> Checkout reminders</h2>
-        <p className="text-xs text-text-muted">{data.counts.overdue} overdue · {data.counts.dueSoon} due soon · {data.counts.due} due today{isManager && data.counts.escalated ? ` · ${data.counts.escalated} need manager attention` : ''}</p>
+        <p className="text-xs text-text-muted">{data.counts.overdue} overdue · {data.counts.dueSoon} due soon · {data.counts.due} due today</p>
       </div>
       <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {groups.map((group) => {
@@ -83,19 +84,18 @@ export default function CheckoutAlerts() {
                 <ul className="mt-1 space-y-1">
                   {group.rooms.map((room) => (
                     <li key={room.reservationRoomId}>
-                      <p className="text-sm text-text-muted">Room {room.roomNumber || '—'} · {STATE[room.state]?.label || 'Due today'} · {fullCheckout(room.expectedCheckoutAt)}{room.state === 'overdue' ? ` · ${formatDuration(room.minutesLate * 60000)} late` : ''}</p>
+                      <p className="text-sm text-text-muted">Room {room.roomNumber || '—'} · {STATE[room.state]?.label || 'Due today'} · {room.state === 'due' ? expectedCheckoutToday(room.expectedCheckoutAt) : fullCheckout(room.expectedCheckoutAt)}{room.state === 'overdue' ? ` · ${formatDuration(room.minutesLate * 60000)} overstayed` : ''}</p>
                       {room.verification && verificationLine(room.verification)}
                     </li>
                   ))}
                 </ul>
               ) : (
                 <>
-                  <p className="text-sm text-text-muted">Checkout: {fullCheckout(group.rooms[0].expectedCheckoutAt)}</p>
-                  {group.rooms[0].state === 'overdue' && <p className="text-sm font-semibold text-danger-700">{formatDuration(group.rooms[0].minutesLate * 60000)} late · guest departure needs confirmation</p>}
+                  <p className="text-sm text-text-muted">{worst.state === 'due' ? expectedCheckoutToday(worst.expectedCheckoutAt) : `Checkout: ${fullCheckout(worst.expectedCheckoutAt)}`}</p>
+                  {group.rooms[0].state === 'overdue' && <p className="text-sm font-semibold text-danger-700">{formatDuration(group.rooms[0].minutesLate * 60000)} overstayed · Check whether the guest wants to extend or has left</p>}
                   {group.rooms[0].verification && <p className="mt-1">{verificationLine(group.rooms[0].verification)}</p>}
                 </>
               )}
-              {group.escalated && <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-danger-700"><ShieldAlert size={13} /> {isManager ? 'Needs manager attention' : 'Escalated to the manager'}</p>}
               <p className={`mt-1 text-xs font-semibold ${group.balanceDue > 0 ? 'text-danger-700' : 'text-success-700'}`}>{group.balanceDue > 0 ? `Owes: GHS ${group.balanceDue.toFixed(2)}` : 'Paid in full'}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Link to={`${bookingLink(group)}&back=dashboard`} className="min-h-10 rounded-lg bg-primary-600 px-3 py-2 text-xs font-semibold text-white">View reservation</Link>

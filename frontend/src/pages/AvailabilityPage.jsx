@@ -1,6 +1,7 @@
 import { SkeletonCards } from '../components/ui/Skeleton';
 // AvailabilityPage.jsx
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { addDays, defaultToday } from '../lib/period';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAvailableRooms } from '../api/rooms';
@@ -8,7 +9,6 @@ import { createReservation } from '../api/reservations';
 import { recordPayment } from '../api/payments';
 import { useAuthStore } from '../store/authStore';
 import ReservationModal from '../components/reservations/ReservationModal';
-import BookingPaymentNotice from '../components/reservations/BookingPaymentNotice';
 import { createWalkInBooking } from '../lib/createWalkInBooking';
 import toast from 'react-hot-toast';
 import {
@@ -19,6 +19,7 @@ export default function AvailabilityPage() {
   const user = useAuthStore((state) => state.user);
   const propertyId = user?.propertyId;
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   
   const [checkInDate, setCheckInDate] = useState('');
   const [checkOutDate, setCheckOutDate] = useState('');
@@ -31,7 +32,6 @@ export default function AvailabilityPage() {
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [isSavingBooking, setIsSavingBooking] = useState(false);
   const savingBookingRef = useRef(false);
-  const [paymentRecoveryReservation, setPaymentRecoveryReservation] = useState(null);
   const bookingInitialData = useMemo(() => ({
     checkInDate, checkOutDate, roomIds: selectedRooms,
   }), [checkInDate, checkOutDate, selectedRooms]);
@@ -137,10 +137,8 @@ export default function AvailabilityPage() {
     try {
       const { reservation, paymentError } = await createWalkInBooking(payload, { createReservation, recordPayment });
       if (paymentError) {
-        setPaymentRecoveryReservation(reservation);
         toast.error('Reservation saved. Review its initial payment below.');
       } else {
-        setPaymentRecoveryReservation(null);
         toast.success('Reservation created successfully!');
       }
       
@@ -151,6 +149,7 @@ export default function AvailabilityPage() {
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
       queryClient.invalidateQueries({ queryKey: ['payments'] });
+      navigate('/bookings', { state: paymentError ? { paymentRecoveryReservation: reservation } : undefined });
     } catch (err) {
       console.error('Booking failed:', err);
       toast.error(err.response?.data?.message || 'Failed to create reservation.');
@@ -171,7 +170,6 @@ export default function AvailabilityPage() {
 
   return (
     <div className="space-y-6 pb-44 sm:pb-28"> {/* Space for the mobile booking action bar. */}
-      <BookingPaymentNotice reservation={paymentRecoveryReservation} onDismiss={() => setPaymentRecoveryReservation(null)} />
       
       {/* Header */}
       <div>
