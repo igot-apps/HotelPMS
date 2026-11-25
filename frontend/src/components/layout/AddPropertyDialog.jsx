@@ -11,12 +11,16 @@ export default function AddPropertyDialog({ onClose, onAdded }) {
   const [saving, setSaving] = useState(false);
   const first = useRef(null);
 
+  // Focus the first field once, when the dialog opens. Background refreshes of
+  // the page re-render the parent; they must never move the cursor.
+  useEffect(() => { first.current?.focus(); }, []);
+  const latest = useRef({ onClose, saving });
+  latest.current = { onClose, saving };
   useEffect(() => {
-    first.current?.focus();
-    const escape = (event) => { if (event.key === 'Escape' && !saving) onClose(); };
+    const escape = (event) => { if (event.key === 'Escape' && !latest.current.saving) latest.current.onClose(); };
     document.addEventListener('keydown', escape);
     return () => document.removeEventListener('keydown', escape);
-  }, [onClose, saving]);
+  }, []);
 
   const change = (event) => {
     const { name, value } = event.target;
