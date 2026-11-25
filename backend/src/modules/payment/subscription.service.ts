@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { randomUUID } from 'crypto';
 import { prisma } from '../../shared/utils/prisma';
-import { Prisma } from '../../generated/prisma';
+import { Prisma } from '../../../src/generated/prisma';
 import { getFrontendBaseUrl } from '../../shared/utils/frontend-url';
 import { listFreeAccess } from './free-access.service';
 import { addMonthsClamped, buildQuote, Override, SubscriptionConfig, SubscriptionError, Terms } from './subscription-plans';
