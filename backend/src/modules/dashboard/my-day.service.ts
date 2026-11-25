@@ -1,3 +1,4 @@
+import { auditAt } from '../../shared/utils/property-access';
 import { prisma } from '../../shared/utils/prisma';
 import { dayBounds, hotelDate } from '../reports/daily-overview.service';
 
@@ -14,7 +15,7 @@ export async function getMyDay(userId: number, propertyId: number, now = new Dat
   const { gte, lt } = dayBounds(date, timeZone);
   const [audits, bookingsMade, payments] = await Promise.all([
     prisma.auditLog.findMany({
-      where: { userId, entityType: 'Reservation', action: { in: [...CHECK_IN, ...CHECK_OUT] }, createdAt: { gte, lt } },
+      where: { userId, ...auditAt(propertyId), entityType: 'Reservation', action: { in: [...CHECK_IN, ...CHECK_OUT] }, createdAt: { gte, lt } },
       select: { action: true, newData: true },
     }),
     prisma.reservation.count({ where: { propertyId, staffId: userId, createdAt: { gte, lt } } }),

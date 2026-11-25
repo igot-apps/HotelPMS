@@ -1,3 +1,4 @@
+import { atProperty } from '../../shared/utils/property-access';
 import { prisma } from '../../shared/utils/prisma';
 import type { Actor } from './recovery.service';
 const fail = (message: string) => Object.assign(new Error(message), { statusCode: 400 });
@@ -8,7 +9,7 @@ export function momoPhone(value: unknown): string | null {
   return match ? `+233${match[1]}` : null;
 }
 async function staff(tx: any, actor: Actor, manager = false) {
-  const user = await tx.user.findFirst({ where: { userId: actor.userId, propertyId: actor.propertyId, isActive: true }, include: { role: true } });
+  const user = await tx.user.findFirst({ where: { userId: actor.userId, ...atProperty(actor.propertyId), isActive: true }, include: { role: true } });
   if (!user || !['Manager','Receptionist'].includes(user.role.roleName) || (manager && user.role.roleName !== 'Manager')) throw Object.assign(new Error(manager ? 'Only an active hotel manager can change simulation settings or approve a simulation.' : 'Active hotel staff access required.'), { statusCode: 403 });
 }
 export async function refundSimulationSettings(actor: Actor) {
@@ -22,7 +23,7 @@ export async function setRefundSimulationSettings(actor: Actor, enabled: unknown
     await staff(tx, actor, true);
     const old = await tx.property.findUniqueOrThrow({ where: { propertyId: actor.propertyId }, select: { refundSimulationEnabled: true } });
     await tx.property.update({ where: { propertyId: actor.propertyId }, data: { refundSimulationEnabled: enabled } });
-    await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Property', action: 'RefundSimulationSettingChanged', oldData: { propertyId: actor.propertyId, enabled: old.refundSimulationEnabled }, newData: { propertyId: actor.propertyId, enabled, simulationOnly: true } } });
+    await tx.auditLog.create({ data: { propertyId: actor.propertyId, userId: actor.userId, entityType: 'Property', action: 'RefundSimulationSettingChanged', oldData: { propertyId: actor.propertyId, enabled: old.refundSimulationEnabled }, newData: { propertyId: actor.propertyId, enabled, simulationOnly: true } } });
     return { enabled, simulationOnly: true };
   }, { isolationLevel: 'Serializable' });
 }
@@ -41,7 +42,7 @@ export async function simulateRefundInTransaction(tx: any, actor: Actor, request
   if (recipientPhone !== request.input.recipientPhone || recipientPhone !== preview.recipientPhone) throw fail('The recipient phone changed. Reject this request and submit a new one.');
   const simulation = { reference: `SIM-MOMO-${request.requestId}`, recipientPhone, amount: Number(request.input.amount), currency: 'GHS', method: 'MobileMoney', simulatedAt: new Date().toISOString(), moneySent: false, status: 'Sent', balancesApplied: true };
   await applySimulatedReturnInTransaction(tx, actor, request, simulation);
-  await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Reservation', action: 'RefundSimulated', newData: { reservationId: request.reservationId, requestId: request.requestId, ...simulation, reason: request.input.reason } } });
+  await tx.auditLog.create({ data: { propertyId: actor.propertyId, userId: actor.userId, entityType: 'Reservation', action: 'RefundSimulated', newData: { reservationId: request.reservationId, requestId: request.requestId, ...simulation, reason: request.input.reason } } });
   return simulation;
 }
 
@@ -66,7 +67,7 @@ export async function applySimulatedReturnInTransaction(tx: any, actor: Actor, r
   const heldOnPayment = open.filter((r: any)=>Number(r.input.paymentId)===payment.paymentId).reduce((sum: number,r: any)=>sum+cents(r.input.amount),0);
   const paymentRemaining = cents(payment.amount)-booking.refunds.filter((r: any)=>r.paymentId===payment.paymentId).reduce((sum: number,r: any)=>sum+cents(r.amount),0);
   if (amount > eligible-held || amount > paymentRemaining-heldOnPayment) throw fail('This simulation exceeds the remaining refund balance.');
-  const user = await tx.user.findFirst({ where: { userId: actor.userId, propertyId: actor.propertyId } });
+  const user = await tx.user.findFirst({ where: { userId: actor.userId, ...atProperty(actor.propertyId) } });
   if (!user) throw fail('Simulation approver not found for this hotel.');
   const returnedAt = new Date(simulation.simulatedAt);
   if (!Number.isFinite(returnedAt.getTime()) || returnedAt < payment.paymentDate) throw fail('Invalid simulation date.');

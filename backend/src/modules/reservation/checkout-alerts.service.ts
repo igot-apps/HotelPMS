@@ -1,3 +1,4 @@
+import { atProperty } from '../../shared/utils/property-access';
 import { prisma } from '../../shared/utils/prisma';
 import { hotelDate } from '../reports/daily-overview.service';
 import { checkoutDueAt, checkoutState, MANAGER_ESCALATION_MINUTES, minutesLate } from './stay-timing';
@@ -9,7 +10,7 @@ export type VerifyResult = typeof VERIFY_RESULTS[number];
 const DAY = 86_400_000;
 
 async function staff(actor: Actor) {
-  const user = await prisma.user.findFirst({ where: { userId: actor.userId, propertyId: actor.propertyId, isActive: true }, include: { role: true } });
+  const user = await prisma.user.findFirst({ where: { userId: actor.userId, ...atProperty(actor.propertyId), isActive: true }, include: { role: true } });
   if (!user || !['Manager', 'Receptionist'].includes(user.role.roleName)) throw fail('Front desk staff required.', 403);
   return user;
 }
@@ -81,7 +82,7 @@ export async function verifyDeparture(actor: Actor, stayId: number, input: { res
     // Reuse guest presence: still here = in room; left = out (keeps the first time they were seen out).
     if (result === 'present') await tx.reservationRoom.update({ where: { reservationRoomId: stayId }, data: { guestPresenceStatus: 'InRoom', guestOutAt: null, expectedReturnAt: null, presenceUpdatedBy: actor.userId } });
     if (result === 'departed') await tx.reservationRoom.update({ where: { reservationRoomId: stayId }, data: { guestPresenceStatus: 'Out', guestOutAt: stay.guestOutAt || now, presenceUpdatedBy: actor.userId } });
-    await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Reservation', action: 'DepartureVerified', newData: { reservationId: stay.reservationId, reservationRoomId: stayId, result, note: note || null, verifiedAt: now.toISOString() } } });
+    await tx.auditLog.create({ data: { propertyId: actor.propertyId, userId: actor.userId, entityType: 'Reservation', action: 'DepartureVerified', newData: { reservationId: stay.reservationId, reservationRoomId: stayId, result, note: note || null, verifiedAt: now.toISOString() } } });
     return { reservationRoomId: stayId, result, note: note || null, at: now };
   });
 }

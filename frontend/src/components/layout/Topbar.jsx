@@ -1,5 +1,6 @@
 import { useAuthStore } from '../../store/authStore';
-import { Menu, Building2, HandCoins } from 'lucide-react';
+import { Menu, HandCoins } from 'lucide-react';
+import PropertySwitcher from './PropertySwitcher';
 import { Link } from 'react-router-dom';
 import useRefundCount from '../../hooks/useRefundCount';
 
@@ -22,17 +23,8 @@ export default function Topbar({ onMenuClick, isMenuOpen }) {
           <Menu size={24} />
         </button>
 
-        {/* ✅ UPDATED: Current Property Indicator Badge (Tenant concept completely removed) */}
-        <div className="min-w-0 flex items-center gap-2 px-2 sm:px-3 py-1.5 bg-secondary-50 border border-border rounded-lg">
-          <Building2 size={16} className="text-primary-600" />
-          <span 
-            className="text-sm font-semibold text-text truncate max-w-[150px] md:max-w-none" 
-            title={user?.propertyName || 'No Property'}
-          >
-            {/* ✅ CHANGED: Removed tenantName fallback. Property is the root entity now. */}
-            {user?.propertyName || 'No Property'}
-          </span>
-        </div>
+        {/* Active property, always visible. Owners with several properties can switch here. */}
+        <PropertySwitcher />
       </div>
 
       {/* Right Side: User Profile */}

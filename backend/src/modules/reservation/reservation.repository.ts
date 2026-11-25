@@ -307,6 +307,7 @@ export const updateGuestPresence = async (
 
     await tx.auditLog.create({
       data: {
+        propertyId,
         userId,
         action: action === 'out' ? 'GuestMarkedOut' : 'GuestMarkedReturned',
         entityType: 'ReservationRoom',

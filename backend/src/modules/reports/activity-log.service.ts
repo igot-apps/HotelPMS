@@ -1,3 +1,4 @@
+import { atProperty, auditAt } from '../../shared/utils/property-access';
 import { prisma } from '../../shared/utils/prisma';
 import { dayBounds, hotelDate } from './daily-overview.service';
 
@@ -21,7 +22,7 @@ const LABELS: Record<string, string> = {
   'Correction:credit-checkout': 'Correction: checkout with money owed', 'Correction:record-departure': 'Correction: record departure',
   CorrectionRequested: 'Correction requested', CorrectionRequestApproved: 'Request approved', CorrectionRequestRejected: 'Request rejected',
   RefundRequested: 'Refund requested', RefundCompleted: 'Refund paid out', RefundSimulated: 'Refund (simulation)', SimulatedRefundSettled: 'Refund simulation settled',
-  CashCountRecorded: 'Cash count recorded', HousekeepingStatusChanged: 'Room cleaning status changed', HousekeepingSettingChanged: 'Housekeeping setting changed',
+  CashCountRecorded: 'Cash count recorded', CashCountIssueRecorded: 'Pending cash count reported', HousekeepingStatusChanged: 'Room cleaning status changed', HousekeepingSettingChanged: 'Housekeeping setting changed',
   CorrectionPermissionsChanged: 'Staff permissions changed', OnlineRoomPermissionChanged: 'Online room permission changed',
   RefundSimulationSettingChanged: 'Refund simulation setting changed', SmsSimulationSettingChanged: 'SMS simulation setting changed',
   PropertyDeactivated: 'Hotel deactivated', PropertyReactivated: 'Hotel reactivated',
@@ -59,9 +60,11 @@ function detailOf(action: string, data: any): string {
 }
 
 export async function getActivityLog(userId: number, propertyId: number, query: { from?: string; to?: string; staffId?: string; kind?: string; page?: string }) {
-  const manager = await prisma.user.findFirst({ where: { userId, propertyId, isActive: true }, include: { role: true, property: { select: { timezone: true } } } });
+  const manager = await prisma.user.findFirst({ where: { userId, ...atProperty(propertyId), isActive: true }, include: { role: true, property: { select: { timezone: true } } } });
   if (!manager || manager.role.roleName !== 'Manager') throw Object.assign(new Error('Only the hotel manager can view the activity log.'), { statusCode: 403 });
-  const timeZone = manager.property?.timezone || 'Africa/Accra';
+  // An owner working in another property uses that property's timezone, not their home's.
+  const activeProperty = !manager.propertyId || manager.propertyId === propertyId ? manager.property : await prisma.property.findUnique({ where: { propertyId }, select: { timezone: true } });
+  const timeZone = activeProperty?.timezone || 'Africa/Accra';
 
   const isDate = (v?: string) => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
   const today = hotelDate(new Date(), timeZone);
@@ -77,12 +80,12 @@ export async function getActivityLog(userId: number, propertyId: number, query: 
   const page = Math.max(1, Number(query.page) || 1);
 
   // Staff of this hotel (including deactivated accounts, so their past actions still show a name).
-  const staff = await prisma.user.findMany({ where: { propertyId }, select: { userId: true, fullName: true, isActive: true, role: { select: { roleName: true } } }, orderBy: { fullName: 'asc' } });
+  const staff = await prisma.user.findMany({ where: atProperty(propertyId), select: { userId: true, fullName: true, isActive: true, role: { select: { roleName: true } } }, orderBy: { fullName: 'asc' } });
   const staffIds = staff.map(s => s.userId);
   const who = staffId ? [staffId].filter(id => staffIds.includes(id)) : staffIds;
 
   const [logs, bookings, payments] = await Promise.all([
-    prisma.auditLog.findMany({ where: { userId: { in: who }, createdAt: range }, orderBy: { createdAt: 'desc' }, take: 5000 }),
+    prisma.auditLog.findMany({ where: { userId: { in: who }, createdAt: range, ...auditAt(propertyId) }, orderBy: { createdAt: 'desc' }, take: 5000 }),
     !kind || kind === 'bookings' ? prisma.reservation.findMany({ where: { propertyId, staffId: { in: who }, createdAt: range }, select: { reservationId: true, staffId: true, createdAt: true, source: true, totalAmount: true }, take: 5000 }) : [],
     !kind || kind === 'money' ? prisma.payment.findMany({ where: { reservation: { propertyId }, receivedBy: { in: who }, paymentDate: range }, select: { paymentId: true, reservationId: true, receivedBy: true, paymentDate: true, amount: true, paymentMethod: true, status: true }, take: 5000 }) : [],
   ]);

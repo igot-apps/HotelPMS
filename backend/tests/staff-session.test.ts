@@ -11,6 +11,7 @@ jest.mock('../src/generated/prisma', () => ({ PrismaClient: jest.fn().mockImplem
   user: { findUnique: jest.fn() }, property: { findUnique: jest.fn() },
 })) }));
 jest.mock('../src/modules/payment/subscription-access', () => ({ assertCapacity: jest.fn(), getSubscriptionConfig: jest.fn() }));
+jest.mock('../src/shared/utils/prisma', () => ({ prisma: {} }));
 jest.mock('../src/modules/auth/auth.repository', () => ({ findUserById: jest.fn() }));
 
 const db = (PrismaClient as any).mock.results[0].value;

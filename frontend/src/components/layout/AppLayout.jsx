@@ -40,6 +40,23 @@ export default function AppLayout() {
     return () => { isCurrent = false; };
   }, [accessToken]);
 
+  // Another tab switched property (or signed out): reload so this tab never
+  // shows one property's data while sending another property's token.
+  const activePropertyId = useAuthStore((state) => state.user?.propertyId);
+  useEffect(() => {
+    const changed = (event) => {
+      if (event.key !== 'hotel-pms-auth') return;
+      let next = null;
+      try { next = JSON.parse(event.newValue || 'null')?.state?.user?.propertyId ?? null; } catch { /* treat as signed out */ }
+      if (next !== (activePropertyId ?? null)) window.location.reload();
+    };
+    window.addEventListener('storage', changed);
+    return () => window.removeEventListener('storage', changed);
+  }, [activePropertyId]);
+  useEffect(() => {
+    if (useAuthStore.getState().user?.properties?.length > 1 && activePropertyId) document.title = `${useAuthStore.getState().user.propertyName} · HideOut24`;
+  }, [activePropertyId]);
+
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
   const closeSidebar = () => setIsSidebarOpen(false);
 

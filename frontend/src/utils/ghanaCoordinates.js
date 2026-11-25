@@ -5,3 +5,9 @@ export const isWithinGhanaBounds = (latitude, longitude) =>
 
 export const googleMapsUrl = (latitude, longitude) =>
   `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`;
+
+export const GHANA_REGIONS = [
+  'Ahafo', 'Ashanti', 'Bono', 'Bono East', 'Central', 'Eastern', 'Greater Accra',
+  'North East', 'Northern', 'Oti', 'Savannah', 'Upper East', 'Upper West',
+  'Volta', 'Western', 'Western North',
+];

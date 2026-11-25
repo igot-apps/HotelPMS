@@ -196,6 +196,7 @@ export default function PlatformPropertiesPage() {
                           <span>
                             <span className="block text-sm font-semibold text-text">{property.propertyName}</span>
                             <span className="mt-0.5 block font-mono text-xs text-text-muted">{property.propertyCode} · {property.propertyType}</span>
+                            {property.owner && <span className="mt-0.5 block text-xs text-text-muted">Owner: {property.owner.fullName}{property.owner.ownedProperties > 1 ? ` · owns ${property.owner.ownedProperties} properties` : ''}</span>}
                           </span>
                         </div>
                       </td>

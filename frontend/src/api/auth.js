@@ -23,3 +23,8 @@ export const getMe = () => api.get('/auth/me');
 
 export const requestStaffPasswordReset = (email) => api.post('/auth/forgot-password', { email });
 export const resetStaffPassword = (token, password) => api.post('/auth/reset-password', { token, password });
+
+// Owners with several properties: move this session to another property (fresh tokens).
+export const switchProperty = (propertyId) => api.post('/auth/switch-property', { propertyId });
+// Owners: add another property to the same account.
+export const addProperty = (data) => api.post('/auth/properties', data);

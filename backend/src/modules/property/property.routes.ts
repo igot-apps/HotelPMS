@@ -32,7 +32,7 @@ router.patch('/housekeeping', requirePermission('CanManageStaffAndRoles'), async
     const property = await prisma.$transaction(async tx => {
       const old = await tx.property.findUnique({ where: { propertyId: req.user!.propertyId }, select: { housekeepingEnabled: true } });
       const updated = await tx.property.update({ where: { propertyId: req.user!.propertyId }, data: { housekeepingEnabled: req.body.enabled }, select: { housekeepingEnabled: true } });
-      if (old?.housekeepingEnabled !== req.body.enabled) await tx.auditLog.create({ data: { userId: req.user!.userId, entityType: 'Property', action: 'HousekeepingSettingChanged', oldData: { propertyId: req.user!.propertyId, enabled: old?.housekeepingEnabled }, newData: { propertyId: req.user!.propertyId, enabled: req.body.enabled } } });
+      if (old?.housekeepingEnabled !== req.body.enabled) await tx.auditLog.create({ data: { propertyId: req.user!.propertyId, userId: req.user!.userId, entityType: 'Property', action: 'HousekeepingSettingChanged', oldData: { propertyId: req.user!.propertyId, enabled: old?.housekeepingEnabled }, newData: { propertyId: req.user!.propertyId, enabled: req.body.enabled } } });
       return updated;
     });
     return res.json({ success: true, data: property });

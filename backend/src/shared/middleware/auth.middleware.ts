@@ -35,12 +35,18 @@ export const authenticate = async (
   }
 
   try {
-    const account = await prisma.user.findUnique({ where: { userId: decoded.userId }, select: { isActive: true, propertyId: true, sessionVersion: true, role: { select: { roleName: true } } } });
+    const account: any = await prisma.user.findUnique({ where: { userId: decoded.userId }, select: {
+      isActive: true, propertyId: true, sessionVersion: true, role: { select: { roleName: true } },
+      // Owners may hold a token for another property they manage.
+      memberships: { where: { propertyId: decoded.propertyId || -1, isActive: true }, select: { propertyId: true } },
+    } });
     if (!account?.isActive) {
       res.status(401).json({ success: false, code: 'STAFF_ACCOUNT_DISABLED', message: 'Your staff account has been deactivated or is no longer available. Contact your manager.' });
       return;
     }
-    if ((account.propertyId || 0) !== (decoded.propertyId || 0)) {
+    const homeMatches = (account.propertyId || 0) === (decoded.propertyId || 0);
+    const memberMatches = Boolean(decoded.propertyId) && Boolean(account.memberships?.length);
+    if (!homeMatches && !memberMatches) {
       res.status(401).json({ success: false, code: 'STAFF_ACCESS_CHANGED', message: 'Your account access has changed. Please sign in again.' });
       return;
     }
@@ -71,7 +77,9 @@ export const authenticate = async (
   const propertyId = req.user.propertyId;
   
   // Let expired properties start a renewal payment; other writes remain locked.
-  const isSubscriptionPaymentInitialization = req.originalUrl === '/api/paystack/initialize';
+  // Owners can always leave an expired property or add another (that one has its own subscription).
+  const isSubscriptionPaymentInitialization = req.originalUrl === '/api/paystack/initialize'
+    || req.originalUrl === '/api/auth/switch-property' || req.originalUrl === '/api/auth/properties';
   // Only block WRITE requests (POST, PUT, DELETE, PATCH). Allow GET (reading) so they can see the billing page.
   const isPlatformAdminRoute = req.originalUrl.startsWith('/api/platform/');
   if (req.method !== 'GET' && !isSubscriptionPaymentInitialization && !isPlatformAdminRoute && propertyId && propertyId !== 0) {
