@@ -73,40 +73,45 @@ router.post('/webhooks/platform', async (req: any, res: Response) => {
 
 // Subscription billing routes are authenticated and always use the property
 // attached to the signed-in user, never a propertyId supplied by the browser.
-router.get('/subscription-status', authenticate, async (req: AuthRequest, res: Response) => {
+const billing = [authenticate, requirePermission('CanManageBilling')];
+const sendError = (res: Response, error: any) =>
+  res.status(error.statusCode || 400).json({ success: false, message: error.message, code: error.code });
+
+router.get('/subscription-status', ...billing, async (req: AuthRequest, res: Response) => {
   try {
-    const propertyId = req.user?.propertyId;
-    if (!propertyId) return res.status(401).json({ success: false, message: 'Sign in to view subscription status.' });
-    const data = await subscriptionService.getSubscriptionStatus(propertyId);
-    return res.json({ success: true, data });
-  } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
+    return res.json({ success: true, data: await subscriptionService.getSubscriptionStatus(req.user!.propertyId!) });
+  } catch (error: any) { return sendError(res, error); }
 });
 
-router.post('/initialize', authenticate, async (req: AuthRequest, res: Response) => {
+// Live price breakdown for the billing page; GET so expired hotels can still price a renewal.
+router.get('/quote', ...billing, async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.user?.userId;
-    const propertyId = req.user?.propertyId;
-    if (!userId || !propertyId) return res.status(401).json({ success: false, message: 'Sign in to start a subscription payment.' });
-    const durationMonths = Number(req.body.durationMonths);
-    const data = await subscriptionService.initializeSubscriptionPayment(userId, propertyId, durationMonths);
-    return res.json({ success: true, data });
-  } catch (error: any) {
-    return res.status(error.statusCode || 400).json({ success: false, message: error.message });
-  }
+    const q = req.query;
+    const input = {
+      packageCode: q.packageCode ? String(q.packageCode) : undefined,
+      rooms: q.rooms === undefined ? undefined : Number(q.rooms),
+      staff: q.staff === undefined ? undefined : Number(q.staff),
+      months: Number(q.months),
+    };
+    return res.json({ success: true, data: await subscriptionService.quoteSubscription(req.user!.propertyId!, input) });
+  } catch (error: any) { return sendError(res, error); }
 });
 
-router.get('/verify/:reference', authenticate, async (req: AuthRequest, res: Response) => {
+router.post('/initialize', ...billing, async (req: AuthRequest, res: Response) => {
   try {
-    const propertyId = req.user?.propertyId;
-    if (!propertyId) return res.status(401).json({ success: false, message: 'Sign in to verify subscription payment.' });
-    const reference = req.params.reference as string;
-    const data = await subscriptionService.verifySubscriptionPayment(reference, propertyId);
-    return res.json({ success: true, data });
-  } catch (error: any) {
-    return res.status(error.statusCode || 400).json({ success: false, message: error.message });
-  }
+    const b = req.body || {};
+    const input = {
+      packageCode: b.packageCode, rooms: b.rooms, staff: b.staff,
+      months: Number(b.months ?? b.durationMonths),
+    };
+    return res.json({ success: true, data: await subscriptionService.initializeSubscriptionPayment(req.user!.userId, req.user!.propertyId!, input) });
+  } catch (error: any) { return sendError(res, error); }
+});
+
+router.get('/verify/:reference', ...billing, async (req: AuthRequest, res: Response) => {
+  try {
+    return res.json({ success: true, data: await subscriptionService.verifySubscriptionPayment(String(req.params.reference), req.user!.propertyId!) });
+  } catch (error: any) { return sendError(res, error); }
 });
 
 // ============================================================

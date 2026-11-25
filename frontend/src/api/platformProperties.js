@@ -15,3 +15,7 @@ export const deactivatePlatformProperty = (id) => api.delete(`/platform/properti
 export const permanentlyDeletePlatformProperty = ({ id, confirmationCode }) =>
   api.delete(`/platform/properties/${id}/permanent`, { data: { confirmationCode } });
 export const reactivatePlatformProperty = (id) => api.post(`/platform/properties/${id}/reactivate`);
+export const getPropertySubscription = (id) => api.get(`/platform/properties/${id}/subscription`);
+export const setSubscriptionOverride = (id, data) => api.put(`/platform/properties/${id}/subscription-override`, data);
+export const getSubscriptionSettings = () => api.get('/platform/subscription-settings');
+export const saveSubscriptionSettings = (data) => api.put('/platform/subscription-settings', data);

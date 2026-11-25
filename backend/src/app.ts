@@ -13,6 +13,7 @@ console.log(`Using TypeScript version: ${require('typescript').version}\n`);
 import authRoutes from './modules/auth/auth.routes';
 import propertyRoutes from './modules/property/property.routes';
 import platformPropertyRoutes from './modules/property/platformProperty.routes';
+import platformSubscriptionRoutes from './modules/payment/platform-subscription.routes';
 import roomRoutes from './modules/room/room.routes';
 import housekeepingRoutes from './modules/housekeeping/housekeeping.routes';
 import notificationsRoutes from './modules/notifications/notifications.routes';
@@ -96,6 +97,7 @@ app.get('/', (_req: Request, res: Response) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/properties', propertyRoutes);
 app.use('/api/platform/properties', platformPropertyRoutes);
+app.use('/api/platform/subscription-settings', platformSubscriptionRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/housekeeping', housekeepingRoutes);
 app.use('/api/notifications', notificationsRoutes);

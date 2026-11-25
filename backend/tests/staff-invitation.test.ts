@@ -4,6 +4,7 @@ import { inviteStaff } from '../src/modules/user/invitation.service';
 import { deliverStaffInvitation } from '../src/shared/utils/staffEmail';
 
 jest.mock('../src/shared/utils/prisma', () => ({ prisma: { role: { findUnique: jest.fn() }, user: { create: jest.fn() }, $transaction: jest.fn() } }));
+jest.mock('../src/modules/payment/subscription-access', () => ({ assertCapacity: jest.fn(), getSubscriptionConfig: jest.fn() }));
 jest.mock('../src/shared/utils/password', () => ({ hashPassword: jest.fn<any>().mockResolvedValue('random-password-hash') }));
 jest.mock('../src/shared/utils/staffEmail', () => ({ deliverStaffInvitation: jest.fn() }));
 const db = prisma as any;

@@ -2,6 +2,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken, JwtPayload } from '../utils/jwt';
 import { PrismaClient } from '../../../src/generated/prisma';
+import { getSubscriptionState } from '../../modules/payment/subscription-state';
 
 const prisma = new PrismaClient();
 
@@ -80,22 +81,14 @@ export const authenticate = async (
         select: { subscriptionStatus: true, trialEndsAt: true, subscriptionEndsAt: true }
       });
 
-      if (property) {
-        const now = new Date();
-        
-        const isTrialExpired = property.subscriptionStatus === 'Trial' && property.trialEndsAt && property.trialEndsAt < now;
-        const isSubExpired = property.subscriptionStatus === 'Active' && property.subscriptionEndsAt && property.subscriptionEndsAt < now;
-        const isStatusExpired = property.subscriptionStatus === 'Expired';
-
-        // 🚫 BLOCK THE REQUEST IF EXPIRED
-        if (isTrialExpired || isSubExpired || isStatusExpired) {
-          res.status(403).json({ 
-            success: false, 
-            message: 'Your subscription has expired. Please upgrade to continue.',
-            code: 'SUBSCRIPTION_EXPIRED'
-          });
-          return; // STOPS THE REQUEST HERE
-        }
+      // Shared rule: Expired and Cancelled hotels, and lapsed trials/paid periods, are read-only.
+      if (property && getSubscriptionState(property).expired) {
+        res.status(403).json({
+          success: false,
+          message: 'Your subscription has expired. Please renew on Billing & Plan to continue.',
+          code: 'SUBSCRIPTION_EXPIRED'
+        });
+        return;
       }
     } catch (error) {
       console.error('Subscription check error:', error);

@@ -94,6 +94,18 @@ Code: `reservation/stay-timing.ts`, `reservation/checkout-alerts.service.ts`,
 
 ## Subscriptions (hotels pay HideOut24)
 - Trial → paid via Paystack (platform key). Expiry notices on the dashboard; online booking pauses
-  when expired.
+  when expired. Expired **and Cancelled** hotels are read-only (writes blocked) but can still renew.
+- Packages (all with the same features): Standard GHS 200 / 20 rooms / 5 staff, Pro GHS 350 / 40 / 10,
+  Custom GHS 50 + 5/room + 10/staff. 1–24 months; discounts 3+ 8.33%, 6+ 10%, 12+ 16.67%, 24 20%.
+  All of this is **runtime config** (`subscription_settings`, edited in Super admin → Plans & pricing);
+  pricing logic lives only in `backend/src/modules/payment/subscription-plans.ts`.
+- Usage = rooms in active room types (not deactivated) and staff that are active or have a pending
+  invitation (managers included). Limits block creating/reactivating rooms or staff only; existing
+  operations never stop when a hotel is over its allowance.
+- Upgrades apply immediately after paying the prorated price difference for the remaining period.
+  Downgrades are paid at renewal and take effect when the current period ends; they are refused
+  until usage fits. Paid orders store their own price/allowances, so later price edits never change them.
+- Platform admin can set per-hotel overrides (extra % discount, room/staff allowance) and see payment
+  and plan-change history (audit log actions `SubscriptionPurchased`, `SubscriptionOverrideChanged`).
 - Platform admin can grant **free access** (1–365 days, reason required, audited). If the hotel
   still has paid time, free days start after it. Billing page shows "Free access until …".

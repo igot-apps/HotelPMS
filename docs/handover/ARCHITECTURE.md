@@ -22,7 +22,7 @@ HotelPMS/
     prisma.config.ts          loads .env, points Prisma at DATABASE_URL
     src/app.ts                Express app, all route mounts
     src/modules/<area>/       routes + controller + service + repository per area
-    src/shared/               auth middleware, subscription middleware, utils (prisma, jwt, ghanaPhone…)
+    src/shared/               auth middleware (incl. subscription write lock), utils (prisma, jwt, ghanaPhone…)
     scripts/                  one-off/admin scripts (bootstrap platform admin, verifiers, Studio helper)
     tests/                    Jest tests (prisma is mocked)
   frontend/

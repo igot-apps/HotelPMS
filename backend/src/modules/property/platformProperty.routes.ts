@@ -4,6 +4,7 @@ import { PLATFORM_SORTS, PLATFORM_STATES } from './property.repository';
 import { authenticate, AuthRequest, requirePlatformAdmin } from '../../shared/middleware/auth.middleware';
 import { prisma } from '../../shared/utils/prisma';
 import { grantFreeAccess, listFreeAccess } from '../payment/free-access.service';
+import { getSubscriptionAdminView, setSubscriptionOverride } from '../payment/subscription.service';
 import { defaultHotelHostname, normalizeWebsiteHostname } from './website-domain.service';
 import { addRenderDomain, DomainSetupError, frontendHost, listRenderDomains, removeRenderDomain, verifyDomainReadiness } from './render-domain.service';
 
@@ -24,6 +25,22 @@ router.post('/:id/free-access', async (req: AuthRequest, res: Response) => {
     return res.json({ success: true, data });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.code ? 'Could not save free access. Try again.' : error.message });
+  }
+});
+
+router.get('/:id/subscription', async (req: AuthRequest, res: Response) => {
+  try {
+    return res.json({ success: true, data: await getSubscriptionAdminView(parsePropertyId(req.params.id)) });
+  } catch (error: any) {
+    return res.status(error.statusCode || 400).json({ success: false, message: error.message });
+  }
+});
+
+router.put('/:id/subscription-override', async (req: AuthRequest, res: Response) => {
+  try {
+    return res.json({ success: true, data: await setSubscriptionOverride(parsePropertyId(req.params.id), req.user!.userId, req.body || {}) });
+  } catch (error: any) {
+    return res.status(error.statusCode || 400).json({ success: false, message: error.message });
   }
 });
 

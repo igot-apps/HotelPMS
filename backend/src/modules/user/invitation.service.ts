@@ -1,3 +1,4 @@
+import { assertCapacity } from '../payment/subscription-access';
 import { randomBytes, createHash } from 'node:crypto';
 import { prisma } from '../../shared/utils/prisma';
 import { hashPassword } from '../../shared/utils/password';
@@ -20,6 +21,7 @@ export async function inviteStaff(propertyId: number, data: any) {
     throw new Error('Name, username, and a valid email are required.');
   }
   // Allow only the two staff roles shown in Staff Management.
+  await assertCapacity(propertyId, 'staff');
   const roleName = data.role === 'Housekeeper' ? 'Housekeeper' : data.role === undefined || data.role === 'Receptionist' ? 'Receptionist' : null;
   if (!roleName) throw new Error('Choose Receptionist or Housekeeper.');
   if (roleName === 'Housekeeper') {

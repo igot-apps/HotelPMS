@@ -1,285 +1,317 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useAuthStore } from '../store/authStore';
-import { initializeSubscriptionPayment, verifyPayment, fetchSubscriptionStatus } from '../api/billing';
-import { CreditCard, Smartphone, Calendar, CheckCircle2, AlertTriangle, Loader2, Tag, ShieldCheck, Gift } from 'lucide-react';
-import { currentFreeAccess, describeFreeAccess } from '../lib/freeAccess';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, BedDouble, CalendarClock, CheckCircle2, Crown, Gift, Lightbulb, Loader2, Minus, Plus, ShieldCheck, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '../store/authStore';
+import { fetchSubscriptionQuote, fetchSubscriptionStatus, initializeSubscriptionPayment, verifyPayment } from '../api/billing';
+import { currentFreeAccess, describeFreeAccess } from '../lib/freeAccess';
 
-export default function BillingPage() {
-  const { user } = useAuthStore();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const hasVerifiedRef = useRef(false);
-  
-  const [isPaying, setIsPaying] = useState(false);
-  const [selectedDuration, setSelectedDuration] = useState(1);
-  
-  // 🌟 FRESH DATA STATE
-  const [freshData, setFreshData] = useState(null);
-  const [isLoadingStatus, setIsLoadingStatus] = useState(true);
+const money = (n) => `GHS ${Number(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+const date = (v) => (v ? new Date(v).toLocaleDateString('en-GH', { dateStyle: 'long', timeZone: 'Africa/Accra' }) : '—');
+const QUICK_MONTHS = [1, 3, 6, 12, 24];
+const KIND_LABEL = { New: 'New plan', Renewal: 'Renewal', Upgrade: 'Upgrade', Downgrade: 'Plan change at renewal' };
 
-  const pricingTiers = [
-    { months: 1, label: 'Monthly', price: 200, discount: '' },
-    { months: 3, label: 'Quarterly', price: 550, discount: 'Save 50 GHS' },
-    { months: 12, label: 'Yearly', price: 2000, discount: '2 Months Free!' },
-  ];
+function useDebounced(value, ms = 250) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => { const t = setTimeout(() => setDebounced(value), ms); return () => clearTimeout(t); }, [value, ms]);
+  return debounced;
+}
 
-  const currentTier = pricingTiers.find(t => t.months === selectedDuration);
-
-  // 🌟 1. FETCH FRESH DATA FROM DATABASE ON PAGE LOAD
-  useEffect(() => {
-    const getLiveStatus = async () => {
-      try {
-        const res = await fetchSubscriptionStatus();
-        if (res.data.success) {
-          setFreshData(res.data.data);
-          // Sync back to Zustand so the rest of the app knows
-          useAuthStore.setState({ user: { ...user, ...res.data.data } });
-        }
-      } catch (error) {
-        console.error('Failed to fetch fresh subscription status', error);
-      } finally {
-        setIsLoadingStatus(false);
-      }
-    };
-    getLiveStatus();
-  }, []);
-
-  // 🌟 2. HANDLE PAYSTACK REDIRECT SAFELY
-  useEffect(() => {
-    const reference = searchParams.get('reference') || searchParams.get('trxref');
-    
-    // Only run if we have a reference AND we haven't verified it yet
-    if (reference && !hasVerifiedRef.current) {
-      hasVerifiedRef.current = true;
-      setSearchParams({}); // 🧹 Clean the URL immediately to prevent 404s on refresh
-
-      const activateSubscription = async () => {
-        const toastId = toast.loading('Verifying your payment...');
-        try {
-          const res = await verifyPayment(reference);
-          if (res.data.data?.status === 'success') {
-            toast.success('🎉 Payment successful! Updating dashboard...', { id: toastId });
-            
-            // Fetch the fresh data immediately after payment
-            const freshRes = await fetchSubscriptionStatus();
-            if (freshRes.data.success) {
-              setFreshData(freshRes.data.data);
-              useAuthStore.setState({ user: { ...user, ...freshRes.data.data } });
-            }
-          } else {
-            toast.error('Payment was not completed.', { id: toastId });
-          }
-        } catch (error) {
-          toast.error(error.response?.data?.message || 'Could not verify your subscription payment.', { id: toastId });
-        }
-      };
-      activateSubscription();
-    }
-  }, [searchParams, setSearchParams, user]);
-
-  // 🌟 UPGRADED: Resets clock to midnight so the countdown drops at the start of the day
-  const getSubscriptionStatus = () => {
-    if (user?.subscriptionStatus === 'Expired' || user?.subscriptionStatus === 'Cancelled') {
-      return { status: user.subscriptionStatus, daysLeft: 0, isExpired: true, endDate: null };
-    }
-
-    // 🚨 CRITICAL: Reset today to midnight (00:00:00)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // 1. Check Paid Subscription First
-    if (user?.subscriptionStatus === 'Active' && user?.subscriptionEndsAt) {
-      const subEnd = new Date(user.subscriptionEndsAt);
-      // 🚨 CRITICAL: Reset expiration date to midnight as well
-      subEnd.setHours(0, 0, 0, 0);
-
-      if (!isNaN(subEnd.getTime())) {
-        const diffTime = subEnd - today;
-        const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
-        if (daysLeft > 0) {
-          return { 
-            status: 'Active', 
-            daysLeft: daysLeft, 
-            isExpired: false,
-            endDate: new Date(user.subscriptionEndsAt).toLocaleDateString() // Keep original date for display
-          };
-        } else {
-          return { 
-            status: 'Expired', 
-            daysLeft: 0, 
-            isExpired: true,
-            endDate: new Date(user.subscriptionEndsAt).toLocaleDateString()
-          };
-        }
-      }
-    }
-
-    // 2. Check Trial
-    if (user?.subscriptionStatus === 'Trial' && user?.trialEndsAt) {
-      const trialEnd = new Date(user.trialEndsAt);
-      trialEnd.setHours(0, 0, 0, 0); // Reset to midnight
-
-      if (!isNaN(trialEnd.getTime())) {
-        const diffTime = trialEnd - today;
-        const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
-        return { 
-          status: daysLeft > 0 ? 'Trial' : 'Expired', 
-          daysLeft: Math.max(0, daysLeft), 
-          isExpired: daysLeft <= 0,
-          endDate: new Date(user.trialEndsAt).toLocaleDateString()
-        };
-      }
-    }
-
-    // 3. Fallback
-    return { status: 'Unknown', daysLeft: 0, isExpired: false, endDate: null };
-  };
-
-  const subInfo = getSubscriptionStatus();
-
-  const handleUpgrade = async (e) => {
-    e.preventDefault();
-    setIsPaying(true);
-    try {
-      const response = await initializeSubscriptionPayment({
-        durationMonths: selectedDuration,
-      });
-
-      if (!response.data.success || !response.data.data?.authorization_url) {
-        throw new Error(response.data.message || 'Could not start the subscription payment.');
-      }
-      toast.success('Redirecting to Paystack...');
-      window.location.href = response.data.data.authorization_url;
-    } catch (error) {
-      toast.error(error.response?.data?.message || error.message || 'An error occurred.');
-    } finally {
-      setIsPaying(false);
-    }
-  };
-
-  if (isLoadingStatus) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="animate-spin text-primary-500" size={32} />
-      </div>
-    );
-  }
-
+function UsageMeter({ icon: Icon, label, used, limit }) {
+  const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const tone = used > limit ? 'bg-danger-500' : pct >= 90 ? 'bg-warning-500' : 'bg-primary-500';
   return (
-    <div className="space-y-8 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-3xl font-bold text-text tracking-tight">Billing & Subscription</h1>
-        <p className="text-text-muted mt-1">Manage your hotel's subscription plan and payment methods.</p>
+    <div>
+      <div className="mb-1 flex items-center justify-between text-sm">
+        <span className="flex items-center gap-1.5 font-medium text-text"><Icon size={15} className="text-text-muted" /> {label}</span>
+        <span className="text-text-muted"><b className="text-text">{used}</b> of {limit}</span>
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Card 1: Current Plan Status */}
-        <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-primary-50 rounded-lg"><CreditCard size={20} className="text-primary-600" /></div>
-            <h2 className="text-lg font-bold text-text">Current Plan</h2>
-          </div>
-          <div className="space-y-4">
-            <div>
-              <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">Plan Name</p>
-              <p className="text-2xl font-bold text-text">{freshData?.subscriptionPlan || 'Starter'}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">Status</p>
-              <div className="flex items-center gap-2">
-                {subInfo.status === 'Active' ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-success-50 text-success-700 ring-1 ring-success-600/20">
-                    <CheckCircle2 size={14} /> Active ({subInfo.daysLeft} Days Left)
-                  </span>
-                ) : subInfo.isExpired ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-danger-50 text-danger-700 ring-1 ring-danger-600/20">
-                    <AlertTriangle size={14} /> Expired
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-warning-50 text-warning-700 ring-1 ring-warning-600/20">
-                    <Calendar size={14} /> {subInfo.daysLeft} Days Left in Trial
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="pt-4 border-t border-border">
-              <p className="text-sm text-text-muted">
-                {subInfo.status === 'Active' 
-                  ? `🎉 Your subscription is active! It expires on ${subInfo.endDate}.` 
-                  : subInfo.isExpired 
-                    ? '⚠️ Your subscription has expired. Please upgrade below to restore full access.' 
-                    : `Enjoy full access to the PMS. Your free trial will end on ${subInfo.endDate || 'soon'}.`}
-              </p>
-              {currentFreeAccess(freshData?.freeAccess).map((grant) => (
-                <p key={`${grant.startsAt}-${grant.endsAt}`} className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-success-50 px-3 py-1 text-xs font-bold text-success-700 ring-1 ring-success-600/20">
-                  <Gift size={14} /> {describeFreeAccess(grant)}
-                </p>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Card 2: Upgrade */}
-        <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-success-50 rounded-lg"><Smartphone size={20} className="text-success-600" /></div>
-            <h2 className="text-lg font-bold text-text">Upgrade Subscription</h2>
-          </div>
-
-          <form onSubmit={handleUpgrade} className="space-y-6">
-            <div>
-              <label className="block text-sm font-semibold text-text mb-2">Select Billing Duration</label>
-              <div className="grid grid-cols-3 gap-2">
-                {pricingTiers.map((tier) => (
-                  <button
-                    key={tier.months}
-                    type="button"
-                    onClick={() => setSelectedDuration(tier.months)}
-                    className={`relative p-3 rounded-xl border-2 text-center transition-all ${
-                      selectedDuration === tier.months
-                        ? 'border-success-500 bg-success-50/50 shadow-md'
-                        : 'border-border hover:border-success-200 bg-background'
-                    }`}
-                  >
-                    {tier.discount && (
-                      <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-warning-100 text-warning-700 text-[10px] font-bold rounded-full flex items-center gap-0.5 whitespace-nowrap">
-                        <Tag size={8} /> {tier.discount}
-                      </span>
-                    )}
-                    <p className="text-xs font-semibold text-text-muted uppercase">{tier.label}</p>
-                    <p className="text-lg font-bold text-text mt-1">{tier.price} GHS</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-secondary-50 border border-secondary-200 rounded-xl p-4 flex items-start gap-3">
-              <ShieldCheck size={20} className="text-secondary-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-text">Pay with Mobile Money or Visa</p>
-                <p className="text-xs text-text-muted mt-1">
-                  Choose Mobile Money or a card on Paystack's secure checkout.
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isPaying}
-              className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-success-600 text-text-inverted font-semibold rounded-xl hover:bg-success-700 transition shadow-lg shadow-success-600/20 disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {isPaying ? (
-                <><Loader2 className="animate-spin" size={18} /> Initializing...</>
-              ) : (
-                <><CreditCard size={18} /> Pay {currentTier.price} GHS for {currentTier.months} Month{currentTier.months > 1 ? 's' : ''}</>
-              )}
-            </button>
-          </form>
-        </div>
-      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-secondary-100"><div className={`h-full ${tone}`} style={{ width: `${pct}%` }} /></div>
+      {used >= limit && <p className="mt-1 text-xs text-warning-700">Limit reached — existing {label.toLowerCase()} keep working, but you can't add more.</p>}
     </div>
   );
+}
+
+function Stepper({ label, value, min, max, onChange }) {
+  const set = (n) => onChange(Math.max(min, Math.min(max, Number.isFinite(n) ? Math.round(n) : min)));
+  return (
+    <label className="block text-sm font-medium text-text">
+      {label}
+      <div className="mt-1 flex items-center rounded-lg border border-border bg-background">
+        <button type="button" aria-label={`Fewer ${label}`} onClick={() => set(value - 1)} className="p-2 text-text-muted hover:text-text"><Minus size={14} /></button>
+        <input type="number" min={min} max={max} value={value} onChange={(e) => set(Number(e.target.value))} className="w-full min-w-0 bg-transparent text-center text-text outline-none" />
+        <button type="button" aria-label={`More ${label}`} onClick={() => set(value + 1)} className="p-2 text-text-muted hover:text-text"><Plus size={14} /></button>
+      </div>
+      <span className="text-xs font-normal text-text-muted">{min}–{max}</span>
+    </label>
+  );
+}
+
+export default function BillingPage() {
+  const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const verifiedRef = useRef(false);
+  const initRef = useRef(false);
+  const [selection, setSelection] = useState({ packageCode: 'standard', rooms: 20, staff: 5, months: 1 });
+  const [upgradeOnly, setUpgradeOnly] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
+
+  const status = useQuery({
+    queryKey: ['subscriptionStatus'],
+    queryFn: () => fetchSubscriptionStatus().then((r) => r.data.data),
+  });
+  const data = status.data;
+
+  // Keep the signed-in user's subscription fields (used by sidebar/dashboard) in sync.
+  useEffect(() => {
+    if (!data) return;
+    const { subscriptionPlan, subscriptionStatus, trialEndsAt, subscriptionEndsAt } = data;
+    useAuthStore.setState((s) => ({ user: s.user ? { ...s.user, subscriptionPlan, subscriptionStatus, trialEndsAt, subscriptionEndsAt } : s.user }));
+    if (initRef.current) return;
+    initRef.current = true;
+    const target = data.scheduled || data.current;
+    const known = target.packageCode === 'custom' || data.catalog.packages.some((p) => p.code === target.packageCode);
+    setSelection((s) => ({
+      ...s,
+      packageCode: known ? target.packageCode : data.catalog.packages[0]?.code || 'custom',
+      rooms: Math.max(target.roomAllowance, data.usage.rooms, data.catalog.custom?.minRooms || 1),
+      staff: Math.max(target.staffAllowance, data.usage.staff, data.catalog.custom?.minStaff || 1),
+      months: Math.max(1, data.catalog.minMonths),
+    }));
+  }, [data]);
+
+  // Paystack redirects back with ?reference=…
+  useEffect(() => {
+    const reference = searchParams.get('reference') || searchParams.get('trxref');
+    if (!reference || verifiedRef.current) return;
+    verifiedRef.current = true;
+    setSearchParams({});
+    const toastId = toast.loading('Verifying your payment…');
+    verifyPayment(reference)
+      .then((res) => {
+        if (res.data.data?.status === 'success') toast.success('Payment confirmed. Your plan is updated.', { id: toastId });
+        else toast.error('Payment was not completed.', { id: toastId });
+        queryClient.invalidateQueries({ queryKey: ['subscriptionStatus'] });
+      })
+      .catch((error) => toast.error(error.response?.data?.message || 'Could not verify your payment.', { id: toastId }));
+  }, [searchParams, setSearchParams, queryClient]);
+
+  const isCustom = selection.packageCode === 'custom';
+  const params = useDebounced({
+    packageCode: selection.packageCode,
+    ...(isCustom ? { rooms: selection.rooms, staff: selection.staff } : {}),
+    months: upgradeOnly ? 0 : selection.months,
+  });
+  const quote = useQuery({
+    queryKey: ['subscriptionQuote', params],
+    queryFn: () => fetchSubscriptionQuote(params).then((r) => r.data.data),
+    enabled: !!data && initRef.current,
+    retry: false,
+    placeholderData: (prev) => prev,
+  });
+  const quoteError = quote.isError ? quote.error?.response?.data?.message || 'Could not price this option.' : null;
+  const q = quote.isError ? null : quote.data;
+
+  if (status.isLoading) {
+    return <div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin text-primary-500" size={32} /></div>;
+  }
+  if (status.isError || !data) {
+    return <div className="mx-auto max-w-xl rounded-xl border border-danger-200 bg-danger-50 p-6 text-danger-700">{status.error?.response?.data?.message || 'Could not load billing details.'}</div>;
+  }
+
+  const { state, current, scheduled, usage, limits, catalog } = data;
+  const paidActive = data.subscriptionStatus === 'Active' && !state.expired;
+  const statusTone = state.expired ? 'bg-danger-50 text-danger-700' : state.isTrial ? 'bg-primary-50 text-primary-700' : 'bg-success-50 text-success-700';
+  const statusLabel = state.cancelled ? 'Cancelled' : state.expired ? 'Expired' : state.isTrial ? 'Free trial' : 'Active';
+  const choose = (packageCode) => { setSelection((s) => ({ ...s, packageCode })); setUpgradeOnly(false); };
+  const canUpgradeOnly = paidActive && !scheduled && q?.kind === 'Upgrade';
+
+  const pay = async () => {
+    setIsPaying(true);
+    try {
+      const res = await initializeSubscriptionPayment(params);
+      const result = res.data.data;
+      if (result?.applied) {
+        toast.success('Plan updated — no payment was needed.');
+        queryClient.invalidateQueries({ queryKey: ['subscriptionStatus'] });
+      } else if (result?.authorization_url) {
+        window.location.href = result.authorization_url;
+        return;
+      } else throw new Error('Could not start the payment.');
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message || 'Could not start the payment.');
+    }
+    setIsPaying(false);
+  };
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-text sm:text-3xl">Billing & Plan</h1>
+        <p className="mt-1 text-text-muted">Every plan includes all HideOut24 features. Plans differ only in rooms and staff accounts.</p>
+      </div>
+
+      {/* Current plan */}
+      <section className="grid gap-6 rounded-xl border border-border bg-surface p-5 shadow-sm md:grid-cols-2">
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Crown size={18} className="text-primary-600" />
+            <h2 className="text-xl font-bold text-text">{current.packageName}</h2>
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusTone}`}>{statusLabel}</span>
+          </div>
+          <p className="text-sm text-text-muted">
+            {state.expired ? `Ended ${date(state.endsAt)}. Your data is safe — renew to continue making changes and taking online bookings.`
+              : `${state.isTrial ? 'Trial ends' : 'Paid until'} ${date(state.endsAt)}.`}
+          </p>
+          {scheduled && (
+            <p className="flex items-start gap-2 rounded-lg bg-primary-50 p-3 text-sm text-primary-800">
+              <CalendarClock size={16} className="mt-0.5 shrink-0" />
+              Switching to {scheduled.packageName} ({scheduled.roomAllowance} rooms, {scheduled.staffAllowance} staff) on {date(scheduled.effectiveAt)}.
+            </p>
+          )}
+          {data.hotelDiscountPercent > 0 && <p className="text-sm text-success-700">Your hotel has a {data.hotelDiscountPercent}% special discount, included in all prices below.</p>}
+          {currentFreeAccess(data.freeAccess).map((grant) => (
+            <p key={grant.endsAt} className="flex items-center gap-1.5 text-sm text-success-700"><Gift size={14} /> {describeFreeAccess(grant)}</p>
+          ))}
+        </div>
+        <div className="space-y-4">
+          <UsageMeter icon={BedDouble} label="Rooms" used={usage.rooms} limit={limits.rooms} />
+          <UsageMeter icon={Users} label="Staff accounts" used={usage.staff} limit={limits.staff} />
+          <p className="text-xs text-text-muted">Staff includes managers and pending invitations.</p>
+        </div>
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+        <div className="space-y-6">
+          {/* Packages */}
+          <section className="rounded-xl border border-border bg-surface p-5 shadow-sm">
+            <h2 className="mb-4 text-lg font-bold text-text">Choose a plan</h2>
+            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
+              {catalog.packages.map((p) => (
+                <button key={p.code} type="button" onClick={() => choose(p.code)}
+                  className={`rounded-xl border-2 p-4 text-left transition ${selection.packageCode === p.code ? 'border-primary-500 bg-primary-50' : 'border-border hover:border-primary-200'}`}>
+                  <p className="font-semibold text-text">{p.name}</p>
+                  <p className="mt-1 text-xl font-bold text-text">{money(p.monthlyPrice)}<span className="text-sm font-normal text-text-muted">/mo</span></p>
+                  <p className="mt-2 text-sm text-text-muted">{p.rooms} rooms · {p.staff} staff</p>
+                  {current.packageCode === p.code && <p className="mt-2 text-xs font-semibold text-primary-700">Current plan</p>}
+                </button>
+              ))}
+              {catalog.custom && (
+                <button type="button" onClick={() => choose('custom')}
+                  className={`rounded-xl border-2 p-4 text-left transition ${isCustom ? 'border-primary-500 bg-primary-50' : 'border-border hover:border-primary-200'}`}>
+                  <p className="font-semibold text-text">{catalog.custom.name}</p>
+                  <p className="mt-1 text-sm text-text-muted">{money(catalog.custom.baseFee)} base + {money(catalog.custom.perRoom)}/room + {money(catalog.custom.perStaff)}/staff per month</p>
+                  <p className="mt-2 text-sm text-text-muted">Pick exactly what you need</p>
+                  {current.packageCode === 'custom' && <p className="mt-2 text-xs font-semibold text-primary-700">Current plan</p>}
+                </button>
+              )}
+            </div>
+            {isCustom && catalog.custom && (
+              <div className="mt-4 grid gap-4 rounded-lg border border-border bg-background p-4 sm:grid-cols-2">
+                <Stepper label="Rooms" value={selection.rooms} min={catalog.custom.minRooms} max={catalog.custom.maxRooms} onChange={(rooms) => setSelection((s) => ({ ...s, rooms }))} />
+                <Stepper label="Staff accounts" value={selection.staff} min={catalog.custom.minStaff} max={catalog.custom.maxStaff} onChange={(staff) => setSelection((s) => ({ ...s, staff }))} />
+              </div>
+            )}
+          </section>
+
+          {/* Duration */}
+          <section className="rounded-xl border border-border bg-surface p-5 shadow-sm">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-bold text-text">How long?</h2>
+              <span className="text-sm text-text-muted">{upgradeOnly ? 'Remaining period only' : `${selection.months} month${selection.months > 1 ? 's' : ''}`}</span>
+            </div>
+            <input type="range" min={catalog.minMonths} max={catalog.maxMonths} value={selection.months} disabled={upgradeOnly}
+              onChange={(e) => setSelection((s) => ({ ...s, months: Number(e.target.value) }))} className="w-full accent-primary-600" aria-label="Duration in months" />
+            <div className="mt-3 flex flex-wrap gap-2">
+              {QUICK_MONTHS.filter((m) => m >= catalog.minMonths && m <= catalog.maxMonths).map((m) => {
+                const pct = [...catalog.discounts].reverse().find((d) => m >= d.minMonths)?.percent || 0;
+                return (
+                  <button key={m} type="button" disabled={upgradeOnly} onClick={() => setSelection((s) => ({ ...s, months: m }))}
+                    className={`rounded-lg border px-3 py-1.5 text-sm transition disabled:opacity-50 ${!upgradeOnly && selection.months === m ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-border text-text hover:bg-secondary-50'}`}>
+                    {m} mo{pct > 0 && <span className="ml-1 font-semibold text-success-700">−{pct}%</span>}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-3 text-xs text-text-muted">
+              Discounts: {catalog.discounts.filter((d) => d.percent > 0).map((d) => `${d.minMonths}+ months ${d.percent}%`).join(' · ') || 'none'}
+            </p>
+            {(canUpgradeOnly || upgradeOnly) && (
+              <label className="mt-3 flex items-center gap-2 text-sm text-text">
+                <input type="checkbox" checked={upgradeOnly} onChange={(e) => setUpgradeOnly(e.target.checked)} className="accent-primary-600" />
+                Upgrade now for the remaining period only (no extra months)
+              </label>
+            )}
+          </section>
+        </div>
+
+        {/* Breakdown */}
+        <aside className="h-fit rounded-xl border border-border bg-surface p-5 shadow-sm lg:sticky lg:top-4">
+          <h2 className="mb-3 text-lg font-bold text-text">Summary</h2>
+          {quoteError ? (
+            <p className="flex items-start gap-2 rounded-lg bg-warning-50 p-3 text-sm text-warning-800"><AlertTriangle size={16} className="mt-0.5 shrink-0" /> {quoteError}</p>
+          ) : !q ? (
+            <div className="flex h-24 items-center justify-center"><Loader2 className="animate-spin text-primary-500" /></div>
+          ) : (
+            <div className={`space-y-3 text-sm ${quote.isFetching ? 'opacity-60' : ''}`}>
+              <div>
+                <p className="font-semibold text-text">{q.packageName} · {KIND_LABEL[q.kind]}</p>
+                <p className="text-text-muted">{q.roomAllowance} rooms · {q.staffAllowance} staff accounts</p>
+              </div>
+              <dl className="space-y-1.5 border-t border-border pt-3">
+                {q.months > 0 && <>
+                  <Row label={`${money(q.monthlyPrice)} × ${q.months} month${q.months > 1 ? 's' : ''}`} value={money(q.subtotal)} />
+                  {q.discountAmount > 0 && <Row label={`Duration discount (${q.discountPercent}%)`} value={`−${money(q.discountAmount)}`} tone="text-success-700" />}
+                </>}
+                {q.prorationAmount > 0 && <Row label={`Upgrade difference (${q.remainingDays} days left)`} value={money(q.prorationAmount)} />}
+                <div className="flex justify-between border-t border-border pt-2 text-base font-bold text-text"><dt>Total today</dt><dd>{money(q.total)}</dd></div>
+                {q.months > 0 && <Row label="Effective monthly cost" value={money(q.effectiveMonthly)} />}
+                {q.discountAmount > 0 && <Row label="You save" value={money(q.discountAmount)} tone="text-success-700" />}
+              </dl>
+              <p className="rounded-lg bg-background p-3 text-text-muted">
+                {q.kind === 'Downgrade'
+                  ? `New allowances start ${date(q.appliesAt)}, when your current period ends. ${q.months ? `Paid until ${date(q.endsAt)}.` : ''}`
+                  : q.kind === 'Upgrade'
+                    ? `New allowances apply immediately. ${q.endsAt ? `Paid until ${date(q.endsAt)}.` : ''}`
+                    : `${q.startsAt && new Date(q.startsAt) > new Date() ? `Starts after your current period, ${date(q.startsAt)}.` : 'Starts today.'} Paid until ${date(q.endsAt)}.`}
+              </p>
+              {q.recommendation && (
+                <div className="rounded-lg border border-success-200 bg-success-50 p-3 text-success-800">
+                  <p className="flex items-center gap-1.5 font-semibold"><Lightbulb size={15} /> Save {money(q.recommendation.monthlySaving)}/month</p>
+                  <p className="mt-1">{q.recommendation.packageName} ({q.recommendation.roomAllowance} rooms, {q.recommendation.staffAllowance} staff) covers this for {money(q.recommendation.monthlyPrice)}/month.</p>
+                  <button type="button" onClick={() => setSelection((s) => ({ ...s, packageCode: q.recommendation.packageCode, rooms: q.recommendation.roomAllowance, staff: q.recommendation.staffAllowance }))}
+                    className="mt-2 font-semibold underline">Switch to {q.recommendation.packageName}</button>
+                </div>
+              )}
+            </div>
+          )}
+          <button type="button" onClick={pay} disabled={!q || !!quoteError || isPaying || quote.isFetching}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 font-semibold text-text-inverted transition hover:bg-primary-700 disabled:opacity-50">
+            {isPaying ? <><Loader2 size={18} className="animate-spin" /> Connecting to Paystack…</> : q?.total === 0 ? 'Apply change' : `Pay ${money(q?.total)}`}
+          </button>
+          <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-text-muted"><ShieldCheck size={13} /> Mobile money or card via Paystack. No automatic renewals.</p>
+        </aside>
+      </div>
+
+      {/* History */}
+      <section className="rounded-xl border border-border bg-surface p-5 shadow-sm">
+        <h2 className="mb-3 text-lg font-bold text-text">Payment history</h2>
+        {data.payments.length === 0 ? <p className="text-sm text-text-muted">No subscription payments yet.</p> : (
+          <ul className="divide-y divide-border text-sm">
+            {data.payments.map((p) => (
+              <li key={p.reference} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                <span className="flex items-center gap-2 text-text"><CheckCircle2 size={15} className="text-success-600" /> {p.packageCode === 'legacy' ? 'Original plan' : p.planName} · {KIND_LABEL[p.kind] || p.kind}{p.durationMonths ? ` · ${p.durationMonths} mo` : ''}{p.roomAllowance ? ` · ${p.roomAllowance} rooms / ${p.staffAllowance} staff` : ''}</span>
+                <span className="text-text-muted">{date(p.paidAt)} · <b className="text-text">{money(p.amount)}</b></span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function Row({ label, value, tone = 'text-text' }) {
+  return <div className="flex justify-between gap-3"><dt className="text-text-muted">{label}</dt><dd className={`font-medium ${tone}`}>{value}</dd></div>;
 }

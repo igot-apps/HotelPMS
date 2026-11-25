@@ -1,3 +1,4 @@
+import { assertCapacity } from '../payment/subscription-access';
 import * as roomTypeRepository from './room-type.repository';
 
 export const createRoomType = async (data: {
@@ -49,7 +50,12 @@ export const updateRoomType = async (
 ) => {
   const roomType = await roomTypeRepository.findRoomTypeById(roomTypeId);
   if (!roomType) throw new Error('Room type not found');
-  
+  if (data.isActive === true && !roomType.isActive) {
+    // Reactivating a type brings its rooms back into the plan's room count.
+    const returning = roomType.rooms.filter((r: any) => !(r.operationalStatus === 'Maintenance' && r.maintenanceReason === 'Room deactivated')).length;
+    await assertCapacity(roomType.propertyId, 'rooms', returning);
+  }
+
   return roomTypeRepository.updateRoomType(roomTypeId, data);
 };
 

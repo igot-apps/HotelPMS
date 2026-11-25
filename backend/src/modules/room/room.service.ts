@@ -2,6 +2,21 @@ import * as roomRepository from './room.repository';
 import { prisma } from '../../shared/utils/prisma';
 import { hotelDate } from '../reports/daily-overview.service';
 import { expireUnarrivedStays } from '../reservation/recovery.service';
+import { assertCapacity } from '../payment/subscription-access';
+
+const isDeactivated = (room: { operationalStatus: string; maintenanceReason: string | null }) =>
+  room.operationalStatus === 'Maintenance' && room.maintenanceReason === 'Room deactivated';
+
+// A room starts counting against the plan when it leaves the deactivated state or moves to an active room type.
+const assertRoomReactivation = async (room: any, nextStatus?: string, nextRoomTypeId?: number) => {
+  const wasCounted = !isDeactivated(room) && room.roomType?.isActive !== false;
+  if (wasCounted) return;
+  const leavesDeactivated = !isDeactivated(room) || (!!nextStatus && nextStatus !== 'Maintenance');
+  const nextType = nextRoomTypeId && nextRoomTypeId !== room.roomTypeId
+    ? await prisma.roomType.findUnique({ where: { roomTypeId: nextRoomTypeId }, select: { isActive: true } })
+    : room.roomType;
+  if (leavesDeactivated && nextType?.isActive !== false) await assertCapacity(room.propertyId, 'rooms');
+};
 
 
 
@@ -10,7 +25,8 @@ export const createRoom = async (data: any) => {
   if (!data.propertyId) throw new Error('Property ID is required');
   if (!data.roomNumber) throw new Error('Room number is required');
   if (!data.roomTypeId) throw new Error('Room type ID is required');
-  
+  await assertCapacity(Number(data.propertyId), 'rooms');
+
   return roomRepository.createRoom(data);
 };
 
@@ -83,6 +99,7 @@ export const updateRoom = async (roomId: number, data: any) => {
   const room = await roomRepository.findRoomById(roomId);
   if (!room) throw new Error('Room not found');
   const { maintenanceReason, isOnlineBookable: _ignored, ...fields } = data;
+  await assertRoomReactivation(room, fields.operationalStatus, fields.roomTypeId ? Number(fields.roomTypeId) : undefined);
   Object.assign(fields, maintenanceReasonUpdate(room.operationalStatus, fields.operationalStatus, maintenanceReason));
 
   return roomRepository.updateRoom(roomId, fields);
@@ -107,6 +124,7 @@ export const updateRoomStatus = async (
   const room = await roomRepository.findRoomById(roomId);
   if (!room) throw new Error('Room not found');
   const reasonUpdate = maintenanceReasonUpdate(room.operationalStatus, operationalStatus, maintenanceReason);
+  await assertRoomReactivation(room, operationalStatus);
 
   if (operationalStatus === 'Maintenance') {
     const checkedInStay = await roomRepository.findActiveCheckedInReservationRoom(roomId);

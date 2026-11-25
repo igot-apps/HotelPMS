@@ -1,3 +1,4 @@
+import { assertCapacity } from '../payment/subscription-access';
 import { Request, Response } from 'express';
 import * as userService from './user.service';
 import { AuthRequest } from '../../shared/middleware/auth.middleware';
@@ -86,6 +87,9 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
 
     if (user.userId === req.user?.userId || !['Receptionist', 'Housekeeper'].includes(user.role.roleName)) {
       return res.status(403).json({ success: false, message: 'Only staff accounts can be managed here.' });
+    }
+    if (!user.isActive && !user.invitationPending && req.body.isActive === true) {
+      await assertCapacity(user.propertyId!, 'staff');
     }
     const updatedUser = await userService.updateUser(userId, {
       fullName: req.body.fullName, username: req.body.username, email: req.body.email,

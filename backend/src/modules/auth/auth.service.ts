@@ -2,6 +2,7 @@ import { comparePassword ,hashPassword } from '../../shared/utils/password';
 import { generateAccessToken, generateRefreshToken } from '../../shared/utils/jwt';
 import * as authRepository from './auth.repository';
 import { defaultHotelHostname } from '../property/website-domain.service';
+import { getSubscriptionConfig } from '../payment/subscription-access';
 
 import { PrismaClient } from '../../../src/generated/prisma';
 const prisma = new PrismaClient();
@@ -243,13 +244,15 @@ export const registerNewHotel = async (data: {
   const ownerExists = await prisma.user.findFirst({ where: { email: data.ownerEmail } });
   if (ownerExists) throw new Error('An account with this email already exists.');
 
+  // Trial length and allowances come from the platform's subscription settings.
+  const { trial } = await getSubscriptionConfig(prisma);
+
   // 3. Start a Prisma Transaction (All or Nothing)
   const result = await prisma.$transaction(async (tx: any) => {
     
-    // A. Create the Property (The Hotel) with a 14-Day Free Trial
-    // 🌟 Calculate the trial expiration date (14 days from right now)
+    // A. Create the Property (The Hotel) with a free trial
     const trialEndsAt = new Date();
-    trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+    trialEndsAt.setDate(trialEndsAt.getDate() + trial.days);
 
     const property = await tx.property.create({
       data: {
@@ -270,9 +273,12 @@ export const registerNewHotel = async (data: {
         status: 'Active', // Operational status
         
         // 🌟 NEW: Subscription & Trial Setup
-        subscriptionPlan: 'Starter',
-        subscriptionStatus: 'Trial', 
-        trialEndsAt: trialEndsAt, // Automatically sets the 14-day expiration!
+        subscriptionPlan: 'Trial',
+        subscriptionPackage: 'trial',
+        subscriptionStatus: 'Trial',
+        trialEndsAt,
+        roomAllowance: trial.rooms,
+        staffAllowance: trial.staff,
       },
     });
 

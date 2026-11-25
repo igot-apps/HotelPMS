@@ -2,11 +2,13 @@ import { SkeletonRows } from '../components/ui/Skeleton';
 import ResponsiveTable from '../components/ui/ResponsiveTable';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Building2, CheckCircle2, CreditCard, Edit2, Gift, Globe2, MapPin, Plus, Power, PowerOff, Search, ShieldCheck, Trash2, Users } from 'lucide-react';
+import { AlertTriangle, Building2, CheckCircle2, CreditCard, Crown, Edit2, Gift, Globe2, MapPin, Plus, Power, PowerOff, Search, Settings2, ShieldCheck, Trash2, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PropertyModal from '../components/catalog/PropertyModal';
 import WebsiteDomainsDialog from '../components/catalog/WebsiteDomainsDialog';
 import FreeAccessDialog from '../components/catalog/FreeAccessDialog';
+import HotelSubscriptionDialog from '../components/catalog/HotelSubscriptionDialog';
+import SubscriptionSettingsDialog from '../components/catalog/SubscriptionSettingsDialog';
 import {
   createPlatformProperty,
   deactivatePlatformProperty,
@@ -25,6 +27,8 @@ export default function PlatformPropertiesPage() {
   const [editingProperty, setEditingProperty] = useState(null);
   const [websiteProperty, setWebsiteProperty] = useState(null);
   const [freeAccessProperty, setFreeAccessProperty] = useState(null);
+  const [subscriptionProperty, setSubscriptionProperty] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deletingProperty, setDeletingProperty] = useState(null);
   const [confirmationCode, setConfirmationCode] = useState('');
@@ -118,9 +122,14 @@ export default function PlatformPropertiesPage() {
           <h1 className="text-2xl font-bold tracking-tight text-text">All properties</h1>
           <p className="mt-1 text-sm text-text-muted">Manage properties across the HideOut24 platform.</p>
         </div>
-        <button onClick={openAdd} className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-text-inverted shadow-sm transition hover:bg-primary-700">
-          <Plus size={16} /> Add property
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setSettingsOpen(true)} className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-semibold text-text shadow-sm transition hover:bg-secondary-50">
+            <Settings2 size={16} /> Plans & pricing
+          </button>
+          <button onClick={openAdd} className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-text-inverted shadow-sm transition hover:bg-primary-700">
+            <Plus size={16} /> Add property
+          </button>
+        </div>
       </header>
 
       {/* Click a card to show only those hotels; click again (or All) to clear. */}
@@ -195,7 +204,7 @@ export default function PlatformPropertiesPage() {
                         <span className="mt-1 block max-w-48 truncate text-xs">{property.address || 'No address'}</span>
                       </td>
                       <td className="px-5 py-4">
-                        <span className="block text-sm font-semibold text-text">{property.subscriptionPlan || 'Starter'}</span>
+                        <span className="block text-sm font-semibold text-text">{property.subscriptionPlan || 'Trial'}</span>
                         <span className="text-xs text-text-muted">{property.subscriptionStatus || 'Unknown'}{subscriptionEnd(property) ? ` · until ${subscriptionEnd(property)}` : ''}</span>
                       </td>
                       <td className="px-5 py-4 text-sm text-text-muted">
@@ -210,6 +219,7 @@ export default function PlatformPropertiesPage() {
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex justify-end gap-1.5">
+                          <button onClick={() => setSubscriptionProperty(property)} title="Subscription, overrides and history" aria-label={`Subscription for ${property.propertyName}`} className="rounded-lg p-2 text-primary-600 transition hover:bg-primary-50"><Crown size={16} /></button>
                           <button onClick={() => setWebsiteProperty(property)} title="Hotel website and domains" aria-label={`Website for ${property.propertyName}`} className="rounded-lg p-2 text-primary-600 transition hover:bg-primary-50"><Globe2 size={16} /></button>
                           {isActive && (
                             <button onClick={() => setFreeAccessProperty(property)} title="Grant free access" aria-label={`Grant free access to ${property.propertyName}`} className="rounded-lg p-2 text-success-600 transition hover:bg-success-50"><Gift size={16} /></button>
@@ -274,6 +284,8 @@ export default function PlatformPropertiesPage() {
         error={saveMutation.error?.response?.data?.message || (saveMutation.isError ? 'Failed to save property.' : null)}
       />
       {freeAccessProperty && <FreeAccessDialog property={freeAccessProperty} onClose={() => setFreeAccessProperty(null)} />}
+      {subscriptionProperty && <HotelSubscriptionDialog property={subscriptionProperty} onClose={() => setSubscriptionProperty(null)} />}
+      {settingsOpen && <SubscriptionSettingsDialog onClose={() => setSettingsOpen(false)} />}
       {websiteProperty && <WebsiteDomainsDialog property={websiteProperty} onClose={() => setWebsiteProperty(null)} />}
     </div>
   );
