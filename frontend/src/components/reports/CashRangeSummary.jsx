@@ -43,7 +43,7 @@ export default function CashRangeSummary({ from, to }) {
                   <td className="p-2">{row.countedDays} of {row.days.length}</td>
                   <td className={`p-2 font-semibold ${row.countedDays ? tone(row.differenceOnCountedDays) : 'text-text-muted'}`}>{row.countedDays ? signed(row.differenceOnCountedDays) : '—'}</td>
                   <td className="p-2">{row.uncountedDays.length ? row.uncountedDays.map((day) => (
-                    <span key={day} className="mb-1 mr-1 inline-block rounded-md border border-border px-2 py-0.5 text-xs">{day}</span>
+                    <span key={day} className="mb-1 mr-1 inline-block rounded-md border border-border px-2 py-0.5 text-xs">{day}{row.days.find((entry) => entry.date === day)?.pendingReason ? ` · Pending: ${row.days.find((entry) => entry.date === day).pendingReason}` : ''}</span>
                   )) : <span className="text-text-muted">—</span>}</td>
                 </tr>
               ))}

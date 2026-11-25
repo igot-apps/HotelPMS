@@ -39,7 +39,7 @@ export async function grantFreeAccess(propertyId: number, userId: number, input:
       data: { subscriptionStatus: 'Active', subscriptionEndsAt: endsAt },
       select: { propertyId: true },
     });
-    await tx.auditLog.create({ data: { userId, action, entityType: 'Property', entityId: propertyId, newData: grant } });
+    await tx.auditLog.create({ data: { propertyId: propertyId, userId, action, entityType: 'Property', entityId: propertyId, newData: grant } });
     return grant;
   });
 }

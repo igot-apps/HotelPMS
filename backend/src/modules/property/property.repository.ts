@@ -85,7 +85,7 @@ export const findPlatformProperties = async (page = 1, limit = 50, search = '', 
   const count = (s: string) => prisma.property.count({ where: stateWhere(s, now) });
 
   const [properties, total, all, active, inactive, trials, paid, expired] = await Promise.all([
-    prisma.property.findMany({ where, skip, take: limit, orderBy, include: { _count: { select: { rooms: true, users: true } } } }),
+    prisma.property.findMany({ where, skip, take: limit, orderBy, include: { _count: { select: { rooms: true, users: true } }, memberships: { where: { isOwner: true }, select: { user: { select: { userId: true, fullName: true, email: true, _count: { select: { memberships: { where: { isOwner: true } } } } } } } } } }),
     prisma.property.count({ where }),
     prisma.property.count(),
     count('active'), count('inactive'), count('trial'), count('paid'), count('expired'),
@@ -156,12 +156,20 @@ export const permanentlyDeleteProperty = async (propertyId: number, confirmation
       throw new Error('Enter the exact property code to confirm permanent deletion.');
     }
 
+    // Owners who manage other properties keep their account: move their home to
+    // another property they own so deleting this one never deletes the account.
+    const owners = await tx.propertyMembership.findMany({ where: { propertyId, isOwner: true, user: { propertyId } }, select: { userId: true } });
+    for (const { userId } of owners) {
+      const next = await tx.propertyMembership.findFirst({ where: { userId, isActive: true, propertyId: { not: propertyId } }, orderBy: { createdAt: 'asc' }, select: { propertyId: true } });
+      if (next) await tx.user.update({ where: { userId }, data: { propertyId: next.propertyId, lastPropertyId: next.propertyId } });
+    }
+
     // Remove restrictive references before cascading through hotel-owned records.
     await tx.payment.deleteMany({
       where: { OR: [{ propertyId }, { reservation: { propertyId } }] },
     });
     await tx.reservation.deleteMany({ where: { propertyId } });
-    await tx.auditLog.deleteMany({ where: { user: { propertyId } } });
+    await tx.auditLog.deleteMany({ where: { OR: [{ propertyId }, { propertyId: null, user: { propertyId } }] } });
     return tx.property.delete({ where: { propertyId } });
   });
 };

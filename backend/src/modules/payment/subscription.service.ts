@@ -108,7 +108,7 @@ async function applyPayment(tx: any, payment: any, now: Date) {
     },
     select: { propertyId: true },
   });
-  await tx.auditLog.create({ data: {
+  await tx.auditLog.create({ data: { propertyId: payment.propertyId,
     userId: payment.initiatedBy ?? null, action: 'SubscriptionPurchased', entityType: 'Property', entityId: payment.propertyId,
     oldData: { ...current, endsAt: currentEnd?.toISOString() ?? null } as any,
     newData: { ...purchased, kind: payment.kind, reference: payment.reference, amount: Number(payment.amount), months: payment.durationMonths, appliesAt: nextScheduled?.effectiveAt ?? now.toISOString(), endsAt: subscriptionEndsAt?.toISOString() ?? null } as any,
@@ -259,7 +259,7 @@ export const setSubscriptionOverride = async (propertyId: number, userId: number
     const before = await tx.property.findUnique({ where: { propertyId }, select: { subscriptionOverride: true } });
     if (!before) throw new SubscriptionError('Property not found', 404);
     await tx.property.update({ where: { propertyId }, data: { subscriptionOverride: empty ? Prisma.DbNull : next as any }, select: { propertyId: true } });
-    await tx.auditLog.create({ data: {
+    await tx.auditLog.create({ data: { propertyId: propertyId,
       userId, action: 'SubscriptionOverrideChanged', entityType: 'Property', entityId: propertyId,
       oldData: (before.subscriptionOverride as any) ?? undefined, newData: (empty ? { cleared: true } : next) as any,
     } });

@@ -1,10 +1,11 @@
+import { atProperty } from '../../shared/utils/property-access';
 import { prisma } from '../../shared/utils/prisma';
 import { Actor, correctionVersion } from './recovery.service';
 import { CORRECTION_ACTIONS } from './correction-policy';
 import { refundVersion } from './refund.service';
 
 async function manager(actor: Actor) {
-  const account = await prisma.user.findFirst({ where: { userId: actor.userId, propertyId: actor.propertyId, isActive: true }, include: { role: true } });
+  const account = await prisma.user.findFirst({ where: { userId: actor.userId, ...atProperty(actor.propertyId), isActive: true }, include: { role: true } });
   if (account?.role.roleName !== 'Manager') throw Object.assign(new Error('Hotel manager access required.'), { statusCode: 403 });
 }
 const include = {

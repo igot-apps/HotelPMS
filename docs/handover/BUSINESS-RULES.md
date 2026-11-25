@@ -109,3 +109,13 @@ Code: `reservation/stay-timing.ts`, `reservation/checkout-alerts.service.ts`,
   and plan-change history (audit log actions `SubscriptionPurchased`, `SubscriptionOverrideChanged`).
 - Platform admin can grant **free access** (1–365 days, reason required, audited). If the hotel
   still has paid time, free days start after it. Billing page shows "Free access until …".
+
+## Multi-property owners
+
+- `User.propertyId` is the account's **home** property. `property_memberships` lists every property an account can work in; the registering owner has `isOwner = true`.
+- The **active** property is the `propertyId` in the JWT. Owners switch with `POST /api/auth/switch-property` (fresh tokens; the frontend clears caches and reloads). Services keep scoping by `req.user.propertyId`; actor lookups use `atProperty()` from `shared/utils/property-access.ts`.
+- Only an owner can add a property (`POST /api/auth/properties`). Added properties get **no free trial** (read-only until subscribed), and an owner cannot add another while one of their properties has expired without ever being paid. Max 20 per account.
+- Subscriptions, plans, renewals, room/staff limits and expiry stay per property. The owner never uses a staff seat (`countsAsStaff()`); other managers do.
+- Ordinary staff stay single-property. Deactivating a membership ends sessions for that property only; deactivating the account ends all.
+- `audit_logs.propertyId` records where an action happened (older rows fall back to the user's home property, see `auditAt()`).
+- Permanently deleting an owner's home property moves their home to another property they own instead of deleting the account.

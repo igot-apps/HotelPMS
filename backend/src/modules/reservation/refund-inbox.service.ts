@@ -1,7 +1,8 @@
+import { atProperty } from '../../shared/utils/property-access';
 import { prisma } from '../../shared/utils/prisma';
 import type { Actor } from './recovery.service';
 async function staff(actor: Actor) {
-  const user = await prisma.user.findFirst({ where: { userId: actor.userId, propertyId: actor.propertyId, isActive: true }, include: { role: true } });
+  const user = await prisma.user.findFirst({ where: { userId: actor.userId, ...atProperty(actor.propertyId), isActive: true }, include: { role: true } });
   if (!user || !['Manager', 'Receptionist'].includes(user.role.roleName)) throw Object.assign(new Error('Active hotel staff access required.'), { statusCode: 403 });
 }
 export async function refundInboxCount(actor: Actor) {

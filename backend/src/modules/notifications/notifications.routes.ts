@@ -54,7 +54,7 @@ router.patch('/settings', requirePermission('CanManageStaffAndRoles'), async (re
     const property = await prisma.$transaction(async tx => {
       const before = await tx.property.findUniqueOrThrow({ where: { propertyId }, select: { smsSimulationEnabled: true } });
       const updated = await tx.property.update({ where: { propertyId }, data: { smsSimulationEnabled: req.body.enabled }, select: { smsSimulationEnabled: true } });
-      if (before.smsSimulationEnabled !== req.body.enabled) await tx.auditLog.create({ data: { userId: req.user!.userId, entityType: 'Property', action: 'SmsSimulationSettingChanged', oldData: { propertyId, enabled: before.smsSimulationEnabled }, newData: { propertyId, enabled: req.body.enabled } } });
+      if (before.smsSimulationEnabled !== req.body.enabled) await tx.auditLog.create({ data: { propertyId: propertyId, userId: req.user!.userId, entityType: 'Property', action: 'SmsSimulationSettingChanged', oldData: { propertyId, enabled: before.smsSimulationEnabled }, newData: { propertyId, enabled: req.body.enabled } } });
       return updated;
     });
     return res.json({ success: true, data: { enabled: property.smsSimulationEnabled } });

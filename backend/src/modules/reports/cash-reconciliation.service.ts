@@ -1,3 +1,4 @@
+import { atProperty } from '../../shared/utils/property-access';
 import { prisma } from '../../shared/utils/prisma';
 import { dayBounds, hotelDate, rangeBounds } from './daily-overview.service';
 
@@ -7,8 +8,10 @@ const fromCents = (value: number) => value / 100;
 const fail = (message: string, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 
 async function staffAccount(db: any, actor: Actor) {
-  const user = await db.user.findFirst({ where: { userId: actor.userId, propertyId: actor.propertyId, isActive: true }, include: { role: true, property: { select: { timezone: true } } } });
+  const user = await db.user.findFirst({ where: { userId: actor.userId, ...atProperty(actor.propertyId), isActive: true }, include: { role: true, property: { select: { timezone: true } } } });
   if (!user || !['Manager', 'Receptionist'].includes(user.role.roleName)) throw fail('Front desk staff required.', 403);
+  // An owner working in another property uses that property's settings, not their home's.
+  if (user.propertyId && user.propertyId !== actor.propertyId) user.property = await db.property.findUnique({ where: { propertyId: actor.propertyId }, select: { timezone: true } });
   return user;
 }
 
@@ -93,9 +96,14 @@ export async function cashReconciliation(actor: Actor, requestedDate?: unknown) 
   const timeZone = user.property?.timezone || 'Africa/Accra';
   const date = pickDate(requestedDate, timeZone);
   const manager = user.role.roleName === 'Manager';
-  const [figures, counts, activity] = await Promise.all([
+  const [figures, counts, issues, activity] = await Promise.all([
     deskFigures(prisma, actor.propertyId, date, timeZone),
     prisma.cashCount.findMany({
+      where: { propertyId: actor.propertyId, businessDate: new Date(`${date}T00:00:00Z`), ...(manager ? {} : { staffUserId: actor.userId }) },
+      include: { staff: { select: { fullName: true } }, recorder: { select: { fullName: true } } },
+      orderBy: { recordedAt: 'desc' },
+    }),
+    prisma.cashCountIssue.findMany({
       where: { propertyId: actor.propertyId, businessDate: new Date(`${date}T00:00:00Z`), ...(manager ? {} : { staffUserId: actor.userId }) },
       include: { staff: { select: { fullName: true } }, recorder: { select: { fullName: true } } },
       orderBy: { recordedAt: 'desc' },
@@ -107,8 +115,14 @@ export async function cashReconciliation(actor: Actor, requestedDate?: unknown) 
     expectedAmount: Number(c.expectedAmount), countedAmount: Number(c.countedAmount), difference: Number(c.difference),
     note: c.note, recordedBy: c.recorder.fullName, recordedAt: c.recordedAt,
   }));
+  const issueHistory = issues.map(issue => ({
+    cashCountIssueId: issue.cashCountIssueId, staffUserId: issue.staffUserId, staffName: issue.staff.fullName,
+    reason: issue.reason, recordedBy: issue.recorder.fullName, recordedAt: issue.recordedAt,
+    resolvedAt: counts.find(count => count.staffUserId === issue.staffUserId && count.recordedAt > issue.recordedAt)?.recordedAt || null,
+  }));
   // Everyone who handled money that day, plus anyone with a saved count.
   for (const c of history) if (!figures.staff.has(c.staffUserId)) figures.staff.set(c.staffUserId, { userId: c.staffUserId, name: c.staffName, cashIn: 0, cashRefunds: 0, mobileMoney: 0, card: 0, other: 0, refundsOther: 0 });
+  for (const issue of issueHistory) if (!figures.staff.has(issue.staffUserId)) figures.staff.set(issue.staffUserId, { userId: issue.staffUserId, name: issue.staffName, cashIn: 0, cashRefunds: 0, mobileMoney: 0, card: 0, other: 0, refundsOther: 0 });
   for (const c of activity.corrections) if (!figures.staff.has(c.staffUserId)) figures.staff.set(c.staffUserId, { userId: c.staffUserId, name: c.collectedBy, cashIn: 0, cashRefunds: 0, mobileMoney: 0, card: 0, other: 0, refundsOther: 0 });
   if (!manager && !figures.staff.has(actor.userId)) figures.staff.set(actor.userId, { userId: actor.userId, name: user.fullName, cashIn: 0, cashRefunds: 0, mobileMoney: 0, card: 0, other: 0, refundsOther: 0 });
 
@@ -117,11 +131,13 @@ export async function cashReconciliation(actor: Actor, requestedDate?: unknown) 
     .map(r => {
       const expectedCash = r.cashIn - r.cashRefunds;
       const latest = history.find(c => c.staffUserId === r.userId) || null; // newest first
+      const latestIssue = issueHistory.find(issue => issue.staffUserId === r.userId) || null;
       return {
         userId: r.userId, name: r.name,
         cashTaken: fromCents(r.cashIn), cashRefunded: fromCents(r.cashRefunds), expectedCash: fromCents(expectedCash),
         mobileMoney: fromCents(r.mobileMoney), card: fromCents(r.card), other: fromCents(r.other), refundsOther: fromCents(r.refundsOther),
         latestCount: latest,
+        pendingIssue: latestIssue && !latestIssue.resolvedAt ? latestIssue : null,
         // Live difference uses today's records; the saved count keeps the figures as they were when counted.
         differenceNow: latest ? fromCents(cents(latest.countedAmount) - expectedCash) : null,
         changedSinceCount: latest ? Math.abs(cents(latest.expectedAmount) - expectedCash) >= 1 : false,
@@ -140,19 +156,19 @@ export async function cashReconciliation(actor: Actor, requestedDate?: unknown) 
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  if (!manager) return { date, timeZone, role: 'Receptionist', staff: rows, history };
+  if (!manager) return { date, timeZone, role: 'Receptionist', staff: rows, history, issueHistory };
 
   const counted = rows.filter(r => r.latestCount);
   const outstanding = await prisma.reservation.findMany({ where: { propertyId: actor.propertyId, status: { in: ['Confirmed', 'InHouse', 'Completed'] } }, select: { totalAmount: true, amountPaid: true } });
   return {
-    date, timeZone, role: 'Manager', staff: rows, history,
+    date, timeZone, role: 'Manager', staff: rows, history, issueHistory,
     totals: {
       expectedCash: fromCents(rows.reduce((s, r) => s + cents(r.expectedCash), 0)),
       // Hotel total = the sum of each person's latest count (no separate drawer count, so nothing is counted twice).
       countedCash: counted.length ? fromCents(counted.reduce((s, r) => s + cents(r.latestCount!.countedAmount), 0)) : null,
       expectedForCounted: fromCents(counted.reduce((s, r) => s + cents(r.expectedCash), 0)),
       difference: counted.length ? fromCents(counted.reduce((s, r) => s + cents(r.differenceNow), 0)) : null,
-      notCounted: rows.filter(r => !r.latestCount && cents(r.expectedCash) !== 0).map(r => r.name),
+      notCounted: rows.filter(r => !r.latestCount && (cents(r.expectedCash) !== 0 || r.pendingIssue)).map(r => r.name),
       deskMobileMoney: fromCents(rows.reduce((s, r) => s + cents(r.mobileMoney), 0)),
       deskCard: fromCents(rows.reduce((s, r) => s + cents(r.card), 0)),
       verifiedOnline: fromCents(figures.onlineCents),
@@ -173,10 +189,11 @@ export async function cashReconciliationRange(actor: Actor, from: unknown, to: u
   const timeZone = user.property?.timezone || 'Africa/Accra';
   const start = pickDate(from, timeZone), end = pickDate(to, timeZone);
   const bounds = rangeBounds(start, end, timeZone);
-  const [payments, refunds, counts] = await Promise.all([
+  const [payments, refunds, counts, issues] = await Promise.all([
     prisma.payment.findMany({ where: { propertyId: actor.propertyId, status: 'Completed', paymentMethod: 'Cash', verifiedProvider: null, receivedBy: { not: null }, paymentDate: { gte: bounds.gte, lt: bounds.lt } }, select: { amount: true, receivedBy: true, paymentDate: true, receiver: { select: { fullName: true } } } }),
     prisma.refund.findMany({ where: { propertyId: actor.propertyId, isSimulated: false, method: 'Cash', returnedBy: { not: null }, returnedAt: { gte: bounds.gte, lt: bounds.lt } }, select: { amount: true, returnedBy: true, returnedByName: true, returnedAt: true } }),
     prisma.cashCount.findMany({ where: { propertyId: actor.propertyId, businessDate: { gte: new Date(`${start}T00:00:00Z`), lte: new Date(`${end}T00:00:00Z`) } }, include: { staff: { select: { fullName: true } } }, orderBy: { recordedAt: 'desc' } }),
+    prisma.cashCountIssue.findMany({ where: { propertyId: actor.propertyId, businessDate: { gte: new Date(`${start}T00:00:00Z`), lte: new Date(`${end}T00:00:00Z`) } }, include: { staff: { select: { fullName: true } } }, orderBy: { recordedAt: 'desc' } }),
   ]);
   const people = new Map<number, { userId: number; name: string; days: Map<string, number> }>();
   const person = (userId: number, name: string) => { if (!people.has(userId)) people.set(userId, { userId, name, days: new Map() }); return people.get(userId)!; };
@@ -184,12 +201,15 @@ export async function cashReconciliationRange(actor: Actor, from: unknown, to: u
   for (const x of refunds) { const r = person(x.returnedBy!, x.returnedByName); const d = hotelDate(x.returnedAt, timeZone); r.days.set(d, (r.days.get(d) || 0) - cents(x.amount)); }
   const latest = new Map<string, any>(); // newest count per person per day
   for (const c of counts) { const key = `${c.staffUserId}|${c.businessDate.toISOString().slice(0, 10)}`; if (!latest.has(key)) latest.set(key, c); person(c.staffUserId, c.staff.fullName); }
+  const latestIssue = new Map<string, any>();
+  for (const issue of issues) { const key = `${issue.staffUserId}|${issue.businessDate.toISOString().slice(0, 10)}`; if (!latestIssue.has(key)) latestIssue.set(key, issue); person(issue.staffUserId, issue.staff.fullName); }
   const staff = [...people.values()].map(p => {
-    const dates = new Set([...p.days.keys(), ...[...latest.keys()].filter(k => k.startsWith(`${p.userId}|`)).map(k => k.split('|')[1])]);
+    const dates = new Set([...p.days.keys(), ...[...latest.keys(), ...latestIssue.keys()].filter(k => k.startsWith(`${p.userId}|`)).map(k => k.split('|')[1])]);
     const days = [...dates].sort().map(date => {
       const expected = p.days.get(date) || 0;
       const count = latest.get(`${p.userId}|${date}`);
-      return { date, expected: fromCents(expected), counted: count ? Number(count.countedAmount) : null, difference: count ? fromCents(cents(count.countedAmount) - expected) : null };
+      const issue = latestIssue.get(`${p.userId}|${date}`);
+      return { date, expected: fromCents(expected), counted: count ? Number(count.countedAmount) : null, difference: count ? fromCents(cents(count.countedAmount) - expected) : null, pendingReason: issue && (!count || issue.recordedAt > count.recordedAt) ? issue.reason : null };
     });
     const counted = days.filter(d => d.counted !== null);
     return {
@@ -199,7 +219,7 @@ export async function cashReconciliationRange(actor: Actor, from: unknown, to: u
       expectedOnCountedDays: fromCents(counted.reduce((s, d) => s + cents(d.expected), 0)),
       countedCash: fromCents(counted.reduce((s, d) => s + cents(d.counted), 0)),
       differenceOnCountedDays: fromCents(counted.reduce((s, d) => s + cents(d.difference), 0)),
-      uncountedDays: days.filter(d => d.counted === null && cents(d.expected) !== 0).map(d => d.date),
+      uncountedDays: days.filter(d => d.counted === null && (cents(d.expected) !== 0 || d.pendingReason)).map(d => d.date),
     };
   }).sort((a, b) => a.name.localeCompare(b.name));
   const sum = (key: string) => fromCents(staff.reduce((s: number, r: any) => s + cents(r[key]), 0));
@@ -224,7 +244,7 @@ export async function recordCashCount(actor: Actor, input: any) {
     const staffUserId = input?.staffUserId === undefined || input?.staffUserId === null || input?.staffUserId === '' ? actor.userId : Number(input.staffUserId);
     if (!Number.isSafeInteger(staffUserId)) throw fail('Choose a staff member.');
     if (user.role.roleName !== 'Manager' && staffUserId !== actor.userId) throw fail('You can only record a count for your own cash.', 403);
-    const staff = await tx.user.findFirst({ where: { userId: staffUserId, propertyId: actor.propertyId }, select: { userId: true, fullName: true } });
+    const staff = await tx.user.findFirst({ where: { userId: staffUserId, ...atProperty(actor.propertyId) }, select: { userId: true, fullName: true } });
     if (!staff) throw fail('Staff member not found for this hotel.', 404);
     const figures = await deskFigures(tx, actor.propertyId, date, timeZone);
     const r = figures.staff.get(staffUserId);
@@ -235,8 +255,28 @@ export async function recordCashCount(actor: Actor, input: any) {
       expectedAmount: fromCents(expected), countedAmount: fromCents(countedCents), difference: fromCents(countedCents - expected),
       note: note || null, recordedBy: actor.userId,
     } });
-    await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'CashCount', entityId: saved.cashCountId, action: 'CashCountRecorded',
+    await tx.auditLog.create({ data: { propertyId: actor.propertyId, userId: actor.userId, entityType: 'CashCount', entityId: saved.cashCountId, action: 'CashCountRecorded',
       newData: { propertyId: actor.propertyId, date, staffUserId, staffName: staff.fullName, expected: fromCents(expected), counted: fromCents(countedCents), difference: fromCents(countedCents - expected), note: note || null } } });
     return { cashCountId: saved.cashCountId, date, staffUserId, expectedAmount: fromCents(expected), countedAmount: fromCents(countedCents), difference: fromCents(countedCents - expected) };
+  });
+}
+
+export async function recordCashCountIssue(actor: Actor, input: any) {
+  const reason = typeof input?.reason === 'string' ? input.reason.trim() : '';
+  if (!reason || reason.length > 300) throw fail('Enter a reason (up to 300 characters).');
+  return prisma.$transaction(async tx => {
+    const user = await staffAccount(tx, actor);
+    const date = pickDate(input?.date, user.property?.timezone || 'Africa/Accra');
+    const staffUserId = input?.staffUserId === undefined || input?.staffUserId === null || input?.staffUserId === '' ? actor.userId : Number(input.staffUserId);
+    if (!Number.isSafeInteger(staffUserId)) throw fail('Choose a staff member.');
+    if (user.role.roleName !== 'Manager' && staffUserId !== actor.userId) throw fail('You can only report your own cash count.', 403);
+    const staff = await tx.user.findFirst({ where: { userId: staffUserId, ...atProperty(actor.propertyId) }, select: { userId: true, fullName: true } });
+    if (!staff) throw fail('Staff member not found for this hotel.', 404);
+    const businessDate = new Date(`${date}T00:00:00Z`);
+    const latestCount = await tx.cashCount.findFirst({ where: { propertyId: actor.propertyId, businessDate, staffUserId }, orderBy: { recordedAt: 'desc' } });
+    if (latestCount) throw fail('Cash was already counted for this day. Add a note to a recount if needed.');
+    const saved = await tx.cashCountIssue.create({ data: { propertyId: actor.propertyId, businessDate, staffUserId, reason, recordedBy: actor.userId } });
+    await tx.auditLog.create({ data: { propertyId: actor.propertyId, userId: actor.userId, entityType: 'CashCountIssue', entityId: saved.cashCountIssueId, action: 'CashCountIssueRecorded', newData: { propertyId: actor.propertyId, date, staffUserId, staffName: staff.fullName, reason } } });
+    return { cashCountIssueId: saved.cashCountIssueId, date, staffUserId, reason };
   });
 }

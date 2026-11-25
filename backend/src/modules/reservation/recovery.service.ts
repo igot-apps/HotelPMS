@@ -1,3 +1,4 @@
+import { atProperty } from '../../shared/utils/property-access';
 import { prisma } from '../../shared/utils/prisma';
 import { recordSimulatedSms } from '../notifications/simulated-sms.service';
 import { canCorrect } from './correction-policy';
@@ -29,14 +30,14 @@ async function atomic<T>(work: (tx: any) => Promise<T>): Promise<T> {
 async function booking(tx: any, id: string, actor: Actor) {
   const rows = await tx.$queryRaw`SELECT "reservationId" FROM reservations WHERE "reservationId" = ${id} AND "propertyId" = ${actor.propertyId} FOR UPDATE`;
   if (!rows.length) throw new Error('Reservation not found for this hotel.');
-  const user = await tx.user.findFirst({ where: { userId: actor.userId, propertyId: actor.propertyId, isActive: true }, include: { role: true } });
+  const user = await tx.user.findFirst({ where: { userId: actor.userId, ...atProperty(actor.propertyId), isActive: true }, include: { role: true } });
   if (!user) throw new Error('An active hotel staff account is required.');
   const res = await tx.reservation.findUniqueOrThrow({ where: { reservationId: id }, include: { reservationRooms: true, payments: true } });
   return { res, user };
 }
 // actor null = done automatically by the system (e.g. reservation expiry).
 async function audit(tx: any, actor: Actor | null, id: string, action: string, reason: string, before: unknown, after: unknown) {
-  await tx.auditLog.create({ data: { userId: actor?.userId ?? null, entityType: 'Reservation', action,
+  await tx.auditLog.create({ data: { propertyId: actor?.propertyId ?? null, userId: actor?.userId ?? null, entityType: 'Reservation', action,
     oldData: snapshot({ reservationId: id, value: before }),
     newData: snapshot({ reservationId: id, reason, value: after }),
   } });
@@ -216,7 +217,7 @@ export async function transitionStay(stayId: number, status: string, actor: Acto
           });
         }
         occupantConfirmation = { ...occupantConfirmation, uncleanRoomConfirmed: room.housekeepingStatus };
-        await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Room', action: 'HousekeepingStatusChanged',
+        await tx.auditLog.create({ data: { propertyId: actor.propertyId, userId: actor.userId, entityType: 'Room', action: 'HousekeepingStatusChanged',
           oldData: { roomId: stay.roomId, status: room.housekeepingStatus },
           newData: { roomId: stay.roomId, propertyId: actor.propertyId, status: 'Clean', reason: 'Staff confirmed the room was ready during check-in', reservationId: res.reservationId },
         } });
@@ -486,7 +487,7 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
       if (preview) return result;
       await releaseOccupiedRoom(tx, stay);
       await tx.room.update({ where: { roomId: targetId }, data: { operationalStatus: 'Occupied', ...(targetNeedsCleaning ? { housekeepingStatus: 'Clean' } : {}) } });
-      if (targetNeedsCleaning) await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Room', action: 'HousekeepingStatusChanged',
+      if (targetNeedsCleaning) await tx.auditLog.create({ data: { propertyId: actor.propertyId, userId: actor.userId, entityType: 'Room', action: 'HousekeepingStatusChanged',
         oldData: { roomId: targetId, status: target.housekeepingStatus },
         newData: { roomId: targetId, propertyId: actor.propertyId, status: 'Clean', reason: 'Staff confirmed the room was ready during guest transfer', reservationId: id },
       } });

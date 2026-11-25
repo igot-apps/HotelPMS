@@ -1,3 +1,4 @@
+import { atProperty } from '../../shared/utils/property-access';
 import { createHash } from 'node:crypto';
 import { prisma } from '../../shared/utils/prisma';
 import type { Actor } from './recovery.service';
@@ -9,7 +10,7 @@ export const refundVersion = (res: any) => createHash('sha256').update(JSON.stri
 // Refunds are paid back by the hotel (no provider refunds), so Paystack is not a refund method.
 const methods = ['Cash', 'MobileMoney', 'BankTransfer'];
 async function staff(tx: any, actor: Actor, manager = false) {
-  const user = await tx.user.findFirst({ where: { userId: actor.userId, propertyId: actor.propertyId, isActive: true }, include: { role: true } });
+  const user = await tx.user.findFirst({ where: { userId: actor.userId, ...atProperty(actor.propertyId), isActive: true }, include: { role: true } });
   if (!user || !['Manager', 'Receptionist'].includes(user.role.roleName) || (manager && user.role.roleName !== 'Manager')) throw fail(manager ? 'Only an active hotel manager can approve or complete refunds.' : 'Active hotel staff required.', 403);
   return user;
 }
@@ -99,7 +100,7 @@ export async function requestRefund(actor: Actor, id: string, input: any) {
     if (result.mode === 'SimulatedMoMo') {
       const simulation = await simulateRefundInTransaction(tx, actor, request, result);
       request = await tx.correctionRequest.update({ where: { requestId: request.requestId }, data: { status: 'Simulated', input: { ...refundInput, simulation } } });
-      await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Reservation', action: 'CorrectionRequestSimulated', newData: { reservationId: id, requestId: request.requestId, amount: result.amount, paymentId: result.paymentId, reason: result.reason } } });
+      await tx.auditLog.create({ data: { propertyId: actor.propertyId, userId: actor.userId, entityType: 'Reservation', action: 'CorrectionRequestSimulated', newData: { reservationId: id, requestId: request.requestId, amount: result.amount, paymentId: result.paymentId, reason: result.reason } } });
       return request;
     }
     const res = await locked(tx, actor, id);
@@ -190,7 +191,7 @@ async function recordReturn(tx: any, actor: Actor, user: any, res: any, request:
   const refund = await tx.refund.create({ data: { requestId: request.requestId, propertyId: actor.propertyId, reservationId: request.reservationId, paymentId: result.paymentId, amount: result.amount, method, reference, returnedBy: actor.userId, returnedByName: user.fullName, returnedAt } });
   await tx.reservation.update({ where: { reservationId: request.reservationId }, data: { amountPaid: (totals.net - cents(result.amount)) / 100, refundDue: remaining / 100, refundStatus: remaining ? 'Pending' : 'Processed' } });
   await tx.correctionRequest.update({ where: { requestId: request.requestId }, data: { status: 'Completed' } });
-  await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Reservation', action: 'RefundCompleted', newData: { reservationId: request.reservationId, requestId: request.requestId, refundId: refund.refundId, amount: result.amount, method: refund.method, reference: refund.reference, returnedAt: returnedAt.toISOString(), reason: result.reason, ...(request.input?.policyException ? { policyException: true } : {}) } } });
+  await tx.auditLog.create({ data: { propertyId: actor.propertyId, userId: actor.userId, entityType: 'Reservation', action: 'RefundCompleted', newData: { reservationId: request.reservationId, requestId: request.requestId, refundId: refund.refundId, amount: result.amount, method: refund.method, reference: refund.reference, returnedAt: returnedAt.toISOString(), reason: result.reason, ...(request.input?.policyException ? { policyException: true } : {}) } } });
   return refund;
 }
 export async function completeRefund(actor: Actor, requestId: number, input: any) {

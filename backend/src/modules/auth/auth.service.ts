@@ -3,6 +3,8 @@ import { generateAccessToken, generateRefreshToken } from '../../shared/utils/jw
 import * as authRepository from './auth.repository';
 import { defaultHotelHostname } from '../property/website-domain.service';
 import { getSubscriptionConfig } from '../payment/subscription-access';
+import { getSubscriptionState } from '../payment/subscription-state';
+import { canAccessProperty, listAccessibleProperties, isPropertyOwner } from '../../shared/utils/property-access';
 
 import { PrismaClient } from '../../../src/generated/prisma';
 const prisma = new PrismaClient();
@@ -114,49 +116,68 @@ export const loginUser = async (
 
   await authRepository.updateLastLogin(user.userId);
 
-  // 🚨 JWT PAYLOAD: propertyId is now the root scope. Fallback to 0 if null.
+  // Open the property the owner last worked in, if they still have access; otherwise home.
+  const lastPropertyId = (user as any).lastPropertyId as number | null;
+  const propertyId = lastPropertyId && lastPropertyId !== user.propertyId && await canAccessProperty(prisma, user.userId, lastPropertyId)
+    ? lastPropertyId : user.propertyId || 0;
+  return issueSession(user.userId, propertyId);
+};
+
+/** Tokens and the frontend session for one account working in one property. */
+async function issueSession(userId: number, propertyId: number): Promise<LoginResponse> {
+  const user = await authRepository.findUserWithPermissions(userId);
+  if (!user) return { success: false, message: 'User not found' };
+  // 🚨 JWT PAYLOAD: propertyId is the active property (root scope). 0 for platform admins.
   const payload = {
     userId: user.userId,
-    propertyId: user.propertyId || 0, 
+    propertyId: propertyId || 0,
     roleId: user.roleId,
     username: user.username,
     sessionVersion: user.sessionVersion,
   };
+  return {
+    success: true,
+    accessToken: generateAccessToken(payload),
+    refreshToken: generateRefreshToken(payload),
+    user: await buildSessionUser(user, propertyId) as any,
+  };
+}
 
-  const accessToken = generateAccessToken(payload);
-  const refreshToken = generateRefreshToken(payload);
-
-  const permissions = user.role.rolePermissions.map(
-    (rp) => rp.permission.code
-  );
+async function buildSessionUser(user: any, propertyId: number) {
+  const permissions: string[] = (user.role.rolePermissions || []).map((rp: any) => rp.permission.code);
   if (user.role.roleName === 'Manager' && user.propertyId) {
     for (const permission of defaultManagerPermissions) {
       if (!permissions.includes(permission.code)) permissions.push(permission.code);
     }
   }
-
+  const property: any = propertyId
+    ? await prisma.property.findUnique({ where: { propertyId }, select: { propertyId: true, propertyName: true, housekeepingEnabled: true, subscriptionPlan: true, subscriptionStatus: true, trialEndsAt: true, subscriptionEndsAt: true } })
+    : null;
+  const properties = user.propertyId ? await listAccessibleProperties(prisma, user.userId) : [];
+  const active = properties.find((p: any) => p.propertyId === propertyId);
   return {
-    success: true,
-    accessToken,
-    refreshToken,
-    user: {
-      userId: user.userId,
-      fullName: user.fullName,
-      username: user.username,
-      email: user.email || null,
-      role: user.role.roleName,
-      isPlatformAdmin: user.isPlatformAdmin,
-      propertyId: user.propertyId || null,
-      propertyName: (user as any).property?.propertyName || null, // ✅ Safe navigation
-      housekeepingEnabled: Boolean((user as any).property?.housekeepingEnabled),
-      subscriptionPlan: user.property?.subscriptionPlan || 'Platform',
-      subscriptionStatus: user.property?.subscriptionStatus || 'Active',
-      trialEndsAt: user.property?.trialEndsAt || null,
-      subscriptionEndsAt: user.property?.subscriptionEndsAt || null,
-      permissions,
-    },
+    userId: user.userId,
+    fullName: user.fullName,
+    username: user.username,
+    email: user.email || null,
+    role: user.role.roleName,
+    isPlatformAdmin: user.isPlatformAdmin,
+    propertyId: property?.propertyId || null,
+    propertyName: property?.propertyName || null,
+    housekeepingEnabled: Boolean(property?.housekeepingEnabled),
+    subscriptionPlan: property?.subscriptionPlan || 'Platform',
+    subscriptionStatus: property?.subscriptionStatus || 'Active',
+    trialEndsAt: property?.trialEndsAt || null,
+    subscriptionEndsAt: property?.subscriptionEndsAt || null,
+    isOwner: Boolean(active?.isOwner),
+    canAddProperty: Boolean(user.propertyId) && !user.isPlatformAdmin && properties.some((p: any) => p.isOwner),
+    properties: properties.map((p: any) => ({
+      propertyId: p.propertyId, propertyName: p.propertyName, city: p.city, isOwner: p.isOwner,
+      isActive: p.isActive && p.status === 'Active', expired: getSubscriptionState(p).expired,
+    })),
+    permissions,
   };
-};
+}
 
 export const refreshAccessToken = async (refreshToken: string) => {
   const { verifyRefreshToken } = require('../../shared/utils/jwt');
@@ -174,10 +195,14 @@ export const refreshAccessToken = async (refreshToken: string) => {
     return { success: false, message: 'Your password changed. Please sign in again.' };
   }
 
-  // 🚨 JWT PAYLOAD: Fallback to 0 if null
+  // Keep the session in the property it was issued for, only while access remains.
+  const propertyId = decoded.propertyId || 0;
+  if (propertyId !== (user.propertyId || 0) && !await canAccessProperty(prisma, user.userId, propertyId)) {
+    return { success: false, message: 'Your account access has changed. Please sign in again.' };
+  }
   const payload = {
     userId: user.userId,
-    propertyId: user.propertyId || 0,
+    propertyId,
     roleId: user.roleId,
     username: user.username,
     sessionVersion: user.sessionVersion,
@@ -187,34 +212,102 @@ export const refreshAccessToken = async (refreshToken: string) => {
   return { success: true, accessToken };
 };
 
-export const getUserById = async (userId: number) => {
-  const user = await authRepository.findUserById(userId);
+export const getUserById = async (userId: number, propertyId?: number) => {
+  const user = await authRepository.findUserWithPermissions(userId);
   if (!user) return null;
   if (user.role.roleName === 'Manager' && user.propertyId) {
     await prisma.$transaction((tx: any) => ensureManagerPermissions(tx));
   }
-  const role = await prisma.role.findUnique({
-    where: { roleId: user.roleId },
-    include: { rolePermissions: { include: { permission: true } } },
-  });
-  
-  return {
-    userId: user.userId,
-    fullName: user.fullName,
-    username: user.username,
-    email: user.email,
-    role: user.role.roleName,
-    permissions: role?.rolePermissions.map(({ permission }) => permission.code) || [],
-    isPlatformAdmin: user.isPlatformAdmin,
-    propertyId: user.propertyId || null,
-    propertyName: (user as any).property?.propertyName || null, // ✅ Safe navigation
-    housekeepingEnabled: Boolean((user as any).property?.housekeepingEnabled),
-    isActive: user.isActive,
-    lastLoginAt: user.lastLoginAt,
-    createdAt: user.createdAt,
-  };
+  const session = await buildSessionUser(await authRepository.findUserWithPermissions(userId), propertyId ?? user.propertyId ?? 0);
+  return { ...session, isActive: user.isActive, lastLoginAt: user.lastLoginAt, createdAt: user.createdAt };
 };
 
+/** Move an owner's session to another property they manage. Fresh tokens, nothing carried over. */
+export const switchProperty = async (userId: number, propertyId: number): Promise<LoginResponse> => {
+  if (!Number.isInteger(propertyId) || propertyId <= 0) return { success: false, message: 'Choose a property.' };
+  if (!await canAccessProperty(prisma, userId, propertyId)) {
+    return { success: false, message: 'You do not have access to that property.' };
+  }
+  await prisma.user.update({ where: { userId }, data: { lastPropertyId: propertyId } });
+  const session = await issueSession(userId, propertyId);
+  await prisma.auditLog.create({ data: { propertyId: propertyId, userId, action: 'PropertySwitched', entityType: 'Property', entityId: propertyId, newData: { propertyId } } }).catch(() => {});
+  return session;
+};
+
+
+type NewPropertyInput = {
+  hotelName: string; slug: string; email: string; phone: string;
+  area: string; city: string; region: string; latitude: number; longitude: number;
+};
+
+async function availableSlug(raw: string) {
+  const slug = String(raw || '').trim().toLowerCase();
+  if (slug !== String(raw || '').trim() || !defaultHotelHostname(slug)) throw new Error('Use a valid hotel URL with letters, numbers, and hyphens.');
+  const slugExists = await prisma.property.findFirst({ where: { propertyCode: { equals: slug, mode: 'insensitive' } } });
+  if (slugExists) throw new Error('This hotel URL is already taken. Please choose another.');
+  if (await prisma.propertyWebsiteDomain.findUnique({ where: { hostname: `${slug}.hideout24.com` } })) throw new Error('This hotel URL is already reserved. Please choose another.');
+  return slug;
+}
+
+function newPropertyData(data: NewPropertyInput, slug: string, trialEndsAt: Date, trial: { rooms: number; staff: number }) {
+  return {
+    propertyName: data.hotelName,
+    propertyCode: slug,
+    businessName: data.hotelName,
+    propertyType: 'Hotel',
+    primaryEmail: data.email,
+    primaryPhone: data.phone,
+    area: data.area,
+    city: data.city,
+    region: data.region,
+    latitude: data.latitude,
+    longitude: data.longitude,
+    country: 'Ghana',
+    currency: 'GHS',
+    timezone: 'Africa/Accra',
+    status: 'Active', // Operational status
+    // Subscription & trial setup
+    subscriptionPlan: 'Trial',
+    subscriptionPackage: 'trial',
+    subscriptionStatus: 'Trial' as const,
+    trialEndsAt,
+    roomAllowance: trial.rooms,
+    staffAllowance: trial.staff,
+  };
+}
+
+export const MAX_OWNED_PROPERTIES = 20;
+
+/**
+ * A registered owner adds another property to the same account. Each property
+ * keeps its own subscription; additional properties get no free trial (the
+ * trial is already ended) so they stay read-only until subscribed.
+ */
+export const addOwnedProperty = async (userId: number, data: NewPropertyInput) => {
+  const owner = await prisma.user.findUnique({ where: { userId }, select: { isActive: true, isPlatformAdmin: true, propertyId: true } });
+  if (!owner?.isActive || owner.isPlatformAdmin || !owner.propertyId || !await isPropertyOwner(prisma, userId)) {
+    throw Object.assign(new Error('Only the registered property owner can add properties.'), { statusCode: 403 });
+  }
+  const owned = await prisma.propertyMembership.findMany({
+    where: { userId, isOwner: true },
+    select: { property: { select: { propertyId: true, propertyName: true, subscriptionStatus: true, trialEndsAt: true, subscriptionEndsAt: true, _count: { select: { subscriptionPayments: { where: { status: 'Completed' } } } } } } },
+  });
+  if (owned.length >= MAX_OWNED_PROPERTIES) throw new Error(`An account can manage at most ${MAX_OWNED_PROPERTIES} properties. Contact support for more.`);
+  const unpaid = owned.find((m: any) => getSubscriptionState(m.property).expired && m.property._count.subscriptionPayments === 0);
+  if (unpaid) throw new Error(`Subscribe ${unpaid.property.propertyName} before adding another property.`);
+  for (const key of ['hotelName', 'area', 'city', 'region'] as const) {
+    if (!String(data[key] || '').trim()) throw new Error('Property name, URL, area, city and region are required.');
+  }
+  const slug = await availableSlug(data.slug);
+  const { trial } = await getSubscriptionConfig(prisma);
+  const property = await prisma.$transaction(async (tx: any) => {
+    const created = await tx.property.create({ data: newPropertyData({ ...data, hotelName: data.hotelName.trim() }, slug, new Date(), trial) });
+    await tx.propertyMembership.create({ data: { userId, propertyId: created.propertyId, isOwner: true } });
+    await tx.auditLog.create({ data: { propertyId: created.propertyId, userId, action: 'PropertyAdded', entityType: 'Property', entityId: created.propertyId, newData: { propertyId: created.propertyId, propertyName: created.propertyName, propertyCode: slug } } });
+    return created;
+  });
+  return { propertyId: property.propertyId, propertyName: property.propertyName, propertyCode: property.propertyCode };
+};
 
 // ==========================================
 // 🌟 B2B SAAS: PUBLIC HOTEL REGISTRATION
@@ -234,11 +327,7 @@ export const registerNewHotel = async (data: {
   password: string;
 }) => {
   // 1. Check if the URL slug (propertyCode) is already taken
-  const slug = data.slug.trim().toLowerCase();
-  if (slug !== data.slug.trim() || !defaultHotelHostname(slug)) throw new Error('Use a valid hotel URL with letters, numbers, and hyphens.');
-  const slugExists = await prisma.property.findFirst({ where: { propertyCode: { equals: slug, mode: 'insensitive' } } });
-  if (slugExists) throw new Error('This hotel URL is already taken. Please choose another.');
-  if (await prisma.propertyWebsiteDomain.findUnique({ where: { hostname: `${slug}.hideout24.com` } })) throw new Error('This hotel URL is already reserved. Please choose another.');
+  const slug = await availableSlug(data.slug);
 
   // 2. Check if owner email is already in use
   const ownerExists = await prisma.user.findFirst({ where: { email: data.ownerEmail } });
@@ -254,33 +343,7 @@ export const registerNewHotel = async (data: {
     const trialEndsAt = new Date();
     trialEndsAt.setDate(trialEndsAt.getDate() + trial.days);
 
-    const property = await tx.property.create({
-      data: {
-        propertyName: data.hotelName,
-        propertyCode: slug,
-        businessName: data.hotelName,
-        propertyType: 'Hotel',
-        primaryEmail: data.email,
-        primaryPhone: data.phone,
-        area: data.area,
-        city: data.city,
-        region: data.region,
-        latitude: data.latitude,
-        longitude: data.longitude,
-        country: 'Ghana', 
-        currency: 'GHS',
-        timezone: 'Africa/Accra',
-        status: 'Active', // Operational status
-        
-        // 🌟 NEW: Subscription & Trial Setup
-        subscriptionPlan: 'Trial',
-        subscriptionPackage: 'trial',
-        subscriptionStatus: 'Trial',
-        trialEndsAt,
-        roomAllowance: trial.rooms,
-        staffAllowance: trial.staff,
-      },
-    });
+    const property = await tx.property.create({ data: newPropertyData(data, slug, trialEndsAt, trial) });
 
     // B. Ensure the default property-manager role and its permissions exist.
     // Do this on every registration: migrations create tables, but do not run
@@ -306,6 +369,9 @@ export const registerNewHotel = async (data: {
         isActive: true,
       },
     });
+
+    // The registering account owns this property (excluded from staff limits).
+    await tx.propertyMembership.create({ data: { userId: ownerUser.userId, propertyId: property.propertyId, isOwner: true } });
 
     return { property, ownerUser, managerRole }; // ✅ Return managerRole
   });

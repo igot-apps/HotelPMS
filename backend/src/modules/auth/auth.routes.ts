@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import {  refreshToken, login, getMe, logout, registerHotel } from './auth.controller';
+import {  refreshToken, login, getMe, logout, registerHotel, switchProperty, addProperty } from './auth.controller';
 import { authenticate } from '../../shared/middleware/auth.middleware';
 import { requestStaffPasswordReset, resetStaffPassword } from './password-reset.service';
 
@@ -51,6 +51,8 @@ router.post('/register-hotel', registerHotel);
  router.post('/refresh-token', refreshToken);
  router.post('/logout', authenticate, logout);
  router.get('/me', authenticate, getMe);
+ router.post('/switch-property', authenticate, switchProperty);
+ router.post('/properties', authenticate, addProperty);
 
 
 export default router;

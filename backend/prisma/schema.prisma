@@ -120,11 +120,32 @@ model Property {
   correctionRequests     CorrectionRequest[]
   refunds                Refund[]
   cashCounts             CashCount[]
+  cashCountIssues        CashCountIssue[]
   simulatedSms           SimulatedSms[]
   websiteDomains         PropertyWebsiteDomain[]
   hotelGuestAccounts     HotelGuestAccount[]
+  memberships            PropertyMembership[]
 
   @@map("properties")
+}
+
+// Which properties an account can work in. User.propertyId stays the account's
+// home property; owners get one extra row per additional property they manage.
+model PropertyMembership {
+  membershipId Int      @id @default(autoincrement())
+  userId       Int
+  propertyId   Int
+  isOwner      Boolean  @default(false) // the registered owner: excluded from staff limits
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  property     Property @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
+
+  @@unique([userId, propertyId])
+  @@index([propertyId])
+  @@map("property_memberships")
 }
 
 model PropertyWebsiteDomain {
@@ -188,6 +209,7 @@ model User {
   roleId            Int
   isPlatformAdmin   Boolean   @default(false)
   isActive          Boolean   @default(true)
+  lastPropertyId    Int?      // property opened at next sign-in (multi-property owners)
   lastLoginAt       DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -204,6 +226,9 @@ model User {
   returnedRefunds Refund[]
   cashCountsCounted  CashCount[] @relation("cashCountStaff")
   cashCountsRecorded CashCount[] @relation("cashCountRecorder")
+  cashCountIssuesStaff CashCountIssue[] @relation("cashCountIssueStaff")
+  cashCountIssuesRecorded CashCountIssue[] @relation("cashCountIssueRecorder")
+  memberships       PropertyMembership[]
 
   @@map("users")
 }
@@ -631,9 +656,6 @@ model SubscriptionPayment {
   @@map("subscription_payments")
 }
 
-
-
-// ============================================================
 enum SubscriptionPaymentStatus {
   Pending
   Processing
@@ -658,11 +680,15 @@ model SubscriptionSettings {
   @@map("subscription_settings")
 }
 
+
+
+// ============================================================
 // AUDIT LOG
 // ============================================================
 model AuditLog {
   auditLogId        Int       @id @default(autoincrement())
   userId            Int?
+  propertyId        Int?      // property the action happened in (null on older rows: use the user's home property)
   action            String    @db.VarChar(100)
   entityType        String    @db.VarChar(50)
   entityId          Int?
@@ -675,6 +701,7 @@ model AuditLog {
   user              User?     @relation(fields: [userId], references: [userId], onDelete: SetNull)
 
   @@index([userId])
+  @@index([propertyId, createdAt])
   @@index([createdAt])
   @@map("audit_logs")
 }
@@ -729,4 +756,23 @@ model CashCount {
   @@index([propertyId, businessDate])
   @@index([staffUserId])
   @@map("cash_counts")
+}
+
+// Append-only explanations for cash counts that could not be completed.
+model CashCountIssue {
+  cashCountIssueId Int @id @default(autoincrement())
+  propertyId Int
+  businessDate DateTime @db.Date
+  staffUserId Int
+  reason String @db.VarChar(300)
+  recordedBy Int
+  recordedAt DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
+  staff User @relation("cashCountIssueStaff", fields: [staffUserId], references: [userId])
+  recorder User @relation("cashCountIssueRecorder", fields: [recordedBy], references: [userId])
+
+  @@index([propertyId, businessDate])
+  @@index([staffUserId])
+  @@map("cash_count_issues")
 }

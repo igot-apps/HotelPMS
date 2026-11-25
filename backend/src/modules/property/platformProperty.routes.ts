@@ -141,9 +141,11 @@ const parsePropertyId = (value: string | string[]) => {
 
 const toClientProperty = (property: any) => {
   if (!property) return property;
-  const { paystackSecretKey, ...safeProperty } = property;
+  const { paystackSecretKey, memberships, ...safeProperty } = property;
+  const owner = memberships?.[0]?.user;
   return {
     ...safeProperty,
+    ...(memberships ? { owner: owner ? { userId: owner.userId, fullName: owner.fullName, email: owner.email, ownedProperties: owner._count?.memberships || 1 } : null } : {}),
     hasPaystackSecretKey: Boolean(paystackSecretKey),
     usesPlatformPaystackKey: !paystackSecretKey && Boolean(process.env.PAYSTACK_SECRET_KEY),
     paystackMode: (paystackSecretKey || process.env.PAYSTACK_SECRET_KEY)?.startsWith('sk_test_') ? 'test' : (paystackSecretKey || process.env.PAYSTACK_SECRET_KEY) ? 'live' : null,
@@ -203,7 +205,7 @@ router.post('/:id/reactivate', async (req: AuthRequest, res: Response) => {
   try {
     const propertyId = parsePropertyId(req.params.id);
     await propertyService.reactivateProperty(propertyId);
-    await prisma.auditLog.create({ data: { userId: req.user!.userId, entityType: 'Property', entityId: propertyId, action: 'PropertyReactivated', newData: { propertyId, status: 'Active' } } });
+    await prisma.auditLog.create({ data: { propertyId: propertyId, userId: req.user!.userId, entityType: 'Property', entityId: propertyId, action: 'PropertyReactivated', newData: { propertyId, status: 'Active' } } });
     return res.json({ success: true, message: 'Property reactivated. Online booking resumes if the subscription is valid.' });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });
@@ -215,7 +217,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     const propertyId = parsePropertyId(req.params.id);
     await propertyService.deleteProperty(propertyId);
     // Record who deactivated the hotel so the reason online booking stopped is traceable.
-    await prisma.auditLog.create({ data: { userId: req.user!.userId, entityType: 'Property', entityId: propertyId, action: 'PropertyDeactivated', newData: { propertyId, status: 'Inactive' } } });
+    await prisma.auditLog.create({ data: { propertyId: propertyId, userId: req.user!.userId, entityType: 'Property', entityId: propertyId, action: 'PropertyDeactivated', newData: { propertyId, status: 'Inactive' } } });
     return res.json({ success: true, message: 'Property deactivated successfully.' });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });

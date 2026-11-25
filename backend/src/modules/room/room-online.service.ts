@@ -1,10 +1,11 @@
+import { atProperty } from '../../shared/utils/property-access';
 import { prisma } from '../../shared/utils/prisma';
 
 type Actor = { userId: number; propertyId: number };
 const fail = (message: string, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 
 async function activeStaff(actor: Actor) {
-  const user = await prisma.user.findFirst({ where: { userId: actor.userId, propertyId: actor.propertyId, isActive: true }, include: { role: true } });
+  const user = await prisma.user.findFirst({ where: { userId: actor.userId, ...atProperty(actor.propertyId), isActive: true }, include: { role: true } });
   if (!user) throw fail('Active hotel staff required.', 403);
   return user;
 }
@@ -27,7 +28,7 @@ export async function setRoomOnlineBooking(actor: Actor, roomId: number, enabled
   if (room.isOnlineBookable === enabled) return room;
   const [updated] = await prisma.$transaction([
     prisma.room.update({ where: { roomId }, data: { isOnlineBookable: enabled }, select: { roomId: true, roomNumber: true, isOnlineBookable: true } }),
-    prisma.auditLog.create({ data: { userId: actor.userId, entityType: 'Room', entityId: roomId, action: enabled ? 'RoomShownOnline' : 'RoomHiddenOnline', oldData: { isOnlineBookable: room.isOnlineBookable }, newData: { isOnlineBookable: enabled, roomNumber: room.roomNumber } } }),
+    prisma.auditLog.create({ data: { propertyId: actor.propertyId, userId: actor.userId, entityType: 'Room', entityId: roomId, action: enabled ? 'RoomShownOnline' : 'RoomHiddenOnline', oldData: { isOnlineBookable: room.isOnlineBookable }, newData: { isOnlineBookable: enabled, roomNumber: room.roomNumber } } }),
   ]);
   return updated;
 }
@@ -36,12 +37,12 @@ export async function setOnlineRoomPermission(actor: Actor, userId: number, enab
   if (typeof enabled !== 'boolean') throw fail('Choose whether to allow this permission.');
   const manager = await activeStaff(actor);
   if (manager.role.roleName !== 'Manager') throw fail('Only a hotel manager can change this permission.', 403);
-  const target = await prisma.user.findFirst({ where: { userId, propertyId: actor.propertyId }, include: { role: true } });
+  const target = await prisma.user.findFirst({ where: { userId, ...atProperty(actor.propertyId) }, include: { role: true } });
   if (!target || target.role.roleName !== 'Receptionist') throw fail('Choose a receptionist from your hotel.');
   if (target.canManageOnlineRooms === enabled) return { userId, canManageOnlineRooms: enabled };
   await prisma.$transaction([
     prisma.user.update({ where: { userId }, data: { canManageOnlineRooms: enabled } }),
-    prisma.auditLog.create({ data: { userId: actor.userId, entityType: 'User', entityId: userId, action: 'OnlineRoomPermissionChanged', oldData: { canManageOnlineRooms: target.canManageOnlineRooms }, newData: { canManageOnlineRooms: enabled } } }),
+    prisma.auditLog.create({ data: { propertyId: actor.propertyId, userId: actor.userId, entityType: 'User', entityId: userId, action: 'OnlineRoomPermissionChanged', oldData: { canManageOnlineRooms: target.canManageOnlineRooms }, newData: { canManageOnlineRooms: enabled } } }),
   ]);
   return { userId, canManageOnlineRooms: enabled };
 }

@@ -180,14 +180,16 @@ function CountCashDialog({ from, to, today, onClose }) {
   const [staffId, setStaffId] = useState(null);
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
+  const [pendingReason, setPendingReason] = useState('');
   // Same query key as the dashboard's one-day cash figures, so both stay in step.
   const dayCash = useQuery({ queryKey: ['cashRecon', day, day], queryFn: get('/dashboard/cash', { date: day }) });
   const rows = dayCash.data?.staff || [];
   const row = rows.find((r) => r.userId === staffId);
   const history = (dayCash.data?.history || []).filter((c) => c.staffUserId === staffId);
+  const issueHistory = (dayCash.data?.issueHistory || []).filter((issue) => issue.staffUserId === staffId);
   const valid = Boolean(row) && /^\d+(\.\d{1,2})?$/.test(amount);
   const difference = valid ? Number(amount) - Number(row.expectedCash) : null;
-  const pick = (id) => { setStaffId(id === staffId ? null : id); setAmount(''); setNote(''); };
+  const pick = (id) => { setStaffId(id === staffId ? null : id); setAmount(''); setNote(''); setPendingReason(''); };
   const save = useMutation({
     mutationFn: async () => (await api.post('/dashboard/cash-counts', { date: day, staffUserId: row.userId, countedAmount: Number(amount), note }, { skipErrorToast: true })).data.data,
     onSuccess: async (result) => {
@@ -197,7 +199,17 @@ function CountCashDialog({ from, to, today, onClose }) {
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Could not save the cash count.'),
   });
+  const reportPending = useMutation({
+    mutationFn: async () => (await api.post('/dashboard/cash-count-issues', { date: day, staffUserId: row.userId, reason: pendingReason.trim() }, { skipErrorToast: true })).data.data,
+    onSuccess: async () => {
+      toast.success(`Pending count recorded for ${row.name}.`);
+      setPendingReason('');
+      await queryClient.invalidateQueries({ queryKey: ['cashRecon'] });
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not record the pending count.'),
+  });
   const status = (r) => {
+    if (r.pendingIssue) return <span className="font-semibold text-warning-800">Count pending</span>;
     if (!r.latestCount) return <span className="text-text-muted">Not counted</span>;
     const d = Number(r.differenceNow);
     return <span className={`font-semibold ${diffTone(d)}`}>{d === 0 ? 'Matches' : `${d < 0 ? 'Short' : 'Over'} ${cash(Math.abs(d))}`}</span>;
@@ -236,6 +248,7 @@ function CountCashDialog({ from, to, today, onClose }) {
                     <form onSubmit={(event) => { event.preventDefault(); if (valid && !save.isPending) save.mutate(); }} className="space-y-3 border-t border-border p-3">
                       <p className="text-xs text-text-muted">{cash(r.cashTaken)} cash taken − {cash(r.cashRefunded)} cash refunds = <strong className="text-text">{cash(r.expectedCash)} expected</strong></p>
                       {r.changedSinceCount && <p className="flex items-start gap-1 text-xs text-warning-700"><AlertTriangle size={12} className="mt-0.5 shrink-0" /> Payments or refunds changed after the last count.</p>}
+                      {r.pendingIssue && <p className="rounded-lg bg-warning-50 p-2 text-sm text-warning-800">Count pending · {r.pendingIssue.reason} · reported by {r.pendingIssue.recordedBy}</p>}
                       <label className="block text-sm font-semibold text-text">Actual cash counted (GHS)
                         <input autoFocus value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder={Number(r.expectedCash).toFixed(2)}
                           className="mt-1 min-h-11 w-full rounded-lg border border-border bg-background px-3 text-base text-text" />
@@ -245,6 +258,12 @@ function CountCashDialog({ from, to, today, onClose }) {
                         <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} className="mt-1 min-h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-text" />
                       </label>
                       <button disabled={!valid || save.isPending} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 text-sm font-semibold text-white disabled:opacity-50">{save.isPending && <Loader2 size={16} className="animate-spin" />} {r.latestCount ? 'Save recount' : 'Save count'}</button>
+                      {!r.latestCount && <div className="space-y-2 border-t border-border pt-3">
+                        <label className="block text-sm font-semibold text-text">Reason this count is pending
+                          <textarea value={pendingReason} onChange={(e) => setPendingReason(e.target.value)} maxLength={300} rows={2} className="mt-1 w-full rounded-lg border border-border bg-background p-3 text-sm text-text" />
+                        </label>
+                        <button type="button" disabled={!pendingReason.trim() || reportPending.isPending} onClick={() => reportPending.mutate()} className="min-h-10 rounded-lg border border-warning-300 bg-warning-50 px-3 text-sm font-semibold text-warning-800 disabled:opacity-50">{reportPending.isPending ? 'Saving…' : r.pendingIssue ? 'Add follow-up reason' : 'Report pending count'}</button>
+                      </div>}
                       {history.length > 0 && (
                         <div className="text-xs text-text-muted">
                           <p className="font-semibold text-text">Earlier counts ({history.length}) · kept, not replaced</p>
@@ -253,6 +272,7 @@ function CountCashDialog({ from, to, today, onClose }) {
                           ))}</ul>
                         </div>
                       )}
+                      {issueHistory.length > 0 && <div className="text-xs text-text-muted"><p className="font-semibold text-text">Pending count history ({issueHistory.length})</p><ul className="mt-1 space-y-1">{issueHistory.map((issue) => <li key={issue.cashCountIssueId}>{new Date(issue.recordedAt).toLocaleString('en-GB')} · {issue.reason} · by {issue.recordedBy}{issue.resolvedAt ? ' · resolved by a later count' : ' · pending'}</li>)}</ul></div>}
                     </form>
                   )}
                 </li>
@@ -308,6 +328,7 @@ function CountHistoryDialog({ from, to, today, onClose }) {
   const [day, setDay] = useState(lastDay < from ? from : lastDay);
   const dayCash = useQuery({ queryKey: ['cashRecon', day, day], queryFn: get('/dashboard/cash', { date: day }) });
   const history = dayCash.data?.history || [];
+  const issueHistory = dayCash.data?.issueHistory || [];
   return (
     <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="count-history-title">
       <div className="flex max-h-[92vh] w-full max-w-lg flex-col rounded-xl border border-border bg-surface shadow-xl">
@@ -327,6 +348,7 @@ function CountHistoryDialog({ from, to, today, onClose }) {
           {dayCash.isPending && <p role="status" className="flex items-center gap-2 text-sm text-text-muted"><Loader2 size={16} className="animate-spin" /> Loading…</p>}
           {dayCash.error && <p role="alert" className="text-sm text-danger-700">{dayCash.error.response?.data?.message || 'Could not load the count history.'}</p>}
           {dayCash.data && !history.length && <p className="rounded-lg bg-secondary-50 p-3 text-sm text-text-muted">No cash counts saved for this day.</p>}
+          {issueHistory.length > 0 && <div className="space-y-2"><h3 className="text-sm font-bold text-text">Pending count reports</h3>{issueHistory.map((issue) => <p key={issue.cashCountIssueId} className="rounded-lg border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900"><strong>{issue.staffName}</strong> · {issue.reason}<span className="block text-xs">{new Date(issue.recordedAt).toLocaleString('en-GB')} · by {issue.recordedBy} · {issue.resolvedAt ? 'Resolved by a later count' : 'Still pending'}</span></p>)}</div>}
           {history.length > 0 && (
             <ul className="space-y-2">
               {history.map((c) => (

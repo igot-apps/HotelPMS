@@ -1,3 +1,4 @@
+import { atProperty } from '../../shared/utils/property-access';
 import { prisma } from '../../shared/utils/prisma';
 import { Actor, correctBookingInTransaction } from './recovery.service';
 import { CORRECTION_ACTIONS, DEFAULT_RECEPTIONIST_CORRECTIONS, canCorrect, validateCorrectionPermissions } from './correction-policy';
@@ -8,7 +9,7 @@ import { simulateRefundInTransaction } from './refund-simulation.service';
 
 const include = { requester: { select: { fullName: true } }, reviewer: { select: { fullName: true } }, reservation: { select: { confirmationCode: true, guestNameSnapshot: true } } };
 async function staff(tx: any, actor: Actor, manager = false) {
-  const user = await tx.user.findFirst({ where: { userId: actor.userId, propertyId: actor.propertyId, isActive: true }, include: { role: true } });
+  const user = await tx.user.findFirst({ where: { userId: actor.userId, ...atProperty(actor.propertyId), isActive: true }, include: { role: true } });
   if (!user || !['Manager', 'Receptionist'].includes(user.role.roleName) || (manager && user.role.roleName !== 'Manager')) throw new Error(manager ? 'An active hotel manager must review this request.' : 'Active hotel staff access required.');
   return user;
 }
@@ -19,7 +20,7 @@ async function atomic<T>(work: (tx: any) => Promise<T>): Promise<T> {
   }
 }
 async function record(tx: any, actor: Actor, reservationId: string, action: string, value: any) {
-  await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'Reservation', action, newData: { reservationId, ...value } } });
+  await tx.auditLog.create({ data: { propertyId: actor.propertyId, userId: actor.userId, entityType: 'Reservation', action, newData: { reservationId, ...value } } });
 }
 export async function correctionAccess(actor: Actor) {
   const user = await staff(prisma, actor);
@@ -30,7 +31,7 @@ export async function setCorrectionPermissions(actor: Actor, userId: number, inp
   const permissions = [...DEFAULT_RECEPTIONIST_CORRECTIONS];
   return atomic(async tx => {
     const manager = await staff(tx, actor, true);
-    const target = await tx.user.findFirst({ where: { userId, propertyId: actor.propertyId }, include: { role: true } });
+    const target = await tx.user.findFirst({ where: { userId, ...atProperty(actor.propertyId) }, include: { role: true } });
     if (!target || target.role.roleName !== 'Receptionist') throw new Error('Choose a receptionist from your hotel.');
     const saved = { ...(target.financialDelegation || {}) };
     delete saved['correct-payment'];
@@ -38,7 +39,7 @@ export async function setCorrectionPermissions(actor: Actor, userId: number, inp
     const increased = Object.entries(financial).some(([action, limit]) => limit > Number(target.financialDelegation?.[action] || 0));
     if (increased && (confirmed !== true || typeof password !== 'string' || !await comparePassword(password, manager.passwordHash))) throw new Error('Confirm the delegation warning and enter your manager password to enable or increase financial access.');
     await tx.user.update({ where: { userId }, data: { correctionPermissions: permissions, financialDelegation: financial } });
-    await tx.auditLog.create({ data: { userId: actor.userId, entityType: 'User', action: 'CorrectionPermissionsChanged', oldData: { userId, permissions: target.correctionPermissions, financialDelegation: target.financialDelegation || {} }, newData: { userId, propertyId: actor.propertyId, permissions, financialDelegation: financial } } });
+    await tx.auditLog.create({ data: { propertyId: actor.propertyId, userId: actor.userId, entityType: 'User', action: 'CorrectionPermissionsChanged', oldData: { userId, permissions: target.correctionPermissions, financialDelegation: target.financialDelegation || {} }, newData: { userId, propertyId: actor.propertyId, permissions, financialDelegation: financial } } });
     return { correctionPermissions: permissions, financialDelegation: financial };
   });
 }

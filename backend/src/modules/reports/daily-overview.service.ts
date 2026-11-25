@@ -1,3 +1,4 @@
+import { atProperty, auditAt } from '../../shared/utils/property-access';
 import { prisma } from '../../shared/utils/prisma';
 
 export function hotelDate(now: Date, timeZone: string) {
@@ -31,9 +32,11 @@ export function rangeBounds(from: string, to: string | undefined, timeZone: stri
 }
 
 export async function dailyOverview(userId: number, propertyId: number, requestedDate?: string, requestedTo?: string) {
-  const user = await prisma.user.findFirst({ where: { userId, propertyId, isActive: true }, include: { role: true, property: true } });
-  if (!user || user.role.roleName !== 'Manager' || !user.property) throw Object.assign(new Error('Only the hotel manager can view the daily overview.'), { statusCode: 403 });
-  const timeZone = user.property.timezone || 'Africa/Accra';
+  const user = await prisma.user.findFirst({ where: { userId, ...atProperty(propertyId), isActive: true }, include: { role: true, property: true } });
+  // An owner working in another property uses that property's settings, not their home's.
+  const property = !user ? null : !user.propertyId || user.propertyId === propertyId ? user.property : await prisma.property.findUnique({ where: { propertyId } });
+  if (!user || user.role.roleName !== 'Manager' || !property) throw Object.assign(new Error('Only the hotel manager can view the daily overview.'), { statusCode: 403 });
+  const timeZone = property.timezone || 'Africa/Accra';
   const date = requestedDate || hotelDate(new Date(), timeZone);
   const { to, ...bounds } = rangeBounds(date, requestedTo, timeZone);
   return prisma.$transaction(async tx => {
@@ -46,7 +49,7 @@ export async function dailyOverview(userId: number, propertyId: number, requeste
           reservation: { select: { reservationId: true, confirmationCode: true, guestNameSnapshot: true, propertyGuest: { select: { fullName: true } }, platformGuest: { select: { fullName: true } } } },
         },
       }),
-      tx.auditLog.findMany({ where: { user: { propertyId }, entityType: 'Reservation', createdAt: bounds }, orderBy: { createdAt: 'desc' }, include: { user: { select: { fullName: true } } } }),
+      tx.auditLog.findMany({ where: { ...auditAt(propertyId), entityType: 'Reservation', createdAt: bounds }, orderBy: { createdAt: 'desc' }, include: { user: { select: { fullName: true } } } }),
       tx.reservation.count({ where: { propertyId, createdAt: bounds } }),
       tx.reservationRoom.count({ where: { reservation: { propertyId }, actualCheckIn: bounds } }),
       tx.reservationRoom.count({ where: { reservation: { propertyId }, actualCheckOut: bounds } }),

@@ -54,7 +54,7 @@ export default function CashReconciliation({ date }) {
                   <td className="p-2">{cash(row.cashTaken)}</td>
                   <td className="p-2">{cash(row.cashRefunded)}</td>
                   <td className="p-2 font-semibold">{cash(row.expectedCash)}</td>
-                  <td className="p-2">{row.latestCount ? <>{cash(row.latestCount.countedAmount)}<span className="block text-xs text-text-muted">{when(row.latestCount.recordedAt)} · by {row.latestCount.recordedBy}</span>{row.latestCount.note && <span className="block text-xs text-text-muted">“{row.latestCount.note}”</span>}</> : <span className="text-text-muted">Not counted</span>}</td>
+                  <td className="p-2">{row.latestCount ? <>{cash(row.latestCount.countedAmount)}<span className="block text-xs text-text-muted">{when(row.latestCount.recordedAt)} · by {row.latestCount.recordedBy}</span>{row.latestCount.note && <span className="block text-xs text-text-muted">“{row.latestCount.note}”</span>}</> : row.pendingIssue ? <span className="text-warning-800">Count pending<span className="block text-xs">{row.pendingIssue.reason} · by {row.pendingIssue.recordedBy}</span></span> : <span className="text-text-muted">Not counted</span>}</td>
                   <td className={`p-2 font-semibold ${tone(row.differenceNow)}`}>
                     {row.differenceNow === null ? '—' : signed(row.differenceNow)}
                     {row.changedSinceCount && <span className="mt-1 flex items-start gap-1 text-xs font-normal text-warning-700"><AlertTriangle size={12} className="mt-0.5 shrink-0" /> Payments or refunds changed after the count. At count time: expected {cash(row.latestCount.expectedAmount)}, difference {signed(row.latestCount.difference)}.</span>}

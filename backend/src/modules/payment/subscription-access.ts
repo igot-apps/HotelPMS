@@ -1,3 +1,4 @@
+import { countsAsStaff } from '../../shared/utils/property-access';
 import { prisma } from '../../shared/utils/prisma';
 import { DEFAULT_CONFIG, SubscriptionConfig, SubscriptionError, validateConfig } from './subscription-plans';
 import { getLimits, termsFields } from './subscription-state';
@@ -35,7 +36,8 @@ export const countedRoomsWhere = (propertyId: number) => ({
 export async function getUsage(propertyId: number, db: Db = prisma) {
   const [rooms, staff] = await Promise.all([
     db.room.count({ where: countedRoomsWhere(propertyId) }),
-    db.user.count({ where: { propertyId, OR: [{ isActive: true }, { invitationPending: true }] } }),
+    // The registered owner never uses a staff seat; additional managers do.
+    db.user.count({ where: { ...countsAsStaff(propertyId), OR: [{ isActive: true }, { invitationPending: true }] } }),
   ]);
   return { rooms, staff };
 }

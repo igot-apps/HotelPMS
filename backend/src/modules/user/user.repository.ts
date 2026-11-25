@@ -73,6 +73,7 @@ export const createUser = async (data: {
       passwordHash: data.passwordHash,
       roleId: data.roleId,
       isActive: data.isActive !== undefined ? data.isActive : true,
+      memberships: { create: { propertyId: data.propertyId } }, // staff stay single-property
     },
     include: {
       role: { select: { roleId: true, roleName: true } },

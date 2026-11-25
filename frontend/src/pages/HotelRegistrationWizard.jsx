@@ -6,13 +6,8 @@ import BackButton from '../components/ui/BackButton';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 import { Building2, User, ArrowRight, ArrowLeft, Loader2, CheckCircle2, Sparkles, MapPin, Eye, EyeOff } from 'lucide-react';
-import { isWithinGhanaBounds, googleMapsUrl } from '../utils/ghanaCoordinates';
+import { isWithinGhanaBounds, googleMapsUrl, GHANA_REGIONS } from '../utils/ghanaCoordinates';
 
-const GHANA_REGIONS = [
-  'Ahafo', 'Ashanti', 'Bono', 'Bono East', 'Central', 'Eastern', 'Greater Accra',
-  'North East', 'Northern', 'Oti', 'Savannah', 'Upper East', 'Upper West',
-  'Volta', 'Western', 'Western North',
-];
 
 export default function HotelRegistrationWizard() {
   const navigate = useNavigate();

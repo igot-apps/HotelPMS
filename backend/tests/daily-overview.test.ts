@@ -43,7 +43,7 @@ test('separates staff, online, unknown, voids and replacement entries without do
   expect(result.byStaff.some(row => row.name === 'Online / Paystack')).toBe(true);
   expect(result.activity.outstandingNow).toBe(60);
   expect(tx.payment.findMany.mock.calls[0][0].where.reservation).toEqual({ propertyId: 4 });
-  expect(mock.user.findFirst.mock.calls[0][0].where).toEqual({ userId: 1, propertyId: 4, isActive: true });
+  expect(mock.user.findFirst.mock.calls[0][0].where).toEqual({ userId: 1, OR: [{ propertyId: 4 }, { memberships: { some: { propertyId: 4, isActive: true } } }], isActive: true });
   expect(tx.reservationRoom.count.mock.calls[0][0].where.reservation).toEqual({ propertyId: 4 });
 });
 test('returns explicit empty results when nothing happened', async () => {

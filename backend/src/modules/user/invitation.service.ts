@@ -48,6 +48,7 @@ export async function inviteStaff(propertyId: number, data: any) {
     roleId: role.roleId, passwordHash: await hashPassword(randomBytes(32).toString('hex')),
     correctionPermissions: roleName === 'Receptionist' ? [...DEFAULT_RECEPTIONIST_CORRECTIONS] : [],
     isActive: false, invitationPending: true, ...fields,
+    memberships: { create: { propertyId } }, // staff stay single-property
   }, select: { userId: true } });
   let delivery;
   try {

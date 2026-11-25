@@ -34,7 +34,7 @@ router.patch('/rooms/:id', async (req: AuthRequest, res) => {
       if (room.housekeepingStatus === status) return room;
       const changed = await tx.room.updateMany({ where: { roomId, propertyId, operationalStatus: 'Available', housekeepingStatus: room.housekeepingStatus }, data: { housekeepingStatus: status } });
       if (!changed.count) throw new Error('Room status changed. Refresh the list and try again.');
-      await tx.auditLog.create({ data: { userId: req.user!.userId, entityType: 'Room', action: 'HousekeepingStatusChanged', oldData: { roomId, status: room.housekeepingStatus }, newData: { roomId, propertyId, status } } });
+      await tx.auditLog.create({ data: { propertyId: propertyId, userId: req.user!.userId, entityType: 'Room', action: 'HousekeepingStatusChanged', oldData: { roomId, status: room.housekeepingStatus }, newData: { roomId, propertyId, status } } });
       return tx.room.findUnique({ where: { roomId } });
     });
     return res.json({ success: true, data: updated });

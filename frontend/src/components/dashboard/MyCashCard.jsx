@@ -16,6 +16,8 @@ export default function MyCashCard() {
   const queryClient = useQueryClient();
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
+  const [showPending, setShowPending] = useState(false);
+  const [pendingReason, setPendingReason] = useState('');
   const { data, isLoading, isError } = useQuery({
     queryKey: ['cashRecon', 'today'],
     queryFn: async () => (await api.get('/dashboard/cash', { skipErrorToast: true })).data.data,
@@ -29,6 +31,15 @@ export default function MyCashCard() {
       queryClient.invalidateQueries({ queryKey: ['cashRecon'] });
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Could not save the cash count.'),
+  });
+  const reportPending = useMutation({
+    mutationFn: async () => (await api.post('/dashboard/cash-count-issues', { reason: pendingReason.trim() }, { skipErrorToast: true })).data.data,
+    onSuccess: () => {
+      toast.success('Pending cash count reported to the manager.');
+      setPendingReason(''); setShowPending(false);
+      queryClient.invalidateQueries({ queryKey: ['cashRecon'] });
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not report the pending cash count.'),
   });
   if (isError) return null;
   const mine = data?.staff?.find((row) => row.userId === user?.userId);
@@ -49,7 +60,7 @@ export default function MyCashCard() {
                 Last count {time(latest.recordedAt)}: <strong>{cash(latest.countedAmount)}</strong> · {Number(mine.differenceNow) === 0 ? 'matches' : `difference ${signed(mine.differenceNow)}`}
                 {mine.changedSinceCount && <span className="block text-xs">Payments or refunds changed after that count (expected was {cash(latest.expectedAmount)} then).</span>}
               </p>
-            ) : <p className="mt-2 text-xs text-text-muted">Not counted yet today.</p>}
+            ) : mine?.pendingIssue ? <p className="mt-2 rounded-lg bg-warning-50 p-2 text-sm text-warning-800">Count pending · {mine.pendingIssue.reason}</p> : <p className="mt-2 text-xs text-text-muted">Not counted yet today.</p>}
           </div>
           <form onSubmit={(event) => { event.preventDefault(); if (valid && !save.isPending) save.mutate(); }} className="space-y-2">
             <label className="block text-sm font-semibold text-text">Cash you counted (GHS)
@@ -63,6 +74,15 @@ export default function MyCashCard() {
               {save.isPending && <Loader2 size={16} className="animate-spin" />} Save cash count
             </button>
             <p className="text-xs text-text-muted">Each count is kept. Counting again adds a new count; it does not replace the earlier one.</p>
+            {!latest && <div className="border-t border-border pt-3">
+              <button type="button" onClick={() => setShowPending((current) => !current)} className="min-h-10 text-sm font-semibold text-primary-700 underline">Cannot count cash now</button>
+              {showPending && <div className="mt-2 space-y-2">
+                <label className="block text-sm font-semibold text-text">Why is the count pending?
+                  <textarea value={pendingReason} onChange={(event) => setPendingReason(event.target.value)} maxLength={300} rows={2} className="mt-1 w-full rounded-lg border border-border bg-background p-3 text-sm text-text" />
+                </label>
+                <button type="button" disabled={!pendingReason.trim() || reportPending.isPending} onClick={() => reportPending.mutate()} className="min-h-10 rounded-lg border border-warning-300 bg-warning-50 px-3 text-sm font-semibold text-warning-800 disabled:opacity-50">{reportPending.isPending ? 'Saving…' : 'Report pending count'}</button>
+              </div>}
+            </div>}
           </form>
         </div>
       )}
