@@ -67,8 +67,15 @@ export default function PropertySwitcher() {
         aria-label={`Current property: ${user?.propertyName || 'none'}. Switch property`}
         className="min-w-0 min-h-11 flex items-center gap-2 px-2 sm:px-3 py-1.5 bg-secondary-50 border border-border rounded-lg hover:border-primary-500 transition"
       >
-        {badge}
-        <ChevronDown size={16} className="shrink-0 text-text-muted" />
+        <Building2 size={16} className="shrink-0 text-primary-600" />
+        {/* Two lines so owners see at a glance that this is where they switch or add properties. */}
+        <span className="min-w-0 text-left leading-tight">
+          <span className="block text-sm font-semibold text-text truncate max-w-[130px] sm:max-w-[200px] md:max-w-xs" title={user?.propertyName || 'No Property'}>{user?.propertyName || 'No Property'}</span>
+          <span className="block text-[11px] font-semibold text-primary-700 truncate">
+            {properties.length > 1 ? `${properties.length} properties · Switch` : 'Add a property'}
+          </span>
+        </span>
+        <ChevronDown size={16} className="shrink-0 text-primary-600" />
       </button>
       {open && (
         <div role="menu" className="absolute left-0 top-full mt-2 w-72 max-w-[calc(100vw-1.5rem)] rounded-xl border border-border bg-surface shadow-xl z-50 overflow-hidden">
