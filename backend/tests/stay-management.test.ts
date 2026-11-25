@@ -222,4 +222,22 @@ describe('shortening only removes unused nights', () => {
     expect(preview).toMatchObject({ newTotal: 300, credit: 200, canApply: true });
     await expect(correctBookingInTransaction(tx, 'R1', actor, { ...shorten('2026-11-12'), expectedVersion: preview.version })).resolves.toMatchObject({ applied: true });
   });
+
+  // Booked 5 nights at GHS 100, used 3: the 2 unused nights are GHS 200; the hotel keeps penalty% of them.
+  test.each([
+    [0, 300, 200, undefined],
+    [25, 350, 150, 50],
+    [100, 500, 0, 200],
+  ])('early-departure penalty %p%% keeps that share of the unused nights', async (penalty, newTotal, credit, penaltyKept) => {
+    jest.useFakeTimers({ now: new Date('2026-11-12T10:00:00Z'), doNotFake: ['nextTick', 'setImmediate'] });
+    const { tx } = fixture({ stay: { checkOutDate: day('2026-11-14') }, res: { totalAmount: 500, amountPaid: 500 } });
+    tx.property.findUnique.mockResolvedValue({ timezone: 'Africa/Accra', allowEarlyDepartureChargeReduction: true, earlyDepartureChargeReductionPenaltyPercent: penalty });
+    tx.room.findFirst = mock().mockResolvedValue({ roomId: 9, operationalStatus: 'Occupied', housekeepingStatus: 'Clean', roomType: { isActive: true } });
+    const input = { action: 'correct-date', stayIds: [5], newCheckOutDate: '2026-11-12', reason: 'Guest is leaving early.' };
+    const preview = await correctBookingInTransaction(tx, 'R1', actor, { ...input, preview: true });
+    expect(preview).toMatchObject({ oldTotal: 500, newTotal, credit });
+    expect(preview.penaltyKept).toBe(penaltyKept);
+    await correctBookingInTransaction(tx, 'R1', actor, { ...input, expectedVersion: preview.version });
+    expect(tx.reservation.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ totalAmount: newTotal, refundDue: credit }) }));
+  });
 });

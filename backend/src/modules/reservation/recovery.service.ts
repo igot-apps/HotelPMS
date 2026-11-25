@@ -97,14 +97,20 @@ async function availableInventory(tx: any, roomId: number | null, propertyId: nu
 // Re-price a booking when selected stays get a new departure date. Keeps the original effective
 // tax/adjustment multiplier instead of using the hotel's current tax. Shared by date corrections
 // and recorded departures so both use the same maths.
-export function repriceDeparture(res: any, selected: any[], date: Date) {
-  const base = (rooms: any[]) => rooms.filter(r => r.status !== 'Cancelled').reduce((sum, r) => sum + Number(r.agreedPricePerNight) * Math.ceil((r.checkOutDate.getTime() - r.checkInDate.getTime()) / 86400000), 0);
+// penaltyPercent: share of the removed (unused) nights' charges the hotel keeps. 0 removes them in full.
+export function repriceDeparture(res: any, selected: any[], date: Date, penaltyPercent = 0) {
+  const nights = (r: any) => Math.ceil((r.checkOutDate.getTime() - r.checkInDate.getTime()) / 86400000);
+  const base = (rooms: any[]) => rooms.filter(r => r.status !== 'Cancelled').reduce((sum, r) => sum + Number(r.agreedPricePerNight) * nights(r), 0);
   const oldBase = base(res.reservationRooms);
   if (oldBase <= 0) throw new Error('This booking needs financial reconciliation before repricing.');
   const revised = res.reservationRooms.map((r: any) => selected.some(stay => stay.reservationRoomId === r.reservationRoomId) ? { ...r, checkOutDate: date } : r);
-  const totalAmount = money(base(revised) * Number(res.totalAmount) / oldBase);
+  const removed = res.reservationRooms.filter((r: any) => r.status !== 'Cancelled' && date < r.checkOutDate && selected.some(stay => stay.reservationRoomId === r.reservationRoomId))
+    .reduce((sum: number, r: any) => sum + Number(r.agreedPricePerNight) * (nights(r) - nights({ ...r, checkOutDate: date })), 0);
+  const kept = removed * Math.min(100, Math.max(0, Number(penaltyPercent) || 0)) / 100;
+  const scale = Number(res.totalAmount) / oldBase;
+  const totalAmount = money((base(revised) + kept) * scale);
   const credit = Math.max(0, money(Number(res.amountPaid) - totalAmount));
-  return { revised, totalAmount, credit };
+  return { revised, totalAmount, credit, penaltyKept: money(kept * scale) };
 }
 
 export const DEPARTURE_EVIDENCE = ['key-returned', 'room-found-empty', 'guest-confirmed', 'security-record', 'other'];
@@ -394,9 +400,11 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
       if (selected.some(stay => !['Reserved', 'CheckedIn'].includes(stay.status)) || !['Confirmed', 'InHouse'].includes(res.status)) throw new Error('Only active reserved or checked-in stays can have their departure date corrected.');
       const date = new Date(`${input.newCheckOutDate}T00:00:00.000Z`);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(input.newCheckOutDate || '') || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== input.newCheckOutDate || selected.some(stay => date <= stay.checkInDate)) throw new Error('Choose a valid departure date after every selected room arrival.');
+      let penaltyPercent = 0;
       if (selected.some(stay => date < stay.checkOutDate)) {
-        const policy = await tx.property.findUnique({ where: { propertyId: actor.propertyId }, select: { allowEarlyDepartureChargeReduction: true } });
+        const policy = await tx.property.findUnique({ where: { propertyId: actor.propertyId }, select: { allowEarlyDepartureChargeReduction: true, earlyDepartureChargeReductionPenaltyPercent: true } });
         if (policy?.allowEarlyDepartureChargeReduction === false) throw new Error("Your hotel's early-departure policy keeps the original booking charges. The guest can check out early without shortening the charged stay.");
+        penaltyPercent = Number(policy?.earlyDepartureChargeReductionPenaltyPercent ?? 0);
       }
       // Consumed nights can't be removed: a checked-in guest has used every night before today
       // (hotel calendar), so the earliest departure is today — and never before the first night.
@@ -416,9 +424,9 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
       await availableInventory(tx, stay.roomId, actor.propertyId);
       await noConflict(tx, stay.roomId, stay.reservationRoomId, stay.checkInDate, date);
       }
-      const { revised, totalAmount, credit } = repriceDeparture(res, selected, date);
+      const { revised, totalAmount, credit, penaltyKept } = repriceDeparture(res, selected, date, penaltyPercent);
       await checkDelegation({ oldTotal: money(res.totalAmount), newTotal: totalAmount, isExtension: selected.every(stay => date > stay.checkOutDate) });
-      Object.assign(result, { oldTotal: money(res.totalAmount), newTotal: totalAmount, credit, balanceDue: Math.max(0, money(totalAmount - Number(res.amountPaid))), message: 'Correct departure and reprice the booking. Any overpayment remains recorded as a credit requiring refund review; no money is automatically returned.' });
+      Object.assign(result, { oldTotal: money(res.totalAmount), newTotal: totalAmount, credit, ...(penaltyKept > 0 ? { penaltyPercent, penaltyKept } : {}), balanceDue: Math.max(0, money(totalAmount - Number(res.amountPaid))), message: 'Correct departure and reprice the booking. Any overpayment remains recorded as a credit requiring refund review; no money is automatically returned.' });
       if (preview) return result;
       for (const stay of selected) await tx.reservationRoom.update({ where: { reservationRoomId: stay.reservationRoomId }, data: { checkOutDate: date, originalCheckOutDate: stay.originalCheckOutDate || stay.checkOutDate } });
       const latest = new Date(Math.max(...revised.map((r: any) => r.checkOutDate.getTime())));

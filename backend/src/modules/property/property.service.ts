@@ -67,6 +67,7 @@ export const updateProperty = async (propertyId: number, data: any) => {
     'country', 'latitude', 'longitude', 'primaryEmail', 'primaryPhone', 'primaryPhoneWhatsappOnly', 'coverImage',
     'galleryImages', 'publicDescription', 'cancellationPolicy', 'houseRules', 'taxPercentage',
     'isOnlineBookingEnabled', 'checkInTime', 'checkOutTime', 'isNonRefundable', 'allowEarlyDepartureChargeReduction',
+    'earlyDepartureChargeReductionPenaltyPercent',
   ] as const;
   const updateData: Record<string, unknown> = {};
 
@@ -91,6 +92,12 @@ export const updateProperty = async (propertyId: number, data: any) => {
     updateData.paystackSecretKey = key;
   }
 
+  if (updateData.earlyDepartureChargeReductionPenaltyPercent !== undefined) {
+    const raw = updateData.earlyDepartureChargeReductionPenaltyPercent;
+    const penalty = Number(raw);
+    if (raw === null || raw === '' || typeof raw === 'boolean' || !Number.isFinite(penalty) || penalty < 0 || penalty > 100 || Math.round(penalty * 100) / 100 !== penalty) throw new Error('Early-departure penalty must be between 0 and 100%, with at most two decimal places.');
+    updateData.earlyDepartureChargeReductionPenaltyPercent = penalty;
+  }
   if (updateData.taxPercentage !== undefined) {
     const tax = Number(updateData.taxPercentage);
     if (!Number.isFinite(tax) || tax < 0 || tax > 100) throw new Error('Tax percentage must be between 0 and 100.');

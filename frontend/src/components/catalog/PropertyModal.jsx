@@ -67,11 +67,12 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
     propertyName: '', propertyCode: '', businessName: '', legalName: '', propertyType: 'Hotel', address: '', area: '', city: '', region: '', country: 'Ghana',
     latitude: '', longitude: '', checkInTime: '14:00', checkOutTime: '11:00',
     primaryEmail: '', primaryPhone: '', primaryPhoneWhatsappOnly: false, coverImage: '', galleryImages: [], publicDescription: '',
-    cancellationPolicy: '', houseRules: '', taxPercentage: 0.00, isOnlineBookingEnabled: false, isNonRefundable: true, allowEarlyDepartureChargeReduction: false,
+    cancellationPolicy: '', houseRules: '', taxPercentage: 0.00, isOnlineBookingEnabled: false, isNonRefundable: true, allowEarlyDepartureChargeReduction: false, earlyDepartureChargeReductionPenaltyPercent: 0,
     paystackSecretKey: '',
   });
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState('');
+  const [penaltyError, setPenaltyError] = useState('');
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState('');
   const [isReplacingPaystackKey, setIsReplacingPaystackKey] = useState(false);
@@ -106,6 +107,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
         isOnlineBookingEnabled: initialData.isOnlineBookingEnabled || false,
         isNonRefundable: initialData.isNonRefundable !== false,
         allowEarlyDepartureChargeReduction: initialData.allowEarlyDepartureChargeReduction === true,
+        earlyDepartureChargeReductionPenaltyPercent: initialData.earlyDepartureChargeReductionPenaltyPercent != null ? parseFloat(initialData.earlyDepartureChargeReductionPenaltyPercent) : 0,
         paystackSecretKey: '',
       });
     } else {
@@ -113,7 +115,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
         propertyName: '', propertyCode: '', businessName: '', legalName: '', propertyType: 'Hotel', address: '', area: '', city: '', region: '', country: 'Ghana',
         latitude: '', longitude: '', checkInTime: '14:00', checkOutTime: '11:00',
         primaryEmail: '', primaryPhone: '', primaryPhoneWhatsappOnly: false, coverImage: '', galleryImages: [], publicDescription: '',
-        cancellationPolicy: '', houseRules: '', taxPercentage: 0.00, isOnlineBookingEnabled: false, isNonRefundable: true, allowEarlyDepartureChargeReduction: false,
+        cancellationPolicy: '', houseRules: '', taxPercentage: 0.00, isOnlineBookingEnabled: false, isNonRefundable: true, allowEarlyDepartureChargeReduction: false, earlyDepartureChargeReductionPenaltyPercent: 0,
         paystackSecretKey: '',
       });
     }
@@ -186,6 +188,12 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
       return;
     }
     setLocationError('');
+    const penalty = Number(formData.earlyDepartureChargeReductionPenaltyPercent);
+    if (formData.earlyDepartureChargeReductionPenaltyPercent === '' || !Number.isFinite(penalty) || penalty < 0 || penalty > 100) {
+      setPenaltyError('Enter an early-departure penalty between 0 and 100%.');
+      return;
+    }
+    setPenaltyError('');
     const galleryArray = formData.galleryImages.filter((image) => image !== formData.coverImage);
 
     // 🌟 CRITICAL: Only send the Paystack key if it's a NEW value (not the masked version)
@@ -197,6 +205,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
       galleryImages: galleryArray,
       coverImage: formData.coverImage || formData.galleryImages[0] || '',
       taxPercentage: parseFloat(formData.taxPercentage) || 0.00,
+      earlyDepartureChargeReductionPenaltyPercent: Math.round(penalty * 100) / 100,
       latitude: formData.latitude === '' ? null : Number(formData.latitude),
       longitude: formData.longitude === '' ? null : Number(formData.longitude),
       // 🌟 Conditionally include the key
@@ -353,9 +362,19 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
                 <label htmlFor="allowEarlyDepartureChargeReduction" className="text-sm font-bold text-text">Reduce charges when a guest leaves early</label>
                 <p className="mt-0.5 text-xs text-text-muted">
                   {formData.allowEarlyDepartureChargeReduction
-                    ? 'On: staff may shorten an active stay and remove charges for unused nights.'
+                    ? (Number(formData.earlyDepartureChargeReductionPenaltyPercent) > 0
+                      ? `On: staff may shorten an active stay. The hotel keeps ${Number(formData.earlyDepartureChargeReductionPenaltyPercent)}% of unused nights; the rest is removed.`
+                      : 'On: staff may shorten an active stay and remove charges for unused nights.')
                     : 'Off: guests may check out early, but the original agreed booking charges remain.'}
                 </p>
+                {formData.allowEarlyDepartureChargeReduction && (
+                  <div className="mt-3">
+                    <label htmlFor="earlyDepartureChargeReductionPenaltyPercent" className="text-xs font-semibold text-text">Early-departure penalty (%)</label>
+                    <p className="text-xs text-text-muted">Share of the unused nights' charges the hotel keeps. 0% removes them in full; 100% keeps them all.</p>
+                    <input id="earlyDepartureChargeReductionPenaltyPercent" type="number" name="earlyDepartureChargeReductionPenaltyPercent" min="0" max="100" step="0.01" required value={formData.earlyDepartureChargeReductionPenaltyPercent} onChange={(e) => { setPenaltyError(''); handleChange(e); }} className="mt-1 w-32 px-3 py-2 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
+                    {penaltyError && <p role="alert" className="mt-1 text-xs text-danger-600">{penaltyError}</p>}
+                  </div>
+                )}
               </div>
               <label className="relative inline-flex min-h-11 shrink-0 cursor-pointer items-center">
                 <input id="allowEarlyDepartureChargeReduction" type="checkbox" name="allowEarlyDepartureChargeReduction" checked={formData.allowEarlyDepartureChargeReduction} onChange={handleChange} className="peer sr-only" />

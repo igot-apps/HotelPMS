@@ -98,6 +98,7 @@ export default function ShortenStayDialog({ room, reservationId, timeZone, polic
             {preview && (
               <div className="space-y-1 rounded-lg border border-border bg-background p-3 text-sm">
                 <p className="flex justify-between"><span className="text-text-muted">Booking total</span><span><s className="mr-2 text-text-muted">{cash(preview.oldTotal)}</s><strong className="text-text">{cash(preview.newTotal)}</strong></span></p>
+                {preview.penaltyKept > 0 && <p className="flex justify-between"><span className="text-text-muted">Early-departure penalty kept ({preview.penaltyPercent}%)</span><strong className="text-text">{cash(preview.penaltyKept)}</strong></p>}
                 {preview.credit > 0 && <p className="flex justify-between"><span className="text-text-muted">Overpaid (to refund)</span><strong className="text-success-700">{cash(preview.credit)}</strong></p>}
                 {preview.balanceDue > 0 && <p className="flex justify-between"><span className="text-text-muted">Balance still due</span><strong className="text-danger-700">{cash(preview.balanceDue)}</strong></p>}
               </div>
