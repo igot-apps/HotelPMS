@@ -4,10 +4,10 @@ import { getLimits, getSubscriptionState, getTerms } from '../src/modules/paymen
 
 const now = new Date('2026-11-25T12:00:00Z');
 const days = (n: number) => new Date(now.getTime() + n * 86_400_000);
-const standard = { packageCode: 'standard', packageName: 'Standard', roomAllowance: 20, staffAllowance: 5, monthlyPrice: 200, discountPercent: 0 };
+const standard = { packageCode: 'standard', packageName: 'Standard', roomAllowance: 10, staffAllowance: 2, monthlyPrice: 200, discountPercent: 0 };
 const ctx = (over: Partial<QuoteContext> = {}): QuoteContext => ({
   now, status: 'Active', expired: false, currentEnd: days(30), current: standard, scheduled: null,
-  usage: { rooms: 10, staff: 3 }, hotelDiscount: 0, ...over,
+  usage: { rooms: 5, staff: 2 }, hotelDiscount: 0, ...over,
 });
 
 describe('pricing', () => {
@@ -32,15 +32,15 @@ describe('pricing', () => {
 
   test('recommends a cheaper suitable option', () => {
     const expired = { status: 'Expired', expired: true, currentEnd: null };
-    // Pro chosen, but usage (10 rooms / 3 staff) fits Standard.
-    expect(buildQuote(C, { packageCode: 'pro', months: 1 }, ctx(expired)).recommendation).toMatchObject({ packageCode: 'standard', monthlySaving: 150 });
-    // Custom 30/8 (GHS 280) while Standard still covers usage.
+    // Custom 10 rooms / 2 staff = 50+50+20 = 120, cheaper than Standard (200) for the same allowances.
+    expect(cheapestCovering(C, 10, 2)).toMatchObject({ packageCode: 'custom', monthlyPrice: 120 });
+    expect(buildQuote(C, { packageCode: 'standard', months: 1 }, ctx(expired)).recommendation).toMatchObject({ packageCode: 'custom', monthlySaving: 80 });
+    // Pro (20/4) can be matched by Custom 20/4 for 190.
+    expect(buildQuote(C, { packageCode: 'pro', months: 1 }, ctx(expired)).recommendation).toMatchObject({ packageCode: 'custom', roomAllowance: 20, staffAllowance: 4, monthlySaving: 160 });
+    // Custom 30/8 (GHS 280) while Standard still covers today's usage (5 rooms / 2 staff).
     expect(buildQuote(C, { packageCode: 'custom', rooms: 30, staff: 8, months: 1 }, ctx(expired)).recommendation).toMatchObject({ packageCode: 'standard', monthlySaving: 80 });
-    // Usage 25/6 needs Pro-sized allowances: custom 40/10 ties with Pro, so nothing cheaper.
-    expect(buildQuote(C, { packageCode: 'custom', rooms: 40, staff: 10, months: 1 }, ctx({ ...expired, usage: { rooms: 25, staff: 6 } })).recommendation).toBeNull();
-    // Named package wins a price tie.
-    expect(cheapestCovering(C, 20, 5)?.packageCode).toBe('standard');
-    expect(buildQuote(C, { packageCode: 'standard', months: 1 }, ctx()).recommendation).toBeNull();
+    // Nothing is cheaper than a small custom plan.
+    expect(buildQuote(C, { packageCode: 'custom', rooms: 10, staff: 2, months: 1 }, ctx(expired)).recommendation).toBeNull();
   });
 
   test('hotel-specific discount lowers package prices', () => {
@@ -84,16 +84,16 @@ describe('plan changes', () => {
   });
 
   test('downgrade is scheduled for the end of the current period and needs months', () => {
-    const pro = { packageCode: 'pro', packageName: 'Pro', roomAllowance: 40, staffAllowance: 10, monthlyPrice: 350, discountPercent: 0 };
+    const pro = { packageCode: 'pro', packageName: 'Pro', roomAllowance: 20, staffAllowance: 4, monthlyPrice: 350, discountPercent: 0 };
     const q = buildQuote(C, { packageCode: 'standard', months: 1 }, ctx({ current: pro }));
     expect(q).toMatchObject({ kind: 'Downgrade', prorationAmount: 0, total: 200, appliesAt: days(30).toISOString() });
     expect(() => buildQuote(C, { packageCode: 'standard', months: 0 }, ctx({ current: pro }))).toThrow();
   });
 
   test('downgrade is refused until usage fits the smaller allowances', () => {
-    const pro = { packageCode: 'pro', packageName: 'Pro', roomAllowance: 40, staffAllowance: 10, monthlyPrice: 350, discountPercent: 0 };
-    expect(() => buildQuote(C, { packageCode: 'standard', months: 1 }, ctx({ current: pro, usage: { rooms: 25, staff: 3 } }))).toThrow(/uses 25 rooms/);
-    expect(() => buildQuote(C, { packageCode: 'custom', rooms: 30, staff: 4, months: 1 }, ctx({ current: pro, usage: { rooms: 25, staff: 5 } }))).toThrow(/5 staff/);
+    const pro = { packageCode: 'pro', packageName: 'Pro', roomAllowance: 20, staffAllowance: 4, monthlyPrice: 350, discountPercent: 0 };
+    expect(() => buildQuote(C, { packageCode: 'standard', months: 1 }, ctx({ current: pro, usage: { rooms: 25, staff: 3 } }))).toThrow('Standard is too small for this hotel: you have 25 rooms (it allows 10) and 3 staff accounts');
+    expect(() => buildQuote(C, { packageCode: 'custom', rooms: 30, staff: 4, months: 1 }, ctx({ current: pro, usage: { rooms: 25, staff: 5 } }))).toThrow(/5 staff accounts including managers/);
   });
 
   test('a pending downgrade blocks other changes but allows renewing it', () => {
@@ -117,10 +117,10 @@ describe('state, terms and limits', () => {
   });
 
   test('a scheduled downgrade takes effect once its date passes', () => {
-    const property = { subscriptionPackage: 'pro', subscriptionPlan: 'Pro', roomAllowance: 40, staffAllowance: 10, subscriptionMonthlyPrice: 350,
+    const property = { subscriptionPackage: 'pro', subscriptionPlan: 'Pro', roomAllowance: 20, staffAllowance: 4, subscriptionMonthlyPrice: 350,
       scheduledSubscription: { ...standard, effectiveAt: days(1).toISOString() } };
     expect(getTerms(property, C, now).current.packageCode).toBe('pro');
-    expect(getLimits(property, C, now)).toMatchObject({ rooms: 20, staff: 5 }); // pending downgrade caps new additions
+    expect(getLimits(property, C, now)).toMatchObject({ rooms: 10, staff: 2 }); // pending downgrade caps new additions
     expect(getTerms(property, C, days(2))).toMatchObject({ current: { packageCode: 'standard' }, scheduled: null });
   });
 

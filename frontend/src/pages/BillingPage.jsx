@@ -34,13 +34,28 @@ function UsageMeter({ icon: Icon, label, used, limit }) {
 }
 
 function Stepper({ label, value, min, max, onChange }) {
-  const set = (n) => onChange(Math.max(min, Math.min(max, Number.isFinite(n) ? Math.round(n) : min)));
+  // Keep the typed text separately so the field can be cleared and retyped freely;
+  // only whole numbers in range update the plan, and leaving the field restores a valid value.
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => { setDraft(String(value)); }, [value]);
+  const clamp = (n) => Math.max(min, Math.min(max, Math.round(n)));
+  const set = (n) => onChange(clamp(Number.isFinite(n) ? n : min));
+  const type = (text) => {
+    const digits = text.replace(/\D/g, '');
+    setDraft(digits);
+    const n = Number(digits);
+    if (digits && n >= min && n <= max) onChange(n);
+  };
+  const out = draft !== '' && (Number(draft) < min || Number(draft) > max);
   return (
     <label className="block text-sm font-medium text-text">
       {label}
-      <div className="mt-1 flex items-center rounded-lg border border-border bg-background">
+      <div className={`mt-1 flex items-center rounded-lg border bg-background ${out ? 'border-warning-500' : 'border-border'}`}>
         <button type="button" aria-label={`Fewer ${label}`} onClick={() => set(value - 1)} className="p-2 text-text-muted hover:text-text"><Minus size={14} /></button>
-        <input type="number" min={min} max={max} value={value} onChange={(e) => set(Number(e.target.value))} className="w-full min-w-0 bg-transparent text-center text-text outline-none" />
+        <input type="text" inputMode="numeric" value={draft} placeholder={String(min)}
+          onChange={(e) => type(e.target.value)}
+          onBlur={() => { const n = Number(draft); const next = draft === '' ? value : clamp(n); setDraft(String(next)); if (next !== value) onChange(next); }}
+          className="w-full min-w-0 bg-transparent text-center text-text outline-none" />
         <button type="button" aria-label={`More ${label}`} onClick={() => set(value + 1)} className="p-2 text-text-muted hover:text-text"><Plus size={14} /></button>
       </div>
       <span className="text-xs font-normal text-text-muted">{min}–{max}</span>
@@ -71,10 +86,12 @@ export default function BillingPage() {
     if (initRef.current) return;
     initRef.current = true;
     const target = data.scheduled || data.current;
-    const known = target.packageCode === 'custom' || data.catalog.packages.some((p) => p.code === target.packageCode);
+    // Start on the hotel's own plan when it still fits, otherwise the first plan that does.
+    const fitting = data.catalog.packages.filter((p) => p.rooms >= data.usage.rooms && p.staff >= data.usage.staff);
+    const own = fitting.find((p) => p.code === target.packageCode && p.rooms === target.roomAllowance && p.staff === target.staffAllowance);
     setSelection((s) => ({
       ...s,
-      packageCode: known ? target.packageCode : data.catalog.packages[0]?.code || 'custom',
+      packageCode: target.packageCode === 'custom' ? 'custom' : own?.code || fitting[0]?.code || (data.catalog.custom ? 'custom' : target.packageCode),
       rooms: Math.max(target.roomAllowance, data.usage.rooms, data.catalog.custom?.minRooms || 1),
       staff: Math.max(target.staffAllowance, data.usage.staff, data.catalog.custom?.minStaff || 1),
       months: Math.max(1, data.catalog.minMonths),
@@ -160,6 +177,7 @@ export default function BillingPage() {
             <h2 className="text-xl font-bold text-text">{current.packageName}</h2>
             <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusTone}`}>{statusLabel}</span>
           </div>
+          <p className="text-sm font-medium text-text">Your allowance: {current.roomAllowance} rooms · {current.staffAllowance} staff accounts</p>
           <p className="text-sm text-text-muted">
             {state.expired ? `Ended ${date(state.endsAt)}. Your data is safe — renew to continue making changes and taking online bookings.`
               : `${state.isTrial ? 'Trial ends' : 'Paid until'} ${date(state.endsAt)}.`}
@@ -188,15 +206,21 @@ export default function BillingPage() {
           <section className="rounded-xl border border-border bg-surface p-5 shadow-sm">
             <h2 className="mb-4 text-lg font-bold text-text">Choose a plan</h2>
             <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
-              {catalog.packages.map((p) => (
-                <button key={p.code} type="button" onClick={() => choose(p.code)}
-                  className={`rounded-xl border-2 p-4 text-left transition ${selection.packageCode === p.code ? 'border-primary-500 bg-primary-50' : 'border-border hover:border-primary-200'}`}>
-                  <p className="font-semibold text-text">{p.name}</p>
-                  <p className="mt-1 text-xl font-bold text-text">{money(p.monthlyPrice)}<span className="text-sm font-normal text-text-muted">/mo</span></p>
-                  <p className="mt-2 text-sm text-text-muted">{p.rooms} rooms · {p.staff} staff</p>
-                  {current.packageCode === p.code && <p className="mt-2 text-xs font-semibold text-primary-700">Current plan</p>}
-                </button>
-              ))}
+              {catalog.packages.map((p) => {
+                const short = [p.rooms < usage.rooms && `${usage.rooms} rooms`, p.staff < usage.staff && `${usage.staff} staff accounts`].filter(Boolean);
+                const isCurrent = current.packageCode === p.code && current.roomAllowance === p.rooms && current.staffAllowance === p.staff;
+                return (
+                  <button key={p.code} type="button" onClick={() => choose(p.code)} disabled={short.length > 0} aria-pressed={selection.packageCode === p.code}
+                    className={`rounded-xl border-2 p-4 text-left transition disabled:cursor-not-allowed disabled:bg-secondary-50 disabled:opacity-70 ${selection.packageCode === p.code && !short.length ? 'border-primary-500 bg-primary-50' : 'border-border hover:border-primary-200'}`}>
+                    <p className="font-semibold text-text">{p.name}</p>
+                    <p className="mt-1 text-xl font-bold text-text">{money(p.monthlyPrice)}<span className="text-sm font-normal text-text-muted">/mo</span></p>
+                    <p className="mt-2 text-sm text-text-muted">{p.rooms} rooms · {p.staff} staff</p>
+                    {short.length > 0
+                      ? <p className="mt-2 text-xs font-medium text-warning-700">Too small — you have {short.join(' and ')}</p>
+                      : isCurrent && <p className="mt-2 text-xs font-semibold text-primary-700">Current plan</p>}
+                  </button>
+                );
+              })}
               {catalog.custom && (
                 <button type="button" onClick={() => choose('custom')}
                   className={`rounded-xl border-2 p-4 text-left transition ${isCustom ? 'border-primary-500 bg-primary-50' : 'border-border hover:border-primary-200'}`}>
@@ -209,8 +233,8 @@ export default function BillingPage() {
             </div>
             {isCustom && catalog.custom && (
               <div className="mt-4 grid gap-4 rounded-lg border border-border bg-background p-4 sm:grid-cols-2">
-                <Stepper label="Rooms" value={selection.rooms} min={catalog.custom.minRooms} max={catalog.custom.maxRooms} onChange={(rooms) => setSelection((s) => ({ ...s, rooms }))} />
-                <Stepper label="Staff accounts" value={selection.staff} min={catalog.custom.minStaff} max={catalog.custom.maxStaff} onChange={(staff) => setSelection((s) => ({ ...s, staff }))} />
+                <Stepper label="Rooms" value={selection.rooms} min={Math.max(catalog.custom.minRooms, usage.rooms)} max={catalog.custom.maxRooms} onChange={(rooms) => setSelection((s) => ({ ...s, rooms }))} />
+                <Stepper label="Staff accounts" value={selection.staff} min={Math.max(catalog.custom.minStaff, usage.staff)} max={catalog.custom.maxStaff} onChange={(staff) => setSelection((s) => ({ ...s, staff }))} />
               </div>
             )}
           </section>
@@ -288,7 +312,7 @@ export default function BillingPage() {
           )}
           <button type="button" onClick={pay} disabled={!q || !!quoteError || isPaying || quote.isFetching}
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 font-semibold text-text-inverted transition hover:bg-primary-700 disabled:opacity-50">
-            {isPaying ? <><Loader2 size={18} className="animate-spin" /> Connecting to Paystack…</> : q?.total === 0 ? 'Apply change' : `Pay ${money(q?.total)}`}
+            {isPaying ? <><Loader2 size={18} className="animate-spin" /> Connecting to Paystack…</> : quoteError ? 'Choose a plan that fits' : !q ? 'Pay' : q.total === 0 ? 'Apply change' : `Pay ${money(q.total)}`}
           </button>
           <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-text-muted"><ShieldCheck size={13} /> Mobile money or card via Paystack. No automatic renewals.</p>
         </aside>

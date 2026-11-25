@@ -29,12 +29,12 @@ const day = 86_400_000;
 const future = (n: number) => new Date(Date.now() + n * day);
 const activeStandard = (over: any = {}) => ({
   propertyId: 5, subscriptionStatus: 'Active', trialEndsAt: null, subscriptionEndsAt: future(10),
-  subscriptionPlan: 'Standard', subscriptionPackage: 'standard', roomAllowance: 20, staffAllowance: 5,
+  subscriptionPlan: 'Standard', subscriptionPackage: 'standard', roomAllowance: 10, staffAllowance: 2,
   subscriptionMonthlyPrice: 200, subscriptionDiscountPercent: 0, scheduledSubscription: null, subscriptionOverride: null, ...over,
 });
 const order = (over: any = {}) => ({
   subscriptionPaymentId: 9, propertyId: 5, initiatedBy: 1, reference: 'SUB-5-x', amount: 350, currency: 'GHS', status: 'Pending',
-  durationMonths: 1, planName: 'Pro', kind: 'Upgrade', packageCode: 'pro', roomAllowance: 40, staffAllowance: 10,
+  durationMonths: 1, planName: 'Pro', kind: 'Upgrade', packageCode: 'pro', roomAllowance: 20, staffAllowance: 4,
   monthlyPrice: 350, discountPercent: 0, ...over,
 });
 const paystackOk = (amount: number) => (axios.get as any).mockResolvedValue({ data: { status: true, data: { status: 'success', reference: 'SUB-5-x', amount: amount * 100, currency: 'GHS' } } });
@@ -44,8 +44,8 @@ beforeEach(() => {
   process.env.PAYSTACK_SECRET_KEY = 'sk_test_x';
   db.subscriptionSettings.findUnique.mockResolvedValue(null);
   db.subscriptionPayment.updateMany.mockResolvedValue({ count: 1 });
-  db.room.count.mockResolvedValue(10);
-  db.user.count.mockResolvedValue(3);
+  db.room.count.mockResolvedValue(5);
+  db.user.count.mockResolvedValue(2);
 });
 
 describe('payment verification', () => {
@@ -56,7 +56,7 @@ describe('payment verification', () => {
     const result: any = await verifySubscriptionPayment('SUB-5-x', 5);
     expect(result.status).toBe('success');
     const data = db.property.update.mock.calls[0][0].data;
-    expect(data).toMatchObject({ subscriptionPackage: 'pro', roomAllowance: 40, staffAllowance: 10, subscriptionMonthlyPrice: 350, subscriptionStatus: 'Active', scheduledSubscription: 'DbNull' });
+    expect(data).toMatchObject({ subscriptionPackage: 'pro', roomAllowance: 20, staffAllowance: 4, subscriptionMonthlyPrice: 350, subscriptionStatus: 'Active', scheduledSubscription: 'DbNull' });
     expect(data.subscriptionEndsAt.getTime()).toBeGreaterThan(future(38).getTime()); // 10 days left + 1 month kept
     expect(db.auditLog.create.mock.calls[0][0].data.action).toBe('SubscriptionPurchased');
     expect(db.subscriptionPayment.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'Completed' }) }));
@@ -64,13 +64,13 @@ describe('payment verification', () => {
 
   test('a downgrade keeps current allowances and schedules the new ones at period end', async () => {
     const end = future(10);
-    db.subscriptionPayment.findUnique.mockResolvedValue(order({ kind: 'Downgrade', packageCode: 'standard', planName: 'Standard', roomAllowance: 20, staffAllowance: 5, monthlyPrice: 200, amount: 200 }));
-    db.property.findUnique.mockResolvedValue(activeStandard({ subscriptionPackage: 'pro', subscriptionPlan: 'Pro', roomAllowance: 40, staffAllowance: 10, subscriptionMonthlyPrice: 350, subscriptionEndsAt: end }));
+    db.subscriptionPayment.findUnique.mockResolvedValue(order({ kind: 'Downgrade', packageCode: 'standard', planName: 'Standard', roomAllowance: 10, staffAllowance: 2, monthlyPrice: 200, amount: 200 }));
+    db.property.findUnique.mockResolvedValue(activeStandard({ subscriptionPackage: 'pro', subscriptionPlan: 'Pro', roomAllowance: 20, staffAllowance: 4, subscriptionMonthlyPrice: 350, subscriptionEndsAt: end }));
     paystackOk(200);
     await verifySubscriptionPayment('SUB-5-x', 5);
     const data = db.property.update.mock.calls[0][0].data;
-    expect(data).toMatchObject({ subscriptionPackage: 'pro', roomAllowance: 40 });
-    expect(data.scheduledSubscription).toMatchObject({ packageCode: 'standard', roomAllowance: 20, effectiveAt: end.toISOString() });
+    expect(data).toMatchObject({ subscriptionPackage: 'pro', roomAllowance: 20 });
+    expect(data.scheduledSubscription).toMatchObject({ packageCode: 'standard', roomAllowance: 10, effectiveAt: end.toISOString() });
   });
 
   test('duplicate callbacks/webhooks never apply a payment twice', async () => {
@@ -101,7 +101,7 @@ describe('payment verification', () => {
     (axios.post as any).mockResolvedValue({ data: { status: true, data: { authorization_url: 'https://pay' } } });
     await initializeSubscriptionPayment(1, 5, { packageCode: 'standard', months: 12, amount: 1 });
     const created = db.subscriptionPayment.create.mock.calls[0][0].data;
-    expect(created).toMatchObject({ amount: 2000, durationMonths: 12, kind: 'Renewal', packageCode: 'standard', roomAllowance: 20, discountPercent: 16.67 });
+    expect(created).toMatchObject({ amount: 2000, durationMonths: 12, kind: 'Renewal', packageCode: 'standard', roomAllowance: 10, discountPercent: 16.67 });
     expect((axios.post as any).mock.calls[0][1].amount).toBe('200000');
   });
 });
@@ -109,19 +109,19 @@ describe('payment verification', () => {
 describe('limits', () => {
   test('blocks adding past the allowance but allows up to it', async () => {
     db.property.findUnique.mockResolvedValue(activeStandard());
-    db.room.count.mockResolvedValue(19);
+    db.room.count.mockResolvedValue(9);
     await expect(assertCapacity(5, 'rooms')).resolves.toBeUndefined();
-    db.room.count.mockResolvedValue(20);
+    db.room.count.mockResolvedValue(10);
     await expect(assertCapacity(5, 'rooms')).rejects.toMatchObject({ code: 'PLAN_LIMIT_REACHED', statusCode: 409 });
-    db.user.count.mockResolvedValue(5);
-    await expect(assertCapacity(5, 'staff')).rejects.toThrow(/5 staff accounts \(including pending invitations\)/);
+    db.user.count.mockResolvedValue(2);
+    await expect(assertCapacity(5, 'staff')).rejects.toThrow(/2 staff accounts \(including pending invitations\)/);
   });
 
   test('reactivating a room type checks all of its returning rooms', async () => {
     db.property.findUnique.mockResolvedValue(activeStandard());
-    db.room.count.mockResolvedValue(15);
+    db.room.count.mockResolvedValue(5);
     await expect(assertCapacity(5, 'rooms', 5)).resolves.toBeUndefined();
-    await expect(assertCapacity(5, 'rooms', 6)).rejects.toThrow(/allows 20 rooms/);
+    await expect(assertCapacity(5, 'rooms', 6)).rejects.toThrow(/allows 10 rooms/);
   });
 });
 

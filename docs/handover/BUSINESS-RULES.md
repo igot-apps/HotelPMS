@@ -95,7 +95,7 @@ Code: `reservation/stay-timing.ts`, `reservation/checkout-alerts.service.ts`,
 ## Subscriptions (hotels pay HideOut24)
 - Trial → paid via Paystack (platform key). Expiry notices on the dashboard; online booking pauses
   when expired. Expired **and Cancelled** hotels are read-only (writes blocked) but can still renew.
-- Packages (all with the same features): Standard GHS 200 / 20 rooms / 5 staff, Pro GHS 350 / 40 / 10,
+- Packages (all with the same features): Standard GHS 200 / 10 rooms / 2 staff, Pro GHS 350 / 20 / 4,
   Custom GHS 50 + 5/room + 10/staff. 1–24 months; discounts 3+ 8.33%, 6+ 10%, 12+ 16.67%, 24 20%.
   All of this is **runtime config** (`subscription_settings`, edited in Super admin → Plans & pricing);
   pricing logic lives only in `backend/src/modules/payment/subscription-plans.ts`.

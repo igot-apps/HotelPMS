@@ -20,8 +20,8 @@ export const CUSTOM_CODE = 'custom';
 
 export const DEFAULT_CONFIG: SubscriptionConfig = {
   packages: [
-    { code: 'standard', name: 'Standard', monthlyPrice: 200, rooms: 20, staff: 5, active: true },
-    { code: 'pro', name: 'Pro', monthlyPrice: 350, rooms: 40, staff: 10, active: true },
+    { code: 'standard', name: 'Standard', monthlyPrice: 200, rooms: 10, staff: 2, active: true },
+    { code: 'pro', name: 'Pro', monthlyPrice: 350, rooms: 20, staff: 4, active: true },
   ],
   custom: { enabled: true, name: 'Custom', baseFee: 50, perRoom: 5, perStaff: 10, minRooms: 1, maxRooms: 200, minStaff: 1, maxStaff: 50 },
   minMonths: 1,
@@ -160,8 +160,12 @@ export function buildQuote(config: SubscriptionConfig, input: { packageCode?: st
   if (!Number.isInteger(months) || months > config.maxMonths || (months < config.minMonths && !(months === 0 && canUpgradeOnly))) {
     throw new SubscriptionError(`Choose between ${config.minMonths} and ${config.maxMonths} months${canUpgradeOnly ? ', or upgrade for the remaining period only' : ''}.`);
   }
-  if (selected.roomAllowance < ctx.usage.rooms || selected.staffAllowance < ctx.usage.staff) {
-    throw new SubscriptionError(`This hotel uses ${ctx.usage.rooms} rooms and ${ctx.usage.staff} staff accounts (including pending invitations). Choose allowances that cover current usage, or reduce usage first.`, 400, 'USAGE_EXCEEDS_PACKAGE');
+  const over = [
+    selected.roomAllowance < ctx.usage.rooms && `${ctx.usage.rooms} rooms (it allows ${selected.roomAllowance})`,
+    selected.staffAllowance < ctx.usage.staff && `${ctx.usage.staff} staff accounts including managers and pending invitations (it allows ${selected.staffAllowance})`,
+  ].filter(Boolean);
+  if (over.length) {
+    throw new SubscriptionError(`${selected.packageName} is too small for this hotel: you have ${over.join(' and ')}. Choose a bigger plan, or deactivate rooms or staff first.`, 400, 'USAGE_EXCEEDS_PACKAGE');
   }
 
   const discountPercent = discountFor(config, months);
