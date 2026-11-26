@@ -2,7 +2,7 @@ import { Skeleton } from '../components/ui/Skeleton';
 import ResponsiveTable from '../components/ui/ResponsiveTable';
 import BackButton from '../components/ui/BackButton';
 import { useEffect, useRef, useState } from 'react';
-import { useParams, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useParams, useLocation, useNavigate } from 'react-router-dom';
 import { bookingStatusLabel, roomStatusLabel, roomStatusTone } from '../lib/statusLabels';
 
 import { hotelToday } from '../lib/period';
@@ -241,6 +241,9 @@ export default function ReservationDetailsPage() {
   const approvedRefundTotal = approvedRefunds.reduce((sum, request) => sum + Number(request.input?.amount || 0), 0);
   const pendingRefunds = refundOverview?.requests?.filter(request => request.status === 'Pending') || [];
 
+  const bookingGuestName = resData.guestNameSnapshot || resData.propertyGuest?.fullName || resData.platformGuest?.fullName || '';
+  const bookingGuestPhone = resData.guestPhoneSnapshot || resData.propertyGuest?.phone || resData.platformGuest?.phone || '';
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -253,6 +256,12 @@ export default function ReservationDetailsPage() {
               <CalendarDays size={14} />
               {new Date(resData.checkInDate).toLocaleDateString()} → {new Date(resData.checkOutDate).toLocaleDateString()}
             </p>
+            {bookingGuestName && (
+              <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-text-muted">
+                Guest: <Link to={`/guests?search=${encodeURIComponent(bookingGuestPhone.replace(/\D/g, '').slice(-9) || bookingGuestName)}`} className="font-semibold text-primary-700 hover:underline">{bookingGuestName}</Link>
+                {bookingGuestPhone && <Link to={`/bookings?new=1&guest=${encodeURIComponent(bookingGuestPhone)}`} className="inline-flex items-center gap-1 font-semibold text-primary-700 hover:underline"><Plus size={14} /> Book again</Link>}
+              </p>
+            )}
             <div className="mt-2"><ReservationPaymentStatus reservation={resData} compact /></div>
           </div>
         </div>

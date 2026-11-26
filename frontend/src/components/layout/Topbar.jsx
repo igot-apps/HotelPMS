@@ -1,6 +1,7 @@
 import { useAuthStore } from '../../store/authStore';
 import { Menu, HandCoins } from 'lucide-react';
 import PropertySwitcher from './PropertySwitcher';
+import UserMenu from './UserMenu';
 import { Link } from 'react-router-dom';
 import useRefundCount from '../../hooks/useRefundCount';
 
@@ -34,9 +35,7 @@ export default function Topbar({ onMenuClick, isMenuOpen }) {
           <p className="text-sm font-semibold text-text">{user?.fullName || 'User'}</p>
           <p className="text-xs text-text-muted">{user?.role || 'Staff'}</p>
         </div>
-        <div className="w-10 h-10 rounded-full bg-primary-600 flex items-center justify-center text-text-inverted font-bold text-sm">
-          {user?.fullName?.charAt(0).toUpperCase() || 'U'}
-        </div>
+        <UserMenu />
       </div>
     </header>
   );

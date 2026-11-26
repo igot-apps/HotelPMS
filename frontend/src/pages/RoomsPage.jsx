@@ -5,7 +5,9 @@ import { getRooms, updateRoomStatus, getOnlineRoomAccess, setRoomOnlineBooking }
 import { MaintenanceReasonDialog } from '../components/rooms/MaintenanceReason';
 import { useAuthStore } from '../store/authStore';
 import RoomCard from '../components/rooms/RoomCard';
-import { BedDouble, AlertCircle, CheckCircle2, Wrench, Sparkles, LayoutGrid, Search } from 'lucide-react';
+import { BedDouble, AlertCircle, CheckCircle2, Wrench, Sparkles, LayoutGrid, Search, Settings } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import RequirePermission from '../components/RequirePermission';
 import { updateGuestPresence } from '../api/reservations';
 import toast from 'react-hot-toast';
 
@@ -118,9 +120,14 @@ export default function RoomsPage() {
   return (
     <div className="space-y-8">
       {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-text tracking-tight">Room Inventory</h1>
-        <p className="text-text-muted mt-1">Manage room status, housekeeping, and availability in real-time.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold text-text tracking-tight">Room Inventory</h1>
+          <p className="text-text-muted mt-1">Manage room status, housekeeping, and availability in real-time.</p>
+        </div>
+        <RequirePermission permission="CanCreateRoom">
+          <Link to="/room-management" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-primary-700 hover:bg-primary-50"><Settings size={16} /> Edit rooms & prices</Link>
+        </RequirePermission>
       </div>
 
       {/* Quick Stats Dashboard */}

@@ -208,8 +208,10 @@ export default function ReservationsPage() {
     if (searchParams.get('new') === '1') {
       // A free room tapped on the dashboard is pre-selected (only if it is still free for the dates).
       const room = Number(searchParams.get('room'));
-      setNewBookingInitial(Number.isSafeInteger(room) && room > 0 ? { roomIds: [room] } : null);
-      setIsModalOpen(true); updateParams({ new: null, room: null }); return;
+      const guestPhone = (searchParams.get('guest') || '').replace(/[^\d+]/g, '').slice(0, 15);
+      const initial = { ...(Number.isSafeInteger(room) && room > 0 ? { roomIds: [room] } : {}), ...(guestPhone ? { guestPhone } : {}) };
+      setNewBookingInitial(Object.keys(initial).length ? initial : null);
+      setIsModalOpen(true); updateParams({ new: null, room: null, guest: null }); return;
     }
     const open = searchParams.get('open');
     if (!open || isLoading || isPlaceholderData || handledLink.current === searchParams.toString()) return;

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
+import MobileTabBar from './MobileTabBar';
 import BackButton from '../ui/BackButton';
 import ClockNotice from './ClockNotice';
 import TestClockBar from './TestClockBar';
@@ -83,6 +84,7 @@ export default function AppLayout() {
           <ClockNotice />
           <Outlet />
         </main>
+        <MobileTabBar onMore={toggleSidebar} isMenuOpen={isSidebarOpen} />
       </div>
     </div>
   );

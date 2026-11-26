@@ -3,14 +3,14 @@ import { useState } from 'react';
 import { addDays, defaultToday } from '../lib/period';
 import useServerClock from '../lib/useServerClock';
 import CashRangeSummary from '../components/reports/CashRangeSummary';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getFullDashboardReport } from '../api/reports';
 import { getProperties } from '../api/properties';
 import { useAuthStore } from '../store/authStore'; // 🚨 ADD THIS
 import { 
   TrendingUp, TrendingDown, DollarSign, BedDouble, Percent, 
-  Calendar, BarChart3, PieChart, Loader2, Building2, Wallet, Activity
+  Calendar, BarChart3, PieChart, Loader2, Building2, Wallet, Activity, ArrowRight
 } from 'lucide-react';
 
 export default function ReportsPage() {
@@ -128,6 +128,20 @@ const currentPropertyName = user?.propertyName || 'All Properties';
             <KpiCard icon={BedDouble} label="ADR" value={`${summary.adr?.toFixed(2) || 0} GHS`} subtext="Avg. Daily Rate" color="warning" />
             <KpiCard icon={Wallet} label="RevPAR" value={`${summary.revpar?.toFixed(2) || 0} GHS`} subtext="Rev. Per Avail. Room" color="info" />
           </div>
+
+          {/* Where to look next: the records behind these numbers (current property only). */}
+          {(!propertyId || String(propertyId) === String(userPropertyId)) && userPropertyId && (
+            <nav aria-label="See the records behind this report" className="flex flex-wrap gap-2">
+              {[
+                { to: `/bookings?fromDate=${startDate}&toDate=${endDate}`, label: 'Bookings in this period' },
+                { to: '/calendar', label: 'Calendar' },
+                { to: '/refunds', label: 'Refunds' },
+                ...(user?.role === 'Manager' ? [{ to: '/activity', label: 'Activity log' }] : []),
+              ].map((item) => (
+                <Link key={item.to} to={item.to} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-semibold text-primary-700 hover:bg-primary-50">{item.label} <ArrowRight size={14} /></Link>
+              ))}
+            </nav>
+          )}
 
           {/* 🌟 CHARTS ROW */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

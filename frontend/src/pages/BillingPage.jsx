@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, BedDouble, CalendarClock, CheckCircle2, Crown, Gift, Lightbulb, Loader2, Minus, Plus, ShieldCheck, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { fetchSubscriptionQuote, fetchSubscriptionStatus, initializeSubscriptionPayment } from '../api/billing';
 import SubscriptionMomoPanel from '../components/billing/SubscriptionMomoPanel';
@@ -18,13 +19,13 @@ function useDebounced(value, ms = 250) {
   return debounced;
 }
 
-function UsageMeter({ icon: Icon, label, used, limit }) {
+function UsageMeter({ icon: Icon, label, used, limit, to }) {
   const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
   const tone = used > limit ? 'bg-danger-500' : pct >= 90 ? 'bg-warning-500' : 'bg-primary-500';
   return (
     <div>
       <div className="mb-1 flex items-center justify-between text-sm">
-        <span className="flex items-center gap-1.5 font-medium text-text"><Icon size={15} className="text-text-muted" /> {label}</span>
+        <span className="flex items-center gap-1.5 font-medium text-text"><Icon size={15} className="text-text-muted" /> {label}{to && <Link to={to} className="ml-1 text-xs font-semibold text-primary-700 hover:underline">Manage</Link>}</span>
         <span className="text-text-muted"><b className="text-text">{used}</b> of {limit}</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-secondary-100"><div className={`h-full ${tone}`} style={{ width: `${pct}%` }} /></div>
@@ -180,8 +181,8 @@ export default function BillingPage() {
           ))}
         </div>
         <div className="space-y-4">
-          <UsageMeter icon={BedDouble} label="Rooms" used={usage.rooms} limit={limits.rooms} />
-          <UsageMeter icon={Users} label="Staff accounts" used={usage.staff} limit={limits.staff} />
+          <UsageMeter icon={BedDouble} label="Rooms" used={usage.rooms} limit={limits.rooms} to="/room-management" />
+          <UsageMeter icon={Users} label="Staff accounts" used={usage.staff} limit={limits.staff} to="/users" />
           <p className="text-xs text-text-muted">Staff includes managers and pending invitations.</p>
         </div>
       </section>

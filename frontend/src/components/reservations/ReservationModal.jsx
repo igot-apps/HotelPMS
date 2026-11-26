@@ -84,7 +84,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
       });
       
       setCurrentStep(1);
-      setPhoneLookup('');
+      setPhoneLookup(initialData?.guestPhone ? toPhoneInputValue(initialData.guestPhone) : '');
       lastAutoLookupRef.current = '';
       phoneLookupRequestRef.current += 1;
       setPhoneLookupResult(null);

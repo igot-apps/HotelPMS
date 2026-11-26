@@ -13,6 +13,7 @@ import RoomTypeModal from '../components/catalog/RoomTypeModal';
 import AmenityManagementModal from '../components/catalog/AmenityManagementModal';
 import { MaintenanceReasonField, isValidMaintenanceReason } from '../components/rooms/MaintenanceReason';
 import toast from 'react-hot-toast';
+import AllowanceHint from '../components/billing/AllowanceHint';
 import {
   BedDouble, Layers, Plus, Edit2, Trash2, Loader2, Sparkles, AlertCircle, X, Tag, CheckCircle2, ArrowRight
 } from 'lucide-react';
@@ -129,6 +130,7 @@ export default function RoomManagementPage() {
       <div>
         <h1 className="text-2xl font-bold text-text tracking-tight">Room Management</h1>
         <p className="text-text-muted text-sm mt-1">Set up your room types (with nightly prices), then add each room in the hotel.</p>
+        <div className="mt-1"><AllowanceHint kind="rooms" /></div>
       </div>
 
       {!isLoadingTypes && !isLoadingRooms && !setupDone && (

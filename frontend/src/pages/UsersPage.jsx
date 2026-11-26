@@ -12,6 +12,7 @@ import RequirePermission from '../components/RequirePermission';
 import toast from 'react-hot-toast';
 import { Shield, Plus, Edit2, Trash2, Search, Building2, Sparkles } from 'lucide-react';
 
+import AllowanceHint from '../components/billing/AllowanceHint';
 export default function UsersPage() {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user); // ✅ ADDED: Get logged-in user data
@@ -94,6 +95,7 @@ export default function UsersPage() {
             <Shield size={24} className="text-primary-500" /> Staff Management
           </h1>
           <p className="text-text-muted text-sm mt-1">Manage system users, roles, and property assignments.</p>
+        <div className="mt-1"><AllowanceHint kind="staff" /></div>
         </div>
         <RequirePermission permission="CanManageStaffAndRoles">
           <button onClick={() => { setEditingUser(null); setIsModalOpen(true); }} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-text-inverted text-sm font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm">

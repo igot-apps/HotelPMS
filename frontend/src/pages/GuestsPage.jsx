@@ -1,10 +1,13 @@
 import { SkeletonRows } from '../components/ui/Skeleton';
 import ResponsiveTable from '../components/ui/ResponsiveTable';
 import { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getGuests, createGuest, updateGuest, deleteGuest } from '../api/guests';
 import GuestModal from '../components/guests/GuestModal';
 import { Search, Plus, Edit2, Trash2, Users, AlertCircle, ChevronLeft, ChevronRight, Building2, Globe2 } from 'lucide-react';
+
+const phoneKey = (phone) => (phone || '').replace(/\D/g, '').slice(-9);
 
 export default function GuestsPage() {
   const queryClient = useQueryClient();
@@ -12,8 +15,9 @@ export default function GuestsPage() {
   const [editingGuest, setEditingGuest] = useState(null);
   
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get('search') || '');
+  const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get('search') || '');
 
   // Debounce search input
   useEffect(() => {
@@ -155,19 +159,22 @@ export default function GuestsPage() {
                       <p className="text-xs">{guest.city || '—'}{guest.country ? `, ${guest.country}` : ''}</p>
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-sm font-semibold text-text">{guest.totalBookings || 0} {guest.totalBookings === 1 ? 'booking' : 'bookings'}</p>
+                      {guest.totalBookings > 0 && phoneKey(guest.phone)
+                        ? <Link to={`/bookings?search=${phoneKey(guest.phone)}`} className="text-sm font-semibold text-primary-700 hover:underline">{guest.totalBookings} {guest.totalBookings === 1 ? 'booking' : 'bookings'}</Link>
+                        : <p className="text-sm font-semibold text-text">{guest.totalBookings || 0} {guest.totalBookings === 1 ? 'booking' : 'bookings'}</p>}
                       <p className="text-xs text-text-muted">Latest check-in: {formatDate(guest.lastStayDate) === '—' ? 'None' : formatDate(guest.lastStayDate)}</p>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {guest.phone && <Link to={`/bookings?new=1&guest=${encodeURIComponent(guest.phone)}`} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-primary-700 hover:bg-primary-50" aria-label={`New booking for ${guest.fullName}`}><Plus size={14} /> Book</Link>}
                         {isOnlineGuest ? (
                           <span className="text-xs text-text-muted">Guest-managed profile</span>
                         ) : (
                           <>
-                            <button onClick={() => openEditModal(guest)} className="p-2 rounded-lg hover:bg-primary-50 text-primary-600 transition" title="Edit">
+                            <button onClick={() => openEditModal(guest)} className="p-2 rounded-lg hover:bg-primary-50 text-primary-600 transition" title="Edit" aria-label={`Edit ${guest.fullName}`}>
                               <Edit2 size={16} />
                             </button>
-                            <button onClick={() => handleDelete(guest)} className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition" title="Deactivate">
+                            <button onClick={() => handleDelete(guest)} className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 transition" title="Deactivate" aria-label={`Deactivate ${guest.fullName}`}>
                               <Trash2 size={16} />
                             </button>
                           </>

@@ -73,7 +73,7 @@ export default function RoomCard({ room, onToggleHousekeeping, onToggleOperation
         </div>
         {reservedTonight && (
           <p className="mb-3 rounded-lg border border-warning-200 bg-warning-50 px-3 py-2 text-xs text-warning-800">
-            Held for <span className="font-semibold">{room.arrivingToday.guestName}</span>{room.arrivingToday.confirmationCode ? ` · ${room.arrivingToday.confirmationCode}` : ''}. Do not give this room to another guest.
+            Held for <span className="font-semibold">{room.arrivingToday.guestName}</span>{room.arrivingToday.confirmationCode ? ' · ' : ''}{room.arrivingToday.confirmationCode && <Link to={`/bookings/${room.arrivingToday.reservationId}?back=rooms`} className="font-semibold underline hover:text-warning-900">{room.arrivingToday.confirmationCode}</Link>}
           </p>
         )}
 

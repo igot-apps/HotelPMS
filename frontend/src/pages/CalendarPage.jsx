@@ -105,7 +105,7 @@ export default function CalendarPage() {
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const dayNum = i + 1;
             const dayReservations = reservationsByDay[dayNum] || [];
-            const isToday = dayNum === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear();
+            const isToday = dayNum === Number(today.slice(8, 10)) && currentMonth === Number(today.slice(5, 7)) - 1 && currentYear === Number(today.slice(0, 4));
 
             return (
               <div key={dayNum} className={`h-32 p-2 flex flex-col gap-1 overflow-hidden ${isToday ? 'bg-primary-50/30' : 'bg-surface'}`}>
