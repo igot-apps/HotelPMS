@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Building2, Crown, LogOut } from 'lucide-react';
+import { Building2, Crown, LogOut, UserRound } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 
 /** Avatar button in the top bar: who is signed in, account shortcuts and Sign out. */
@@ -36,6 +36,7 @@ export default function UserMenu() {
             <p className="truncate text-sm font-semibold text-text">{user?.fullName || 'User'}</p>
             <p className="truncate text-xs text-text-muted">{user?.role || 'Staff'}{user?.propertyName ? ` · ${user.propertyName}` : ''}</p>
           </div>
+          <Link role="menuitem" to="/profile" onClick={() => setOpen(false)} className={link}><UserRound size={16} /> My profile & password</Link>
           {user?.role === 'Manager' && <Link role="menuitem" to="/properties" onClick={() => setOpen(false)} className={link}><Building2 size={16} /> Property settings</Link>}
           {permissions.includes('CanManageBilling') && <Link role="menuitem" to="/billing" onClick={() => setOpen(false)} className={link}><Crown size={16} /> Billing & Plan</Link>}
           <button role="menuitem" type="button" onClick={signOut} className={`${link} w-full text-danger-700`}><LogOut size={16} /> Sign out</button>

@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Search, BedDouble, Users, CalendarDays, BarChart3, Sparkles,
-  LogOut, Settings, Building2, X, Shield, Crown, HandCoins, History, CalendarRange
+  LogOut, Settings, Building2, X, Shield, Crown, HandCoins, History, CalendarRange, UserRound
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
@@ -34,6 +34,7 @@ const configItems = [
 const accountItems = [
   // ✅ CHANGED: Now checks for the dedicated Billing permission
   { to: '/billing', icon: Crown, label: 'Billing & Plan', permission: 'CanManageBilling' }, 
+  { to: '/profile', icon: UserRound, label: 'My profile' },
 ];
 
 export default function Sidebar({ isOpen, onClose }) {
@@ -60,7 +61,7 @@ export default function Sidebar({ isOpen, onClose }) {
   const renderLinks = (items) => (
     items.map((item) => {
       if (item.managerOnly && user?.role !== 'Manager') return null;
-      if (user?.role === 'Housekeeper' && item.to !== '/housekeeping') return null;
+      if (user?.role === 'Housekeeper' && !['/housekeeping', '/profile'].includes(item.to)) return null;
       if (item.housekeeping && user?.role !== 'Housekeeper' && (!user?.housekeepingEnabled || !user?.permissions?.includes('CanManageHousekeeping'))) return null;
       if (item.staffOnly && !['Manager','Receptionist'].includes(user?.role)) return null;
       const linkElement = (
@@ -71,8 +72,8 @@ export default function Sidebar({ isOpen, onClose }) {
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isActive 
-                  ? 'bg-primary-600/20 text-primary-400 border-l-4 border-primary-500' 
-                  : 'text-secondary-300 hover:bg-secondary-800 hover:text-text-inverted'
+                  ? 'bg-primary-50 text-primary-700 font-semibold border-l-4 border-primary-600' 
+                  : 'text-text-muted hover:bg-primary-50/60 hover:text-primary-700'
               }`
             }
           >
@@ -101,31 +102,31 @@ export default function Sidebar({ isOpen, onClose }) {
   );
 
   return (
-    <aside id="hotel-sidebar" aria-label="Hotel navigation" className={`fixed inset-y-0 left-0 z-50 w-64 max-w-[85vw] bg-secondary-900 text-secondary-300 flex flex-col transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0 visible' : '-translate-x-full invisible md:visible'} md:translate-x-0`}>
-      <div className="p-6 border-b border-secondary-700 flex items-center justify-between">
+    <aside id="hotel-sidebar" aria-label="Hotel navigation" className={`fixed inset-y-0 left-0 z-50 w-64 max-w-[85vw] bg-surface text-text border-r border-border flex flex-col transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0 visible' : '-translate-x-full invisible md:visible'} md:translate-x-0`}>
+      <div className="p-6 border-b border-border flex items-center justify-between">
         <NavLink
           to="/dashboard"
           onClick={onClose}
           aria-label="Hotel PMS dashboard"
           className="group rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
         >
-          <h1 className="flex items-center gap-2 text-xl font-bold text-text-inverted transition-colors group-hover:text-primary-300"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white"><BrandMark className="h-8 w-8" /></span>Hotel PMS</h1>
-          <p className="text-xs text-secondary-400 mt-1">Management System</p>
+          <h1 className="flex items-center gap-2 text-xl font-bold text-text transition-colors group-hover:text-primary-700"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50"><BrandMark className="h-8 w-8" /></span>Hotel PMS</h1>
+          <p className="text-xs text-text-muted mt-1">Management System</p>
         </NavLink>
-        <button aria-label="Close navigation" onClick={onClose} className="p-2 rounded-lg hover:bg-secondary-800 text-secondary-400 transition md:hidden">
+        <button aria-label="Close navigation" onClick={onClose} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition md:hidden">
           <X size={20} />
         </button>
       </div>
       
       <nav className="flex-1 overflow-y-auto py-4 px-3">
-        <p className="px-4 mb-2 text-xs font-bold text-secondary-500 uppercase tracking-wider">Operations</p>
+        <p className="px-4 mb-2 text-xs font-bold text-primary-700/70 uppercase tracking-wider">Operations</p>
         <ul className="space-y-1 mb-6">
           {renderLinks(operationItems)}
         </ul>
         
-        <div className="border-t border-secondary-700 my-4"></div>
+        <div className="border-t border-border my-4"></div>
         
-        <p className="px-4 mb-2 text-xs font-bold text-secondary-500 uppercase tracking-wider flex items-center gap-2">
+        <p className="px-4 mb-2 text-xs font-bold text-primary-700/70 uppercase tracking-wider flex items-center gap-2">
           <Settings size={12} /> Configuration
         </p>
         <ul className="space-y-1 mb-6">
@@ -133,8 +134,8 @@ export default function Sidebar({ isOpen, onClose }) {
         </ul>
 
         {/* 🌟 NEW: Account Section */}
-        <div className="border-t border-secondary-700 my-4"></div>
-        <p className="px-4 mb-2 text-xs font-bold text-secondary-500 uppercase tracking-wider flex items-center gap-2">
+        <div className="border-t border-border my-4"></div>
+        <p className="px-4 mb-2 text-xs font-bold text-primary-700/70 uppercase tracking-wider flex items-center gap-2">
           <Crown size={12} /> Account
         </p>
         <ul className="space-y-1">
@@ -143,10 +144,10 @@ export default function Sidebar({ isOpen, onClose }) {
 
       </nav>
 
-      <div className="p-4 border-t border-secondary-700">
+      <div className="p-4 border-t border-border">
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 w-full px-4 py-2.5 rounded-lg text-sm font-medium text-secondary-300 hover:bg-danger-500/10 hover:text-danger-400 transition-colors"
+          className="flex items-center gap-3 w-full px-4 py-2.5 rounded-lg text-sm font-medium text-text-muted hover:bg-danger-50 hover:text-danger-700 transition-colors"
         >
           <LogOut size={20} />
           Logout

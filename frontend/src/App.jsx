@@ -39,6 +39,7 @@ import AvailabilityPage from './pages/AvailabilityPage';
 import RoomManagementPage from './pages/RoomManagementPage';
 import UsersPage from './pages/UsersPage';
 import BillingPage from './pages/BillingPage';
+import MyProfilePage from './pages/MyProfilePage';
 import GuestProfilePage from './pages/GuestProfilePage';
 import SuperAdminPage from './pages/SuperAdminPage';
 import PlatformAccountLinkPage from './pages/PlatformAccountLinkPage';
@@ -139,6 +140,7 @@ function App() {
           <Route path="/properties" element={<PropertiesPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/billing" element={<BillingPage />} />
+          <Route path="/profile" element={<MyProfilePage />} />
         </Route>
 
         {/* ========================================== */}

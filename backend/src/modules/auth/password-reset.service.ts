@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { prisma } from '../../shared/utils/prisma';
-import { hashPassword } from '../../shared/utils/password';
+import { comparePassword, hashPassword } from '../../shared/utils/password';
 import { deliverStaffPasswordReset } from '../../shared/utils/staffEmail';
 
 const digest = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -50,4 +50,27 @@ export async function resetStaffPassword(token: unknown, password: unknown): Pro
     },
   });
   if (!updated.count) throw new Error('Invalid or expired reset link. Request a new one.');
+}
+
+/**
+ * A signed-in hotel staff member changes their own password. Needs the current password,
+ * signs out every other session (new sessionVersion) and records it in the activity log.
+ */
+export async function changeStaffPassword(userId: number, propertyId: number, currentPassword: unknown, newPassword: unknown): Promise<void> {
+  if (typeof currentPassword !== 'string' || !currentPassword) throw new Error('Enter your current password.');
+  if (typeof newPassword !== 'string' || newPassword.length < 8 || Buffer.byteLength(newPassword) > 72) {
+    throw new Error('Use a password of at least 8 characters and at most 72 bytes.');
+  }
+  if (newPassword === currentPassword) throw new Error('Choose a new password that is different from your current one.');
+  const user = await prisma.user.findUnique({ where: { userId }, select: { passwordHash: true, isActive: true, isPlatformAdmin: true, propertyId: true } });
+  if (!user?.isActive || user.isPlatformAdmin || !user.propertyId) throw new Error('This account cannot change its password here.');
+  if (!(await comparePassword(currentPassword, user.passwordHash))) throw new Error('Your current password is not correct.');
+  const passwordHash = await hashPassword(newPassword);
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { userId },
+      data: { passwordHash, passwordResetTokenHash: null, passwordResetExpiresAt: null, sessionVersion: randomBytes(16).toString('hex') },
+    }),
+    prisma.auditLog.create({ data: { userId, propertyId: propertyId || user.propertyId, entityType: 'User', entityId: userId, action: 'PasswordChanged', newData: { userId } } }),
+  ]);
 }

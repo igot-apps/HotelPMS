@@ -13,7 +13,7 @@ export default function ProtectedRoute({ children }) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (user.role === 'Housekeeper' && location.pathname !== '/housekeeping') return <Navigate to="/housekeeping" replace />;
+  if (user.role === 'Housekeeper' && !['/housekeeping', '/profile'].includes(location.pathname)) return <Navigate to="/housekeeping" replace />;
 
   return children;
 }

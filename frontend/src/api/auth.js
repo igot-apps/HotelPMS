@@ -28,3 +28,5 @@ export const resetStaffPassword = (token, password) => api.post('/auth/reset-pas
 export const switchProperty = (propertyId) => api.post('/auth/switch-property', { propertyId });
 // Owners: add another property to the same account.
 export const addProperty = (data) => api.post('/auth/properties', data);
+// Signed-in staff: change own password (errors shown on the form). Returns fresh tokens for this device.
+export const changeMyPassword = (currentPassword, newPassword) => api.post('/auth/change-password', { currentPassword, newPassword }, { skipErrorToast: true });

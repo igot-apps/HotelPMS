@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import {  refreshToken, login, getMe, logout, registerHotel, switchProperty, addProperty } from './auth.controller';
 import { authenticate } from '../../shared/middleware/auth.middleware';
-import { requestStaffPasswordReset, resetStaffPassword } from './password-reset.service';
+import { changeStaffPassword, requestStaffPasswordReset, resetStaffPassword } from './password-reset.service';
+import { issueSession } from './auth.service';
+import type { AuthRequest } from '../../shared/middleware/auth.middleware';
 
 const router = Router();
 const resetAttempts = new Map<string, { count: number; resetAt: number }>();
@@ -51,6 +53,20 @@ router.post('/register-hotel', registerHotel);
  router.post('/refresh-token', refreshToken);
  router.post('/logout', authenticate, logout);
  router.get('/me', authenticate, getMe);
+
+// A signed-in staff member changes their own password; this device stays signed in with fresh tokens.
+router.post('/change-password', authenticate, async (req: AuthRequest, res) => {
+  const userId = req.user!.userId;
+  if (!limitReset(`user:${userId}`, 5)) return res.status(429).json({ success: false, message: 'Too many attempts. Try again in a minute.' });
+  try {
+    await changeStaffPassword(userId, req.user!.propertyId || 0, req.body?.currentPassword, req.body?.newPassword);
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error instanceof Error ? error.message : 'Could not change your password.' });
+  }
+  const session = await issueSession(userId, req.user!.propertyId || 0);
+  if (!session.success) return res.status(401).json({ success: false, message: 'Password changed. Please sign in again.' });
+  return res.json({ success: true, message: 'Password changed.', data: { accessToken: session.accessToken, refreshToken: session.refreshToken } });
+});
  router.post('/switch-property', authenticate, switchProperty);
  router.post('/properties', authenticate, addProperty);
 
