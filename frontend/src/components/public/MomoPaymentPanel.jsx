@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Loader2, Smartphone, ShieldCheck, AlertCircle } from 'lucide-react';
 import api from '../../lib/axios';
 
@@ -28,7 +29,14 @@ const POLL_FOR_MS = 10 * 60 * 1000;
  * approve the prompt on the phone → status is checked automatically until it settles.
  * The server owns every reference; this component never retries with a new one.
  */
-export default function MomoPaymentPanel({ propertyCode, reservationId, amount, defaultPhone, testMode, onPaid, onReleased, onCancel }) {
+export default function MomoPaymentPanel({ propertyCode, reservationId, amount, defaultPhone, testMode: testModeProp, onPaid, onReleased, onCancel }) {
+  // Pages that already loaded the hotel pass testMode; otherwise read it from the same cached hotel query.
+  const { data: hotel } = useQuery({
+    queryKey: ['publicProperty', propertyCode],
+    queryFn: async () => (await api.get(`/public/${propertyCode}`)).data.data,
+    enabled: testModeProp === undefined && Boolean(propertyCode),
+  });
+  const testMode = testModeProp ?? hotel?.paymentTestMode;
   const [phone, setPhone] = useState(defaultPhone || '');
   const [network, setNetwork] = useState(() => guessNetwork(defaultPhone));
   const [otp, setOtp] = useState('');
@@ -104,7 +112,13 @@ export default function MomoPaymentPanel({ propertyCode, reservationId, amount, 
 
   return (
     <div className="space-y-3 rounded-xl border border-primary-100 bg-primary-50/40 p-4 text-left">
-      {testMode && <p role="note" className="rounded-md bg-warning-100 px-2 py-1 text-center text-[11px] font-bold uppercase tracking-wide text-warning-800">Test mode · no real money moves</p>}
+      {testMode && (
+        <div role="note" className="rounded-md bg-warning-100 px-2 py-1.5 text-center text-warning-800">
+          <p className="text-[11px] font-bold uppercase tracking-wide">Test mode · no real money moves</p>
+          {/* Moolre's sandbox texts a real code to any other number, so 123456 only works for its test numbers. */}
+          <p className="mt-0.5 text-[11px]">Use MTN number <strong>0240000111</strong> and SMS code <strong>123456</strong>.</p>
+        </div>
+      )}
       <div className="flex items-center justify-between gap-2">
         <p className="flex items-center gap-2 text-sm font-bold text-text"><Smartphone size={16} className="text-primary-600" /> Pay with mobile money</p>
         {amount != null && <p className="text-sm font-bold text-primary-700">GH₵ {Number(amount).toFixed(2)}</p>}
