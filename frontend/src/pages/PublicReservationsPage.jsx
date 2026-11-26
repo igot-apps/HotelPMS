@@ -166,7 +166,12 @@ export default function PublicReservationsPage() {
   };
 
   // Mobile money payment (Moolre) for one reservation at a time.
-  const [payingId, setPayingId] = useState(null);
+  // Back from Moolre's hosted checkout: open that booking's panel and keep checking its payment.
+  const [returnedFromCheckout] = useState(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get('moolre') === 'return' ? params.get('booking') : null;
+  });
+  const [payingId, setPayingId] = useState(returnedFromCheckout);
   const startPayment = (reservation) => {
     if (['Cancelled', 'Expired'].includes(reservation.status)) {
       toast.error('This reservation has been cancelled. Payment is not allowed.');
@@ -399,6 +404,7 @@ export default function PublicReservationsPage() {
                           reservationId={res.reservationId}
                           amount={balanceDue}
                           defaultPhone={res.platformGuest?.phone}
+                          resumeWaiting={returnedFromCheckout === res.reservationId}
                           onPaid={reference => paymentDone(res, reference)}
                           onReleased={message => paymentReleased(res, message)}
                           onCancel={() => setPayingId(null)}

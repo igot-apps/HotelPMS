@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Loader2, Smartphone, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Loader2, Smartphone, ShieldCheck, AlertCircle, CreditCard } from 'lucide-react';
 import api from '../../lib/axios';
 
 export const MOMO_NETWORKS = [
@@ -29,7 +29,7 @@ const POLL_FOR_MS = 10 * 60 * 1000;
  * approve the prompt on the phone → status is checked automatically until it settles.
  * The server owns every reference; this component never retries with a new one.
  */
-export default function MomoPaymentPanel({ propertyCode, reservationId, amount, defaultPhone, testMode: testModeProp, onPaid, onReleased, onCancel }) {
+export default function MomoPaymentPanel({ propertyCode, reservationId, amount, defaultPhone, testMode: testModeProp, resumeWaiting, onPaid, onReleased, onCancel }) {
   // Pages that already loaded the hotel pass testMode; otherwise read it from the same cached hotel query.
   const { data: hotel } = useQuery({
     queryKey: ['publicProperty', propertyCode],
@@ -49,6 +49,8 @@ export default function MomoPaymentPanel({ propertyCode, reservationId, amount, 
   const finished = useRef(false);
 
   useEffect(() => () => clearTimeout(pollTimer.current), []);
+  // Back from Moolre's checkout page: keep checking the same payment until it settles.
+  useEffect(() => { if (resumeWaiting) { setMessage('Confirming your payment with Moolre…'); startWaiting(); } }, [resumeWaiting]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handle = (data) => {
     if (!data) return;
@@ -60,6 +62,8 @@ export default function MomoPaymentPanel({ propertyCode, reservationId, amount, 
     }
     if (data.status === 'released') { finished.current = true; clearTimeout(pollTimer.current); onReleased?.(data.message); return; }
     if (data.status === 'otp_required') { setStep('otp'); setOtp(''); setMessage(data.message || 'Enter the code sent to your phone by SMS.'); return; }
+    if (data.status === 'redirect' && data.url) { window.location.assign(data.url); return; }
+    if (data.status === 'pending' && data.checkoutUrl) { window.location.assign(data.checkoutUrl); return; }
     if (data.status === 'failed') { setStep('form'); setError(data.message || 'The payment did not go through. Check the number and try again.'); return; }
     if (data.status === 'pending' || data.status === 'unknown') {
       setMessage(data.message || 'Approve the payment prompt on your phone.');
@@ -104,6 +108,10 @@ export default function MomoPaymentPanel({ propertyCode, reservationId, amount, 
     if (busy) return;
     run(() => api.post(`/public/${propertyCode}/payments/initialize`, { reservationId, phone, network }, { skipErrorToast: true }));
   };
+  const openCheckout = () => {
+    if (busy) return;
+    run(() => api.post(`/public/${propertyCode}/payments/link`, { reservationId }, { skipErrorToast: true }));
+  };
   const submitOtp = (e) => {
     e.preventDefault();
     if (busy) return;
@@ -138,6 +146,10 @@ export default function MomoPaymentPanel({ propertyCode, reservationId, amount, 
           </label>
           <button type="button" onClick={start} disabled={busy || !phone.trim()} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-primary-700 disabled:opacity-50">
             {busy ? <><Loader2 size={16} className="animate-spin" /> Sending request…</> : 'Send payment request'}
+          </button>
+          <div className="flex items-center gap-2 text-[11px] text-text-muted"><span className="h-px flex-1 bg-border" />or<span className="h-px flex-1 bg-border" /></div>
+          <button type="button" onClick={openCheckout} disabled={busy} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-primary-200 bg-surface px-4 py-2.5 text-sm font-bold text-primary-700 hover:bg-primary-50 disabled:opacity-50">
+            <CreditCard size={16} /> Pay on Moolre checkout page
           </button>
           {onCancel && <button type="button" onClick={onCancel} disabled={busy} className="w-full text-center text-xs font-semibold text-text-muted hover:underline">Cancel</button>}
         </div>

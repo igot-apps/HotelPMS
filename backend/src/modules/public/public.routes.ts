@@ -3,7 +3,7 @@ import { Prisma } from '../../generated/prisma';
 import { prisma } from '../../shared/utils/prisma';
 import jwt from 'jsonwebtoken'; // Ensure this is imported at the top of the file
 import { verifyGuestPayment } from '../payment/guest-payment.service';
-import { initializeGuestPayment, checkGuestPaymentStatus, submitGuestPaymentOtp } from '../payment/guest-payment-attempt.service';
+import { initializeGuestPayment, checkGuestPaymentStatus, submitGuestPaymentOtp, startGuestPaymentLink } from '../payment/guest-payment-attempt.service';
 import { createHotelReservation } from '../reservation/booking-creation.service';
 import { expireOnlineHolds } from '../reservation/online-hold.service';
 import { onlineBookableRoom } from '../reservation/stay-timing';
@@ -506,6 +506,16 @@ router.post('/:propertyCode/payments/initialize', requireBookingGuest, async (re
     ) });
   } catch (error: any) {
     return res.status(error.statusCode || 400).json({ success: false, code: error instanceof OnlineBookingPausedError ? error.code : undefined, message: error.message || 'Could not start payment. Check payment status before retrying.' });
+  }
+});
+
+// Moolre hosted checkout: returns a link to Moolre's payment page (card or mobile money).
+router.post('/:propertyCode/payments/link', requireBookingGuest, async (req: any, res: Response) => {
+  try {
+    if (typeof req.body.reservationId !== 'string') return res.status(400).json({ success: false, message: 'Reservation ID is required.' });
+    return res.json({ success: true, data: await startGuestPaymentLink(req.params.propertyCode, req.body.reservationId, req.bookingGuest) });
+  } catch (error: any) {
+    return res.status(error.statusCode || 400).json({ success: false, code: error instanceof OnlineBookingPausedError ? error.code : undefined, message: error.message || 'Could not open checkout. Check payment status before retrying.' });
   }
 });
 
