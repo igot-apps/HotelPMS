@@ -34,6 +34,17 @@ unrelated old projects — ignore them.
   `RENDER_CUSTOM_DOMAIN_LIMIT` — adding hotel custom domains to the frontend service
 - `PLATFORM_ADMIN_NAME`, `PLATFORM_ADMIN_PHONE`, `PLATFORM_ADMIN_INITIAL_PASSWORD` — only for
   `npm run prisma:bootstrap-platform-admin`
+- `PLATFORM_EMAIL_TOKEN_SECRET` (optional) — signs Super Admin email-change links; falls back to `JWT_SECRET`.
+  Super Admin invite/reset/verify emails use `RESEND_API_KEY` + `RESEND_FROM_EMAIL` (or `STAFF_EMAIL_MODE=simulation`).
+
+## Super Admin emergency recovery
+Use only if no administrator can sign in or reset by email. From the API service **Shell** on Render:
+`npm run platform-admin:recover -- --account <email or phone> --confirm`
+It reactivates that platform admin, signs out all its sessions, writes an audit entry and prints a
+one-time 30-minute reset link (open it, set a new password). Options: `--set-email <email>` attaches an
+email to a phone-only admin; `--account <email> --create --name "Full Name"` creates a new admin when
+none is left. Never paste the printed link into chat or tickets. Anyone with Render shell access can
+do this, so keep Render team access limited.
 
 **Frontend (`hotelpms-frontend`, read at build time — redeploy after changing)**
 - `VITE_API_URL` — API base, e.g. `https://hotelpms-api-n24g.onrender.com/api`

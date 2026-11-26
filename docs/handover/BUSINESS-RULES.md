@@ -9,6 +9,13 @@ Change these only when the owner asks. Code locations are given so you can verif
   "Hide rooms from online booking" (`canManageOnlineRooms`).
 - **Housekeeper**: housekeeping screens only.
 - **Platform Admin**: all hotels, subscriptions, free access, domains (`/superadmin`).
+  Several Super Admins, each with their own email + password (min 12 chars). They sign in only at
+  `/superadmin` (`/api/auth/platform/login`, own rate limits); the hotel login refuses them. Admins invite,
+  deactivate and reactivate each other under Administrators; nobody can deactivate themself and the last
+  active admin cannot be deactivated (pending invites don't count). Email change needs the current
+  password and a link sent to the new address. Every action is audited (Administrators → activity).
+  The original phone-only admin can sign in by phone until an email is verified on the account.
+  The Super Admin browser session is stored separately from the hotel session.
 
 ## Online booking (public site)
 - Guest must sign in (email). Clicking pay creates a **Pending** reservation that holds one

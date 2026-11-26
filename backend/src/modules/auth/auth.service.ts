@@ -104,7 +104,8 @@ export const loginUser = async (
   }
   
   const isPasswordValid = await comparePassword(password, user.passwordHash);
-  if (!isPasswordValid) {
+  // Platform admins must use /api/auth/platform/login (its own rate limits); never issue tokens here.
+  if (!isPasswordValid || user.isPlatformAdmin) {
     return { success: false, message: 'Invalid username or password' };
   }
 
@@ -124,7 +125,7 @@ export const loginUser = async (
 };
 
 /** Tokens and the frontend session for one account working in one property. */
-async function issueSession(userId: number, propertyId: number): Promise<LoginResponse> {
+export async function issueSession(userId: number, propertyId: number): Promise<LoginResponse> {
   const user = await authRepository.findUserWithPermissions(userId);
   if (!user) return { success: false, message: 'User not found' };
   // 🚨 JWT PAYLOAD: propertyId is the active property (root scope). 0 for platform admins.

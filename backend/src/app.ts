@@ -11,6 +11,7 @@ console.log(`Using TypeScript version: ${require('typescript').version}\n`);
 
 // Import modules
 import authRoutes from './modules/auth/auth.routes';
+import { platformAdminRoutes, platformAuthRoutes } from './modules/platform-admin/platform-admin.routes';
 import propertyRoutes from './modules/property/property.routes';
 import platformPropertyRoutes from './modules/property/platformProperty.routes';
 import platformSubscriptionRoutes from './modules/payment/platform-subscription.routes';
@@ -90,10 +91,12 @@ app.get('/', (_req: Request, res: Response) => {
 
 
 // API Routes
+app.use('/api/auth/platform', platformAuthRoutes); // Super Admin sign-in and recovery (separate rate limits)
 app.use('/api/auth', authRoutes);
 app.use('/api/properties', propertyRoutes);
 app.use('/api/platform/properties', platformPropertyRoutes);
 app.use('/api/platform/subscription-settings', platformSubscriptionRoutes);
+app.use('/api/platform/admins', platformAdminRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/housekeeping', housekeepingRoutes);
 app.use('/api/notifications', notificationsRoutes);

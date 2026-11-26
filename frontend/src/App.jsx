@@ -41,6 +41,7 @@ import UsersPage from './pages/UsersPage';
 import BillingPage from './pages/BillingPage';
 import GuestProfilePage from './pages/GuestProfilePage';
 import SuperAdminPage from './pages/SuperAdminPage';
+import PlatformAccountLinkPage from './pages/PlatformAccountLinkPage';
 
 function LegacyBookingRedirect() {
   const location = useLocation();
@@ -99,6 +100,9 @@ function App() {
         <Route path="/hotel/login" element={<LoginPage />} />
         <Route path="/for-hotels" element={<ForHotelsPage />} />
         <Route path="/superadmin" element={<SuperAdminPage />} />
+        <Route path="/superadmin/setup" element={<PlatformAccountLinkPage mode="setup" />} />
+        <Route path="/superadmin/reset-password" element={<PlatformAccountLinkPage mode="reset" />} />
+        <Route path="/superadmin/verify-email" element={<PlatformAccountLinkPage mode="verify" />} />
         <Route path="/platform/properties" element={<Navigate to="/superadmin" replace />} />
         <Route path="/register-your-hotel" element={<HotelRegistrationWizard />} />
         <Route path="/public/reservations" element={<GuestProtectedRoute><PublicReservationsPage /></GuestProtectedRoute>} />

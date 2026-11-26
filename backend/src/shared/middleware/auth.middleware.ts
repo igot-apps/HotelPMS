@@ -120,9 +120,9 @@ export const requirePlatformAdmin = async (
   try {
     const user = await prisma.user.findUnique({
       where: { userId: req.user.userId },
-      select: { isPlatformAdmin: true, isActive: true, propertyId: true },
+      select: { isPlatformAdmin: true, isActive: true, propertyId: true, invitationPending: true },
     });
-    if (!user?.isActive || !user.isPlatformAdmin || user.propertyId !== null) {
+    if (!user?.isActive || !user.isPlatformAdmin || user.propertyId !== null || user.invitationPending) {
       res.status(403).json({ success: false, message: 'Platform administrator access required.' });
       return;
     }

@@ -1,6 +1,7 @@
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore'; // Adjust path if your store is elsewhere
+import { usePlatformAuthStore, isPlatformApiPath } from '../store/platformAuthStore';
 import { recordServerTime, setResync } from './serverClock';
 
 const api = axios.create({
@@ -22,8 +23,10 @@ api.interceptors.request.use(
     const requestPath = new URL(config.url || '', config.baseURL || window.location.origin).pathname;
     const isPublicRequest = requestPath.startsWith('/public/');
     const isGuestAuthRequest = requestPath.startsWith('/public/auth/');
+    // Super Admin endpoints use the separate platform session, never the hotel staff token.
     const token = isPublicRequest
       ? (isGuestAuthRequest ? null : localStorage.getItem('guestToken'))
+      : isPlatformApiPath(requestPath) ? usePlatformAuthStore.getState().accessToken
       : useAuthStore.getState().accessToken;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -66,6 +69,11 @@ api.interceptors.response.use(
           localStorage.removeItem('guestToken');
           window.dispatchEvent(new Event('guest-session-changed'));
           error.guestSessionExpired = true;
+        } else if (isPlatformApiPath(requestPath)) {
+          // Only the Super Admin session is affected; a hotel session in this browser stays signed in.
+          const currentToken = usePlatformAuthStore.getState().accessToken;
+          if (currentToken && error.config?.headers?.Authorization === `Bearer ${currentToken}`) usePlatformAuthStore.getState().logout();
+          toastMessage = requestPath.startsWith('/auth/platform/') ? backendMessage : 'Your administrator session has ended. Please sign in again.';
         } else if (!isPublicRequest) {
           // A response from an older session must not sign out a newer login.
           const currentToken = useAuthStore.getState().accessToken;
