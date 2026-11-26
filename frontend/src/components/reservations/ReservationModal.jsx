@@ -7,6 +7,7 @@ import { getGuests, lookupGuestByPhone, createGuest, updateGuest } from '../../a
 import { useAuthStore } from '../../store/authStore';
 import toast from 'react-hot-toast';
 import ThermalReceiptModal from './ThermalReceiptModal';
+import StayNights from '../ui/StayNights';
 
 const toPhoneInputValue = (phone = '') => {
   const digits = String(phone).replace(/\D/g, '');
@@ -108,9 +109,11 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
   // 🌟 UPDATED: Auto-select the rooms when Step 2 loads
   useEffect(() => {
     if (currentStep === 1 && isOpen && formData.checkInDate && formData.checkOutDate && propertyId) {
+      let stale = false; // quick date taps: only the latest search may update the list
       setIsFetchingRooms(true);
       getAvailableRooms(formData.checkInDate, formData.checkOutDate, propertyId)
         .then(res => {
+          if (stale) return;
           const rooms = res.data.data || [];
           setAvailableRooms(rooms);
           
@@ -122,12 +125,19 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
             setFormData(prev => ({ ...prev, selectedRooms: prev.selectedRooms.filter(selected => rooms.some(room => room.roomId === selected.roomId)) }));
           }
         })
-        .catch(err => { console.error(err); setAvailableRooms([]); })
-        .finally(() => setIsFetchingRooms(false));
+        .catch(err => { if (stale) return; console.error(err); setAvailableRooms([]); })
+        .finally(() => { if (!stale) setIsFetchingRooms(false); });
+      return () => { stale = true; };
     }
   }, [currentStep, isOpen, formData.checkInDate, formData.checkOutDate, propertyId, initialData]);
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  // One tap adds or removes a night; a stay is always at least one night.
+  const changeNights = (delta) => {
+    const current = formData.checkOutDate > formData.checkInDate ? formData.checkOutDate : addDays(formData.checkInDate, 1);
+    const next = addDays(current, delta);
+    if (next > formData.checkInDate) setFormData({ ...formData, checkOutDate: next });
+  };
 
   const toggleRoomSelection = (room) => {
     const isSelected = formData.selectedRooms.some(r => r.roomId === room.roomId);
@@ -397,7 +407,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
               stats={{
                 totalAmount: createdReservation.totalAmount,
                 totalPaid: createdReservation.amountPaid,
-                balanceDue: createdReservation.balanceDue,
+                balanceDue: Math.max(0, Number(createdReservation.totalAmount || 0) - Number(createdReservation.amountPaid || 0)),
               }}
             />
           )}
@@ -447,7 +457,7 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-text mb-1.5">Departure Date *</label>
+                    <label className="block text-sm font-semibold text-text mb-1.5">Departure Date *<StayNights checkIn={formData.checkInDate} checkOut={formData.checkOutDate} /></label>
                     <input 
                       type="date" 
                       name="checkOutDate" 
@@ -457,6 +467,12 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                       required 
                       className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition" 
                     />
+                    <div className="mt-2 flex items-center gap-2">
+                      <button type="button" onClick={() => changeNights(-1)} disabled={!formData.checkInDate || nights <= 1} aria-label="Remove one night"
+                        className="min-h-10 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50 disabled:opacity-40">− 1 night</button>
+                      <button type="button" onClick={() => changeNights(1)} disabled={!formData.checkInDate} aria-label="Add one night"
+                        className="min-h-10 rounded-lg border border-primary-300 bg-primary-50 px-3 text-sm font-semibold text-primary-700 hover:bg-primary-100 disabled:opacity-40">+ 1 night</button>
+                    </div>
                   </div>
                 </div>
                 </div>
@@ -468,7 +484,11 @@ export default function ReservationModal({ isOpen, onClose, onSubmit, isLoading,
                 </div>
                 <p className="text-xs font-semibold text-primary-600">Tick one or more rooms to add to this booking.</p>
               </div>
-              {isFetchingRooms ? (
+              {/* Fixed-height slot so the dialog does not jump while rooms refresh. */}
+              <p className={`flex h-4 items-center gap-1.5 text-xs text-text-muted ${isFetchingRooms && availableRooms.length > 0 ? 'visible' : 'invisible'}`} aria-live="polite">
+                <Loader2 className="animate-spin" size={12} /> Updating rooms for the new dates…
+              </p>
+              {isFetchingRooms && availableRooms.length === 0 ? (
                 <div className="p-12 text-center text-text-muted flex flex-col items-center gap-2"><Loader2 className="animate-spin" size={24} /> Searching...</div>
               ) : availableRooms.length === 0 ? (
                 <div className="p-12 text-center text-warning-700 bg-warning-50 rounded-xl border border-warning-100 flex flex-col items-center gap-2"><AlertCircle size={24} /> <p className="font-semibold">No rooms available.</p></div>

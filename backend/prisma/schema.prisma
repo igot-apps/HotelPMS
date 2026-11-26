@@ -528,6 +528,7 @@ model ReservationRoom {
   checkOutDate        DateTime
   originalCheckOutDate DateTime?
   agreedPricePerNight Decimal   @db.Decimal(10, 2)
+  earlyDeparturePenalty Decimal @default(0) @db.Decimal(10, 2) // charge kept for unused nights removed by an early departure (before tax)
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 

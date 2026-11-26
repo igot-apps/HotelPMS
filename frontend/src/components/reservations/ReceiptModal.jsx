@@ -1,5 +1,7 @@
+import { Fragment } from 'react';
 import { X, Printer } from 'lucide-react';
 import { formatPaymentMethod } from '../../utils/payment';
+import { serverNow } from '../../lib/serverClock';
 
 export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
   if (!isOpen || !reservation) return null;
@@ -14,6 +16,11 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
   const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const formatCurrency = (val) => parseFloat(val || 0).toFixed(2);
   const receiptReference = reservation.confirmationCode || `#${reservation.reservationId?.slice(0, 8).toUpperCase()}`;
+  // Bookings carry the guest as propertyGuest (desk) or platformGuest (online).
+  const guest = reservation.guest || reservation.propertyGuest || reservation.platformGuest || {};
+  const printedAt = serverNow() || new Date(); // hotel (and test) clock, not the computer's
+  const nightsLabel = (n) => `${n} night${n === 1 ? '' : 's'}`;
+  const penaltyOf = (room) => parseFloat(room.earlyDeparturePenalty || 0);
   const getRoomNights = (room) => Math.max(0, Math.ceil(
     (new Date(room.checkOutDate || reservation.checkOutDate) - new Date(room.checkInDate || reservation.checkInDate))
       / (1000 * 60 * 60 * 24)
@@ -51,15 +58,16 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
             {/* Hotel Header */}
             <div className="text-center border-b-2 border-gray-800 pb-4 mb-6">
               <h1 className="text-2xl font-bold tracking-tight">{reservation.property?.propertyName || 'Hotel PMS'}</h1>
-              <p className="text-sm text-gray-600 mt-1">{reservation.property?.address || ''}</p>
-              <p className="text-sm text-gray-600">{reservation.property?.city}, {reservation.property?.country}</p>
+              {reservation.property?.address && <p className="text-sm text-gray-600 mt-1">{reservation.property.address}</p>}
+              {[reservation.property?.city, reservation.property?.country].filter(Boolean).join(', ') && <p className="text-sm text-gray-600">{[reservation.property?.city, reservation.property?.country].filter(Boolean).join(', ')}</p>}
+              {reservation.property?.primaryPhone && <p className="text-sm text-gray-600">Tel: {reservation.property.primaryPhone}</p>}
             </div>
 
             {/* Receipt Info */}
             <div className="flex justify-between text-sm mb-6">
               <div>
                 <p className="font-bold text-gray-900">GUEST FOLIO / RECEIPT</p>
-                <p className="text-gray-600">Date: {formatDate(new Date())}</p>
+                <p className="text-gray-600">Date: {formatDate(printedAt)}</p>
               </div>
               <div className="text-right">
                 <p className="text-gray-600">Status: <span className="font-bold text-gray-900">{reservation.status}</span></p>
@@ -74,9 +82,9 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
             {/* Guest Info */}
             <div className="mb-6 p-3 bg-gray-50 rounded-lg print:bg-gray-100 print:p-2 print:border print:border-gray-300">
               <p className="text-xs font-bold text-gray-500 uppercase mb-1">Guest Details</p>
-              <p className="text-sm font-bold text-gray-900">{reservation.guest?.fullName}</p>
-              <p className="text-xs text-gray-600">{reservation.guest?.phone} • {reservation.guest?.email}</p>
-              {reservation.guest?.idNumber && <p className="text-xs text-gray-600">ID: {reservation.guest.idNumber}</p>}
+              <p className="text-sm font-bold text-gray-900">{guest.fullName || '—'}</p>
+              {[guest.phone, guest.email].filter(Boolean).join(' • ') && <p className="text-xs text-gray-600">{[guest.phone, guest.email].filter(Boolean).join(' • ')}</p>}
+              {guest.idNumber && <p className="text-xs text-gray-600">ID: {guest.idNumber}</p>}
             </div>
 
             {/* Stay Details */}
@@ -115,7 +123,8 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
                     const roomNights = getRoomNights(rr);
                     const subtotal = rate * roomNights;
                     return (
-                      <tr key={rr.reservationRoomId} className="border-b border-gray-100">
+                      <Fragment key={rr.reservationRoomId}>
+                      <tr className="border-b border-gray-100">
                         <td className="py-2">
                           <p className="font-semibold text-gray-900">Room {rr.room?.roomNumber || rr.roomNumberSnapshot || 'Removed'}</p>
                           <p className="text-xs text-gray-500">{rr.roomType?.typeName || rr.room?.roomType?.typeName || rr.roomTypeNameSnapshot || 'Room type removed'}</p>
@@ -124,6 +133,13 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
                         <td className="text-right py-2 text-gray-700">{formatCurrency(rate)}</td>
                         <td className="text-right py-2 font-semibold text-gray-900">{formatCurrency(subtotal)}</td>
                       </tr>
+                      {penaltyOf(rr) > 0 && (
+                        <tr className="border-b border-gray-100">
+                          <td className="py-2 text-gray-700" colSpan={3}>Early departure charge · Room {rr.room?.roomNumber || rr.roomNumberSnapshot || 'Removed'}</td>
+                          <td className="text-right py-2 font-semibold text-gray-900">{formatCurrency(penaltyOf(rr))}</td>
+                        </tr>
+                      )}
+                      </Fragment>
                     );
                   })}
                 </tbody>
@@ -187,7 +203,7 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
                 </div>
               </div>
               
-              <p className="text-[10px] text-gray-400 mt-8">Generated by Hotel PMS • {new Date().toLocaleString()}</p>
+              <p className="text-[10px] text-gray-400 mt-8">Generated by {reservation.property?.propertyName || 'Hotel PMS'} • {printedAt.toLocaleString()}</p>
             </div>
           </div>
         </div>

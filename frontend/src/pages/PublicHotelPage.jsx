@@ -12,6 +12,7 @@ import PublicNavbar from '../components/public/PublicNavbar';
 import BackButton from '../components/ui/BackButton';
 import { useHotelWebsite } from '../lib/hotelWebsite';
 import { publicImageSrc } from '../lib/publicImages';
+import StayNights from '../components/ui/StayNights';
 
 // Helper to fetch property data
 const fetchProperty = async (propertyCode) => {
@@ -236,7 +237,7 @@ const formatStayDate = value => isStayDate(value) ? new Date(`${value}T00:00:00Z
             </div>
           </div>
           <div className="min-w-0 w-full">
-            <label htmlFor="hotel-check-out" className="block text-xs font-bold text-text-muted uppercase mb-1.5">Departure</label>
+            <label htmlFor="hotel-check-out" className="block text-xs font-bold text-text-muted uppercase mb-1.5">Departure<StayNights checkIn={checkIn} checkOut={checkOut} /></label>
             <div className="flex w-full min-w-0 max-w-full">
             <input 
               id="hotel-check-out"

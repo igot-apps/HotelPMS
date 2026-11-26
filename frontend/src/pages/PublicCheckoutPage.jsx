@@ -10,6 +10,7 @@ import PublicNavbar from '../components/public/PublicNavbar';
 import BackButton from '../components/ui/BackButton';
 import { currentHotelHostname } from '../lib/hotelWebsite';
 import { reusableCheckoutBooking } from '../lib/checkout-booking.mjs';
+import StayNights from '../components/ui/StayNights';
 
 export default function PublicCheckoutPage() {
   const { propertyCode, roomTypeId } = useParams();
@@ -282,7 +283,7 @@ export default function PublicCheckoutPage() {
                     />
                   </div>
                   <div className="min-w-0">
-                    <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">Check Out</label>
+                    <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">Check Out<StayNights checkIn={checkIn} checkOut={checkOut} /></label>
                     <input
                       type="date"
                       value={checkOut}

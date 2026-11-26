@@ -12,6 +12,7 @@ import {
 import toast from 'react-hot-toast';
 import PublicNavbar from '../components/public/PublicNavbar';
 import { publicImageSrc } from '../lib/publicImages';
+import StayNights from '../components/ui/StayNights';
 //import PublicPropertyCard from '../components/public/PublicPropertyCard';
 
 
@@ -373,7 +374,7 @@ export default function DiscoverPage() {
                   </div>
                 </div>
                 <div className="md:col-span-6 lg:col-span-2 min-w-0">
-                  <label htmlFor="discover-check-out" className="block text-xs font-bold text-text-muted mb-1 px-1 text-left">Departure</label>
+                  <label htmlFor="discover-check-out" className="block text-xs font-bold text-text-muted mb-1 px-1 text-left">Departure<StayNights checkIn={checkIn} checkOut={checkOut} /></label>
                   <div className="relative flex w-full min-w-0 max-w-full">
                     <input id="discover-check-out" aria-label="Departure date" type="date" value={checkOut} min={checkIn || tomorrow} onChange={(e) => setCheckOut(e.target.value)} aria-invalid={hasInvalidDateRange} aria-describedby={hasInvalidDateRange ? 'discover-date-error' : undefined} className={`responsive-date-input px-3 py-3 bg-background border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition ${hasInvalidDateRange ? 'border-danger-500' : 'border-border'}`} />
                   </div>

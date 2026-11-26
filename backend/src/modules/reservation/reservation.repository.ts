@@ -124,7 +124,7 @@ export const findReservations = async (
       take: limit,
       orderBy: { createdAt: 'desc' },
       include: {
-        property: { select: { propertyId: true, propertyName: true, propertyCode: true, checkOutTime: true, checkInTime: true, timezone: true, allowEarlyDepartureChargeReduction: true } },
+        property: { select: { propertyId: true, propertyName: true, propertyCode: true, checkOutTime: true, checkInTime: true, timezone: true, allowEarlyDepartureChargeReduction: true, address: true, city: true, country: true, primaryPhone: true } },
         propertyGuest: { select: { guestId: true, fullName: true, phone: true } },
         platformGuest: { select: { guestId: true, fullName: true, phone: true, email: true } },
         staff: { select: { userId: true, fullName: true } },
@@ -150,7 +150,7 @@ export const findReservationById = async (reservationId: string) => {
   return prisma.reservation.findUnique({
     where: { reservationId },
     include: {
-      property: { select: { propertyId: true, propertyName: true, propertyCode: true, timezone: true, checkOutTime: true, checkInTime: true, allowEarlyDepartureChargeReduction: true } },
+      property: { select: { propertyId: true, propertyName: true, propertyCode: true, timezone: true, checkOutTime: true, checkInTime: true, allowEarlyDepartureChargeReduction: true, address: true, city: true, country: true, primaryPhone: true } },
       propertyGuest: { select: { guestId: true, fullName: true, phone: true } },
       platformGuest: { select: { guestId: true, fullName: true, phone: true, email: true } },
       staff: { select: { userId: true, fullName: true } },

@@ -7,6 +7,7 @@ import { useSearchParams, Link, useNavigate, useLocation } from 'react-router-do
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   getReservations,
+  getReservationById,
   createReservation,
   cancelReservation,
   updateReservationRoomStatus,
@@ -304,7 +305,7 @@ export default function ReservationsPage() {
     mutationFn: async (payload) => {
       return createWalkInBooking(payload, { createReservation, recordPayment });
     },
-    onSuccess: ({ response, reservation, paymentError }) => {
+    onSuccess: async ({ response, reservation, paymentError }) => {
       setPaymentRecoveryReservation(paymentError ? reservation : null);
       if (paymentError) toast.error('Reservation saved. Review its initial payment below.');
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
@@ -312,7 +313,10 @@ export default function ReservationsPage() {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['dashboardActive'] });
       queryClient.invalidateQueries({ queryKey: ['dashboardUpcoming'] });
-      setCreatedReservation(response.data.data);
+      const created = response.data.data;
+      setCreatedReservation(created);
+      // The create response has no payments, guest or staff details; load the saved booking for its receipt.
+      try { const full = (await getReservationById(created.reservationId)).data.data; if (full) setCreatedReservation(full); } catch { /* keep the create response */ }
     },
     onError: (err) => {
       toast.error(err.response?.data?.message || 'Failed to create reservation');

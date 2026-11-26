@@ -98,17 +98,25 @@ async function availableInventory(tx: any, roomId: number | null, propertyId: nu
 // tax/adjustment multiplier instead of using the hotel's current tax. Shared by date corrections
 // and recorded departures so both use the same maths.
 // penaltyPercent: share of the removed (unused) nights' charges the hotel keeps. 0 removes them in full.
+// Kept penalties are stored per room (earlyDeparturePenalty) and counted as charges, so a later
+// repricing keeps them as they are instead of treating them as part of the tax multiplier.
 export function repriceDeparture(res: any, selected: any[], date: Date, penaltyPercent = 0) {
   const nights = (r: any) => Math.ceil((r.checkOutDate.getTime() - r.checkInDate.getTime()) / 86400000);
-  const base = (rooms: any[]) => rooms.filter(r => r.status !== 'Cancelled').reduce((sum, r) => sum + Number(r.agreedPricePerNight) * nights(r), 0);
+  const charge = (r: any) => Number(r.agreedPricePerNight) * nights(r) + Number(r.earlyDeparturePenalty || 0);
+  const base = (rooms: any[]) => rooms.filter(r => r.status !== 'Cancelled').reduce((sum, r) => sum + charge(r), 0);
   const oldBase = base(res.reservationRooms);
   if (oldBase <= 0) throw new Error('This booking needs financial reconciliation before repricing.');
-  const revised = res.reservationRooms.map((r: any) => selected.some(stay => stay.reservationRoomId === r.reservationRoomId) ? { ...r, checkOutDate: date } : r);
-  const removed = res.reservationRooms.filter((r: any) => r.status !== 'Cancelled' && date < r.checkOutDate && selected.some(stay => stay.reservationRoomId === r.reservationRoomId))
-    .reduce((sum: number, r: any) => sum + Number(r.agreedPricePerNight) * (nights(r) - nights({ ...r, checkOutDate: date })), 0);
-  const kept = removed * Math.min(100, Math.max(0, Number(penaltyPercent) || 0)) / 100;
+  const pct = Math.min(100, Math.max(0, Number(penaltyPercent) || 0)) / 100;
+  let kept = 0;
+  const revised = res.reservationRooms.map((r: any) => {
+    if (!selected.some(stay => stay.reservationRoomId === r.reservationRoomId)) return r;
+    const removedNights = r.status !== 'Cancelled' && date < r.checkOutDate ? nights(r) - nights({ ...r, checkOutDate: date }) : 0;
+    const roomKept = Math.round(Number(r.agreedPricePerNight) * removedNights * pct * 100) / 100;
+    kept += roomKept;
+    return { ...r, checkOutDate: date, earlyDeparturePenalty: Math.round((Number(r.earlyDeparturePenalty || 0) + roomKept) * 100) / 100 };
+  });
   const scale = Number(res.totalAmount) / oldBase;
-  const totalAmount = money((base(revised) + kept) * scale);
+  const totalAmount = money(base(revised) * scale);
   const credit = Math.max(0, money(Number(res.amountPaid) - totalAmount));
   return { revised, totalAmount, credit, penaltyKept: money(kept * scale) };
 }
@@ -428,7 +436,7 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
       await checkDelegation({ oldTotal: money(res.totalAmount), newTotal: totalAmount, isExtension: selected.every(stay => date > stay.checkOutDate) });
       Object.assign(result, { oldTotal: money(res.totalAmount), newTotal: totalAmount, credit, ...(penaltyKept > 0 ? { penaltyPercent, penaltyKept } : {}), balanceDue: Math.max(0, money(totalAmount - Number(res.amountPaid))), message: 'Correct departure and reprice the booking. Any overpayment remains recorded as a credit requiring refund review; no money is automatically returned.' });
       if (preview) return result;
-      for (const stay of selected) await tx.reservationRoom.update({ where: { reservationRoomId: stay.reservationRoomId }, data: { checkOutDate: date, originalCheckOutDate: stay.originalCheckOutDate || stay.checkOutDate } });
+      for (const stay of selected) await tx.reservationRoom.update({ where: { reservationRoomId: stay.reservationRoomId }, data: { checkOutDate: date, originalCheckOutDate: stay.originalCheckOutDate || stay.checkOutDate, earlyDeparturePenalty: revised.find((r: any) => r.reservationRoomId === stay.reservationRoomId).earlyDeparturePenalty } });
       const latest = new Date(Math.max(...revised.map((r: any) => r.checkOutDate.getTime())));
       await tx.reservation.update({ where: { reservationId: id }, data: { checkOutDate: latest, totalAmount, refundDue: credit, refundStatus: credit > 0 ? 'Pending' : 'None' } });
     } else if (input.action === 'record-departure') {

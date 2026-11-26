@@ -11,6 +11,7 @@ import { useAuthStore } from '../store/authStore';
 import ReservationModal from '../components/reservations/ReservationModal';
 import { createWalkInBooking } from '../lib/createWalkInBooking';
 import toast from 'react-hot-toast';
+import StayNights from '../components/ui/StayNights';
 import {
   Search, Calendar, BedDouble, AlertCircle, Users, ChevronRight, Loader2, ShoppingCart, CheckCircle2
 } from 'lucide-react';
@@ -199,7 +200,7 @@ export default function AvailabilityPage() {
           </div>
           <div>
             <label className="block text-sm font-semibold text-text mb-1.5">
-              <Calendar size={16} className="inline mr-1.5" /> Departure Date
+              <Calendar size={16} className="inline mr-1.5" /> Departure Date<StayNights checkIn={checkInDate} checkOut={checkOutDate} />
             </label>
             <input 
               type="date" 

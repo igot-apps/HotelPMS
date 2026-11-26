@@ -1,5 +1,6 @@
 import { X, Printer } from 'lucide-react';
 import { formatPaymentMethod } from '../../utils/payment';
+import { serverNow } from '../../lib/serverClock';
 
 const MAX_PAYMENT_LINES = 3;
 export default function ThermalReceiptModal({ isOpen, onClose, reservation, stats }) {
@@ -16,6 +17,11 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
   // Thermal paper is a short slip: only money that actually moved, newest few lines.
   const receiptPayments = (reservation.payments || []).filter(p => p.status === 'Completed' || p.status === 'Refunded');
   const hiddenPayments = Math.max(0, receiptPayments.length - MAX_PAYMENT_LINES);
+  // Bookings carry the guest as propertyGuest (desk) or platformGuest (online).
+  const guest = reservation.guest || reservation.propertyGuest || reservation.platformGuest || {};
+  const printedAt = serverNow() || new Date(); // hotel (and test) clock, not the computer's
+  const nightsLabel = (n) => `${n} night${n === 1 ? '' : 's'}`;
+  const penaltyOf = (room) => parseFloat(room.earlyDeparturePenalty || 0);
   const getRoomNights = (room) => Math.max(0, Math.ceil(
     (new Date(room.checkOutDate || reservation.checkOutDate) - new Date(room.checkInDate || reservation.checkInDate))
       / (1000 * 60 * 60 * 24)
@@ -29,7 +35,7 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
 
   return (
     <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm thermal-modal-wrapper">
-      <div className="bg-white w-full max-w-xs rounded-2xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col thermal-modal-wrapper">
+      <div className="bg-white w-full max-w-sm rounded-2xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col thermal-modal-wrapper">
         
         {/* Screen-only Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 print:hidden">
@@ -63,7 +69,7 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
             {/* Hotel Header */}
             <div className="text-center mb-2">
               <h1 className="text-base font-bold uppercase tracking-wider">{reservation.property?.propertyName || 'Hotel PMS'}</h1>
-              {reservation.property?.address && <p className="text-[10px]">{reservation.property.address}</p>}
+              {[reservation.property?.address, reservation.property?.city].filter(Boolean).join(', ') && <p className="text-[10px]">{[reservation.property?.address, reservation.property?.city].filter(Boolean).join(', ')}</p>}
               {reservation.property?.primaryPhone && <p className="text-[10px]">Tel: {reservation.property.primaryPhone}</p>}
             </div>
 
@@ -76,8 +82,8 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
             </div>
             <div className="text-[10px] mb-1">
               <div className="flex justify-between gap-2">
-                <span>Date: {formatDate(new Date())}</span>
-                <span>Time: {formatTime(new Date())}</span>
+                <span>Date: {formatDate(printedAt)}</span>
+                <span>Time: {formatTime(printedAt)}</span>
               </div>
               <p className="mt-0.5">Cashier: {reservation.staff?.fullName || 'System'}</p>
             </div>
@@ -86,8 +92,8 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
 
             {/* Guest Info */}
             <div className="text-[11px] mb-1">
-              <p className="font-bold">GUEST: {reservation.guest?.fullName}</p>
-              <p>{reservation.guest?.phone || ''}</p>
+              <p className="font-bold">GUEST: {guest.fullName || ''}</p>
+              {guest.phone && <p>{guest.phone}</p>}
             </div>
             <div className="flex justify-between text-[11px] mb-1">
               <span>Check-in: {formatDate(reservation.checkInDate)}</span>
@@ -111,9 +117,15 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
                     <span>Room {rr.room?.roomNumber || rr.roomNumberSnapshot || 'Removed'} ({rr.roomType?.typeName || rr.roomTypeNameSnapshot || 'Room type removed'})</span>
                   </div>
                   <div className="flex justify-between pl-2">
-                    <span>{roomNights} nights x {formatCurrency(rate)}</span>
+                    <span>{nightsLabel(roomNights)} x {formatCurrency(rate)}</span>
                     <span>{formatCurrency(subtotal)}</span>
                   </div>
+                  {penaltyOf(rr) > 0 && (
+                    <div className="flex justify-between pl-2">
+                      <span>Early departure charge</span>
+                      <span>{formatCurrency(penaltyOf(rr))}</span>
+                    </div>
+                  )}
                 </div>
               );
             })}
