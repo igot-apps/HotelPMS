@@ -224,7 +224,9 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary-100 text-text-muted transition"><X size={20} /></button>
         </div>
 
-        <form onSubmit={handleSubmit} className="min-h-0 flex-1 space-y-6 overflow-y-auto p-4 sm:p-6">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        {/* Only the settings scroll; the save bar below stays fixed and never covers content. */}
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-4 sm:p-6">
       {/* Basic Info */}
           <section className="rounded-xl border border-border bg-background/40 p-4 sm:p-5">
             <h3 className="text-base font-bold text-text">Property details</h3>
@@ -467,9 +469,10 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
               )}
             </div>
           </section>
+        </div>
 
           {/* Footer Buttons */}
-          <div className="sticky bottom-0 -mx-4 -mb-4 flex justify-end gap-3 border-t border-border bg-surface/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:-mb-6 sm:px-6">
+          <div className="flex shrink-0 justify-end gap-3 border-t border-border bg-surface px-4 py-4 sm:px-6">
             <button type="button" onClick={onClose} className="px-5 py-2.5 text-sm font-semibold text-text bg-surface border border-border rounded-lg hover:bg-secondary-50 transition">Cancel</button>
             <button type="submit" disabled={isLoading} className="px-5 py-2.5 text-sm font-semibold text-text-inverted bg-primary-600 rounded-lg hover:bg-primary-700 transition disabled:opacity-50 flex items-center gap-2">
               {isLoading && <Loader2 className="animate-spin" size={16} />}
