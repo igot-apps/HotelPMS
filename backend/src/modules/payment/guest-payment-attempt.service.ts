@@ -3,20 +3,13 @@ import { prisma } from '../../shared/utils/prisma';
 import { isExpiredOnlineHold } from '../reservation/online-hold.service';
 import { canBookOnline, OnlineBookingPausedError, publicBookingFields } from '../reservation/public-booking-policy';
 import { paymentConfiguration, verifyGuestPayment } from './guest-payment.service';
-import { getFrontendBaseUrl } from '../../shared/utils/frontend-url';
-import { createPaymentLink, initiatePayment, InitiateResult, MoolreConfig, normalizeChannel, normalizePayer, payerMessage } from './moolre.client';
+import { initiatePayment, InitiateResult, MoolreConfig, normalizeChannel, normalizePayer, payerMessage } from './moolre.client';
 
 const failure = (message: string, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 // OtpRequired: the SMS code was sent but no payment prompt yet, so nothing can be charged.
 // Verifying: the code is being checked and the prompt may be on its way.
 const activeStatuses = ['Initializing', 'OtpRequired', 'Verifying', 'Pending', 'Unknown'];
 const recoveryDelayMs = 30000;
-// Moolre hosted checkout (card or mobile money on Moolre's page). An unpaid link stops working
-// after LINK_EXPIRES_MIN, so after that (plus a margin) a link Moolre has no payment for is closed.
-const LINK_CHANNEL = 'LINK';
-const LINK_EXPIRES_MIN = 30;
-const linkClosed = (attempt: { channel: string | null; createdAt: Date }) =>
-  attempt.channel === LINK_CHANNEL && Date.now() - attempt.createdAt.getTime() > (LINK_EXPIRES_MIN + 2) * 60000;
 
 async function ownedBooking(propertyCode: string, reservationId: string, guestId: number) {
   const booking = await prisma.reservation.findFirst({ where: { reservationId, platformGuestId: guestId, property: { propertyCode } } });
@@ -27,7 +20,7 @@ const maskPhone = (phone?: string | null) => (phone ? `${phone.slice(0, 3)}****$
 
 export async function checkGuestPaymentStatus(propertyCode: string, reservationId: string, guestId: number) {
   let booking = await ownedBooking(propertyCode, reservationId, guestId);
-  let attempt = await prisma.guestPaymentAttempt.findFirst({ where: { reservationId, status: { in: activeStatuses } }, orderBy: { attemptId: 'desc' } });
+  const attempt = await prisma.guestPaymentAttempt.findFirst({ where: { reservationId, status: { in: activeStatuses } }, orderBy: { attemptId: 'desc' } });
   let uncertain = false;
   let providerStatus = '';
   if (attempt) {
@@ -36,10 +29,6 @@ export async function checkGuestPaymentStatus(propertyCode: string, reservationI
       providerStatus = result.status;
       if (result.status === 'failed') {
         await prisma.guestPaymentAttempt.updateMany({ where: { reference: attempt.reference, status: { not: 'Completed' } }, data: { status: 'Failed' } });
-      } else if (result.status === 'not_found' && linkClosed(attempt)) {
-        // The checkout link expired unpaid: nothing can be charged on it any more.
-        await prisma.guestPaymentAttempt.updateMany({ where: { attemptId: attempt.attemptId, status: attempt.status }, data: { status: 'Expired' } });
-        attempt = null;
       }
     } catch { uncertain = true; }
     booking = await ownedBooking(propertyCode, reservationId, guestId);
@@ -54,16 +43,14 @@ export async function checkGuestPaymentStatus(propertyCode: string, reservationI
   const status = released ? 'released' : balanceDue === 0 && amountPaid > 0 ? 'paid'
     : retryable ? 'retryable' : otpRequired ? 'otp_required' : uncertain ? 'unknown'
     : attempt && !['failed', 'success'].includes(providerStatus) ? 'pending' : 'unpaid';
-  const linkOpen = status === 'pending' && attempt?.channel === LINK_CHANNEL;
   return { status, reservationId, bookingStatus: booking.status, confirmationCode: booking.confirmationCode, amountPaid, balanceDue,
-    checkedReference: attempt?.reference, providerStatus, checkoutUrl: linkOpen ? attempt?.checkoutUrl || undefined : undefined, payer: attempt?.payer ? maskPhone(attempt.payer) : undefined,
+    checkedReference: attempt?.reference, providerStatus, payer: attempt?.payer ? maskPhone(attempt.payer) : undefined,
     refundDue: Number(booking.refundDue), requiresRefundReview: booking.refundStatus === 'Pending',
     message: status === 'retryable' ? 'The payment prompt was not sent. You can try again; we will reuse the same payment reference.'
       : status === 'otp_required' ? `Enter the code sent by SMS to ${maskPhone(attempt?.payer)} to continue, or start again.`
       : status === 'unknown' ? 'Payment status is not yet confirmed. Check again before paying; do not start another booking if you were charged.'
       : status === 'released' && amountPaid > 0 ? 'Payment recorded. This booking was released and requires hotel refund review.'
       : status === 'paid' ? 'Payment received. No further payment is due.'
-      : linkOpen ? `A Moolre checkout page is open for this booking. Finish paying there, or wait about ${LINK_EXPIRES_MIN} minutes for it to expire before paying another way.`
       : status === 'pending' ? 'Payment is still pending. Approve the prompt on your phone; if you were charged, wait and check again before paying.'
       : status === 'released' ? 'This booking has been released. Check its payment and refund details.'
       : amountPaid > 0 ? `GHS ${amountPaid.toFixed(2)} received. Remaining balance: GHS ${balanceDue.toFixed(2)}.`
@@ -138,7 +125,7 @@ export async function initializeGuestPayment(propertyCode: string, reservationId
         await tx.guestPaymentAttempt.update({ where: { attemptId: existing.attemptId }, data: { status: 'Superseded' } });
       } else {
         return { status: 'pending' as const, reference: existing.reference,
-          message: existing.channel === LINK_CHANNEL ? checked.message : changedBalance
+          message: changedBalance
             ? `An earlier GHS ${Number(existing.amount).toFixed(2)} payment is not yet resolved. Your remaining balance is GHS ${amount.toFixed(2)}. Check payment status before paying again.`
             : 'A payment prompt was already sent. Approve it on your phone, or check its status if you were charged.',
         };
@@ -172,55 +159,4 @@ export async function submitGuestPaymentOtp(propertyCode: string, reservationId:
   const result = await applyOutcome(attempt, prompt, ['Verifying']);
   if (result.status === 'pending') return (await releasedOrPaid(propertyCode, reservationId, guest.guestId)) || result;
   return result;
-}
-
-/**
- * Moolre hosted checkout: creates a one-time payment link for the balance and returns its URL.
- * The guest pays on Moolre's page (card or mobile money); the result is confirmed by status
- * check / webhook on the same RES- reference, never by the redirect back to us.
- */
-export async function startGuestPaymentLink(propertyCode: string, reservationId: string, guest: { guestId: number }) {
-  const checked = await checkGuestPaymentStatus(propertyCode, reservationId, guest.guestId);
-  if (['paid', 'released', 'unknown'].includes(checked.status)) return checked;
-  if (checked.status === 'pending' && checked.checkoutUrl) return { status: 'redirect', reference: checked.checkedReference, url: checked.checkoutUrl };
-  const { property, moolre } = await paymentConfiguration(propertyCode);
-  if (property.currency !== 'GHS') throw failure('Online payments need the hotel currency set to GHS.', 503);
-  const owner = await prisma.property.findUniqueOrThrow({ where: { propertyId: property.propertyId }, select: { primaryEmail: true } });
-  const email = owner.primaryEmail?.trim() || process.env.MOOLRE_EMAIL?.trim();
-  if (!email) throw failure('Card checkout is not set up for this hotel yet. Please pay with mobile money.', 503);
-  const prepared = await prisma.$transaction(async tx => {
-    const locked = await tx.$queryRaw<any[]>`SELECT "reservationId" FROM reservations WHERE "reservationId" = ${reservationId} AND "propertyId" = ${property.propertyId} AND "platformGuestId" = ${guest.guestId} FOR UPDATE`;
-    if (!locked.length) throw failure('Booking not found.', 404);
-    const booking = await tx.reservation.findUniqueOrThrow({ where: { reservationId } });
-    if (!['Pending', 'Confirmed'].includes(booking.status) || isExpiredOnlineHold(booking)) throw failure('This booking is no longer available for payment. Check My Reservations.');
-    const amount = Math.round((Number(booking.totalAmount || 0) - Number(booking.amountPaid || 0)) * 100) / 100;
-    if (amount <= 0) return { status: 'paid' as const };
-    const existing = await tx.guestPaymentAttempt.findFirst({ where: { reservationId, status: { in: activeStatuses } }, orderBy: { attemptId: 'desc' } });
-    if (existing) {
-      if (existing.status === 'OtpRequired' && checked.checkedReference === existing.reference && checked.status === 'otp_required') {
-        // Only an SMS code was sent for a mobile money attempt; no prompt reached the phone.
-        await tx.guestPaymentAttempt.update({ where: { attemptId: existing.attemptId }, data: { status: 'Superseded' } });
-      } else {
-        return { status: 'pending' as const, reference: existing.reference, message: 'A payment for this booking is not yet resolved. Check payment status before paying again.' };
-      }
-    }
-    const currentProperty = await tx.property.findUniqueOrThrow({ where: { propertyId: property.propertyId }, select: publicBookingFields });
-    if (!canBookOnline(currentProperty)) throw new OnlineBookingPausedError();
-    // Commit the reference BEFORE contacting Moolre.
-    const attempt = await tx.guestPaymentAttempt.create({ data: { reservationId, reference: `RES-${reservationId}-${randomUUID()}`, amount, currency: 'GHS', channel: LINK_CHANNEL } });
-    return { status: 'new' as const, attempt };
-  });
-  if (prepared.status !== 'new') return prepared;
-  const { attempt } = prepared;
-  const redirect = `${getFrontendBaseUrl()}/public/reservations?moolre=return&booking=${encodeURIComponent(reservationId)}`;
-  const link = await createPaymentLink(moolre, { amount: Number(attempt.amount), externalref: attempt.reference, email, redirect, expiresMinutes: LINK_EXPIRES_MIN, metadata: { reservationId } });
-  if (link.outcome === 'created') {
-    await prisma.guestPaymentAttempt.updateMany({ where: { attemptId: attempt.attemptId, status: 'Initializing' }, data: { status: 'Pending', checkoutUrl: link.url } });
-    return { status: 'redirect', reference: attempt.reference, url: link.url };
-  }
-  // The guest never received a link, so nothing can be paid on this reference. Keep it for
-  // reconciliation (a late webhook still settles through verifyGuestPayment) and let them retry.
-  await prisma.guestPaymentAttempt.updateMany({ where: { attemptId: attempt.attemptId, status: 'Initializing' }, data: { status: 'Superseded' } });
-  console.error(`Moolre payment link failed (${link.code}): ${link.message}`);
-  return { status: 'failed', reference: attempt.reference, message: 'Could not open the Moolre checkout page. Try again, or pay with mobile money.' };
 }

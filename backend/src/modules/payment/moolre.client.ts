@@ -83,35 +83,7 @@ export async function initiatePayment(config: MoolreConfig, p: { channel: string
   }
 }
 
-export type LinkResult = { outcome: 'created'; url: string; code: string } | { outcome: 'rejected' | 'unknown'; code: string; message: string };
-
-/**
- * Moolre hosted checkout (POST /embed/link): the customer opens the returned URL and pays on
- * Moolre's own page. The result is confirmed the same way as a direct collection (status by
- * externalref and/or the signed webhook), never by the redirect.
- */
-export async function createPaymentLink(config: MoolreConfig, p: { amount: number | string; externalref: string; email: string; redirect?: string; expiresMinutes?: number; metadata?: object }): Promise<LinkResult> {
-  const amount = Number(p.amount);
-  if (!Number.isFinite(amount) || amount <= 0.01) return { outcome: 'rejected', code: 'LOCAL', message: 'Amount must be more than GHS 0.01.' };
-  const body: Record<string, unknown> = {
-    type: 1, amount: amount.toFixed(2), currency: 'GHS', email: p.email, externalref: p.externalref,
-    accountnumber: String(config.account), reusable: '0',
-  };
-  if (p.expiresMinutes) body.expiration_time = p.expiresMinutes;
-  if (p.redirect) body.redirect = p.redirect;
-  if (p.metadata) body.metadata = p.metadata;
-  try {
-    const reply = await call(config, '/embed/link', body);
-    const url = reply.data?.authorization_url;
-    if (reply.status === 1 && typeof url === 'string' && /^https:\/\//.test(url)) return { outcome: 'created', url, code: reply.code };
-    if (reply.code.startsWith('HTTP5') || UNKNOWN_CODES.has(reply.code)) return { outcome: 'unknown', code: reply.code, message: String(reply.message || '') };
-    return { outcome: 'rejected', code: reply.code, message: String(reply.message || '') };
-  } catch (error: any) {
-    return { outcome: 'unknown', code: 'NETWORK', message: error?.message || 'No response from Moolre.' };
-  }
-}
-
-export type StatusResult ={ status: 'success' | 'failed' | 'pending' | 'not_found'; code: string; amount: number | null; externalref: string | null; data: any };
+export type StatusResult = { status: 'success' | 'failed' | 'pending' | 'not_found'; code: string; amount: number | null; externalref: string | null; data: any };
 
 /** Checks a collection by externalref. Throws on auth/config errors so callers treat the result as uncertain. */
 export async function checkPaymentStatus(config: MoolreConfig, externalref: string): Promise<StatusResult> {
