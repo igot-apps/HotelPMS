@@ -88,7 +88,15 @@ export default function PublicReservationsPage() {
   const [paymentFeedback, setPaymentFeedback] = useState({});
   const statusMutation = useMutation({
     mutationFn: async reservation => (await api.get(`/public/${reservation.property.propertyCode}/reservations/${reservation.reservationId}/payment-status`, { skipErrorToast: true })).data.data,
-    onSuccess: (result, reservation) => { client.invalidateQueries({ queryKey: ['guestReservations'] }); setPaymentFeedback(current => ({ ...current, [reservation.reservationId]: { status: result.status, message: result.message || 'No successful payment confirmed yet.' } })); if (result.status === 'paid') toast.success('Payment received.', { id: `guest-payment-${reservation.reservationId}` }); },
+    onSuccess: (result, reservation) => {
+      client.invalidateQueries({ queryKey: ['guestReservations'] });
+      // Every check gets a visible answer, even when the status has not changed since the last one.
+      const nextStep = result.status === 'otp_required' ? ' No payment has been received yet. Tap Pay Balance to enter the SMS code or start the payment again.' : '';
+      setPaymentFeedback(current => ({ ...current, [reservation.reservationId]: { status: result.status, message: `${result.message || 'No successful payment confirmed yet.'}${nextStep}`, checkedAt: new Date() } }));
+      const id = `guest-payment-${reservation.reservationId}`;
+      if (result.status === 'paid') toast.success('Payment received.', { id });
+      else toast(result.status === 'otp_required' || result.status === 'unpaid' ? 'Checked: no payment received yet.' : 'Checked: payment not confirmed yet.', { id, icon: 'ℹ️' });
+    },
     onError: (_, reservation) => setPaymentFeedback(current => ({ ...current, [reservation.reservationId]: { status: 'unknown', message: 'Could not confirm payment status. If you were charged, do not pay again; check again or contact the hotel.' } })),
   });
   const cancelMutation = useMutation({
@@ -345,7 +353,7 @@ export default function PublicReservationsPage() {
                         </div>
                       </div>
                     )}
-                    {feedback && !released && !isFullyPaid && <p role="status" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{feedback.message}</p>}
+                    {feedback && !released && !isFullyPaid && <p role="status" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{feedback.checkedAt && <strong className="block">Checked at {feedback.checkedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</strong>}{feedback.message}</p>}
                     {expired && <p className="mb-3 text-sm text-text-muted">The room hold has been released. {returnedTotal > 0 ? 'Refund details are shown below.' : amountPaid > 0 ? 'Your late payment was recorded; contact the hotel for refund review.' : 'No payment was recorded for this booking.'}</p>}
                     {!released && Number(res.refundDue) > 0 && <p className="mb-3 text-sm text-warning-700">Credit awaiting hotel refund review: GH₵ {Number(res.refundDue).toFixed(2)}. No further payment is needed if your balance is zero.</p>}
                     {refundApproved && <p className="mb-3 text-sm text-warning-700">Refund approved — awaiting money return from the hotel.</p>}
