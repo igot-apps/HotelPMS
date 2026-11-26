@@ -16,7 +16,8 @@ Change these only when the owner asks. Code locations are given so you can verif
   password and a link sent to the new address. Every action is audited (Administrators → activity).
   The original phone-only admin can sign in by phone until an email is verified on the account.
   The Super Admin browser session is stored separately from the hotel session.
-  The default admin (`PLATFORM_DEFAULT_ADMIN_EMAIL`) can never be deactivated and its email cannot change.
+  The default admin (`PLATFORM_DEFAULT_ADMIN_EMAIL`) is created automatically, can never be deactivated and
+  its email cannot change; its password is set/reset via "Forgot your password?".
 
 ## Online booking (public site)
 - Guest must sign in (email). Clicking pay creates a **Pending** reservation that holds one

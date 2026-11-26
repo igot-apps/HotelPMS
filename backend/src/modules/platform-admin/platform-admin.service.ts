@@ -35,6 +35,39 @@ const ACTIVE = { ...PLATFORM, isActive: true, invitationPending: false } as cons
 export const defaultAdminEmail = () => process.env.PLATFORM_DEFAULT_ADMIN_EMAIL?.trim().toLowerCase() || null;
 const isDefaultAdmin = (email: string | null | undefined) => Boolean(email && defaultAdminEmail() && email.toLowerCase() === defaultAdminEmail());
 
+/**
+ * Makes sure the default administrator always exists and is active, so "Forgot password" works for
+ * it without any script. Runs at startup and before a reset for that email. A new account gets an
+ * unusable random password: the owner sets one through the reset email.
+ */
+export async function ensureDefaultAdmin(): Promise<'missing-config' | 'created' | 'ok' | 'conflict'> {
+  const email = defaultAdminEmail();
+  if (!email) return 'missing-config';
+  if (!EMAIL_RE.test(email)) { console.error('PLATFORM_DEFAULT_ADMIN_EMAIL is not a valid email address.'); return 'missing-config'; }
+  const existing = await prisma.user.findUnique({ where: { email }, select: { userId: true, isPlatformAdmin: true, propertyId: true, isActive: true, invitationPending: true } });
+  if (existing && (!existing.isPlatformAdmin || existing.propertyId !== null)) {
+    console.error('PLATFORM_DEFAULT_ADMIN_EMAIL belongs to a hotel account; the default administrator was not created.');
+    return 'conflict';
+  }
+  if (existing) {
+    if (!existing.isActive || existing.invitationPending) {
+      await prisma.user.update({ where: { userId: existing.userId }, data: { isActive: true, invitationPending: false, invitationTokenHash: null, invitationExpiresAt: null } });
+      await audit(null, existing.userId, 'PlatformAdminDefaultRestored');
+    }
+    return 'ok';
+  }
+  const role = await platformRole();
+  const created = await prisma.user.create({ data: {
+    propertyId: null, fullName: process.env.PLATFORM_DEFAULT_ADMIN_NAME?.trim() || 'Default Administrator', email,
+    username: `platform_admin_${randomBytes(8).toString('hex')}`,
+    passwordHash: await hashPassword(randomBytes(32).toString('hex')),
+    roleId: role.roleId, isPlatformAdmin: true, isActive: true,
+  }, select: { userId: true } });
+  await audit(null, created.userId, 'PlatformAdminDefaultCreated', { email });
+  console.info('Default platform administrator created; use "Forgot password" on /superadmin to set its password.');
+  return 'created';
+}
+
 export function normalizeEmail(value: unknown): string {
   if (typeof value !== 'string') throw new PlatformAdminError('Enter a valid email address.');
   const email = value.trim().toLowerCase();
@@ -277,6 +310,7 @@ export async function confirmEmailChange(token: unknown) {
 
 export async function requestPasswordReset(emailInput: unknown) {
   const email = normalizeEmail(emailInput);
+  if (email === defaultAdminEmail()) await ensureDefaultAdmin();
   const user = await prisma.user.findFirst({ where: { ...ACTIVE, email }, select: { userId: true } });
   if (!user) return; // same response either way
   const token = randomBytes(32).toString('hex');

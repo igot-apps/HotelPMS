@@ -12,6 +12,7 @@ console.log(`Using TypeScript version: ${require('typescript').version}\n`);
 // Import modules
 import authRoutes from './modules/auth/auth.routes';
 import { platformAdminRoutes, platformAuthRoutes } from './modules/platform-admin/platform-admin.routes';
+import { ensureDefaultAdmin } from './modules/platform-admin/platform-admin.service';
 import propertyRoutes from './modules/property/property.routes';
 import platformPropertyRoutes from './modules/property/platformProperty.routes';
 import platformSubscriptionRoutes from './modules/payment/platform-subscription.routes';
@@ -144,6 +145,8 @@ if (require.main === module) {
   setInterval(() => {
     void activateReadyWebsiteDomains().catch(error => console.error('Could not check automatic domain activation:', error));
   }, 5 * 60 * 1000).unref();
+  // The default Super Admin (PLATFORM_DEFAULT_ADMIN_EMAIL) always exists, so its password can be reset by email.
+  void ensureDefaultAdmin().catch(error => console.error('Could not ensure the default platform administrator:', error instanceof Error ? error.message : error));
   app.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}\n`);
     console.log(`📊 Environment: ${process.env.NODE_ENV}\n`);

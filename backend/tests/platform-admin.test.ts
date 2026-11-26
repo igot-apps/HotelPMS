@@ -180,3 +180,31 @@ test('the default administrator cannot be deactivated or have its email changed'
     expect((await service.listAdmins()).map((a: any) => a.isDefault)).toEqual([true, false]);
   } finally { delete process.env.PLATFORM_DEFAULT_ADMIN_EMAIL; }
 });
+
+test('the default administrator is created automatically when missing, and restored if inactive', async () => {
+  process.env.PLATFORM_DEFAULT_ADMIN_EMAIL = 'Owner@Example.com';
+  try {
+    db.user.findUnique.mockResolvedValueOnce(null);
+    expect(await service.ensureDefaultAdmin()).toBe('created');
+    expect(db.user.create.mock.calls[0][0].data).toMatchObject({ email: 'owner@example.com', isPlatformAdmin: true, propertyId: null, isActive: true });
+
+    db.user.findUnique.mockResolvedValueOnce({ userId: 5, isPlatformAdmin: true, propertyId: null, isActive: false, invitationPending: false });
+    expect(await service.ensureDefaultAdmin()).toBe('ok');
+    expect(db.user.update.mock.calls[0][0].data).toMatchObject({ isActive: true, invitationPending: false });
+
+    db.user.findUnique.mockResolvedValueOnce({ userId: 9, isPlatformAdmin: false, propertyId: 3, isActive: true });
+    expect(await service.ensureDefaultAdmin()).toBe('conflict');
+    expect(db.user.create).toHaveBeenCalledTimes(1);
+  } finally { delete process.env.PLATFORM_DEFAULT_ADMIN_EMAIL; }
+});
+
+test('forgot password for the default email creates the account first, then sends the reset link', async () => {
+  process.env.PLATFORM_DEFAULT_ADMIN_EMAIL = 'owner@example.com';
+  try {
+    db.user.findUnique.mockResolvedValueOnce(null);
+    db.user.findFirst.mockResolvedValueOnce({ userId: 5 });
+    await service.requestPasswordReset('owner@example.com');
+    expect(db.user.create).toHaveBeenCalled();
+    expect(email.deliverPlatformPasswordReset).toHaveBeenCalledWith('owner@example.com', expect.stringMatching(/^[a-f0-9]{64}$/));
+  } finally { delete process.env.PLATFORM_DEFAULT_ADMIN_EMAIL; }
+});
