@@ -5,6 +5,7 @@ import * as recovery from './recovery.service';
 import * as approvals from './correction-approval.service';
 import * as inbox from './approval-inbox.service';
 import * as refunds from './refund.service';
+import { notifyRefundRecorded } from '../notifications/push-events';
 import * as refundQueue from './refund-inbox.service';
 import * as simulation from './refund-simulation.service';
 import * as checkoutAlertsService from './checkout-alerts.service';
@@ -46,11 +47,19 @@ router.get('/:id/refunds', async (req: AuthRequest, res) => {
   catch (error: any) { return res.status(error.statusCode || 400).json({ success: false, message: error.message }); }
 });
 router.post('/:id/refund-requests', async (req: AuthRequest, res) => {
-  try { return res.json({ success: true, data: await refunds.requestRefund(actor(req), String(req.params.id), req.body) }); }
+  try {
+    const data: any = await refunds.requestRefund(actor(req), String(req.params.id), req.body);
+    if (data?.status === 'Completed' && Array.isArray(data.refunds)) void notifyRefundRecorded(actor(req), data.refunds).catch(() => {});
+    return res.json({ success: true, data });
+  }
   catch (error: any) { return res.status(error.statusCode || 400).json({ success: false, message: error.message }); }
 });
 router.post('/refund-requests/:requestId/complete', async (req: AuthRequest, res) => {
-  try { return res.json({ success: true, data: await refunds.completeRefund(actor(req), Number(req.params.requestId), req.body) }); }
+  try {
+    const data: any = await refunds.completeRefund(actor(req), Number(req.params.requestId), req.body);
+    if (data?.refundId && data.reservationId) void notifyRefundRecorded(actor(req), [data]).catch(() => {});
+    return res.json({ success: true, data });
+  }
   catch (error: any) { return res.status(error.statusCode || 400).json({ success: false, message: error.message }); }
 });
 router.get('/approval-inbox/count', async (req: AuthRequest, res) => {

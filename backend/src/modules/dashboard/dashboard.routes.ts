@@ -6,6 +6,7 @@ import { atProperty } from '../../shared/utils/property-access';
    import { getOwedAfterCheckout } from './owed-after-checkout.service';
    import { getMyDay } from './my-day.service';
    import { cashReconciliation, cashReconciliationRange, recordCashCount, recordCashCountIssue } from '../reports/cash-reconciliation.service';
+   import { notifyCashCountIssue } from '../notifications/push-events';
    import * as dashboardController from './dashboard.controller';
 
    // 🚨 TRACKING BEACON
@@ -70,7 +71,10 @@ import { atProperty } from '../../shared/utils/property-access';
    });
    router.post('/cash-count-issues', async (req: AuthRequest, res) => {
      try {
-       return res.status(201).json({ success: true, data: await recordCashCountIssue({ userId: req.user!.userId, propertyId: req.user!.propertyId }, req.body) });
+       const actor = { userId: req.user!.userId, propertyId: req.user!.propertyId };
+       const issue = await recordCashCountIssue(actor, req.body);
+       void notifyCashCountIssue(actor, { issueId: issue.cashCountIssueId, staffUserId: issue.staffUserId, businessDate: issue.date, reason: issue.reason }).catch(() => {});
+       return res.status(201).json({ success: true, data: issue });
      } catch (error: any) {
        return res.status(error.statusCode || 400).json({ success: false, message: error.message || 'Could not record the pending cash count.' });
      }

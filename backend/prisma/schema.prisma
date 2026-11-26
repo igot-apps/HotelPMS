@@ -234,6 +234,7 @@ model User {
   cashCountIssuesStaff CashCountIssue[] @relation("cashCountIssueStaff")
   cashCountIssuesRecorded CashCountIssue[] @relation("cashCountIssueRecorder")
   memberships       PropertyMembership[]
+  pushSubscriptions PushSubscription[]
 
   @@map("users")
 }
@@ -786,4 +787,32 @@ model CashCountIssue {
   @@index([propertyId, businessDate])
   @@index([staffUserId])
   @@map("cash_count_issues")
+}
+
+
+// ============================================================
+// PUSH NOTIFICATIONS (staff devices that allowed notifications)
+// ============================================================
+model PushSubscription {
+  subscriptionId Int       @id @default(autoincrement())
+  userId         Int
+  endpoint       String    @unique
+  p256dh         String    @db.VarChar(200)
+  auth           String    @db.VarChar(100)
+  userAgent      String?   @db.VarChar(300)
+  createdAt      DateTime  @default(now())
+  lastSuccessAt  DateTime?
+
+  user           User      @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+// One row per notification that must only ever be sent once (e.g. one overstay alert per stay).
+model PushNotice {
+  key       String   @id @db.VarChar(200)
+  createdAt DateTime @default(now())
+
+  @@map("push_notices")
 }

@@ -31,6 +31,8 @@ import publicRoutes from './modules/public/public.routes';
 import publicImagesRoutes from './modules/public/public-images.routes';
 import publicAuthRoutes from './modules/public/public-auth.routes';
 import testClockRoutes from './shared/test-clock.routes';
+import pushRoutes from './modules/notifications/push.routes';
+import { notifyOverstays } from './modules/notifications/push-events';
 import { expireOnlineHolds } from './modules/reservation/online-hold.service';
 import { expireUnarrivedStays } from './modules/reservation/recovery.service';
 import { activateReadyWebsiteDomains } from './modules/property/domain-auto-activation.service';
@@ -101,6 +103,7 @@ app.use('/api/platform/admins', platformAdminRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/housekeeping', housekeepingRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/push', pushRoutes);
 app.use('/api/guests', guestRoutes);
 app.use('/api/reservations', reservationRoutes);
 app.use('/api/payments', paymentRoutes);
@@ -138,6 +141,9 @@ if (require.main === module) {
   const expireStays = () => expireUnarrivedStays().catch(error => console.error('Could not expire unarrived reservations; will retry.', error));
   void expireStays();
   setInterval(expireStays, 5 * 60 * 1000).unref();
+  // Push notifications for guests past checkout (no-op unless VAPID keys are set).
+  const checkOverstays = () => notifyOverstays().catch(() => console.warn('Could not check overstays for notifications.'));
+  setInterval(checkOverstays, 5 * 60 * 1000).unref();
   const remindManagers = () => sendSubscriptionReminders().catch(() => console.warn('Could not check subscription reminders.'));
   void remindManagers();
   setInterval(remindManagers, 30 * 60 * 1000).unref();

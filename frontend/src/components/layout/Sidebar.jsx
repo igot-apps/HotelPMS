@@ -4,6 +4,7 @@ import {
   LogOut, Settings, Building2, X, Shield, Crown, HandCoins, History, CalendarRange, UserRound
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
+import { disablePushOnSignOut } from '../../lib/push';
 import { useNavigate } from 'react-router-dom';
 import RequirePermission from '../RequirePermission'; 
 import useRefundCount from '../../hooks/useRefundCount';
@@ -45,7 +46,8 @@ export default function Sidebar({ isOpen, onClose }) {
   const checkoutAlerts = useCheckoutAlerts();
   const overdueCheckouts = checkoutAlerts.data?.counts?.overdue || 0;
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await disablePushOnSignOut(); // this device stops getting the signed-out person's notifications
     logout();
     navigate('/login');
   };

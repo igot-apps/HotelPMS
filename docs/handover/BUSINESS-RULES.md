@@ -128,3 +128,14 @@ Code: `reservation/stay-timing.ts`, `reservation/checkout-alerts.service.ts`,
 - Ordinary staff stay single-property. Deactivating a membership ends sessions for that property only; deactivating the account ends all.
 - `audit_logs.propertyId` records where an action happened (older rows fall back to the user's home property, see `auditAt()`).
 - Permanently deleting an owner's home property moves their home to another property they own instead of deleting the account.
+
+## Push notifications (`notifications/push.service.ts`, `push-events.ts`)
+- Each staff member turns notifications on per device under **My profile**. iPhone: only from the Home Screen app (iOS 16.4+).
+- Signing out removes that device's subscription, so a shared phone never shows the previous person's alerts.
+- Sent to active staff of the hotel with the listed role; the person who did the action is never notified about it.
+  - Online booking confirmed by payment / other online payment / late payment → Manager + Receptionist (once per payment reference).
+  - Guest past checkout → Receptionist (once per stay); still not out after 3 h → Manager (once).
+  - Refund recorded → Managers. Cash count problem → Managers.
+  - Plan expires in 3 days / has expired → Managers (once each, even when email is not configured).
+- One-time sends are guarded by `push_notices` keys, so restarts or several API instances do not repeat them.
+- Failures never break the booking, payment or refund that triggered them; dead devices (404/410) are removed.

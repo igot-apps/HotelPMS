@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Building2, Crown, LogOut, UserRound } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
+import { disablePushOnSignOut } from '../../lib/push';
 
 /** Avatar button in the top bar: who is signed in, account shortcuts and Sign out. */
 export default function UserMenu() {
@@ -21,7 +22,7 @@ export default function UserMenu() {
     return () => { document.removeEventListener('mousedown', outside); document.removeEventListener('keydown', escape); };
   }, [open]);
 
-  const signOut = () => { setOpen(false); logout(); navigate('/login'); };
+  const signOut = async () => { setOpen(false); await disablePushOnSignOut(); logout(); navigate('/login'); };
   const link = 'flex min-h-11 items-center gap-2 px-4 py-2 text-sm font-medium text-text hover:bg-secondary-50';
 
   return (

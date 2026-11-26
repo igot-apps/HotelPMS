@@ -1,3 +1,4 @@
+import { notifyStaffLater } from '../notifications/push.service';
 import { prisma } from '../../shared/utils/prisma';
 import { isExpiredOnlineHold } from '../reservation/online-hold.service';
 import { restoreLatePaymentAllocation } from './late-payment-allocation';
@@ -109,13 +110,26 @@ export async function verifyGuestPayment(propertyCode: string, reference: string
       } : {}),
     } });
     await tx.guestPaymentAttempt.updateMany({ where: { reference }, data: { status: 'Completed' } });
-    return { confirmationCode: reservation.confirmationCode, bookingStatus: restored ? 'Confirmed' : late ? 'Expired' : reservation.status === 'Pending' ? 'Confirmed' : reservation.status, requiresRefundReview: released || refundIncrement > 0 || reservation.refundStatus === 'Pending' };
+    return { confirmationCode: reservation.confirmationCode, bookingStatus: restored ? 'Confirmed' : late ? 'Expired' : reservation.status === 'Pending' ? 'Confirmed' : reservation.status, requiresRefundReview: released || refundIncrement > 0 || reservation.refundStatus === 'Pending',
+      // For the staff push notification only (removed before the guest's response).
+      notice: { amount, guestName: reservation.guestNameSnapshot || 'A guest', newBooking: (reservation.status === 'Pending' && !late) || restored, lateRelease: late && !restored } };
       }, { isolationLevel: 'Serializable', timeout: 15000 });
       break;
     } catch (error: any) {
       if (!['P2034', 'P2010'].includes(error.code) || (error.code === 'P2010' && !['40001', '40P01'].includes(error.meta?.code)) || retry >= 2) throw error;
     }
   }
-  if (settlement.bookingStatus === 'Confirmed') await recordSimulatedSms(reservationId, 'confirmed');
-  return { success: true, status: transaction.status, data: { ...transaction, ...settlement } };
+  const { notice, ...guestFacing } = settlement;
+  if (notice) {
+    const code = guestFacing.confirmationCode ? ` · ${guestFacing.confirmationCode}` : '';
+    const money = `GHS ${Number(notice.amount).toFixed(2)}`;
+    notifyStaffLater(property.propertyId, ['Manager', 'Receptionist'], notice.newBooking
+      ? { title: 'New online booking', body: `${notice.guestName} booked and paid ${money}${code}`, url: `/bookings/${reservationId}`, tag: `payment-${reference}` }
+      : notice.lateRelease
+        ? { title: 'Late online payment', body: `${notice.guestName} paid ${money} after the hold expired${code}. Check the booking.`, url: `/bookings/${reservationId}`, tag: `payment-${reference}` }
+        : { title: 'Online payment received', body: `${notice.guestName} paid ${money}${code}`, url: `/bookings/${reservationId}`, tag: `payment-${reference}` },
+    { onceKey: `payment:${reference}` });
+  }
+  if (guestFacing.bookingStatus === 'Confirmed') await recordSimulatedSms(reservationId, 'confirmed');
+  return { success: true, status: transaction.status, data: { ...transaction, ...guestFacing } };
 }

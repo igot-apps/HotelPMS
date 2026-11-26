@@ -4,6 +4,7 @@ import { Eye, EyeOff, KeyRound, Mail, UserRound } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { changeMyPassword, getMe, requestStaffPasswordReset } from '../api/auth';
 import { useAuthStore } from '../store/authStore';
+import NotificationsCard from '../components/profile/NotificationsCard';
 
 const card = 'space-y-4 rounded-xl border border-border bg-surface p-5 shadow-sm';
 const input = 'mt-1 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-text outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20';
@@ -96,6 +97,8 @@ export default function MyProfilePage() {
         </button>
         <p className="text-xs text-text-muted">After changing it, you stay signed in here and are signed out on your other devices.</p>
       </form>
+
+      <NotificationsCard role={user.role} cardClassName={card} />
 
       <section className={card} aria-labelledby="forgot-current">
         <h2 id="forgot-current" className="flex items-center gap-2 font-bold text-text"><Mail size={18} className="text-primary-600" /> Forgot your current password?</h2>

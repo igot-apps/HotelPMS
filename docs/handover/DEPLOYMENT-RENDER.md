@@ -39,6 +39,7 @@ unrelated old projects — ignore them.
   deactivated and its email cannot be changed. Set or regain its password with "Forgot your password?"
   on `/superadmin` — no script needed.
 - `PLATFORM_EMAIL_TOKEN_SECRET` (optional) — signs Super Admin email-change links; falls back to `JWT_SECRET`.
+- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (e.g. `mailto:you@example.com`) — staff push notifications. Generate once with `npx web-push generate-vapid-keys` in `backend/`. Without them push is simply off. **Never change the keys after staff have turned notifications on** (every device would have to turn them on again). Use different keys locally and in production.
   Super Admin invite/reset/verify emails use `RESEND_API_KEY` + `RESEND_FROM_EMAIL` (or `STAFF_EMAIL_MODE=simulation`).
 
 ## Super Admin emergency recovery
