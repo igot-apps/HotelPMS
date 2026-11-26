@@ -39,13 +39,15 @@ export default function TodayAtAGlance() {
   // Each pop-up has its own search text.
   const [queries, setQueries] = useState({});
   const query = queries[open] || '';
-  // Coming back from the Reservations page: reopen the same list once, then tidy the URL.
+  // ?panel=<list> (coming back from a booking, or the sidebar overstay badge): open that list, then tidy the URL.
+  const panelParam = searchParams.get('panel');
   useEffect(() => {
-    if (!searchParams.get('panel')) return;
+    if (!panelParam) return;
+    setOpen(panelParam);
     const next = new URLSearchParams(searchParams);
     next.delete('panel');
     setSearchParams(next, { replace: true });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [panelParam]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (event) => { if (event.key === 'Escape') setOpen(null); };

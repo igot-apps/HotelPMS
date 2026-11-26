@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Search, BedDouble, Users, CalendarDays, BarChart3, Sparkles,
   LogOut, Settings, Building2, X, Shield, Crown, HandCoins, History, CalendarRange, UserRound
@@ -67,7 +67,7 @@ export default function Sidebar({ isOpen, onClose }) {
       if (item.housekeeping && user?.role !== 'Housekeeper' && (!user?.housekeepingEnabled || !user?.permissions?.includes('CanManageHousekeeping'))) return null;
       if (item.staffOnly && !['Manager','Receptionist'].includes(user?.role)) return null;
       const linkElement = (
-        <li key={item.to}>
+        <li key={item.to} className="relative">
           <NavLink
             to={item.to}
             onClick={onClose}
@@ -81,7 +81,6 @@ export default function Sidebar({ isOpen, onClose }) {
           >
             <item.icon size={20} />
             <span className="flex-1">{item.label}</span>
-            {item.to === '/dashboard' && overdueCheckouts > 0 && <span aria-label={`${overdueCheckouts} overstays`} title="Overstays" className="min-w-6 rounded-full bg-danger-600 px-2 py-0.5 text-center text-xs font-bold text-white shadow-sm ring-2 ring-white/30">{overdueCheckouts > 99 ? '99+' : overdueCheckouts}</span>}
             {item.to === '/refunds' && (refunds.isError ? <span title="Could not refresh refunds" className="rounded bg-amber-100 px-2 text-xs text-amber-900">!</span> : refunds.data?.ready > 0 && <span aria-label={`${refunds.data.ready} approved refunds ready to return`} className="min-w-6 rounded-full bg-white px-2 py-0.5 text-center text-xs font-bold text-primary-800 shadow-sm">{refunds.data.ready > 99 ? '99+' : refunds.data.ready}</span>)}
             
             {/* 🌟 Premium UX: Pulsing red dot if trial is expiring in 3 days or less */}
@@ -89,6 +88,12 @@ export default function Sidebar({ isOpen, onClose }) {
               <span className="ml-auto w-2.5 h-2.5 bg-danger-500 rounded-full animate-pulse"></span>
             )}
           </NavLink>
+          {/* Overstays: its own link, straight to the Overstays list (not the top of the dashboard). */}
+          {item.to === '/dashboard' && overdueCheckouts > 0 && (
+            <Link to="/dashboard?panel=departures" onClick={onClose} title="Guests past checkout time" className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-danger-600 px-2.5 py-1 text-xs font-bold text-white shadow-sm ring-2 ring-white/30 hover:bg-danger-700">
+              {overdueCheckouts > 99 ? '99+' : overdueCheckouts} {overdueCheckouts === 1 ? 'overstay' : 'overstays'}
+            </Link>
+          )}
         </li>
       );
 

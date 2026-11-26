@@ -17,7 +17,7 @@ import api from '../lib/axios';
 import { recordPayment } from '../api/payments';
 import {
   BedDouble, CreditCard, X, Loader2,
-  CalendarDays, AlertCircle, Plus, Printer, ChevronDown, Smartphone, Undo2, Wrench, ChevronRight, XCircle
+  CalendarDays, AlertCircle, Plus, Printer, ChevronDown, Smartphone, Undo2, Wrench, ChevronRight, XCircle, AlarmClock, Phone
 } from 'lucide-react';
 import ReceiptModal from '../components/reservations/ReceiptModal';
 import ThermalReceiptModal from '../components/reservations/ThermalReceiptModal';
@@ -34,6 +34,8 @@ import ReservationPaymentStatus from '../components/reservations/ReservationPaym
 import { useAuthStore } from '../store/authStore';
 import { expectedCheckoutAt, formatDuration, formatTime } from '../lib/stayTiming';
 import { serverNow } from '../lib/serverClock';
+import useCheckoutAlerts from '../hooks/useCheckoutAlerts';
+import RecordDepartureDialog from '../components/reservations/RecordDepartureDialog';
 
 export default function ReservationDetailsPage() {
   useServerClock(); // re-render when server time arrives or is lost
@@ -57,6 +59,11 @@ export default function ReservationDetailsPage() {
   const [isPrintMenuOpen, setIsPrintMenuOpen] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [extendRoom, setExtendRoom] = useState(null);
+  const [recordingDeparture, setRecordingDeparture] = useState(null);
+  // Overstays come from the same list as the dashboard, sidebar badge and phone alerts.
+  const checkoutAlerts = useCheckoutAlerts();
+  const overstayByRoom = Object.fromEntries((checkoutAlerts.data?.alerts || []).filter((a) => a.state === 'overdue' && a.reservationId === id).map((a) => [a.reservationRoomId, a]));
+  const hasOverstay = Object.keys(overstayByRoom).length > 0;
   const [shortenRoom, setShortenRoom] = useState(null);
   const [moveRoom, setMoveRoom] = useState(null);
   const [occupantDialog, setOccupantDialog] = useState(null);
@@ -278,6 +285,7 @@ export default function ReservationDetailsPage() {
           }`}>
             {bookingStatusLabel(resData.status, resData.reservationRooms)}
           </span>
+          {hasOverstay && <span className="inline-flex items-center gap-1 rounded-lg bg-danger-600 px-3 py-1.5 text-sm font-bold text-white"><AlarmClock size={14} aria-hidden="true" /> Overstayed</span>}
 
           {['Pending', 'Confirmed'].includes(resData.status) && !resData.reservationRooms?.some((stay) => stay.status === 'CheckedIn') && (
             <button type="button" onClick={() => setConfirmCancel(true)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-danger-200 bg-surface px-4 py-2 text-sm font-semibold text-danger-700 hover:bg-danger-50">
@@ -325,8 +333,10 @@ export default function ReservationDetailsPage() {
             const canCheckIn = active && rr.status === 'Reserved' && Boolean(today) && String(rr.checkInDate).slice(0, 10) <= today;
             const inRoom = active && rr.status === 'CheckedIn';
             const btn = 'inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold';
+            const overstay = inRoom ? overstayByRoom[rr.reservationRoomId] : null;
+            const callPhone = overstay?.phone || rr.occupantPhone;
             return (
-              <li key={rr.reservationRoomId} className="rounded-lg border border-border bg-secondary-50 p-4">
+              <li key={rr.reservationRoomId} className={`rounded-lg border p-4 ${overstay ? 'border-danger-300 bg-danger-50/40' : 'border-border bg-secondary-50'}`}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-base font-bold text-text">Room {rr.room?.roomNumber || rr.roomNumberSnapshot || 'Removed'}</p>
@@ -343,12 +353,22 @@ export default function ReservationDetailsPage() {
                 {rr.status === 'CheckedIn' && rr.guestPresenceStatus !== 'Out' && rr.guestReturnedAt && <p className="mt-1 text-xs text-success-700">Back in room since {new Date(rr.guestReturnedAt).toLocaleString()}</p>}
                 {rr.status === 'Reserved' && rr.room?.operationalStatus === 'Occupied' && <p className="mt-1 text-xs font-semibold text-danger-700">Room {rr.room.roomNumber} still has a guest checked in. Check them out (or verify their departure) first, or move this guest to another room.</p>}
                 {rr.status === 'Reserved' && rr.room?.housekeepingStatus && !['Clean', 'Inspected'].includes(rr.room.housekeepingStatus) && <p className="mt-1 text-xs font-semibold text-warning-700">Room needs cleaning before check-in</p>}
+                {overstay && (
+                  <div role="alert" className="mt-2 rounded-lg border border-danger-200 bg-danger-50 p-3 text-sm text-danger-800">
+                    <p className="flex items-center gap-1.5 font-bold"><AlarmClock size={16} aria-hidden="true" /> Overstayed · {formatDuration(overstay.minutesLate * 60000)} past checkout</p>
+                    <p className="mt-0.5">Checkout was {new Date(overstay.expectedCheckoutAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} at {formatTime(new Date(overstay.expectedCheckoutAt), resData.property?.timezone)}. Check whether the guest is staying or has left.</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {callPhone && <a href={`tel:${callPhone.replace(/[^\d+]/g, '')}`} className={`${btn} border border-danger-200 bg-surface text-danger-800 hover:bg-danger-50`}><Phone size={14} aria-hidden="true" /> Call {callPhone}</a>}
+                      <button type="button" onClick={() => setRecordingDeparture(overstay)} className={`${btn} border border-danger-200 bg-surface text-danger-800 hover:bg-danger-50`}>Guest left earlier</button>
+                    </div>
+                  </div>
+                )}
                 {rr.status === 'NoShow' && <p className="mt-1 text-xs font-semibold text-orange-700">Expired: the guest did not arrive before the departure date. Create a new booking if they come.</p>}
                 {(canCheckIn || inRoom || (active && rr.status === 'Reserved')) && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {canCheckIn && <button type="button" onClick={() => setOccupantDialog({ room: rr, reservation: resData, mode: 'checkin' })} className={`${btn} bg-success-600 text-white hover:bg-success-700`}>Check in</button>}
                     {inRoom && <button type="button" onClick={() => startCheckout(rr)} className={`${btn} bg-primary-600 text-white hover:bg-primary-700`}>Check out</button>}
-                    {inRoom && <button type="button" onClick={() => setExtendRoom(rr)} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Extend</button>}
+                    {inRoom && <button type="button" onClick={() => setExtendRoom(rr)} className={`${btn} ${overstay ? 'bg-success-600 text-white hover:bg-success-700' : 'border border-border bg-surface text-text hover:bg-secondary-50'}`}>{overstay ? 'Extend stay' : 'Extend'}</button>}
                     {inRoom && <button type="button" onClick={() => setShortenRoom(rr)} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Shorten</button>}
                     {inRoom && <button type="button" onClick={() => setMoveRoom(rr)} className={`${btn} border border-border bg-surface text-text hover:bg-secondary-50`}>Move to another room</button>}
                     {inRoom && (rr.guestPresenceStatus === 'Out' ? <button type="button" disabled={presenceMutation.isPending} onClick={() => presenceMutation.mutate({ roomId: rr.reservationRoomId, action: 'returned' })} className={`${btn} bg-success-600 text-white hover:bg-success-700 disabled:opacity-50`}>{presenceMutation.isPending && presenceMutation.variables?.roomId === rr.reservationRoomId ? 'Updating…' : 'Mark back in room'}</button> : <button type="button" disabled={presenceMutation.isPending} onClick={() => setPresenceDialog({ room: rr })} className={`${btn} border border-warning-300 bg-surface text-warning-800 hover:bg-warning-50 disabled:opacity-50`}>Mark temporarily out</button>)}
@@ -441,6 +461,7 @@ export default function ReservationDetailsPage() {
       {moveRoom && <MoveRoomDialog room={moveRoom} reservation={resData} onClose={() => setMoveRoom(null)} />}
       {occupantDialog && <RoomOccupantDialog key={`${occupantDialog.room.reservationRoomId}-${occupantDialog.mode}`} {...occupantDialog} busy={roomActionMutation.isPending || occupantMutation.isPending} onClose={() => setOccupantDialog(null)} onSubmit={(details) => occupantDialog.mode === 'checkin' ? roomActionMutation.mutateAsync({ roomId: occupantDialog.room.reservationRoomId, status: 'CheckedIn', ...details }) : occupantMutation.mutateAsync({ roomId: occupantDialog.room.reservationRoomId, ...details })} />}
       {earlyCheckout && <EarlyCheckoutDialog key={earlyCheckout.room.reservationRoomId} {...earlyCheckout} onClose={() => setEarlyCheckout(null)} onCheckOut={async () => { await completeCheckout(earlyCheckout.room); setEarlyCheckout(null); }} />}
+      {recordingDeparture && <RecordDepartureDialog stay={recordingDeparture} onClose={() => setRecordingDeparture(null)} />}
       {owingCheckout && <CheckoutOwingDialog key={owingCheckout.room.reservationRoomId} roomNumber={owingCheckout.room.room?.roomNumber || owingCheckout.room.roomNumberSnapshot} guestName={owingCheckout.room.occupantName || resData.guestNameSnapshot || resData.propertyGuest?.fullName || 'Guest'} code={resData.confirmationCode} balanceDue={owingCheckout.balanceDue} lateText={owingCheckout.lateText} onClose={() => setOwingCheckout(null)} onTakePayment={() => { setOwingCheckout(null); openPanel('payments'); }} onCheckOut={async (overrideReason, departureNote) => { await completeCheckout(owingCheckout.room, { overrideReason, departureNote }); toast.success(`Checked out. GHS ${Number(owingCheckout.balanceDue).toFixed(2)} is still owed.`); setOwingCheckout(null); }} />}
       {presenceDialog && (
         <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="presence-dialog-title">

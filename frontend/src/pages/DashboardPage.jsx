@@ -1,5 +1,6 @@
 import { SkeletonCards } from '../components/ui/Skeleton';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { serverNow } from '../lib/serverClock';
 import CheckoutAlerts from '../components/reservations/CheckoutAlerts';
 import TodayAtAGlance from '../components/dashboard/TodayAtAGlance';
@@ -98,6 +99,10 @@ export default function DashboardPage() {
     setView(next);
     try { localStorage.setItem(viewKey(user), next); } catch { /* still switches for this visit */ }
   };
+  // A link straight to a front desk list (e.g. the sidebar overstay badge) shows the front desk view for this visit.
+  const [searchParams] = useSearchParams();
+  const panelRequested = searchParams.get('panel');
+  useEffect(() => { if (panelRequested) setView('frontDesk'); }, [panelRequested]);
   const managerView = canSwitchView && view === 'manager';
   const { data: properties = [] } = useQuery({ queryKey: ['properties'], enabled: !user?.propertyId,
     queryFn: async () => (await getProperties()).data.data || [],
