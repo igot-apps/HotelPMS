@@ -118,7 +118,6 @@ export default function SuperAdminPage() {
           <Link to="/superadmin/reset-password" className="block text-center text-sm font-semibold text-primary-700 hover:underline">Forgot your password?</Link>
           <p className="text-center text-xs text-text-muted">Original administrator without an email yet? Enter your 10-digit phone number instead.</p>
         </form>
-        <a href="/login" className="mt-6 block text-center text-sm font-medium text-text-muted hover:text-primary-700">Go to hotel staff sign in</a>
       </section>
     </main>
   );

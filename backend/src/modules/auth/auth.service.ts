@@ -103,9 +103,14 @@ export const loginUser = async (
     return { success: false, message: 'This account is not assigned to a property.' };
   }
   
+  // Platform admins must use /superadmin (its own rate limits). Answered before any password check,
+  // so this endpoint never confirms a Super Admin password and never issues them tokens.
+  if (user.isPlatformAdmin) {
+    return { success: false, message: 'This is a Super Admin account. Super Admins cannot sign in as hotel staff — sign in at /superadmin.' };
+  }
+
   const isPasswordValid = await comparePassword(password, user.passwordHash);
-  // Platform admins must use /api/auth/platform/login (its own rate limits); never issue tokens here.
-  if (!isPasswordValid || user.isPlatformAdmin) {
+  if (!isPasswordValid) {
     return { success: false, message: 'Invalid username or password' };
   }
 

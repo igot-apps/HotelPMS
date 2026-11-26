@@ -15,6 +15,7 @@ export const getMyPlatformAccount = () => api.get('/platform/admins/me');
 export const invitePlatformAdmin = (data) => api.post('/platform/admins', data);
 export const resendPlatformInvite = (id) => api.post(`/platform/admins/${id}/resend-invite`);
 export const deactivatePlatformAdmin = (id) => api.post(`/platform/admins/${id}/deactivate`);
+export const removePlatformAdmin = (id) => api.delete(`/platform/admins/${id}`);
 export const reactivatePlatformAdmin = (id) => api.post(`/platform/admins/${id}/reactivate`);
 export const updateMyPlatformName = (fullName) => api.put('/platform/admins/me/name', { fullName });
 export const changeMyPlatformPassword = (currentPassword, newPassword) => api.put('/platform/admins/me/password', { currentPassword, newPassword }, quiet);

@@ -16,10 +16,16 @@ jest.mock('../src/modules/auth/auth.repository', () => ({ findUserByUsernameOrEm
 const repo = repository as any;
 beforeEach(() => { jest.clearAllMocks(); });
 
-test('platform admin with the correct password gets the same generic failure on the shared login', async () => {
+test('platform admins are told to use /superadmin, with no password check and no tokens', async () => {
+  const { comparePassword } = jest.requireMock('../src/shared/utils/password') as any;
   repo.findUserByUsernameOrEmail.mockResolvedValue({ userId: 1, isActive: true, propertyId: null, isPlatformAdmin: true, passwordHash: 'hash:right', role: { roleName: 'Platform Admin' } });
-  const result = await loginUser('0241234567', 'right');
-  expect(result).toEqual({ success: false, message: 'Invalid username or password' });
+  for (const password of ['right', 'wrong']) {
+    const result = await loginUser('boss@example.com', password);
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/Super Admin.*\/superadmin/);
+    expect(result.accessToken).toBeUndefined();
+  }
+  expect(comparePassword).not.toHaveBeenCalled(); // no password oracle outside the dedicated rate limits
   expect(repo.updateLastLogin).not.toHaveBeenCalled();
 });
 

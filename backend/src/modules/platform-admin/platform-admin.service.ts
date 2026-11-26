@@ -213,6 +213,20 @@ export async function deactivateAdmin(actorId: number, targetId: number) {
   });
 }
 
+/**
+ * Removes an inactive administrator record that was never used (revoked or mistyped invitation, never
+ * signed in). The audit history of that invitation stays, plus a removal entry.
+ */
+export async function removeUnusedAdmin(actorId: number, targetId: number) {
+  const target = await prisma.user.findFirst({ where: { ...PLATFORM, userId: targetId }, select: { email: true, isActive: true, lastLoginAt: true } });
+  if (!target) throw new PlatformAdminError('Administrator not found.', 404);
+  if (isDefaultAdmin(target.email)) throw new PlatformAdminError('The default administrator cannot be removed.', 403);
+  if (target.isActive || target.lastLoginAt) throw new PlatformAdminError('Only inactive administrators who never signed in can be removed. Deactivate instead.', 409);
+  const deleted = await prisma.user.deleteMany({ where: { ...PLATFORM, userId: targetId, isActive: false, lastLoginAt: null } });
+  if (!deleted.count) throw new PlatformAdminError('This administrator can no longer be removed.', 409);
+  await audit(actorId, targetId, 'PlatformAdminRemoved', { email: target.email });
+}
+
 /** Reactivates the account; all old sessions stay invalid. The admin can use "Forgot password" if needed. */
 export async function reactivateAdmin(actorId: number, targetId: number) {
   const updated = await prisma.user.updateMany({ where: { ...PLATFORM, userId: targetId, isActive: false }, data: { isActive: true, sessionVersion: newSessionVersion() } });

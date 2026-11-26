@@ -102,6 +102,9 @@ platformAdminRoutes.post('/:id/deactivate', async (req: AuthRequest, res) => {
 platformAdminRoutes.post('/:id/reactivate', async (req: AuthRequest, res) => {
   try { await service.reactivateAdmin(me(req), targetId(req)); return res.json({ success: true }); } catch (error) { return fail(res, error, 'Could not reactivate the administrator.'); }
 });
+platformAdminRoutes.delete('/:id', async (req: AuthRequest, res) => {
+  try { await service.removeUnusedAdmin(me(req), targetId(req)); return res.json({ success: true }); } catch (error) { return fail(res, error, 'Could not remove the administrator.'); }
+});
 platformAdminRoutes.put('/me/name', async (req: AuthRequest, res) => {
   try { await service.updateName(me(req), req.body?.fullName); return res.json({ success: true }); } catch (error) { return fail(res, error, 'Could not update your name.'); }
 });

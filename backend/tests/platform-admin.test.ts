@@ -8,7 +8,7 @@ import * as service from '../src/modules/platform-admin/platform-admin.service';
 import { platformAuthRoutes, resetRateLimits } from '../src/modules/platform-admin/platform-admin.routes';
 
 jest.mock('../src/shared/utils/prisma', () => {
-  const user = { findFirst: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), update: jest.fn(), updateMany: jest.fn(), create: jest.fn(), count: jest.fn() };
+  const user = { findFirst: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), update: jest.fn(), deleteMany: jest.fn<any>().mockResolvedValue({ count: 1 }), updateMany: jest.fn(), create: jest.fn(), count: jest.fn() };
   const auditLog = { create: jest.fn(), findMany: jest.fn() };
   const tx = { user, auditLog, $executeRaw: jest.fn() };
   return { prisma: { user, auditLog, role: { upsert: jest.fn<any>().mockResolvedValue({ roleId: 9 }) }, $transaction: jest.fn((fn: any) => fn(tx)), tx } };
@@ -207,4 +207,17 @@ test('forgot password for the default email creates the account first, then send
     expect(db.user.create).toHaveBeenCalled();
     expect(email.deliverPlatformPasswordReset).toHaveBeenCalledWith('owner@example.com', expect.stringMatching(/^[a-f0-9]{64}$/));
   } finally { delete process.env.PLATFORM_DEFAULT_ADMIN_EMAIL; }
+});
+
+test('only inactive, never-used administrator records can be removed, and removal is audited', async () => {
+  db.user.findFirst.mockResolvedValueOnce({ email: 'typo@example.com', isActive: true, lastLoginAt: null });
+  await expect(service.removeUnusedAdmin(1, 14)).rejects.toThrow('Only inactive');
+  db.user.findFirst.mockResolvedValueOnce({ email: 'used@example.com', isActive: false, lastLoginAt: new Date() });
+  await expect(service.removeUnusedAdmin(1, 14)).rejects.toThrow('Only inactive');
+  expect(db.user.deleteMany).not.toHaveBeenCalled();
+
+  db.user.findFirst.mockResolvedValueOnce({ email: 'typo@example.com', isActive: false, lastLoginAt: null });
+  await service.removeUnusedAdmin(1, 14);
+  expect(db.user.deleteMany.mock.calls[0][0].where).toMatchObject({ userId: 14, isActive: false, lastLoginAt: null, isPlatformAdmin: true, propertyId: null });
+  expect(db.auditLog.create.mock.calls[0][0].data).toMatchObject({ action: 'PlatformAdminRemoved', entityId: 14, newData: { email: 'typo@example.com' } });
 });

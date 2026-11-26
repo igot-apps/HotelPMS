@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Mail, Plus, Power, PowerOff, RefreshCw } from 'lucide-react';
+import { Mail, Plus, Power, PowerOff, RefreshCw, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
-  deactivatePlatformAdmin, getPlatformAdminActivity, getPlatformAdmins, invitePlatformAdmin, reactivatePlatformAdmin, resendPlatformInvite,
+  deactivatePlatformAdmin, getPlatformAdminActivity, removePlatformAdmin, getPlatformAdmins, invitePlatformAdmin, reactivatePlatformAdmin, resendPlatformInvite,
 } from '../api/platformAdmins';
 
 const ACTION_LABELS = {
@@ -11,7 +11,8 @@ const ACTION_LABELS = {
   PlatformAdminInvitationAccepted: 'Accepted invitation', PlatformAdminDeactivated: 'Deactivated administrator', PlatformAdminReactivated: 'Reactivated administrator',
   PlatformAdminPasswordChanged: 'Changed password', PlatformAdminPasswordResetRequested: 'Requested password reset', PlatformAdminPasswordReset: 'Reset password by email link',
   PlatformAdminEmailChangeRequested: 'Requested email change', PlatformAdminEmailChanged: 'Changed email', PlatformAdminNameChanged: 'Changed name',
-  PlatformAdminEmergencyRecovery: 'Emergency recovery (server script)',
+  PlatformAdminEmergencyRecovery: 'Emergency recovery (server script)', PlatformAdminRemoved: 'Removed unused administrator record',
+  PlatformAdminDefaultCreated: 'Default administrator created', PlatformAdminDefaultRestored: 'Default administrator restored',
 };
 const when = (value) => (value ? new Date(value).toLocaleString() : '—');
 
@@ -37,15 +38,16 @@ export default function PlatformAdminsPage({ currentUserId }) {
     },
   });
   const act = useMutation({
-    mutationFn: ({ kind, id }) => ({ resend: resendPlatformInvite, deactivate: deactivatePlatformAdmin, reactivate: reactivatePlatformAdmin }[kind])(id),
+    mutationFn: ({ kind, id }) => ({ resend: resendPlatformInvite, deactivate: deactivatePlatformAdmin, reactivate: reactivatePlatformAdmin, remove: removePlatformAdmin }[kind])(id),
     onSuccess: (res, { kind }) => {
       if (kind === 'resend') toast[res.data.data.emailSent ? 'success' : 'error'](res.data.data.emailSent ? 'Invitation resent.' : 'The email was not sent. Try again later.');
-      else toast.success(kind === 'deactivate' ? 'Access removed and sessions signed out.' : 'Administrator reactivated.');
+      else toast.success({ deactivate: 'Access removed and sessions signed out.', reactivate: 'Administrator reactivated.', remove: 'Record removed. Its history stays in the activity log.' }[kind]);
       refresh();
     },
   });
 
   const confirmAndRun = (kind, admin) => {
+    if (kind === 'remove' && !window.confirm(`Remove ${admin.email || admin.fullName}? This frees the email for a new invitation. The history stays in the activity log.`)) return;
     if (kind === 'deactivate' && !window.confirm(admin.invitationPending ? `Revoke the invitation for ${admin.email}?` : `Deactivate ${admin.fullName}? They will be signed out immediately.`)) return;
     act.mutate({ kind, id: admin.userId });
   };
@@ -84,6 +86,7 @@ export default function PlatformAdminsPage({ currentUserId }) {
                     <div className="flex justify-end gap-2">
                       {admin.invitationPending && admin.isActive && <button onClick={() => confirmAndRun('resend', admin)} disabled={act.isPending} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold"><Mail size={14} /> Resend invite</button>}
                       {admin.isActive && !self && !admin.isDefault && <button onClick={() => confirmAndRun('deactivate', admin)} disabled={act.isPending} className="inline-flex items-center gap-1 rounded-lg border border-danger-200 px-2 py-1 text-xs font-semibold text-danger-700"><PowerOff size={14} /> {admin.invitationPending ? 'Revoke' : 'Deactivate'}</button>}
+                      {!admin.isActive && !admin.lastLoginAt && !admin.isDefault && <button onClick={() => confirmAndRun('remove', admin)} disabled={act.isPending} className="inline-flex items-center gap-1 rounded-lg border border-danger-200 px-2 py-1 text-xs font-semibold text-danger-700"><Trash2 size={14} /> Remove</button>}
                       {!admin.isActive && <button onClick={() => confirmAndRun('reactivate', admin)} disabled={act.isPending} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold"><Power size={14} /> Reactivate</button>}
                     </div>
                   </td>
