@@ -42,13 +42,14 @@ export default function AddPropertyDialog({ onClose, onAdded }) {
 
   const submit = async (event) => {
     event.preventDefault();
-    if (!isWithinGhanaBounds(Number(form.latitude), Number(form.longitude)) || !form.latitude || !form.longitude) {
-      toast.error('Enter the property’s Google Maps coordinates within Ghana.');
+    const noCoordinates = !form.latitude.trim() && !form.longitude.trim();
+    if (!noCoordinates && (!isWithinGhanaBounds(Number(form.latitude), Number(form.longitude)) || !form.latitude || !form.longitude)) {
+      toast.error('Enter both coordinates within Ghana, or leave both empty and add them later.');
       return;
     }
     setSaving(true);
     try {
-      const { data } = await addProperty({ ...form, latitude: Number(form.latitude), longitude: Number(form.longitude) });
+      const { data } = await addProperty({ ...form, latitude: noCoordinates ? null : Number(form.latitude), longitude: noCoordinates ? null : Number(form.longitude) });
       toast.success(`${data.data.propertyName} added. Choose a plan to start using it.`);
       onClose();
       onAdded?.(data.data);
@@ -89,8 +90,8 @@ export default function AddPropertyDialog({ onClose, onAdded }) {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><label htmlFor="ap-lat" className="block text-sm font-semibold mb-1">Latitude *</label><input id="ap-lat" autoComplete="off" type="number" step="any" name="latitude" value={form.latitude} onChange={change} required placeholder="e.g. 5.6037" className={input} /></div>
-              <div><label htmlFor="ap-lng" className="block text-sm font-semibold mb-1">Longitude *</label><input id="ap-lng" autoComplete="off" type="number" step="any" name="longitude" value={form.longitude} onChange={change} required placeholder="e.g. -0.1870" className={input} /></div>
+              <div><label htmlFor="ap-lat" className="block text-sm font-semibold mb-1">Latitude <span className="font-normal text-text-muted">(optional)</span></label><input id="ap-lat" autoComplete="off" type="number" step="any" name="latitude" value={form.latitude} onChange={change} placeholder="e.g. 5.6037" className={input} /></div>
+              <div><label htmlFor="ap-lng" className="block text-sm font-semibold mb-1">Longitude <span className="font-normal text-text-muted">(optional)</span></label><input id="ap-lng" autoComplete="off" type="number" step="any" name="longitude" value={form.longitude} onChange={change} placeholder="e.g. -0.1870" className={input} /></div>
             </div>
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <button type="button" onClick={captureLocation} className="inline-flex items-center gap-1 font-semibold text-primary-700"><MapPin size={16} /> Use my current location</button>

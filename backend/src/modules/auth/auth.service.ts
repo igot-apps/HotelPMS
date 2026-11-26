@@ -243,7 +243,7 @@ export const switchProperty = async (userId: number, propertyId: number): Promis
 
 type NewPropertyInput = {
   hotelName: string; slug: string; email: string; phone: string;
-  area: string; city: string; region: string; latitude: number; longitude: number;
+  area: string; city: string; region: string; latitude: number | null; longitude: number | null;
 };
 
 async function availableSlug(raw: string) {
@@ -326,8 +326,8 @@ export const registerNewHotel = async (data: {
   area: string;
   city: string;
   region: string;
-  latitude: number;
-  longitude: number;
+  latitude: number | null;
+  longitude: number | null;
   ownerName: string;
   ownerEmail: string;
   password: string;

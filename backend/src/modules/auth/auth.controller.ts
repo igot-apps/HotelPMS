@@ -135,10 +135,10 @@ export const registerHotel = async (req: Request, res: Response) => {
       });
     }
 
-    const { isWithinGhanaBounds } = await import('../../shared/utils/ghana-coordinates');
-    if (latitude === '' || longitude === '' || latitude == null || longitude == null || !isWithinGhanaBounds(Number(latitude), Number(longitude))) {
-      return res.status(400).json({ success: false, message: 'Choose the hotel’s Google Maps coordinates within Ghana.' });
-    }
+    const { parseOptionalCoordinates } = await import('../../shared/utils/ghana-coordinates');
+    let coordinates;
+    try { coordinates = parseOptionalCoordinates(latitude, longitude); }
+    catch (error: any) { return res.status(400).json({ success: false, message: error.message }); }
 
     const result = await authService.registerNewHotel({
       hotelName,
@@ -148,8 +148,7 @@ export const registerHotel = async (req: Request, res: Response) => {
       area: String(area).trim(),
       city: String(city).trim(),
       region: String(region).trim(),
-      latitude: Number(latitude),
-      longitude: Number(longitude),
+      ...coordinates,
       ownerName,
       ownerEmail,
       password,
@@ -185,15 +184,15 @@ export const switchProperty = async (req: AuthRequest, res: Response) => {
 export const addProperty = async (req: AuthRequest, res: Response) => {
   try {
     const body = req.body || {};
-    const { isWithinGhanaBounds } = await import('../../shared/utils/ghana-coordinates');
-    if (body.latitude === '' || body.longitude === '' || body.latitude == null || body.longitude == null || !isWithinGhanaBounds(Number(body.latitude), Number(body.longitude))) {
-      return res.status(400).json({ success: false, message: 'Choose the property’s Google Maps coordinates within Ghana.' });
-    }
+    const { parseOptionalCoordinates } = await import('../../shared/utils/ghana-coordinates');
+    let coordinates;
+    try { coordinates = parseOptionalCoordinates(body.latitude, body.longitude); }
+    catch (error: any) { return res.status(400).json({ success: false, message: error.message }); }
     const property = await authService.addOwnedProperty(req.user!.userId, {
       hotelName: String(body.hotelName || ''), slug: String(body.slug || ''),
       email: String(body.email || '').trim(), phone: String(body.phone || '').trim(),
       area: String(body.area || '').trim(), city: String(body.city || '').trim(), region: String(body.region || '').trim(),
-      latitude: Number(body.latitude), longitude: Number(body.longitude),
+      ...coordinates,
     });
     return res.status(201).json({ success: true, message: 'Property added. Subscribe on Billing & Plan to start using it.', data: property });
   } catch (error: any) {

@@ -65,8 +65,9 @@ export default function HotelRegistrationWizard() {
 
   const nextStep = (e) => {
     e.preventDefault();
-    if (!isWithinGhanaBounds(Number(formData.latitude), Number(formData.longitude)) || !formData.latitude || !formData.longitude) {
-      toast.error('Enter the hotel’s coordinates within Ghana.');
+    const noCoordinates = !String(formData.latitude).trim() && !String(formData.longitude).trim();
+    if (!noCoordinates && (!isWithinGhanaBounds(Number(formData.latitude), Number(formData.longitude)) || !formData.latitude || !formData.longitude)) {
+      toast.error('Enter both coordinates within Ghana, or leave both empty and add them later.');
       return;
     }
     setStep(2);
@@ -183,8 +184,8 @@ export default function HotelRegistrationWizard() {
                     <a href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer" className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text hover:bg-secondary-50">Find hotel on Google Maps ↗</a>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div><label htmlFor="hotel-latitude" className="block text-sm font-semibold text mb-1.5">Latitude *</label><input id="hotel-latitude" type="number" step="any" name="latitude" value={formData.latitude} onChange={handleChange} required placeholder="e.g. 5.6037" className="w-full px-4 py-3 bg-background border border-border rounded-lg" /></div>
-                    <div><label htmlFor="hotel-longitude" className="block text-sm font-semibold text mb-1.5">Longitude *</label><input id="hotel-longitude" type="number" step="any" name="longitude" value={formData.longitude} onChange={handleChange} required placeholder="e.g. -0.1870" className="w-full px-4 py-3 bg-background border border-border rounded-lg" /></div>
+                    <div><label htmlFor="hotel-latitude" className="block text-sm font-semibold text mb-1.5">Latitude <span className="font-normal text-text-muted">(optional)</span></label><input id="hotel-latitude" type="number" step="any" name="latitude" value={formData.latitude} onChange={handleChange} placeholder="e.g. 5.6037" className="w-full px-4 py-3 bg-background border border-border rounded-lg" /></div>
+                    <div><label htmlFor="hotel-longitude" className="block text-sm font-semibold text mb-1.5">Longitude <span className="font-normal text-text-muted">(optional)</span></label><input id="hotel-longitude" type="number" step="any" name="longitude" value={formData.longitude} onChange={handleChange} placeholder="e.g. -0.1870" className="w-full px-4 py-3 bg-background border border-border rounded-lg" /></div>
                   </div>
                   {formData.latitude && formData.longitude && isWithinGhanaBounds(Number(formData.latitude), Number(formData.longitude)) && <a href={googleMapsUrl(formData.latitude, formData.longitude)} target="_blank" rel="noopener noreferrer" className="inline-block text-sm font-semibold text-primary-700 underline">Check this hotel pin on Google Maps ↗</a>}
                 </div>

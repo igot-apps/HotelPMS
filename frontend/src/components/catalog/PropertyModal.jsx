@@ -183,8 +183,10 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if ((formData.latitude !== '' || formData.longitude !== '' || !initialData) && (formData.latitude === '' || formData.longitude === '' || !isWithinGhanaBounds(Number(formData.latitude), Number(formData.longitude)))) {
-      setLocationError('Enter both hotel coordinates within Ghana, then check the pin on Google Maps.');
+    // Coordinates are optional: leave both empty to add them later, or enter both within Ghana.
+    const noCoordinates = String(formData.latitude).trim() === '' && String(formData.longitude).trim() === '';
+    if (!noCoordinates && (String(formData.latitude).trim() === '' || String(formData.longitude).trim() === '' || !isWithinGhanaBounds(Number(formData.latitude), Number(formData.longitude)))) {
+      setLocationError('Enter both coordinates within Ghana, or leave both empty and add them later.');
       return;
     }
     setLocationError('');
@@ -289,8 +291,8 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
                   <button type="button" onClick={captureLocation} disabled={locationLoading} className="inline-flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-secondary-50 disabled:opacity-60"><LocateFixed size={16} />{locationLoading ? 'Getting location…' : 'Use current location'}</button>
                 </div>
                 <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div><label htmlFor="property-latitude" className="block text-xs font-semibold text-text mb-1">Latitude</label><input id="property-latitude" type="number" step="any" name="latitude" value={formData.latitude} onChange={handleChange} placeholder="e.g. 5.6037" className="w-full rounded-lg border border-border bg-surface px-3 py-2.5" /></div>
-                  <div><label htmlFor="property-longitude" className="block text-xs font-semibold text-text mb-1">Longitude</label><input id="property-longitude" type="number" step="any" name="longitude" value={formData.longitude} onChange={handleChange} placeholder="e.g. -0.1870" className="w-full rounded-lg border border-border bg-surface px-3 py-2.5" /></div>
+                  <div><label htmlFor="property-latitude" className="block text-xs font-semibold text-text mb-1">Latitude <span className="font-normal text-text-muted">(optional)</span></label><input id="property-latitude" type="number" step="any" name="latitude" value={formData.latitude} onChange={handleChange} placeholder="e.g. 5.6037" className="w-full rounded-lg border border-border bg-surface px-3 py-2.5" /></div>
+                  <div><label htmlFor="property-longitude" className="block text-xs font-semibold text-text mb-1">Longitude <span className="font-normal text-text-muted">(optional)</span></label><input id="property-longitude" type="number" step="any" name="longitude" value={formData.longitude} onChange={handleChange} placeholder="e.g. -0.1870" className="w-full rounded-lg border border-border bg-surface px-3 py-2.5" /></div>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-3 text-sm"><a href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer" className="font-semibold text-primary-700 underline">Find hotel on Google Maps ↗</a>{formData.latitude && formData.longitude && isWithinGhanaBounds(Number(formData.latitude), Number(formData.longitude)) && <a href={googleMapsUrl(formData.latitude, formData.longitude)} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary-700 underline">Check saved pin ↗</a>}</div>
                 {locationError && <p role="alert" className="text-xs text-danger-600 mt-2">{locationError}</p>}
