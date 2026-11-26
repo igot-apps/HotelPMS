@@ -78,7 +78,7 @@ export const authenticate = async (
   
   // Let expired properties start a renewal payment; other writes remain locked.
   // Owners can always leave an expired property or add another (that one has its own subscription).
-  const isSubscriptionPaymentInitialization = req.originalUrl === '/api/paystack/initialize'
+  const isSubscriptionPaymentInitialization = req.originalUrl === '/api/payments/initialize' || req.originalUrl === '/api/payments/otp'
     || req.originalUrl === '/api/auth/switch-property' || req.originalUrl === '/api/auth/properties';
   // Only block WRITE requests (POST, PUT, DELETE, PATCH). Allow GET (reading) so they can see the billing page.
   const isPlatformAdminRoute = req.originalUrl.startsWith('/api/platform/');

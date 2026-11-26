@@ -1,73 +1,22 @@
 import { Router, Response } from 'express';
-import { createHmac, timingSafeEqual } from 'crypto';
 import * as paymentService from './payment.service';
 import * as subscriptionService from './subscription.service';
-import { processGuestPaymentWebhook } from './guest-payment.service';
+import { processMoolreWebhook } from './moolre-webhook.service';
 import { authenticate, AuthRequest, requirePermission } from '../../shared/middleware/auth.middleware';
 import { prisma } from '../../shared/utils/prisma';
 
 const router = Router();
 
-router.post('/webhooks/guest-bookings', async (req, res: Response) => {
+// Moolre callback for guest bookings (RES-) and subscriptions (SUB-). The raw body is kept for the
+// signature check; every outcome is re-verified with Moolre before anything is recorded.
+router.post('/webhooks/moolre', async (req: any, res: Response) => {
   try {
-    await processGuestPaymentWebhook(req.body, req.header('x-paystack-signature'));
-    const event = JSON.parse(req.body.toString('utf8'));
-    if (event.event === 'charge.success' && String(event.data?.reference || '').startsWith('SUB-')) {
-      try {
-        await subscriptionService.processSubscriptionWebhook(event.data.reference);
-      } catch (error: any) {
-        if (error.statusCode !== 404) throw error;
-      }
-    }
+    await processMoolreWebhook(req.body, req.header('x-moolre-signature'));
     return res.sendStatus(200);
   } catch (error: any) {
-    // Never acknowledge an uncommitted payment; non-200 lets Paystack retry.
-    console.error('Guest payment webhook failed:', error.message);
-    return res.status(error.statusCode || 500).json({ success: false, message: 'Could not process guest payment webhook.' });
-  }
-});
-
-// Paystack mobile money can finish after the browser callback. Accept signed
-// success webhooks as a second path to verification; the service re-verifies
-// the transaction with Paystack and is idempotent for duplicate deliveries.
-router.post('/webhooks/platform', async (req: any, res: Response) => {
-  const secret = process.env.PAYSTACK_SECRET_KEY;
-  const signature = req.header('x-paystack-signature');
-  if (!secret || !signature || !Buffer.isBuffer(req.body)) {
-    return res.status(401).json({ success: false, message: 'Invalid Paystack webhook.' });
-  }
-
-  const expected = createHmac('sha512', secret).update(req.body).digest();
-  let provided: Buffer;
-  try {
-    provided = Buffer.from(signature, 'hex');
-  } catch {
-    return res.status(401).json({ success: false, message: 'Invalid Paystack webhook signature.' });
-  }
-  if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
-    return res.status(401).json({ success: false, message: 'Invalid Paystack webhook signature.' });
-  }
-
-  let event: any;
-  try {
-    event = JSON.parse(req.body.toString('utf8'));
-  } catch {
-    return res.status(400).json({ success: false, message: 'Invalid webhook payload.' });
-  }
-  if (event.event !== 'charge.success' || !event.data?.reference) return res.sendStatus(200);
-
-  try {
-    if (String(event.data.reference).startsWith('RES-')) {
-      await processGuestPaymentWebhook(req.body, signature);
-      return res.sendStatus(200);
-    }
-    await subscriptionService.processSubscriptionWebhook(String(event.data.reference));
-    return res.sendStatus(200);
-  } catch (error: any) {
-    // A non-subscription reference is irrelevant here; transient verification
-    // errors should return 500 so Paystack retries the webhook.
-    if (error.statusCode === 404) return res.sendStatus(200);
-    return res.status(500).json({ success: false, message: 'Could not process subscription payment webhook.' });
+    // Never acknowledge an uncommitted payment; non-2xx lets Moolre retry.
+    console.error('Moolre webhook failed:', error.message);
+    return res.status(error.statusCode || 500).json({ success: false, message: 'Could not process payment webhook.' });
   }
 });
 
@@ -103,8 +52,15 @@ router.post('/initialize', ...billing, async (req: AuthRequest, res: Response) =
     const input = {
       packageCode: b.packageCode, rooms: b.rooms, staff: b.staff,
       months: Number(b.months ?? b.durationMonths),
+      phone: b.phone, network: b.network,
     };
     return res.json({ success: true, data: await subscriptionService.initializeSubscriptionPayment(req.user!.userId, req.user!.propertyId!, input) });
+  } catch (error: any) { return sendError(res, error); }
+});
+
+router.post('/otp', ...billing, async (req: AuthRequest, res: Response) => {
+  try {
+    return res.json({ success: true, data: await subscriptionService.submitSubscriptionOtp(String(req.body?.reference || ''), req.user!.propertyId!, req.body?.otp) });
   } catch (error: any) { return sendError(res, error); }
 });
 

@@ -6,7 +6,7 @@
 | Backend | Node 24, **Express 5**, TypeScript (ts-node in dev, `tsc` → `dist/` in prod) |
 | Database | **PostgreSQL** via **Prisma 6** (client generated to `backend/src/generated/prisma`) |
 | Frontend | **React 19**, **Vite 8**, Tailwind CSS 3, TanStack Query 5, axios, react-hot-toast, lucide-react |
-| Payments | Paystack (per-hotel secret key for guest bookings; platform key for subscriptions) |
+| Payments | Moolre mobile money (per-hotel wallet keys for guest bookings, platform wallet fallback; platform wallet for subscriptions) |
 | Email | Resend |
 | SMS | Moolre (sender ID `HideOut24`) |
 | Tests | Jest + ts-jest + supertest (backend only) |
@@ -38,12 +38,12 @@ HotelPMS/
 ## Backend modules (`backend/src/modules`)
 auth, property (incl. platform admin + website domains), room (rooms, room types, rate plans,
 maintenance, online toggle), reservation (booking creation, check-in/out, corrections,
-approvals, refunds, holds, no-show), payment (desk payments, guest Paystack payments,
+approvals, refunds, holds, no-show), payment (desk payments, guest Moolre payments,
 subscriptions, free access), guest, public (guest auth, public website, profile), housekeeping,
 notifications (SMS), reports, dashboard, user (staff, invitations, permissions), amenity.
 
 API mounts are in `src/app.ts`: everything is under `/api/...`; public website routes are
-`/api/public/...` (guest auth at `/api/public/auth/...`). Paystack webhooks use raw bodies.
+`/api/public/...` (guest auth at `/api/public/auth/...`). The Moolre webhook (`/api/payments/webhooks/moolre`) uses a raw body.
 
 ## Auth — two separate systems
 1. **Staff**: JWT access + refresh tokens (`JWT_SECRET`, `REFRESH_TOKEN_SECRET`).
@@ -76,7 +76,7 @@ Errors show a toast unless the request passes `{ skipErrorToast: true }`.
 - `VITE_SHOW_DISCOVER` (frontend): Discover page is shown unless set to `false`.
 
 ## Main data model (Prisma)
-Property (hotel: subscription, online booking switch, SMS switch, Paystack key) · User (staff) ·
+Property (hotel: subscription, online booking switch, SMS switch, Moolre keys) · User (staff) ·
 Role/Permission · Room (operationalStatus Available/Occupied/Maintenance, housekeepingStatus
 Clean/Dirty/Inspected, `maintenanceReason`, `isOnlineBookable`) · RoomType · RatePlan ·
 Reservation (status Pending/Confirmed/InHouse/Completed/Cancelled/Expired/NoShow, totals,

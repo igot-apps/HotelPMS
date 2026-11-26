@@ -7,8 +7,8 @@ export const recordPayment = async (data: any) => {
   const amount = Number(data.amount);
   if (typeof data.reservationId !== 'string' || !Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) / 100 !== amount) throw new Error('A reservation and positive payment amount with at most two decimal places are required.');
   if (typeof data.paymentMethod !== 'string' || !data.paymentMethod.trim()) throw new Error('Payment method is required.');
-  // Money taken at the desk. Online (Paystack) payments are recorded automatically once verified, never by hand.
-  if (!['Cash', 'Card', 'MobileMoney'].includes(data.paymentMethod.trim())) throw new Error('Choose Cash, Card or Mobile Money. Online payments are recorded automatically when Paystack confirms them.');
+  // Money taken at the desk. Online (Moolre) payments are recorded automatically once verified, never by hand.
+  if (!['Cash', 'Card', 'MobileMoney'].includes(data.paymentMethod.trim())) throw new Error('Choose Cash, Card or Mobile Money. Online payments are recorded automatically when Moolre confirms them.');
   return prisma.$transaction(async tx => {
     const locked = await tx.$queryRaw<any[]>`SELECT "reservationId" FROM reservations WHERE "reservationId" = ${data.reservationId} FOR UPDATE`;
     if (!locked.length) throw new Error('Reservation not found.');

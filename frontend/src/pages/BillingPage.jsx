@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, BedDouble, CalendarClock, CheckCircle2, Crown, Gift, Lightbulb, Loader2, Minus, Plus, ShieldCheck, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
-import { fetchSubscriptionQuote, fetchSubscriptionStatus, initializeSubscriptionPayment, verifyPayment } from '../api/billing';
+import { fetchSubscriptionQuote, fetchSubscriptionStatus, initializeSubscriptionPayment } from '../api/billing';
+import SubscriptionMomoPanel from '../components/billing/SubscriptionMomoPanel';
 import { currentFreeAccess, describeFreeAccess } from '../lib/freeAccess';
 
 const money = (n) => `GHS ${Number(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
@@ -65,12 +65,12 @@ function Stepper({ label, value, min, max, onChange }) {
 
 export default function BillingPage() {
   const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const verifiedRef = useRef(false);
   const initRef = useRef(false);
   const [selection, setSelection] = useState({ packageCode: 'standard', rooms: 20, staff: 5, months: 1 });
   const [upgradeOnly, setUpgradeOnly] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
+  const userPhone = useAuthStore((s) => s.user?.phone);
+  const [showMomo, setShowMomo] = useState(() => { try { return Boolean(localStorage.getItem('billing-pending-payment')); } catch { return false; } });
 
   const status = useQuery({
     queryKey: ['subscriptionStatus'],
@@ -97,22 +97,6 @@ export default function BillingPage() {
       months: Math.max(1, data.catalog.minMonths),
     }));
   }, [data]);
-
-  // Paystack redirects back with ?reference=…
-  useEffect(() => {
-    const reference = searchParams.get('reference') || searchParams.get('trxref');
-    if (!reference || verifiedRef.current) return;
-    verifiedRef.current = true;
-    setSearchParams({});
-    const toastId = toast.loading('Verifying your payment…');
-    verifyPayment(reference)
-      .then((res) => {
-        if (res.data.data?.status === 'success') toast.success('Payment confirmed. Your plan is updated.', { id: toastId });
-        else toast.error('Payment was not completed.', { id: toastId });
-        queryClient.invalidateQueries({ queryKey: ['subscriptionStatus'] });
-      })
-      .catch((error) => toast.error(error.response?.data?.message || 'Could not verify your payment.', { id: toastId }));
-  }, [searchParams, setSearchParams, queryClient]);
 
   const isCustom = selection.packageCode === 'custom';
   const params = useDebounced({
@@ -145,21 +129,23 @@ export default function BillingPage() {
   const canUpgradeOnly = paidActive && !scheduled && q?.kind === 'Upgrade';
 
   const pay = async () => {
+    // Paid changes go through mobile money; a free change (total 0) is applied directly.
+    if (q && q.total > 0) { setShowMomo(true); return; }
     setIsPaying(true);
     try {
       const res = await initializeSubscriptionPayment(params);
-      const result = res.data.data;
-      if (result?.applied) {
-        toast.success('Plan updated — no payment was needed.');
-        queryClient.invalidateQueries({ queryKey: ['subscriptionStatus'] });
-      } else if (result?.authorization_url) {
-        window.location.href = result.authorization_url;
-        return;
-      } else throw new Error('Could not start the payment.');
+      if (!res.data.data?.applied) throw new Error('Could not apply the change.');
+      toast.success('Plan updated — no payment was needed.');
+      queryClient.invalidateQueries({ queryKey: ['subscriptionStatus'] });
     } catch (error) {
       toast.error(error.response?.data?.message || error.message || 'Could not start the payment.');
     }
     setIsPaying(false);
+  };
+  const momoDone = () => {
+    setShowMomo(false);
+    toast.success('Payment confirmed. Your plan is updated.');
+    queryClient.invalidateQueries({ queryKey: ['subscriptionStatus'] });
   };
 
   return (
@@ -310,11 +296,15 @@ export default function BillingPage() {
               )}
             </div>
           )}
+          {showMomo ? (
+            <SubscriptionMomoPanel params={params} amountLabel={q ? money(q.total) : ''} defaultPhone={userPhone} onApplied={momoDone} onCancel={() => setShowMomo(false)} />
+          ) : <>
           <button type="button" onClick={pay} disabled={!q || !!quoteError || isPaying || quote.isFetching}
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 font-semibold text-text-inverted transition hover:bg-primary-700 disabled:opacity-50">
-            {isPaying ? <><Loader2 size={18} className="animate-spin" /> Connecting to Paystack…</> : quoteError ? 'Choose a plan that fits' : !q ? 'Pay' : q.total === 0 ? 'Apply change' : `Pay ${money(q.total)}`}
+            {isPaying ? <><Loader2 size={18} className="animate-spin" /> Applying…</> : quoteError ? 'Choose a plan that fits' : !q ? 'Pay' : q.total === 0 ? 'Apply change' : `Pay ${money(q.total)}`}
           </button>
-          <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-text-muted"><ShieldCheck size={13} /> Mobile money or card via Paystack. No automatic renewals.</p>
+          <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-text-muted"><ShieldCheck size={13} /> Mobile money (MTN, Telecel, AT) via Moolre. No automatic renewals.</p>
+          </>}
         </aside>
       </div>
 

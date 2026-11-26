@@ -9,7 +9,7 @@ HideOut24 is a hotel property management system (PMS) for hotels in **Ghana**:
   housekeeping, payments, refunds, corrections with manager approval, reports, billing.
 - **Public booking websites**: each hotel gets `/public/<propertyCode>`, a `<slug>.hideout24.com`
   subdomain and optionally its own domain (e.g. `l400.online`). Guests sign in with email,
-  book and pay online with Paystack.
+  book and pay online with mobile money (Moolre).
 - **Platform admin** (`/superadmin`): manages all hotels, subscriptions, free access, domains.
 
 Currency is GHS. Phone numbers are Ghana numbers, stored as `+233XXXXXXXXX`.

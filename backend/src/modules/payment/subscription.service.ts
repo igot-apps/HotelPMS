@@ -1,17 +1,18 @@
-import axios from 'axios';
 import { randomUUID } from 'crypto';
 import { prisma } from '../../shared/utils/prisma';
 import { Prisma } from '../../../src/generated/prisma';
-import { getFrontendBaseUrl } from '../../shared/utils/frontend-url';
 import { listFreeAccess } from './free-access.service';
 import { addMonthsClamped, buildQuote, Override, SubscriptionConfig, SubscriptionError, Terms } from './subscription-plans';
 import { getLimits, getSubscriptionState, getTerms, termsFields } from './subscription-state';
 import { getSubscriptionConfig, getUsage } from './subscription-access';
 
-const paystackSecret = () => {
-  const secret = process.env.PAYSTACK_SECRET_KEY;
-  if (!secret) throw new SubscriptionError('Subscription payments are not configured. Set PAYSTACK_SECRET_KEY on the backend.', 503);
-  return secret;
+import { checkPaymentStatus, initiatePayment, InitiateResult, normalizeChannel, normalizePayer, payerMessage, platformMoolreConfig } from './moolre.client';
+
+// Subscriptions are paid into the platform's own Moolre wallet.
+const platformMoolre = () => {
+  const config = platformMoolreConfig();
+  if (!config) throw new SubscriptionError('Subscription payments are not configured. Set MOOLRE_USER, MOOLRE_PUBKEY and MOOLRE_ACCOUNT on the backend.', 503);
+  return config;
 };
 
 const termsColumns = (t: Terms) => ({
@@ -137,66 +138,80 @@ export const initializeSubscriptionPayment = async (userId: number, propertyId: 
     return { applied: true, reference, subscriptionEndsAt };
   }
 
-  const [property, user] = await Promise.all([
-    prisma.property.findUnique({ where: { propertyId }, select: { propertyName: true, primaryEmail: true } }),
-    prisma.user.findUnique({ where: { userId }, select: { email: true } }),
-  ]);
-  const email = user?.email || property?.primaryEmail;
-  if (!email) throw new SubscriptionError('Add a billing email to your user or property profile before paying.');
-  const secret = paystackSecret();
+  const payer = normalizePayer(input?.phone);
+  const channel = normalizeChannel(input?.network);
+  if (!payer) throw new SubscriptionError('Enter a valid 10-digit mobile money number, e.g. 0241234567.');
+  if (!channel) throw new SubscriptionError('Choose the mobile money network: MTN, Telecel or AT.');
+  const moolre = platformMoolre();
 
-  const pendingPayment = await prisma.subscriptionPayment.create({ data: orderData });
-  try {
-    const response = await axios.post(
-      'https://api.paystack.co/transaction/initialize',
-      {
-        email,
-        amount: String(Math.round(quote.total * 100)),
-        currency: 'GHS',
-        reference,
-        // Paystack only displays channels enabled for this merchant account and currency.
-        channels: ['mobile_money', 'card'],
-        callback_url: `${getFrontendBaseUrl()}/billing`,
-        metadata: {
-          purpose: 'hotel_pms_subscription', propertyId, propertyName: property?.propertyName,
-          subscriptionPaymentId: pendingPayment.subscriptionPaymentId, durationMonths: quote.months,
-          planName: quote.packageName, kind: quote.kind,
-        },
-      },
-      { headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' } },
-    );
-    if (!response.data?.status || !response.data?.data?.authorization_url) {
-      throw new Error(response.data?.message || 'Paystack could not initialize this payment.');
-    }
-    return response.data.data;
-  } catch (error: any) {
-    await prisma.subscriptionPayment.update({
-      where: { subscriptionPaymentId: pendingPayment.subscriptionPaymentId }, data: { status: 'Failed' },
-    });
-    throw new Error(error.response?.data?.message || error.message || 'Could not start payment with Paystack.');
+  // Save the order (and its reference) BEFORE contacting Moolre, so a lost reply never creates a second charge.
+  const pendingPayment = await prisma.subscriptionPayment.create({ data: { ...orderData, payer, channel, providerStep: 'starting' } });
+  const result = await initiatePayment(moolre, { channel, payer, amount: quote.total, externalref: reference });
+  return recordStep(pendingPayment.subscriptionPaymentId, reference, result, 'starting');
+};
+
+const stepReply = (reference: string, step: string, message: string) => ({ applied: false, reference, step, message });
+
+async function recordStep(subscriptionPaymentId: number, reference: string, result: InitiateResult, fromStep: string) {
+  const where = { subscriptionPaymentId, status: 'Pending' as const, providerStep: fromStep };
+  if (result.outcome === 'prompt_sent') {
+    await prisma.subscriptionPayment.updateMany({ where, data: { providerStep: 'prompt_sent' } });
+    return stepReply(reference, 'prompt_sent', 'A payment prompt was sent to your phone. Approve it with your mobile money PIN.');
   }
+  if (result.outcome === 'otp_required' || result.outcome === 'otp_invalid') {
+    await prisma.subscriptionPayment.updateMany({ where, data: { providerStep: 'otp_required' } });
+    return stepReply(reference, 'otp_required', result.outcome === 'otp_invalid' ? 'That code is wrong or has expired. Check the SMS and try again.' : 'Enter the code sent to your phone by SMS.');
+  }
+  if (result.outcome === 'rejected') {
+    // Refused before any prompt reached the phone: nothing was charged.
+    await prisma.subscriptionPayment.updateMany({ where, data: { status: 'Failed', providerStep: 'rejected' } });
+    throw new SubscriptionError(payerMessage(result));
+  }
+  await prisma.subscriptionPayment.updateMany({ where, data: { providerStep: 'unknown' } });
+  return stepReply(reference, 'unknown', 'We could not confirm the payment request. Do not pay again; check its status in a minute.');
+}
+
+export const submitSubscriptionOtp = async (reference: string, propertyId: number, otp: unknown) => {
+  const code = String(otp ?? '').trim();
+  if (!/^\d{4,8}$/.test(code)) throw new SubscriptionError('Enter the code from the SMS.');
+  const payment = await prisma.subscriptionPayment.findUnique({ where: { reference } });
+  if (!payment || payment.propertyId !== propertyId) throw new SubscriptionError('Subscription payment reference not found.', 404);
+  if (payment.status !== 'Pending' || payment.providerStep !== 'otp_required' || !payment.payer || !payment.channel) {
+    throw new SubscriptionError('This payment is not waiting for a code. Check its status.', 409);
+  }
+  // Claim it so a double click cannot send two prompts.
+  const claim = await prisma.subscriptionPayment.updateMany({ where: { subscriptionPaymentId: payment.subscriptionPaymentId, status: 'Pending', providerStep: 'otp_required' }, data: { providerStep: 'verifying' } });
+  if (claim.count !== 1) throw new SubscriptionError('This code is already being checked. Check the payment status.', 409);
+  const moolre = platformMoolre();
+  const body = { channel: payment.channel, payer: payment.payer, amount: Number(payment.amount), externalref: reference };
+  const verified = await initiatePayment(moolre, { ...body, otpcode: code });
+  if (verified.outcome !== 'otp_verified') return recordStep(payment.subscriptionPaymentId, reference, verified, 'verifying');
+  // Phone verified: resend the original request (same body) with the reference as Idempotency-Key.
+  const prompt = await initiatePayment(moolre, { ...body, idempotencyKey: reference });
+  return recordStep(payment.subscriptionPaymentId, reference, prompt, 'verifying');
 };
 
 export const verifySubscriptionPayment = async (reference: string, propertyId: number) => {
   const payment = await prisma.subscriptionPayment.findUnique({ where: { reference } });
   if (!payment || payment.propertyId !== propertyId) throw new Error('Subscription payment reference not found.');
   if (payment.status === 'Completed') return { status: 'success', alreadyProcessed: true };
+  if (payment.status === 'Failed') return { status: 'failed', alreadyProcessed: false };
   if (payment.status !== 'Pending') throw new Error('This subscription payment is no longer pending.');
+  if (payment.providerStep === 'otp_required') return { status: 'otp_required', alreadyProcessed: false };
 
-  const response = await axios.get(
-    `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
-    { headers: { Authorization: `Bearer ${paystackSecret()}` } },
-  );
-  const transaction = response.data?.data;
-  if (!response.data?.status || !transaction) throw new Error('Paystack could not verify this payment.');
-  if (transaction.status !== 'success') return { status: transaction.status || 'failed', alreadyProcessed: false };
-  if (transaction.reference !== payment.reference) throw new Error('Paystack returned a different payment reference.');
-  if (Number(transaction.amount) !== Math.round(Number(payment.amount) * 100) || transaction.currency !== payment.currency) {
+  const provider = await checkPaymentStatus(platformMoolre(), reference);
+  if (provider.status === 'failed') {
+    await prisma.subscriptionPayment.updateMany({ where: { subscriptionPaymentId: payment.subscriptionPaymentId, status: 'Pending' }, data: { status: 'Failed', providerStep: 'failed' } });
+    return { status: 'failed', alreadyProcessed: false };
+  }
+  if (provider.status !== 'success') return { status: 'pending', alreadyProcessed: false };
+  if (provider.externalref && provider.externalref !== payment.reference) throw new Error('Moolre returned a different payment reference.');
+  if (provider.amount === null || !Number.isFinite(provider.amount) || Math.round(provider.amount * 100) !== Math.round(Number(payment.amount) * 100) || payment.currency !== 'GHS') {
     throw new Error('Verified payment amount or currency does not match this subscription order.');
   }
 
   return prisma.$transaction(async (tx) => {
-    // Claim the order first so concurrent callbacks/webhooks apply it exactly once.
+    // Claim the order first so concurrent checks/webhooks apply it exactly once.
     const claim = await tx.subscriptionPayment.updateMany({
       where: { subscriptionPaymentId: payment.subscriptionPaymentId, status: 'Pending' },
       data: { status: 'Processing' },
@@ -209,7 +224,7 @@ export const verifySubscriptionPayment = async (reference: string, propertyId: n
     const subscriptionEndsAt = await applyPayment(tx, payment, new Date());
     await tx.subscriptionPayment.update({
       where: { subscriptionPaymentId: payment.subscriptionPaymentId },
-      data: { status: 'Completed', paidAt: new Date() },
+      data: { status: 'Completed', paidAt: new Date(), providerStep: 'paid' },
     });
     return { status: 'success', alreadyProcessed: false, subscriptionEndsAt };
   });

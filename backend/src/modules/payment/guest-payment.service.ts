@@ -1,27 +1,35 @@
-import axios from 'axios';
-import { createHmac, timingSafeEqual } from 'node:crypto';
 import { prisma } from '../../shared/utils/prisma';
 import { isExpiredOnlineHold } from '../reservation/online-hold.service';
 import { restoreLatePaymentAllocation } from './late-payment-allocation';
 import { recordSimulatedSms } from '../notifications/simulated-sms.service';
+import { checkPaymentStatus, MoolreConfig, platformMoolreConfig } from './moolre.client';
 
 const failure = (message: string, statusCode = 400) => Object.assign(new Error(message), { statusCode });
+
+type MoolreKeys = { moolreUsername: string | null; moolrePublicKey: string | null; moolreAccountNumber: string | null; moolreWebhookSecret: string | null };
+/** The hotel's own Moolre wallet when fully configured, otherwise the platform wallet from env. */
+export function moolreConfigFor(keys: MoolreKeys): MoolreConfig | null {
+  if (keys.moolreUsername && keys.moolrePublicKey && keys.moolreAccountNumber) {
+    return { user: keys.moolreUsername, pubkey: keys.moolrePublicKey, account: keys.moolreAccountNumber, webhookSecret: keys.moolreWebhookSecret };
+  }
+  return platformMoolreConfig();
+}
 
 export async function paymentConfiguration(propertyCode: string) {
   const property = await prisma.property.findUnique({
     where: { propertyCode },
-    select: { propertyId: true, propertyCode: true, currency: true, paystackSecretKey: true },
+    select: { propertyId: true, propertyCode: true, currency: true, moolreUsername: true, moolrePublicKey: true, moolreAccountNumber: true, moolreWebhookSecret: true },
   });
   if (!property) throw failure('Payment property not found.', 404);
-  const secret = property.paystackSecretKey || process.env.PAYSTACK_SECRET_KEY;
-  if (!secret) throw failure('Property Paystack configuration not found.', 503);
-  return { property, secret };
+  const moolre = moolreConfigFor(property);
+  if (!moolre) throw failure('Property Moolre configuration not found.', 503);
+  return { property, moolre };
 }
 
-// Browser verification and webhook delivery must use the same locked settlement.
+// Status checks, the guest's browser and webhook delivery all use the same locked settlement.
 export async function verifyGuestPayment(propertyCode: string, reference: string) {
   if (!reference || reference.length > 200) throw failure('Invalid payment reference.');
-  const { property, secret } = await paymentConfiguration(propertyCode);
+  const { property, moolre } = await paymentConfiguration(propertyCode);
   const recorded = await prisma.payment.findFirst({ where: { gatewayReference: reference, status: 'Completed', reservation: { propertyId: property.propertyId } }, include: { reservation: true } });
   if (recorded && reference.startsWith(`RES-${recorded.reservationId}-`)) {
     return { success: true, status: 'success', data: { reference, amount: Math.round(Number(recorded.amount) * 100), currency: property.currency,
@@ -30,25 +38,23 @@ export async function verifyGuestPayment(propertyCode: string, reference: string
       requiresRefundReview: ['Cancelled', 'Expired'].includes(recorded.reservation.status) || recorded.reservation.refundStatus === 'Pending',
     } };
   }
-  const response = await axios.get(
-    `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
-    { headers: { Authorization: `Bearer ${secret}` }, timeout: 15000 },
-  );
-  const transaction = response.data?.data;
-  if (!response.data?.status || !transaction) throw failure('Could not verify guest payment.', 502);
-  if (transaction.reference !== reference) throw failure('Payment reference does not match.');
-  if (transaction.status !== 'success') {
-    return { success: true, status: transaction.status, data: { ...transaction, confirmationCode: null } };
+  // The saved attempt (created before Moolre was contacted) is the source of truth for booking, amount and currency.
+  const savedAttempt = await prisma.guestPaymentAttempt.findUnique({ where: { reference }, include: { reservation: { select: { propertyId: true } } } });
+  if (!savedAttempt || savedAttempt.reservation.propertyId !== property.propertyId || !reference.startsWith(`RES-${savedAttempt.reservationId}-`)) {
+    throw failure('Payment does not match this hotel booking.', 404);
   }
-  const reservationId = transaction.metadata?.reservationId;
-  if (typeof reservationId !== 'string' || transaction.metadata?.propertyCode !== propertyCode) {
-    throw failure('Payment does not match this hotel booking.');
+  const reservationId = savedAttempt.reservationId;
+  const provider = await checkPaymentStatus(moolre, reference);
+  if (provider.status !== 'success') {
+    return { success: true, status: provider.status, data: { reference, confirmationCode: null } };
   }
-  if (!reference.startsWith(`RES-${reservationId}-`)
-    || !Number.isSafeInteger(transaction.amount) || transaction.amount <= 0
-    || transaction.currency !== property.currency) {
+  const amount = Number(savedAttempt.amount);
+  if (provider.externalref && provider.externalref !== reference) throw failure('Payment reference does not match.');
+  if (provider.amount === null || !Number.isFinite(provider.amount) || Math.round(provider.amount * 100) !== Math.round(amount * 100)
+    || savedAttempt.currency !== 'GHS' || property.currency !== 'GHS') {
     throw failure('Invalid booking payment amount, currency, or reference.');
   }
+  const transaction = { reference, status: 'success', amount: Math.round(amount * 100), currency: 'GHS', channel: 'mobile_money' };
 
   let settlement: any;
   for (let retry = 0; ; retry++) {
@@ -63,10 +69,10 @@ export async function verifyGuestPayment(propertyCode: string, reference: string
     if (!locked.length) throw failure('Booking not found for this hotel.', 404);
     const reservation = await tx.reservation.findUniqueOrThrow({ where: { reservationId } });
     const attempt = await tx.guestPaymentAttempt.findUnique({ where: { reference } });
-    if (attempt && (attempt.reservationId !== reservationId || Number(attempt.amount) !== transaction.amount / 100 || attempt.currency !== transaction.currency)) throw failure('Payment does not match its saved attempt.');
+    if (!attempt || attempt.reservationId !== reservationId || Math.round(Number(attempt.amount) * 100) !== transaction.amount || attempt.currency !== transaction.currency) throw failure('Payment does not match its saved attempt.');
     const existing = await tx.payment.findFirst({ where: { gatewayReference: reference } });
     if (existing) {
-      if (existing.reservationId !== reservationId || Number(existing.amount) !== transaction.amount / 100) {
+      if (existing.reservationId !== reservationId || Math.round(Number(existing.amount) * 100) !== transaction.amount) {
         throw failure('Payment reference is already linked to a different transaction.');
       }
       return { confirmationCode: reservation.confirmationCode, bookingStatus: reservation.status, requiresRefundReview: ['Cancelled', 'Expired'].includes(reservation.status) || reservation.refundStatus === 'Pending' };
@@ -87,13 +93,12 @@ export async function verifyGuestPayment(propertyCode: string, reference: string
       await tx.reservationRoom.updateMany({ where: { reservationId, status: 'Reserved' }, data: { status: 'Cancelled' } });
       await tx.auditLog.create({ data: { entityType: 'Reservation', action: 'OnlinePaymentHoldExpired', oldData: { reservationId, status: reservation.status }, newData: { reservationId, status: 'Expired', reason: 'Payment arrived after the 10-minute hold expired. Allocation released and payment flagged for refund review.' } } });
     }
-    const paymentMethod = transaction.channel === 'card' ? 'Card'
-      : transaction.channel === 'mobile_money' ? 'MobileMoney' : 'Online';
+    const paymentMethod = 'MobileMoney';
     await tx.payment.create({ data: {
       reservationId, propertyId: property.propertyId, amount, paymentMethod,
       gatewayReference: reference, status: 'Completed', receivedBy: null,
-      verifiedProvider: 'Paystack', verifiedAt: new Date(), // confirmed by Paystack: never editable
-      notes: 'Online payment verified with Paystack.',
+      verifiedProvider: 'Moolre', verifiedAt: new Date(), // confirmed by Moolre: never editable
+      notes: 'Online mobile money payment verified with Moolre.',
     } });
     await tx.reservation.update({ where: { reservationId }, data: {
       amountPaid: { increment: amount },
@@ -113,30 +118,4 @@ export async function verifyGuestPayment(propertyCode: string, reference: string
   }
   if (settlement.bookingStatus === 'Confirmed') await recordSimulatedSms(reservationId, 'confirmed');
   return { success: true, status: transaction.status, data: { ...transaction, ...settlement } };
-}
-
-export async function processGuestPaymentWebhook(rawBody: unknown, signature: string | undefined) {
-  if (!Buffer.isBuffer(rawBody) || !signature || !/^[a-fA-F0-9]{128}$/.test(signature)) {
-    throw failure('Invalid Paystack webhook signature.', 401);
-  }
-  let event: any;
-  try { event = JSON.parse(rawBody.toString('utf8')); }
-  catch { throw failure('Invalid webhook payload.'); }
-  // Metadata is only a routing hint until the raw body signature is checked.
-  const propertyCode = event?.data?.metadata?.propertyCode;
-  const secret = typeof propertyCode === 'string' && propertyCode.length <= 50
-    ? (await paymentConfiguration(propertyCode)).secret : process.env.PAYSTACK_SECRET_KEY;
-  if (!secret) throw failure('Webhook signing key is not configured.', 503);
-  const expected = createHmac('sha512', secret).update(rawBody).digest();
-  if (!timingSafeEqual(expected, Buffer.from(signature, 'hex'))) {
-    throw failure('Invalid Paystack webhook signature.', 401);
-  }
-  if (event.event !== 'charge.success') return;
-  // Subscription/unrelated charges on a shared account belong to other handlers.
-  if (!event.data?.metadata?.reservationId && !String(event.data?.reference || '').startsWith('RES-')) return;
-  if (typeof propertyCode !== 'string' || typeof event.data?.reference !== 'string') {
-    throw failure('Guest payment webhook is missing booking metadata.');
-  }
-  const result = await verifyGuestPayment(propertyCode, event.data.reference);
-  if (result.status !== 'success') throw failure('Guest payment is not yet verified as successful.', 503);
 }

@@ -18,10 +18,10 @@ jest.mock('../src/generated/prisma', () => ({ PrismaClient: jest.fn(() => db), P
 jest.mock('../src/shared/utils/prisma', () => ({ prisma: db }));
 jest.mock('axios');
 
-import { verifySubscriptionPayment, initializeSubscriptionPayment, setSubscriptionOverride } from '../src/modules/payment/subscription.service';
+import { verifySubscriptionPayment, initializeSubscriptionPayment, submitSubscriptionOtp, setSubscriptionOverride } from '../src/modules/payment/subscription.service';
 import { DEFAULT_CONFIG } from '../src/modules/payment/subscription-plans';
 import { assertCapacity, getSubscriptionConfig, saveSubscriptionConfig } from '../src/modules/payment/subscription-access';
-import paystackRoutes from '../src/modules/payment/payment.routes';
+import paymentRoutes from '../src/modules/payment/payment.routes';
 import { authenticate } from '../src/shared/middleware/auth.middleware';
 import { generateAccessToken } from '../src/shared/utils/jwt';
 
@@ -37,11 +37,12 @@ const order = (over: any = {}) => ({
   durationMonths: 1, planName: 'Pro', kind: 'Upgrade', packageCode: 'pro', roomAllowance: 20, staffAllowance: 4,
   monthlyPrice: 350, discountPercent: 0, ...over,
 });
-const paystackOk = (amount: number) => (axios.get as any).mockResolvedValue({ data: { status: true, data: { status: 'success', reference: 'SUB-5-x', amount: amount * 100, currency: 'GHS' } } });
+const moolreOk = (amount: number) => (axios.post as any).mockResolvedValue({ data: { status: 1, code: 'SS01', data: { txstatus: 1, externalref: 'SUB-5-x', amount: String(amount) } } });
 
 beforeEach(() => {
   jest.clearAllMocks();
-  process.env.PAYSTACK_SECRET_KEY = 'sk_test_x';
+  Object.assign(process.env, { MOOLRE_USER: 'platform', MOOLRE_PUBKEY: 'pk', MOOLRE_ACCOUNT: '999' });
+  (axios.post as any).mockReset();
   db.subscriptionSettings.findUnique.mockResolvedValue(null);
   db.subscriptionPayment.updateMany.mockResolvedValue({ count: 1 });
   db.room.count.mockResolvedValue(5);
@@ -52,7 +53,7 @@ describe('payment verification', () => {
   test('applies the frozen purchased terms, extends from the current end, and logs the change', async () => {
     db.subscriptionPayment.findUnique.mockResolvedValue(order());
     db.property.findUnique.mockResolvedValue(activeStandard());
-    paystackOk(350);
+    moolreOk(350);
     const result: any = await verifySubscriptionPayment('SUB-5-x', 5);
     expect(result.status).toBe('success');
     const data = db.property.update.mock.calls[0][0].data;
@@ -66,7 +67,7 @@ describe('payment verification', () => {
     const end = future(10);
     db.subscriptionPayment.findUnique.mockResolvedValue(order({ kind: 'Downgrade', packageCode: 'standard', planName: 'Standard', roomAllowance: 10, staffAllowance: 2, monthlyPrice: 200, amount: 200 }));
     db.property.findUnique.mockResolvedValue(activeStandard({ subscriptionPackage: 'pro', subscriptionPlan: 'Pro', roomAllowance: 20, staffAllowance: 4, subscriptionMonthlyPrice: 350, subscriptionEndsAt: end }));
-    paystackOk(200);
+    moolreOk(200);
     await verifySubscriptionPayment('SUB-5-x', 5);
     const data = db.property.update.mock.calls[0][0].data;
     expect(data).toMatchObject({ subscriptionPackage: 'pro', roomAllowance: 20 });
@@ -79,30 +80,57 @@ describe('payment verification', () => {
     // Race: another request claimed the order between our check and the claim.
     db.subscriptionPayment.findUnique.mockResolvedValueOnce(order()).mockResolvedValueOnce(order({ status: 'Completed' }));
     db.subscriptionPayment.updateMany.mockResolvedValue({ count: 0 });
-    paystackOk(350);
+    moolreOk(350);
     expect(await verifySubscriptionPayment('SUB-5-x', 5)).toEqual({ status: 'success', alreadyProcessed: true });
     expect(db.property.update).not.toHaveBeenCalled();
   });
 
   test('rejects amount mismatches, other hotels, and unsuccessful transactions', async () => {
     db.subscriptionPayment.findUnique.mockResolvedValue(order());
-    paystackOk(10);
+    moolreOk(10);
     await expect(verifySubscriptionPayment('SUB-5-x', 5)).rejects.toThrow(/amount or currency/);
     await expect(verifySubscriptionPayment('SUB-5-x', 6)).rejects.toThrow(/not found/);
-    (axios.get as any).mockResolvedValue({ data: { status: true, data: { status: 'abandoned' } } });
-    expect(await verifySubscriptionPayment('SUB-5-x', 5)).toMatchObject({ status: 'abandoned' });
+    (axios.post as any).mockResolvedValue({ data: { status: 0, code: 'SS08', data: { txstatus: 0 } } });
+    expect(await verifySubscriptionPayment('SUB-5-x', 5)).toMatchObject({ status: 'pending' });
+    (axios.post as any).mockResolvedValue({ data: { status: 0, code: 'SS02', data: { txstatus: 2 } } });
+    expect(await verifySubscriptionPayment('SUB-5-x', 5)).toMatchObject({ status: 'failed' });
+    expect(db.subscriptionPayment.updateMany).toHaveBeenCalledWith({ where: { subscriptionPaymentId: 9, status: 'Pending' }, data: { status: 'Failed', providerStep: 'failed' } });
     expect(db.property.update).not.toHaveBeenCalled();
   });
 
   test('initialize stores the full quote and charges the server-side price', async () => {
     db.property.findUnique.mockResolvedValue({ ...activeStandard(), propertyName: 'H', primaryEmail: 'h@x.com' });
-    db.user.findUnique.mockResolvedValue({ email: 'm@x.com' });
     db.subscriptionPayment.create.mockResolvedValue({ subscriptionPaymentId: 1 });
-    (axios.post as any).mockResolvedValue({ data: { status: true, data: { authorization_url: 'https://pay' } } });
-    await initializeSubscriptionPayment(1, 5, { packageCode: 'standard', months: 12, amount: 1 });
+    (axios.post as any).mockResolvedValue({ data: { status: 1, code: 'TP14' } });
+    const result: any = await initializeSubscriptionPayment(1, 5, { packageCode: 'standard', months: 12, amount: 1, phone: '0240000111', network: 'MTN' });
     const created = db.subscriptionPayment.create.mock.calls[0][0].data;
-    expect(created).toMatchObject({ amount: 2000, durationMonths: 12, kind: 'Renewal', packageCode: 'standard', roomAllowance: 10, discountPercent: 16.67 });
-    expect((axios.post as any).mock.calls[0][1].amount).toBe('200000');
+    expect(created).toMatchObject({ amount: 2000, durationMonths: 12, kind: 'Renewal', packageCode: 'standard', roomAllowance: 10, discountPercent: 16.67, payer: '0240000111', channel: 'MTN' });
+    expect((axios.post as any).mock.calls[0][1]).toMatchObject({ amount: '2000.00', externalref: created.reference, accountnumber: '999' });
+    expect(result).toMatchObject({ step: 'otp_required', reference: created.reference });
+  });
+
+  test('initialize needs a valid number and never marks an unknown outcome as failed', async () => {
+    db.property.findUnique.mockResolvedValue(activeStandard());
+    await expect(initializeSubscriptionPayment(1, 5, { packageCode: 'standard', months: 1, phone: '12', network: 'MTN' })).rejects.toThrow(/10-digit/);
+    expect(db.subscriptionPayment.create).not.toHaveBeenCalled();
+    db.subscriptionPayment.create.mockResolvedValue({ subscriptionPaymentId: 1 });
+    (axios.post as any).mockRejectedValue(new Error('timeout'));
+    const result: any = await initializeSubscriptionPayment(1, 5, { packageCode: 'standard', months: 1, phone: '0240000111', network: 'MTN' });
+    expect(result.step).toBe('unknown');
+    expect(db.subscriptionPayment.updateMany.mock.calls.at(-1)[0].data).toEqual({ providerStep: 'unknown' });
+  });
+
+  test('OTP verification resends the same body with the reference as Idempotency-Key', async () => {
+    db.subscriptionPayment.findUnique.mockResolvedValue(order({ providerStep: 'otp_required', payer: '0240000111', channel: 'MTN' }));
+    (axios.post as any).mockResolvedValueOnce({ data: { status: 1, code: 'TP17' } }).mockResolvedValueOnce({ data: { status: 1, code: 'TR099' } });
+    const result: any = await submitSubscriptionOtp('SUB-5-x', 5, '123456');
+    expect(result.step).toBe('prompt_sent');
+    const [first, second] = (axios.post as any).mock.calls;
+    const { otpcode, ...original } = first[1];
+    expect(otpcode).toBe('123456');
+    expect(second[1]).toEqual(original);
+    expect(second[2].headers['Idempotency-Key']).toBe('SUB-5-x');
+    await expect(submitSubscriptionOtp('SUB-5-x', 6, '123456')).rejects.toMatchObject({ statusCode: 404 });
   });
 });
 
@@ -128,7 +156,7 @@ describe('limits', () => {
 describe('routes and permissions', () => {
   const app = express();
   app.use(express.json());
-  app.use('/api/paystack', paystackRoutes);
+  app.use('/api/payments', paymentRoutes);
   app.post('/api/rooms', authenticate, (_req, res) => res.json({ success: true }));
   const token = generateAccessToken({ userId: 1, propertyId: 5, roleId: 3, username: 'u' } as any);
   const role = (codes: string[]) => db.role.findUnique.mockResolvedValue({ rolePermissions: codes.map(code => ({ permission: { code } })) });
@@ -139,11 +167,11 @@ describe('routes and permissions', () => {
 
   test('billing endpoints require CanManageBilling', async () => {
     role(['CanProcessPayments']);
-    expect((await request(app).get('/api/paystack/quote?months=1').auth(token, { type: 'bearer' })).status).toBe(403);
-    expect((await request(app).post('/api/paystack/initialize').send({ months: 1 }).auth(token, { type: 'bearer' })).status).toBe(403);
+    expect((await request(app).get('/api/payments/quote?months=1').auth(token, { type: 'bearer' })).status).toBe(403);
+    expect((await request(app).post('/api/payments/initialize').send({ months: 1 }).auth(token, { type: 'bearer' })).status).toBe(403);
     role(['CanManageBilling']);
     db.property.findUnique.mockResolvedValue(activeStandard());
-    const ok = await request(app).get('/api/paystack/quote?packageCode=pro&months=3').auth(token, { type: 'bearer' });
+    const ok = await request(app).get('/api/payments/quote?packageCode=pro&months=3').auth(token, { type: 'bearer' });
     expect(ok.status).toBe(200);
     expect(ok.body.data).toMatchObject({ packageCode: 'pro', kind: 'Upgrade' });
   });
@@ -154,7 +182,7 @@ describe('routes and permissions', () => {
     expect(blocked.status).toBe(403);
     expect(blocked.body.code).toBe('SUBSCRIPTION_EXPIRED');
     role(['CanManageBilling']);
-    const renew = await request(app).post('/api/paystack/initialize').send({ packageCode: 'pro', months: 0 }).auth(token, { type: 'bearer' });
+    const renew = await request(app).post('/api/payments/initialize').send({ packageCode: 'pro', months: 0 }).auth(token, { type: 'bearer' });
     expect(renew.status).toBe(400); // reached the billing handler (not the lock); upgrade-only needs an active period
   });
 });
@@ -187,7 +215,7 @@ describe('super admin settings and overrides', () => {
     db.subscriptionPayment.findUnique.mockResolvedValue(order({ monthlyPrice: 350, amount: 350 }));
     db.property.findUnique.mockResolvedValue(activeStandard());
     db.subscriptionSettings.findUnique.mockResolvedValue({ config: { ...DEFAULT_CONFIG, packages: [{ ...DEFAULT_CONFIG.packages[1], monthlyPrice: 999 }] } });
-    paystackOk(350);
+    moolreOk(350);
     await verifySubscriptionPayment('SUB-5-x', 5);
     expect(db.property.update.mock.calls[0][0].data.subscriptionMonthlyPrice).toBe(350); // frozen order price, not the new 999
   });

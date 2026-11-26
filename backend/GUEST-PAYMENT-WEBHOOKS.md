@@ -1,32 +1,47 @@
-Guest payment recovery
-======================
+# Moolre payment webhooks (guest bookings and subscriptions)
 
-In each hotel merchant's Paystack dashboard, configure the webhook URL as:
+Online payments use Moolre mobile money (MTN MoMo, Telecel Cash, AT Money). Paystack is no
+longer used; old Paystack payments stay in the history unchanged (`verifiedProvider = 'Paystack'`).
 
-    https://YOUR-BACKEND-HOST/api/paystack/webhooks/guest-bookings
+## Callback URL
 
-Use the API hostname, not the frontend hostname. Configure the appropriate test
-and live environments. The hotel's saved Paystack secret key must match that
-merchant; otherwise the platform PAYSTACK_SECRET_KEY is used.
+In Moolre, on each wallet's API Service → **Callbacks** tab, set:
 
-For hotels using the shared platform account, the existing
-/api/paystack/webhooks/platform URL also dispatches guest charges. The guest URL
-dispatches subscription charges too, so either URL supports both charge types on
-the shared account. No additional subscription webhook configuration is needed.
+    https://YOUR-BACKEND-HOST/api/payments/webhooks/moolre
 
-The handler validates HMAC-SHA512 against the raw body and re-verifies payment
-through Paystack. Uncommitted/failed processing returns non-200 for provider
-retry. Browser callbacks and webhooks share a reservation row lock and transaction
-so concurrent repeats apply the same reference only once. A committed payment
-does not change the stay status; a late cancelled-booking payment is flagged for
-refund review. Existing inconsistent payment records are not repaired by this change.
+It must be public HTTPS on port 443 with a valid certificate and no redirects. The same URL
+handles guest bookings (`RES-…` references) and subscriptions (`SUB-…` references).
 
-No schema migration is needed. Replacing the merchant key while payments are
-pending can prevent old-account verification; reconcile before rotating keys.
-This does not introduce a scheduler for payments whose webhook was never delivered.
+## Signature
 
-Local verification (temporary fixtures, mocked Paystack):
+`X-Moolre-Signature: t=<unix>,v1=<hex>` = HMAC-SHA256(wallet secret, `${t}.${rawBody}`), checked on
+the raw body, constant-time, rejected if older than 5 minutes.
 
-    npx ts-node --transpile-only scripts/verifyGuestWebhook.ts
+- Guest bookings: the hotel's own webhook secret (Property → Moolre keys); if the hotel uses the
+  platform wallet, `MOOLRE_WEBHOOK_SECRET`.
+- Subscriptions: always `MOOLRE_WEBHOOK_SECRET`.
 
-Provider documentation: https://paystack.com/docs/payments/webhooks/
+## Safety rules
+
+- The callback is only a hint. Every outcome is re-checked with Moolre's status API before anything
+  is recorded, inside the same locked, idempotent settlement used by the guest's browser.
+- A booking is credited only when Moolre reports `txstatus 1` and the amount equals the saved attempt.
+- Unknown outcomes (timeouts, `TP11`, `TP18`, …) are kept as pending. The same reference is checked
+  again; a new reference is never created for an uncertain payment.
+- Non-2xx replies make Moolre retry (1m, 5m, 30m, 2h, …).
+- Without a webhook secret, payments are still confirmed by status checks (the guest's screen polls).
+
+## Environment
+
+    MOOLRE_ENV=sandbox            # or live; restart the server after changing
+    MOOLRE_USER=                  # Moolre username (platform wallet)
+    MOOLRE_PUBKEY=                # API Service public key
+    MOOLRE_ACCOUNT=               # wallet account number
+    MOOLRE_WEBHOOK_SECRET=        # wallet secret, for callbacks
+
+The startup log prints the mode and base URL (`💳 Moolre payments: SANDBOX (...)`).
+
+## Sandbox
+
+Numbers ending 111 succeed, 333 insufficient funds, 777 declined, 222 pending then success.
+SMS code `123456`. Tests: `npx jest tests/guest-payment.test.ts tests/moolre-guest-flow.test.ts`.

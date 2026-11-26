@@ -3,7 +3,7 @@ import { Prisma } from '../../generated/prisma';
 import { prisma } from '../../shared/utils/prisma';
 import jwt from 'jsonwebtoken'; // Ensure this is imported at the top of the file
 import { verifyGuestPayment } from '../payment/guest-payment.service';
-import { initializeGuestPayment, checkGuestPaymentStatus } from '../payment/guest-payment-attempt.service';
+import { initializeGuestPayment, checkGuestPaymentStatus, submitGuestPaymentOtp } from '../payment/guest-payment-attempt.service';
 import { createHotelReservation } from '../reservation/booking-creation.service';
 import { expireOnlineHolds } from '../reservation/online-hold.service';
 import { onlineBookableRoom } from '../reservation/stay-timing';
@@ -13,6 +13,7 @@ import { resolveWebsiteHostname } from '../property/website-domain.service';
 import { canBookOnline, OnlineBookingPausedError, publicBookingFields } from '../reservation/public-booking-policy';
 import { centralGuestSessionVersion, guestJwtSecret, guestWebsiteScope } from './guest-website-scope';
 import { changeGuestPassword, guestProfile, updateGuestProfile } from './guest-profile.service';
+import { moolreMode } from '../payment/moolre.client';
 
 
 const router = Router();
@@ -419,7 +420,7 @@ router.get('/:propertyCode', async (req: any, res: Response) => {
     const photos = publicPhotoReferences(property.propertyCode, property.coverImage, property.galleryImages, property.updatedAt, 'full');
     const { isActive, status, isOnlineBookingEnabled, subscriptionStatus, trialEndsAt, subscriptionEndsAt, ...profile } = property;
     const onlineBookingAvailable = canBookOnline({ isActive, status, isOnlineBookingEnabled, subscriptionStatus, trialEndsAt, subscriptionEndsAt });
-    return res.json({ success: true, data: { ...profile, onlineBookingAvailable, coverImage: photos[0] || null, galleryImages: photos.slice(1) } });
+    return res.json({ success: true, data: { ...profile, onlineBookingAvailable, paymentTestMode: moolreMode() !== 'live', coverImage: photos[0] || null, galleryImages: photos.slice(1) } });
   } catch (error: any) {
     if (error.message.includes('disabled') || error.message.includes('not found')) {
       return res.status(404).json({ success: false, message: error.message });
@@ -500,13 +501,21 @@ router.post('/:propertyCode/reservations', requireBookingGuest, async (req: any,
 router.post('/:propertyCode/payments/initialize', requireBookingGuest, async (req: any, res: Response) => {
   try {
     if (typeof req.body.reservationId !== 'string') return res.status(400).json({ success: false, message: 'Reservation ID is required.' });
-    const origin = req.guestOrigin;
-    const siteHostname = origin ? (req.guestPropertyId ? new URL(origin).hostname : undefined) : req.body.siteHostname;
     return res.json({ success: true, data: await initializeGuestPayment(
-      req.params.propertyCode, req.body.reservationId, req.bookingGuest, siteHostname, req.guestPropertyId ? undefined : origin,
+      req.params.propertyCode, req.body.reservationId, req.bookingGuest, { phone: req.body.phone, network: req.body.network },
     ) });
   } catch (error: any) {
     return res.status(error.statusCode || 400).json({ success: false, code: error instanceof OnlineBookingPausedError ? error.code : undefined, message: error.message || 'Could not start payment. Check payment status before retrying.' });
+  }
+});
+
+// The guest types the SMS code Moolre sent; this verifies the phone and sends the payment prompt.
+router.post('/:propertyCode/payments/otp', requireBookingGuest, async (req: any, res: Response) => {
+  try {
+    if (typeof req.body.reservationId !== 'string') return res.status(400).json({ success: false, message: 'Reservation ID is required.' });
+    return res.json({ success: true, data: await submitGuestPaymentOtp(req.params.propertyCode, req.body.reservationId, req.bookingGuest, req.body.otp) });
+  } catch (error: any) {
+    return res.status(error.statusCode || 400).json({ success: false, message: error.message || 'Could not check the code. Check payment status before retrying.' });
   }
 });
 
@@ -534,7 +543,7 @@ router.get('/:propertyCode/payments/verify/:reference', requireBookingGuest, asy
     const { amount, channel, confirmationCode, bookingStatus, requiresRefundReview } = payment.data;
     return res.json({ success: true, status: payment.status, data: { amount, channel, confirmationCode, bookingStatus, requiresRefundReview } });
   } catch (error: any) {
-    console.error('Paystack Verify Error:', error.message);
+    console.error('Moolre Verify Error:', error.message);
     return res.status(error.statusCode || 500).json({ success: false, message: 'Could not verify guest payment. Please try again.' });
   }
 });

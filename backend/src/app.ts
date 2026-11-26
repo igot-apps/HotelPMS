@@ -20,10 +20,10 @@ import notificationsRoutes from './modules/notifications/notifications.routes';
 import guestRoutes from './modules/guest/guest.routes';
 import reservationRoutes from './modules/reservation/reservation.routes';
 import paymentRoutes from './modules/payment/payment.routes';
+import { moolreBaseUrl, moolreMode } from './modules/payment/moolre.client';
 import reportRoutes from './modules/reports/report.routes';
 import userRoutes from './modules/user/user.routes';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
-import paystackRoutes from './modules/payment/payment.routes'; // ✅ NEW: Moved to payment module
 import amenityRoutes from './modules/amenity/amenity.routes';
 import publicRoutes from './modules/public/public.routes';
 import publicImagesRoutes from './modules/public/public-images.routes';
@@ -49,13 +49,9 @@ if (testClockEnabled) app.use((_req, res, next) => { res.setHeader('Date', new D
 // Replace internal error text (database, code) with a friendly message before it reaches users.
 app.use(safeErrorResponses);
 
-// ⚠️ CRITICAL: Parse raw body specifically for Paystack Webhooks.
-// 1. Platform SaaS Billing Webhook
-app.use('/api/paystack/webhooks/platform', express.raw({ type: 'application/json' }));
-
-// 2. 🌟 Hotel Guest Booking Webhook (UNCOMMENTED & ACTIVE)
-app.use('/api/paystack/webhooks/guest-bookings', express.raw({ type: 'application/json' }));
-app.use('/api/payments/webhooks/guest-bookings', express.raw({ type: 'application/json' }));
+// ⚠️ CRITICAL: Moolre webhooks need the raw body for the signature check.
+app.use('/api/payments/webhooks/moolre', express.raw({ type: 'application/json' }));
+console.log(`💳 Moolre payments: ${moolreMode().toUpperCase()} (${moolreBaseUrl()})`);
 
 // Standard JSON parsing for everything else
 app.use(express.json({ limit: '2mb' }));
@@ -108,7 +104,6 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/amenities', amenityRoutes);
-app.use('/api/paystack', paystackRoutes); // 🌟 Mount Paystack Routes
 app.use('/api/public/images', publicImagesRoutes);
 app.use('/api/public/auth', publicAuthRoutes); // 🌟 Mount Public Auth Routes
 app.use('/api/test-clock', testClockRoutes); // reports enabled:false unless ENABLE_TEST_CLOCK=true

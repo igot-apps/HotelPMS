@@ -27,7 +27,7 @@ unrelated old projects — ignore them.
 - `JWT_SECRET`, `REFRESH_TOKEN_SECRET`, `JWT_EXPIRES_IN` (optional)
 - `NODE_ENV`, `PORT`
 - `FRONTEND_URL` — used for links in emails and payment returns
-- `PAYSTACK_SECRET_KEY` — platform key (subscriptions); hotels store their own guest-booking key
+- `MOOLRE_ENV` (`sandbox`|`live`), `MOOLRE_USER`, `MOOLRE_PUBKEY`, `MOOLRE_ACCOUNT`, `MOOLRE_WEBHOOK_SECRET` — platform Moolre wallet (subscriptions, and guest bookings for hotels without their own keys). Callback URL: `/api/payments/webhooks/moolre` (see `backend/GUEST-PAYMENT-WEBHOOKS.md`)
 - `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `GUEST_EMAIL_FROM`, `STAFF_EMAIL_MODE`
 - `MOOLRE_SMS_VAS_KEY` — live SMS; without it SMS is only simulated (logged in-app)
 - `RENDER_API_KEY`, `RENDER_FRONTEND_SERVICE_ID`, `RENDER_FRONTEND_HOST`,

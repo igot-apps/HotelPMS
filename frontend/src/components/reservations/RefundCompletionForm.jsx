@@ -17,7 +17,7 @@ export default function RefundCompletionForm({ request, onCompleted, onBusyChang
   const field = 'mt-1 min-h-11 w-full min-w-0 rounded-lg border border-border bg-surface p-2 text-sm text-text';
   return <form onSubmit={event => { event.preventDefault(); if (!mutation.isPending) mutation.mutate(); }} className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
     <h4 className="font-bold text-amber-900">Record GHS {Number(request.input.amount).toFixed(2)} returned</h4>
-    <p className="text-sm text-amber-900">Return the money first. This form records the return; it does not send money or initiate a Paystack refund.</p>
+    <p className="text-sm text-amber-900">Return the money first. This form records the return; it does not send money or initiate a provider refund.</p>
     <label className="block text-sm text-text">Return method<select required disabled={mutation.isPending} value={method} onChange={e => { setMethod(e.target.value); setProviderConfirmed(false); }} className={field}><option value="">Choose method</option><option value="Cash">Cash</option><option value="MobileMoney">Mobile money</option><option value="BankTransfer">Bank transfer</option></select></label>
     <label className="block text-sm text-text">Receipt / provider refund reference (optional)<input maxLength={200} disabled={mutation.isPending} value={reference} onChange={e => setReference(e.target.value)} className={field} /></label>
     <label className="block text-sm text-text">Money returned at<input required type="datetime-local" step="1" disabled={mutation.isPending} value={returnedAt} onChange={e => setReturnedAt(e.target.value)} className={field} /></label>

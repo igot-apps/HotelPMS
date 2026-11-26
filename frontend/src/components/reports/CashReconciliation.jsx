@@ -37,7 +37,7 @@ export default function CashReconciliation({ date }) {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Figure small label="Desk Mobile Money" value={cash(t.deskMobileMoney)} />
           <Figure small label="Desk card" value={cash(t.deskCard)} />
-          <Figure small label="Verified online (Paystack)" value={cash(t.verifiedOnline)} />
+          <Figure small label="Verified online" value={cash(t.verifiedOnline)} />
           <Figure small label="Refunds returned" value={cash(t.refundsReturned)} />
           <Figure small label="Money guests owe (not missing cash)" value={cash(t.outstandingBalances)} />
         </div>

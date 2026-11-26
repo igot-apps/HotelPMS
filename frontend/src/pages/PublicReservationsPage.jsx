@@ -9,6 +9,7 @@ import PublicNavbar from '../components/public/PublicNavbar';
 import ReasonSelect from '../components/reservations/ReasonSelect';
 import BackButton from '../components/ui/BackButton';
 import { currentHotelHostname, useHotelWebsite } from '../lib/hotelWebsite';
+import MomoPaymentPanel from '../components/public/MomoPaymentPanel';
 import {
   Calendar, MapPin, Loader2, Search, Clock,
   CheckCircle2, XCircle, CreditCard, ChevronLeft, ChevronRight,
@@ -164,40 +165,26 @@ export default function PublicReservationsPage() {
     }
   };
 
-  // 🌟 PAYMENT RETRY MUTATION
-const retryPaymentMutation = useMutation({
-  mutationFn: async (reservation) => {
-    // 🛡️ CRITICAL CHECK: Prevent payment if the database says it's cancelled
+  // Mobile money payment (Moolre) for one reservation at a time.
+  const [payingId, setPayingId] = useState(null);
+  const startPayment = (reservation) => {
     if (['Cancelled', 'Expired'].includes(reservation.status)) {
-      throw new Error('This reservation has been cancelled. Payment is not allowed.');
+      toast.error('This reservation has been cancelled. Payment is not allowed.');
+      return;
     }
-
-    const totalAmount = Number(reservation.totalAmount || 0);
-    const amountPaid = Number(reservation.amountPaid || 0);
-    const balanceDue = Math.max(0, totalAmount - amountPaid);
-    const amountToPay = balanceDue > 0 ? balanceDue : totalAmount;
-
-    const res = await api.post(`/public/${reservation.property.propertyCode}/payments/initialize`, {
-       reservationId: reservation.reservationId,
-       siteHostname: currentHotelHostname(),
-       email: reservation.platformGuest?.email || 'guest@hideout24.com',
-       amount: amountToPay,
-     }, { skipErrorToast: true });
-     return res.data.data;
-   },
-    onSuccess: (paystackData, reservation) => {
-      if (paystackData.authorization_url) {
-        window.location.href = paystackData.authorization_url;
-      } else {
-        client.invalidateQueries({ queryKey: ['guestReservations'] });
-        setPaymentFeedback(current => ({ ...current, [reservation.reservationId]: { status: paystackData.status, message: paystackData.message || 'Please check payment status before retrying.' } }));
-        if (paystackData.status === 'paid') toast.success('Payment already received.', { id: `guest-payment-${reservation.reservationId}` });
-      }
-    },
-    onError: (err, reservation) => {
-      setPaymentFeedback(current => ({ ...current, [reservation.reservationId]: { status: 'unknown', message: err.response?.data?.message || 'Could not start checkout. Check payment status before trying again.' } }));
-    }
-  });
+    setPaymentFeedback(current => ({ ...current, [reservation.reservationId]: undefined }));
+    setPayingId(reservation.reservationId);
+  };
+  const paymentDone = (reservation, reference) => {
+    setPayingId(null);
+    client.invalidateQueries({ queryKey: ['guestReservations'] });
+    navigate(`/public/${reservation.property.propertyCode}/booking-success${reference ? `?reference=${encodeURIComponent(reference)}` : ''}`);
+  };
+  const paymentReleased = (reservation, message) => {
+    setPayingId(null);
+    client.invalidateQueries({ queryKey: ['guestReservations'] });
+    setPaymentFeedback(current => ({ ...current, [reservation.reservationId]: { status: 'released', message: message || 'This booking has been released.' } }));
+  };
 
   // 🌟 FIXED LOGIC: Check actual DB status FIRST, then check payment status
   const getStatusBadge = (status, isFullyPaid) => {
@@ -388,13 +375,13 @@ const retryPaymentMutation = useMutation({
                             <XCircle size={14} className="inline mr-1" /> Reservation Cancelled
                           </span>
                         ) : !isFullyPaid ? (
-                          <button
-                            onClick={() => retryPaymentMutation.mutate(res)}
-                            disabled={retryPaymentMutation.isPending || statusMutation.isPending || feedback?.status === 'unknown'}
+                          payingId === res.reservationId ? null : <button
+                            onClick={() => startPayment(res)}
+                            disabled={statusMutation.isPending || feedback?.status === 'unknown'}
                             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition shadow-md shadow-primary-600/20 disabled:opacity-50"
                           >
                             <CreditCard size={18} />
-                            {retryPaymentMutation.isPending ? 'Processing...' : feedback?.status === 'unknown' ? 'Check payment status before retrying' : `Pay Balance (GH₵ ${balanceDue.toFixed(2)})`}
+                            {feedback?.status === 'unknown' ? 'Check payment status before retrying' : `Pay Balance (GH₵ ${balanceDue.toFixed(2)})`}
                           </button>
                         ) : (
                           <span className="block w-full text-center text-sm font-semibold text-success-600 bg-success-50 px-4 py-2.5 rounded-lg border border-success-100">
@@ -402,9 +389,22 @@ const retryPaymentMutation = useMutation({
                           </span>
                         )}
                         {!released && ['Pending', 'Confirmed'].includes(res.status) && !res.reservationRooms?.some(stay => stay.status !== 'Reserved' || stay.actualCheckIn) && <button type="button" onClick={() => { setCancelReason(''); cancelMutation.reset(); setCancelTarget(res); }} className="min-h-11 w-full rounded-lg border border-danger-200 px-4 py-2 text-sm font-semibold text-danger-700 hover:bg-danger-50 sm:w-auto">Cancel booking</button>}
-                        {['Pending', 'Confirmed', 'Cancelled', 'Expired'].includes(res.status) && <button type="button" disabled={statusMutation.isPending || retryPaymentMutation.isPending} onClick={() => statusMutation.mutate(res)} className="min-h-11 w-full rounded-lg border border-border px-4 py-2 text-sm font-semibold text-primary-700 disabled:opacity-50 sm:w-auto">{statusMutation.isPending && statusMutation.variables?.reservationId === res.reservationId ? 'Checking…' : 'Check payment status'}</button>}
+                        {['Pending', 'Confirmed', 'Cancelled', 'Expired'].includes(res.status) && <button type="button" disabled={statusMutation.isPending} onClick={() => statusMutation.mutate(res)} className="min-h-11 w-full rounded-lg border border-border px-4 py-2 text-sm font-semibold text-primary-700 disabled:opacity-50 sm:w-auto">{statusMutation.isPending && statusMutation.variables?.reservationId === res.reservationId ? 'Checking…' : 'Check payment status'}</button>}
                       </div>
                     </div>
+                    {payingId === res.reservationId && !isFullyPaid && !released && (
+                      <div className="mt-4">
+                        <MomoPaymentPanel
+                          propertyCode={res.property.propertyCode}
+                          reservationId={res.reservationId}
+                          amount={balanceDue}
+                          defaultPhone={res.platformGuest?.phone}
+                          onPaid={reference => paymentDone(res, reference)}
+                          onReleased={message => paymentReleased(res, message)}
+                          onCancel={() => setPayingId(null)}
+                        />
+                      </div>
+                    )}
                   </div>
                 );
               })}

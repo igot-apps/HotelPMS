@@ -1,4 +1,5 @@
 import * as propertyRepository from './property.repository';
+import { platformMoolreConfig } from '../payment/moolre.client';
 import { prisma } from '../../shared/utils/prisma';
 import { defaultHotelHostname } from './website-domain.service';
 import { isWithinGhanaBounds } from '../../shared/utils/ghana-coordinates';
@@ -78,18 +79,25 @@ export const updateProperty = async (propertyId: number, data: any) => {
   if (updateData.isNonRefundable !== undefined && typeof updateData.isNonRefundable !== 'boolean') throw new Error('Choose whether bookings are refundable.');
   if (updateData.allowEarlyDepartureChargeReduction !== undefined && typeof updateData.allowEarlyDepartureChargeReduction !== 'boolean') throw new Error('Choose an early-departure charge policy.');
 
-  if (data.paystackSecretKey !== undefined && data.replacePaystackSecretKey !== true) {
-    throw new Error('Choose Replace Paystack key before changing the payment setup.');
-  }
-  if (data.replacePaystackSecretKey === true && (typeof data.paystackSecretKey !== 'string' || !data.paystackSecretKey.trim())) {
-    throw new Error('Enter a new Paystack key to replace the current one.');
-  }
-  if (data.replacePaystackSecretKey === true) {
-    const key = data.paystackSecretKey.trim();
-    if (!/^sk_(test|live)_[A-Za-z0-9]+$/.test(key)) {
-      throw new Error('Enter a valid Paystack secret key beginning with sk_test_ or sk_live_.');
-    }
-    updateData.paystackSecretKey = key;
+  // Moolre keys change only with explicit consent, so saving other details can never wipe them.
+  const moolreFields = ['moolreUsername', 'moolrePublicKey', 'moolreAccountNumber', 'moolreWebhookSecret'] as const;
+  const suppliedMoolre = moolreFields.some(field => data[field] !== undefined);
+  if (data.removeMoolreKeys === true) {
+    for (const field of moolreFields) updateData[field] = null;
+  } else if (suppliedMoolre && data.replaceMoolreKeys !== true) {
+    throw new Error('Choose Replace Moolre keys before changing the payment setup.');
+  } else if (data.replaceMoolreKeys === true) {
+    const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+    const username = text(data.moolreUsername);
+    const publicKey = text(data.moolrePublicKey);
+    const accountNumber = text(data.moolreAccountNumber);
+    const webhookSecret = text(data.moolreWebhookSecret);
+    if (!username || !publicKey || !accountNumber) throw new Error('Enter the Moolre username, public key and wallet account number.');
+    if (username.length > 100 || /\s/.test(username)) throw new Error('Enter a valid Moolre username.');
+    if (publicKey.length > 2000 || /\s/.test(publicKey)) throw new Error('Enter a valid Moolre public key.');
+    if (!/^[0-9]{4,50}$/.test(accountNumber)) throw new Error('Enter the Moolre wallet account number (digits only).');
+    if (webhookSecret.length > 2000) throw new Error('Enter a valid Moolre webhook secret.');
+    Object.assign(updateData, { moolreUsername: username, moolrePublicKey: publicKey, moolreAccountNumber: accountNumber, moolreWebhookSecret: webhookSecret || null });
   }
 
   if (updateData.earlyDepartureChargeReductionPenaltyPercent !== undefined) {
@@ -113,8 +121,11 @@ export const updateProperty = async (propertyId: number, data: any) => {
     updateData.longitude = Number(longitude);
   }
 
-  if (updateData.isOnlineBookingEnabled === true && !property.paystackSecretKey && !process.env.PAYSTACK_SECRET_KEY && !updateData.paystackSecretKey) {
-    throw new Error('Configure a Paystack key before enabling online bookings.');
+  const willHaveOwnMoolre = updateData.moolreUsername !== undefined ? Boolean(updateData.moolreUsername)
+    : Boolean(property.moolreUsername && property.moolrePublicKey && property.moolreAccountNumber);
+  const onlineWillBeOn = updateData.isOnlineBookingEnabled === true || (updateData.isOnlineBookingEnabled === undefined && data.removeMoolreKeys === true && property.isOnlineBookingEnabled);
+  if (onlineWillBeOn && !willHaveOwnMoolre && !platformMoolreConfig()) {
+    throw new Error('Configure Moolre keys before enabling online bookings.');
   }
 
   if (updateData.galleryImages !== undefined) {

@@ -13,7 +13,7 @@ Change these only when the owner asks. Code locations are given so you can verif
 ## Online booking (public site)
 - Guest must sign in (email). Clicking pay creates a **Pending** reservation that holds one
   specific room for **10 minutes** (`ONLINE_HOLD_MINUTES`, `reservation/online-hold.service.ts`),
-  then opens Paystack. Payment verify/webhook confirms the booking.
+  then asks for the guest's mobile money number (SMS code the first time) and sends a prompt to approve on the phone. Status checks/webhook confirm the booking.
 - Late payment after the hold expired → booking Expired, payment flagged for refund review.
 - Only rooms with `operationalStatus = Available` **and** `isOnlineBookable = true` are offered
   (`availableRoomsForStay` in `public/public.routes.ts`, and online path of
@@ -22,7 +22,7 @@ Change these only when the owner asks. Code locations are given so you can verif
   subscription has expired.
 
 ## Payments and SMS
-- Desk payments are recorded by staff. Online payments go through Paystack with the hotel's key.
+- Desk payments are recorded by staff. Online payments go through Moolre mobile money into the hotel's wallet (or the platform wallet).
 - After an online payment fully pays a Website booking, a "Payment of GHS X received… booking
   confirmed" SMS is sent (`notifications/simulated-sms.service.ts`), **only if** the hotel's
   **Guest SMS** switch is on (`Property.smsSimulationEnabled`, Notifications page). It sends live
@@ -93,7 +93,7 @@ Code: `reservation/stay-timing.ts`, `reservation/checkout-alerts.service.ts`,
   current/new/confirm fields. Changing the password signs out other devices for that account.
 
 ## Subscriptions (hotels pay HideOut24)
-- Trial → paid via Paystack (platform key). Expiry notices on the dashboard; online booking pauses
+- Trial → paid via Moolre mobile money (platform wallet). Expiry notices on the dashboard; online booking pauses
   when expired. Expired **and Cancelled** hotels are read-only (writes blocked) but can still renew.
 - Packages (all with the same features): Standard GHS 200 / 10 rooms / 2 staff, Pro GHS 350 / 20 / 4,
   Custom GHS 50 + 5/room + 10/staff. 1–24 months; discounts 3+ 8.33%, 6+ 10%, 12+ 16.67%, 24 20%.

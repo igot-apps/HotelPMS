@@ -68,17 +68,17 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
     latitude: '', longitude: '', checkInTime: '14:00', checkOutTime: '11:00',
     primaryEmail: '', primaryPhone: '', primaryPhoneWhatsappOnly: false, coverImage: '', galleryImages: [], publicDescription: '',
     cancellationPolicy: '', houseRules: '', taxPercentage: 0.00, isOnlineBookingEnabled: false, isNonRefundable: true, allowEarlyDepartureChargeReduction: false, earlyDepartureChargeReductionPenaltyPercent: 0,
-    paystackSecretKey: '',
+    moolreUsername: '', moolrePublicKey: '', moolreAccountNumber: '', moolreWebhookSecret: '',
   });
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState('');
   const [penaltyError, setPenaltyError] = useState('');
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState('');
-  const [isReplacingPaystackKey, setIsReplacingPaystackKey] = useState(false);
+  const [isReplacingMoolreKeys, setIsReplacingMoolreKeys] = useState(false);
 
   useEffect(() => {
-    setIsReplacingPaystackKey(false);
+    setIsReplacingMoolreKeys(false);
     if (initialData) {
       setFormData({
         propertyName: initialData.propertyName || '',
@@ -108,7 +108,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
         isNonRefundable: initialData.isNonRefundable !== false,
         allowEarlyDepartureChargeReduction: initialData.allowEarlyDepartureChargeReduction === true,
         earlyDepartureChargeReductionPenaltyPercent: initialData.earlyDepartureChargeReductionPenaltyPercent != null ? parseFloat(initialData.earlyDepartureChargeReductionPenaltyPercent) : 0,
-        paystackSecretKey: '',
+        moolreUsername: '', moolrePublicKey: '', moolreAccountNumber: '', moolreWebhookSecret: '',
       });
     } else {
       setFormData({
@@ -116,7 +116,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
         latitude: '', longitude: '', checkInTime: '14:00', checkOutTime: '11:00',
         primaryEmail: '', primaryPhone: '', primaryPhoneWhatsappOnly: false, coverImage: '', galleryImages: [], publicDescription: '',
         cancellationPolicy: '', houseRules: '', taxPercentage: 0.00, isOnlineBookingEnabled: false, isNonRefundable: true, allowEarlyDepartureChargeReduction: false, earlyDepartureChargeReductionPenaltyPercent: 0,
-        paystackSecretKey: '',
+        moolreUsername: '', moolrePublicKey: '', moolreAccountNumber: '', moolreWebhookSecret: '',
       });
     }
   }, [initialData, isOpen]);
@@ -196,10 +196,9 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
     setPenaltyError('');
     const galleryArray = formData.galleryImages.filter((image) => image !== formData.coverImage);
 
-    // 🌟 CRITICAL: Only send the Paystack key if it's a NEW value (not the masked version)
-    const shouldUpdatePaystackKey = isReplacingPaystackKey && formData.paystackSecretKey.trim().length > 0;
-
-    const { paystackSecretKey, ...propertyFields } = formData;
+    // Keys are sent only when the user explicitly chose to replace them; the server never returns them.
+    const { moolreUsername, moolrePublicKey, moolreAccountNumber, moolreWebhookSecret, ...propertyFields } = formData;
+    const shouldUpdateMoolreKeys = isReplacingMoolreKeys && moolreUsername.trim() && moolrePublicKey.trim() && moolreAccountNumber.trim();
     const payload = {
       ...propertyFields,
       galleryImages: galleryArray,
@@ -209,7 +208,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
       latitude: formData.latitude === '' ? null : Number(formData.latitude),
       longitude: formData.longitude === '' ? null : Number(formData.longitude),
       // 🌟 Conditionally include the key
-      ...(shouldUpdatePaystackKey && { paystackSecretKey: paystackSecretKey.trim(), replacePaystackSecretKey: true }),
+      ...(shouldUpdateMoolreKeys && { moolreUsername: moolreUsername.trim(), moolrePublicKey: moolrePublicKey.trim(), moolreAccountNumber: moolreAccountNumber.trim(), moolreWebhookSecret: moolreWebhookSecret.trim(), replaceMoolreKeys: true }),
     };
 
     onSubmit(payload);
@@ -433,43 +432,37 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
               <input type="number" name="taxPercentage" step="0.01" value={formData.taxPercentage} onChange={handleChange} className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20" />
             </div>
 
-            {/* Paystack credentials for online booking payments */}
+            {/* Moolre mobile money wallet for online booking payments */}
             <div className="mb-4">
               <label className="block text-sm font-semibold text-text mb-1.5 flex items-center gap-2">
                 <Smartphone size={16} className="text-primary-600" />
-                Paystack Secret Key (Online Payments)
+                Moolre Mobile Money (Online Payments)
               </label>
-              {isReplacingPaystackKey ? (
+              {isReplacingMoolreKeys ? (
                 <div className="space-y-2">
-                  <input
-                    type="password"
-                    name="newHotelPaystackSecret"
-                    value={formData.paystackSecretKey}
-                    onChange={(event) => setFormData((current) => ({ ...current, paystackSecretKey: event.target.value }))}
-                    autoComplete="new-password"
-                    required
-                    placeholder="Enter the new sk_test_ or sk_live_ key"
-                    className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 font-mono text-sm"
-                  />
-                  <button type="button" onClick={() => { setIsReplacingPaystackKey(false); setFormData((current) => ({ ...current, paystackSecretKey: '' })); }} className="text-sm font-semibold text-text-muted hover:text-text">Cancel key change</button>
+                  <input type="text" name="moolreUsername" value={formData.moolreUsername} onChange={(event) => setFormData((current) => ({ ...current, moolreUsername: event.target.value }))} autoComplete="off" required placeholder="Moolre username" className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 font-mono text-sm" />
+                  <input type="password" name="moolrePublicKey" value={formData.moolrePublicKey} onChange={(event) => setFormData((current) => ({ ...current, moolrePublicKey: event.target.value }))} autoComplete="new-password" required placeholder="API public key" className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 font-mono text-sm" />
+                  <input type="text" inputMode="numeric" name="moolreAccountNumber" value={formData.moolreAccountNumber} onChange={(event) => setFormData((current) => ({ ...current, moolreAccountNumber: event.target.value }))} autoComplete="off" required placeholder="Wallet account number" className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 font-mono text-sm" />
+                  <input type="password" name="moolreWebhookSecret" value={formData.moolreWebhookSecret} onChange={(event) => setFormData((current) => ({ ...current, moolreWebhookSecret: event.target.value }))} autoComplete="new-password" placeholder="Wallet webhook secret (for instant confirmations)" className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-text outline-none focus:ring-2 focus:ring-primary-500/20 font-mono text-sm" />
+                  <button type="button" onClick={() => { setIsReplacingMoolreKeys(false); setFormData((current) => ({ ...current, moolreUsername: '', moolrePublicKey: '', moolreAccountNumber: '', moolreWebhookSecret: '' })); }} className="text-sm font-semibold text-text-muted hover:text-text">Cancel key change</button>
                 </div>
               ) : (
-                <button type="button" onClick={() => { setFormData((current) => ({ ...current, paystackSecretKey: '' })); setIsReplacingPaystackKey(true); }} className="rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-semibold text-primary-700 transition hover:bg-primary-50">
-                  {initialData?.hasPaystackSecretKey ? 'Replace Paystack key' : 'Set Paystack key'}
+                <button type="button" onClick={() => { setFormData((current) => ({ ...current, moolreUsername: '', moolrePublicKey: '', moolreAccountNumber: '', moolreWebhookSecret: '' })); setIsReplacingMoolreKeys(true); }} className="rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-semibold text-primary-700 transition hover:bg-primary-50">
+                  {initialData?.hasMoolreKeys ? 'Replace Moolre keys' : 'Set Moolre keys'}
                 </button>
               )}
               <p className="text-xs text-text-muted mt-1">
-                Your hotel's Paystack secret key for public booking payments by Mobile Money or card.
-                <a href="https://dashboard.paystack.com/#/settings/developer" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline ml-1">Get your key here →</a>
+                Guests pay into this hotel's Moolre wallet by MTN MoMo, Telecel Cash or AT Money. In Moolre: Integrate Our APIs → API Service → Security → Generate API Keys.
+                <a href="https://app.moolre.com" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline ml-1">Open Moolre →</a>
               </p>
-              {(initialData?.hasPaystackSecretKey || initialData?.usesPlatformPaystackKey) && (
+              {(initialData?.hasMoolreKeys || initialData?.usesPlatformMoolreKeys) && (
                 <p className="text-xs text-text-muted mt-1">Saving other property details keeps the current payment setup.</p>
               )}
-              {initialData?.usesPlatformPaystackKey && (
-                <p className="text-xs text-success-700 mt-1">The platform Paystack {initialData.paystackMode === 'test' ? 'test' : 'live'} key is currently used as this hotel’s default.</p>
+              {initialData?.usesPlatformMoolreKeys && (
+                <p className="text-xs text-success-700 mt-1">The platform Moolre wallet ({initialData.moolreMode === 'live' ? 'live' : 'sandbox'}) is currently used as this hotel’s default.</p>
               )}
-              {initialData?.hasPaystackSecretKey && (
-                <p className="text-xs text-success-700 mt-1">A property-specific Paystack {initialData.paystackMode === 'test' ? 'test' : 'live'} key is configured. The key itself is never shown here.</p>
+              {initialData?.hasMoolreKeys && (
+                <p className="text-xs text-success-700 mt-1">This hotel's own Moolre wallet {initialData.moolreAccountHint} is configured ({initialData.moolreMode === 'live' ? 'live' : 'sandbox'}). Keys are never shown here.{!initialData.hasMoolreWebhookSecret && ' No webhook secret: payments are confirmed by status checks only.'}</p>
               )}
             </div>
           </section>

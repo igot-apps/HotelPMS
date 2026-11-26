@@ -67,7 +67,7 @@ export async function dailyOverview(userId: number, propertyId: number, requeste
       const online = Boolean(p.verifiedProvider); // confirmed by the payment provider
       const correction = Boolean(p.notes?.startsWith('Correction of payment #'));
       const cents = Math.round(Number(p.amount) * 100);
-      const recordedBy = online ? 'Online / Paystack' : p.receiver?.fullName || 'Unknown / former staff';
+      const recordedBy = online ? `Online / ${p.verifiedProvider}` : p.receiver?.fullName || 'Unknown / former staff';
       const key = online ? 'online' : p.receivedBy ? `staff:${p.receivedBy}` : 'unknown';
       if (p.status === 'Completed' && !correction) {
         const row = staff.get(key) || { key, name: recordedBy, count: 0, total: 0, methods: {} };

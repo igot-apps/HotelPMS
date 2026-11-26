@@ -101,7 +101,11 @@ model Property {
   houseRules             String?   @db.Text
   taxPercentage          Decimal   @default(0.00) @db.Decimal(5, 2)
   isOnlineBookingEnabled Boolean   @default(false)
-  paystackSecretKey      String?   @db.Text
+  paystackSecretKey      String?   @db.Text // legacy: no longer used (payments moved to Moolre)
+  moolreUsername         String?   @db.VarChar(100)
+  moolrePublicKey        String?   @db.Text
+  moolreAccountNumber    String?   @db.VarChar(50)
+  moolreWebhookSecret    String?   @db.Text
   refundSimulationEnabled Boolean @default(false)
   isNonRefundable     Boolean @default(true) // hotel keeps the money on cancellation; refunds only as a recorded exception
   allowEarlyDepartureChargeReduction Boolean @default(false) // if false, early checkout keeps the original agreed charges
@@ -621,6 +625,8 @@ model GuestPaymentAttempt {
   currency String @db.VarChar(10)
   status String @default("Initializing") @db.VarChar(30)
   checkoutUrl String? @db.Text
+  payer String? @db.VarChar(20)
+  channel String? @db.VarChar(10)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   reservation Reservation @relation(fields: [reservationId], references: [reservationId], onDelete: Cascade)
@@ -647,6 +653,9 @@ model SubscriptionPayment {
   discountPercent        Decimal   @default(0) @db.Decimal(5, 2)
   prorationAmount        Decimal   @default(0) @db.Decimal(10, 2)
   pricing                Json?
+  payer                  String?   @db.VarChar(20)
+  channel                String?   @db.VarChar(10)
+  providerStep           String?   @db.VarChar(30) // Moolre progress: otp_required, verifying, prompt_sent, unknown
   createdAt              DateTime  @default(now())
   paidAt                 DateTime?
 

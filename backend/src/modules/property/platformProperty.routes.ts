@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import { moolreMode, platformMoolreConfig } from '../payment/moolre.client';
 import * as propertyService from './property.service';
 import { PLATFORM_SORTS, PLATFORM_STATES } from './property.repository';
 import { authenticate, AuthRequest, requirePlatformAdmin } from '../../shared/middleware/auth.middleware';
@@ -141,14 +142,19 @@ const parsePropertyId = (value: string | string[]) => {
 
 const toClientProperty = (property: any) => {
   if (!property) return property;
-  const { paystackSecretKey, memberships, ...safeProperty } = property;
+  const { paystackSecretKey, moolreUsername, moolrePublicKey, moolreAccountNumber, moolreWebhookSecret, memberships, ...safeProperty } = property;
+  void paystackSecretKey; void moolrePublicKey;
+  const ownMoolre = Boolean(moolreUsername && moolrePublicKey && moolreAccountNumber);
   const owner = memberships?.[0]?.user;
   return {
     ...safeProperty,
     ...(memberships ? { owner: owner ? { userId: owner.userId, fullName: owner.fullName, email: owner.email, ownedProperties: owner._count?.memberships || 1 } : null } : {}),
-    hasPaystackSecretKey: Boolean(paystackSecretKey),
-    usesPlatformPaystackKey: !paystackSecretKey && Boolean(process.env.PAYSTACK_SECRET_KEY),
-    paystackMode: (paystackSecretKey || process.env.PAYSTACK_SECRET_KEY)?.startsWith('sk_test_') ? 'test' : (paystackSecretKey || process.env.PAYSTACK_SECRET_KEY) ? 'live' : null,
+    // Never send keys to the browser: only whether they exist and the last digits of the wallet.
+    hasMoolreKeys: ownMoolre,
+    moolreAccountHint: ownMoolre ? `****${String(moolreAccountNumber).slice(-4)}` : null,
+    hasMoolreWebhookSecret: Boolean(ownMoolre ? moolreWebhookSecret : process.env.MOOLRE_WEBHOOK_SECRET),
+    usesPlatformMoolreKeys: !ownMoolre && Boolean(platformMoolreConfig()),
+    moolreMode: ownMoolre || platformMoolreConfig() ? moolreMode() : null,
   };
 };
 

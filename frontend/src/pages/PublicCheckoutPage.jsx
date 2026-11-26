@@ -8,7 +8,7 @@ import api from '../lib/axios';
 import toast from 'react-hot-toast';
 import PublicNavbar from '../components/public/PublicNavbar';
 import BackButton from '../components/ui/BackButton';
-import { currentHotelHostname } from '../lib/hotelWebsite';
+import MomoPaymentPanel from '../components/public/MomoPaymentPanel';
 import { reusableCheckoutBooking } from '../lib/checkout-booking.mjs';
 import StayNights from '../components/ui/StayNights';
 
@@ -120,30 +120,13 @@ export default function PublicCheckoutPage() {
       }
       const reservationId = savedBooking.current.reservationId;
 
-      // 2. Initialize Paystack
-      const paystackRes = await api.post(`/public/${propertyCode}/payments/initialize`, {
-        reservationId,
-        siteHostname: currentHotelHostname(),
-        email: guestData.email || 'guest@hideout24.com',
-        amount: totalAmount,
-      }, { skipErrorToast: true });
-
-      return paystackRes.data.data;
+      // 2. Pay with mobile money (Moolre) in the panel below.
+      return { reservationId };
     },
-    onSuccess: (paystackData) => {
-      // 3. Redirect to Paystack
-      if (paystackData.authorization_url) window.location.href = paystackData.authorization_url;
-      else {
-        if (paystackData.status === 'released' && savedBooking.current) {
-          try { sessionStorage.removeItem(`checkout-booking:${savedBooking.current.key}`); } catch { /* Storage is optional. */ }
-          savedBooking.current = null;
-        }
-        toast(paystackData.message || 'Check payment status in My Reservations before retrying.'); navigate('/public/reservations');
-      }
-    },
+    onSuccess: ({ reservationId }) => setPayingReservationId(reservationId),
     onError: (err) => {
       if (err.response?.data?.code !== 'ONLINE_BOOKING_PAUSED') {
-        toast.error(err.response?.data?.message || 'Failed to initialize payment.');
+        toast.error(err.response?.data?.message || 'Could not reserve the room. Please try again.');
       }
     },
     onSettled: () => { paymentBusy.current = false; },
@@ -152,11 +135,20 @@ export default function PublicCheckoutPage() {
     || initializePaymentMutation.error?.response?.data?.code === 'ONLINE_BOOKING_PAUSED';
 
   const [confirmationData, setConfirmationData] = useState(null);
+  const [payingReservationId, setPayingReservationId] = useState(null);
+  const paymentReleased = (message) => {
+    if (savedBooking.current) {
+      try { sessionStorage.removeItem(`checkout-booking:${savedBooking.current.key}`); } catch { /* Storage is optional. */ }
+      savedBooking.current = null;
+    }
+    setPayingReservationId(null);
+    toast(message || 'This booking has been released. Check My Reservations.'); navigate('/public/reservations');
+  };
 
   // 🌟 Handle Pay (Smart logic for logged-in vs guest)
   const handlePay = (e) => {
     e.preventDefault();
-    if (paymentBusy.current || bookingPaused) return;
+    if (paymentBusy.current || bookingPaused || payingReservationId) return;
 
     let name, phone, email, platformGuestId;
 
@@ -362,6 +354,17 @@ export default function PublicCheckoutPage() {
               </div>
               {property && <p role="note" className="mb-4 rounded-lg border border-warning-100 bg-warning-50 p-3 text-xs font-semibold text-warning-700"><AlertCircle size={14} className="mr-1 inline -mt-0.5" /> Non-refundable: online payments are not refunded, even if you cancel.</p>}
 
+              {payingReservationId ? (
+                <MomoPaymentPanel
+                  propertyCode={propertyCode}
+                  reservationId={payingReservationId}
+                  amount={totalAmount}
+                  defaultPhone={guestInfo?.phone}
+                  testMode={property?.paymentTestMode}
+                  onPaid={reference => navigate(`/public/${propertyCode}/booking-success${reference ? `?reference=${encodeURIComponent(reference)}` : ''}`)}
+                  onReleased={paymentReleased}
+                />
+              ) : <>
               <button
                 type="submit"
                 disabled={initializePaymentMutation.isPending}
@@ -376,8 +379,9 @@ export default function PublicCheckoutPage() {
 
               <div className="mt-4 flex items-center justify-center gap-2 text-[11px] text-text-muted">
                 <Lock size={12} className="shrink-0" />
-                <span>Secure checkout by Paystack · Mobile Money · Visa / Mastercard</span>
+                <span>Secure mobile money checkout by Moolre · MTN · Telecel · AT</span>
               </div>
+              </>}
               </>}
             </div>
           </div>

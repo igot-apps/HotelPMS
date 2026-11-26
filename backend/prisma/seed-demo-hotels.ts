@@ -9,7 +9,6 @@ const prisma = new PrismaClient();
 const DEMO_PASSWORD = process.env.DEMO_SEED_PASSWORD;
 const DEMO_GUEST_PHONE = '0000000000';
 const DEMO_GUEST_EMAIL = 'guest@demo.hideout24.test';
-const DEMO_PAYSTACK_KEY = process.env.DEMO_PAYSTACK_TEST_KEY?.trim();
 const ASSET_DIR = path.join(__dirname, 'demo-assets');
 
 const demoHotels: { area: string; city: string; region: string; latitude: number; longitude: number; address: string; ghanaPostAddress: string }[] = require('./demo-locations.json');
@@ -51,9 +50,6 @@ function assertLocalDemoConfiguration() {
   const localHosts = new Set(['localhost', '127.0.0.1', '::1', 'host.docker.internal']);
   if (!localHosts.has(hostname)) {
     throw new Error(`Refusing to seed non-local database host "${hostname}". Use your local PostgreSQL database only.`);
-  }
-  if (DEMO_PAYSTACK_KEY && !DEMO_PAYSTACK_KEY.startsWith('sk_test_')) {
-    throw new Error('DEMO_PAYSTACK_TEST_KEY must be a Paystack test secret key (sk_test_...).');
   }
 }
 
@@ -144,7 +140,6 @@ async function main() {
         // Preserve the manager's current public-booking choice on reruns. New
         // demo records start enabled below, but seeding must not re-publish a
         // property that a manager has intentionally disabled.
-        ...(DEMO_PAYSTACK_KEY ? { paystackSecretKey: DEMO_PAYSTACK_KEY } : {}),
       },
       create: {
         propertyCode,
@@ -169,7 +164,6 @@ async function main() {
         primaryPhoneWhatsappOnly: true,
         publicDescription: 'A HideOut24 demo listing for local testing. The displayed WhatsApp contact is a placeholder. Update the property details and contact information before using with real guests.',
         isOnlineBookingEnabled: true,
-        ...(DEMO_PAYSTACK_KEY ? { paystackSecretKey: DEMO_PAYSTACK_KEY } : {}),
       },
     });
 
