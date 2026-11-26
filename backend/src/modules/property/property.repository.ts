@@ -165,11 +165,18 @@ export const permanentlyDeleteProperty = async (propertyId: number, confirmation
     }
 
     // Remove restrictive references before cascading through hotel-owned records.
+    // Refunds point at payments (RESTRICT); cash counts point at staff users; rooms and
+    // rate plans point at room types. Delete them first so the cascade cannot be blocked.
+    await tx.refund.deleteMany({ where: { OR: [{ propertyId }, { payment: { OR: [{ propertyId }, { reservation: { propertyId } }] } }] } });
+    await tx.cashCountIssue.deleteMany({ where: { propertyId } });
+    await tx.cashCount.deleteMany({ where: { propertyId } });
     await tx.payment.deleteMany({
       where: { OR: [{ propertyId }, { reservation: { propertyId } }] },
     });
     await tx.reservation.deleteMany({ where: { propertyId } });
     await tx.auditLog.deleteMany({ where: { OR: [{ propertyId }, { propertyId: null, user: { propertyId } }] } });
+    await tx.ratePlan.deleteMany({ where: { propertyId } });
+    await tx.room.deleteMany({ where: { propertyId } });
     return tx.property.delete({ where: { propertyId } });
   });
 };
