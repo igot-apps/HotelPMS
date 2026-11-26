@@ -19,7 +19,8 @@ export function guessNetwork(phone) {
   return 'MTN';
 }
 
-const field = 'block w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-text outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20';
+const SANDBOX_TEST_NUMBER = '0240000111';
+const field ='block w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-text outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20';
 const POLL_FAST_MS = 5000;
 const POLL_SLOW_MS = 15000;
 const POLL_FOR_MS = 10 * 60 * 1000;
@@ -49,6 +50,13 @@ export default function MomoPaymentPanel({ propertyCode, reservationId, amount, 
   const finished = useRef(false);
 
   useEffect(() => () => clearTimeout(pollTimer.current), []);
+  // Test mode: Moolre's sandbox code 123456 only works for its test numbers, so start with one
+  // (only while the guest hasn't typed their own number yet).
+  useEffect(() => {
+    if (!testMode) return;
+    setPhone(current => (current === (defaultPhone || '') ? SANDBOX_TEST_NUMBER : current));
+    setNetwork(current => (phone === (defaultPhone || '') ? 'MTN' : current));
+  }, [testMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handle = (data) => {
     if (!data) return;

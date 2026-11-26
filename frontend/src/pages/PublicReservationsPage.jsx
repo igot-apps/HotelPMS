@@ -302,7 +302,14 @@ export default function PublicReservationsPage() {
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2 flex-wrap">
                           <h3 className="text-lg font-bold text-text group-hover:text-primary-600 transition-colors">
-                            {res.property?.propertyName}
+                            {res.property?.propertyCode ? (
+                              <Link
+                                to={`/public/${res.property.propertyCode}`}
+                                className="rounded-sm hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary-600"
+                              >
+                                {res.property.propertyName}
+                              </Link>
+                            ) : res.property?.propertyName}
                           </h3>
                           {/* 🌟 Pass isFullyPaid to badge */}
                           {expired && amountPaid > 0 ? <span className="rounded-full border border-warning-200 bg-warning-50 px-2.5 py-1 text-xs font-semibold text-warning-700">Payment received · Booking not confirmed</span> : getStatusBadge(expired ? 'Expired' : res.status, isFullyPaid)}
