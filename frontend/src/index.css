@@ -15,6 +15,17 @@ html {
 }
 a, button, [role="button"], label, summary { touch-action: manipulation; }
 
+/* Staff app shell: the page itself never moves (no pull-down of the top bar on iPhone);
+   only the content area scrolls, and it doesn't drag the whole screen with it. */
+html.app-shell, html.app-shell body {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+html.app-shell #root { height: 100%; }
+html.app-shell #main-content { overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; }
+
 /* Opened from the Home Screen: no rubber-band bounce of the whole page, and
    buttons/navigation don't get selected or show the long-press callout. */
 @media (display-mode: standalone) {

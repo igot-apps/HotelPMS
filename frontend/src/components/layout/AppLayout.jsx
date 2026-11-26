@@ -58,6 +58,12 @@ export default function AppLayout() {
     if (useAuthStore.getState().user?.properties?.length > 1 && activePropertyId) document.title = `${useAuthStore.getState().user.propertyName} · HideOut24`;
   }, [activePropertyId]);
 
+  // Lock the page frame while the staff app is shown (public/guest pages keep normal page scrolling).
+  useEffect(() => {
+    document.documentElement.classList.add('app-shell');
+    return () => document.documentElement.classList.remove('app-shell');
+  }, []);
+
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
   const closeSidebar = () => setIsSidebarOpen(false);
 
