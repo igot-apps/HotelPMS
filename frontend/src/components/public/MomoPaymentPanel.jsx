@@ -19,7 +19,18 @@ export function guessNetwork(phone) {
   return 'MTN';
 }
 
-const SANDBOX_TEST_NUMBER = '0240000111';
+export const SANDBOX_TEST_NUMBER = '0240000111';
+
+/** Shown on every Moolre payment form while the backend is in sandbox. */
+export function SandboxBanner() {
+  return (
+    <div role="note" className="rounded-md bg-warning-100 px-2 py-1.5 text-center text-warning-800">
+      <p className="text-[11px] font-bold uppercase tracking-wide">Test mode · no real money moves</p>
+      {/* Moolre's sandbox texts a real code to any other number, so 123456 only works for its test numbers. */}
+      <p className="mt-0.5 text-[11px]">Use MTN number <strong>{SANDBOX_TEST_NUMBER}</strong> and SMS code <strong>123456</strong>.</p>
+    </div>
+  );
+}
 const field ='block w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-text outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20';
 const POLL_FAST_MS = 5000;
 const POLL_SLOW_MS = 15000;
@@ -120,13 +131,7 @@ export default function MomoPaymentPanel({ propertyCode, reservationId, amount, 
 
   return (
     <div className="space-y-3 rounded-xl border border-primary-100 bg-primary-50/40 p-4 text-left">
-      {testMode && (
-        <div role="note" className="rounded-md bg-warning-100 px-2 py-1.5 text-center text-warning-800">
-          <p className="text-[11px] font-bold uppercase tracking-wide">Test mode · no real money moves</p>
-          {/* Moolre's sandbox texts a real code to any other number, so 123456 only works for its test numbers. */}
-          <p className="mt-0.5 text-[11px]">Use MTN number <strong>0240000111</strong> and SMS code <strong>123456</strong>.</p>
-        </div>
-      )}
+      {testMode && <SandboxBanner />}
       <div className="flex items-center justify-between gap-2">
         <p className="flex items-center gap-2 text-sm font-bold text-text"><Smartphone size={16} className="text-primary-600" /> Pay with mobile money</p>
         {amount != null && <p className="text-sm font-bold text-primary-700">GH₵ {Number(amount).toFixed(2)}</p>}

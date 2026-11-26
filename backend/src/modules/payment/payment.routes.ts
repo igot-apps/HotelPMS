@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import * as paymentService from './payment.service';
 import * as subscriptionService from './subscription.service';
 import { processMoolreWebhook } from './moolre-webhook.service';
+import { moolreMode } from './moolre.client';
 import { authenticate, AuthRequest, requirePermission } from '../../shared/middleware/auth.middleware';
 import { prisma } from '../../shared/utils/prisma';
 
@@ -28,7 +29,8 @@ const sendError = (res: Response, error: any) =>
 
 router.get('/subscription-status', ...billing, async (req: AuthRequest, res: Response) => {
   try {
-    return res.json({ success: true, data: await subscriptionService.getSubscriptionStatus(req.user!.propertyId!) });
+    const status = await subscriptionService.getSubscriptionStatus(req.user!.propertyId!);
+    return res.json({ success: true, data: { ...status, paymentTestMode: moolreMode() !== 'live' } });
   } catch (error: any) { return sendError(res, error); }
 });
 

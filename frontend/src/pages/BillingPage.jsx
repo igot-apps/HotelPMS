@@ -297,7 +297,7 @@ export default function BillingPage() {
             </div>
           )}
           {showMomo ? (
-            <SubscriptionMomoPanel params={params} amountLabel={q ? money(q.total) : ''} defaultPhone={userPhone} onApplied={momoDone} onCancel={() => setShowMomo(false)} />
+            <SubscriptionMomoPanel params={params} amountLabel={q ? money(q.total) : ''} defaultPhone={userPhone} testMode={data?.paymentTestMode} onApplied={momoDone} onCancel={() => setShowMomo(false)} />
           ) : <>
           <button type="button" onClick={pay} disabled={!q || !!quoteError || isPaying || quote.isFetching}
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 font-semibold text-text-inverted transition hover:bg-primary-700 disabled:opacity-50">

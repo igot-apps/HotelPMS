@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertCircle, Loader2, ShieldCheck, Smartphone } from 'lucide-react';
 import { initializeSubscriptionPayment, submitSubscriptionOtp, verifyPayment } from '../../api/billing';
-import { guessNetwork, MOMO_NETWORKS } from '../public/MomoPaymentPanel';
+import { guessNetwork, MOMO_NETWORKS, SandboxBanner, SANDBOX_TEST_NUMBER } from '../public/MomoPaymentPanel';
 
 const PENDING_KEY = 'billing-pending-payment';
 const field = 'block w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-text outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20';
@@ -12,7 +12,7 @@ const savePending = (ref) => { try { if (ref) localStorage.setItem(PENDING_KEY, 
  * Subscription payment with Moolre mobile money. The order and its reference are created on the
  * server before Moolre is contacted; this panel only ever checks that same reference.
  */
-export default function SubscriptionMomoPanel({ params, amountLabel, defaultPhone, onApplied, onCancel }) {
+export default function SubscriptionMomoPanel({ params, amountLabel, defaultPhone, testMode, onApplied, onCancel }) {
   const [phone, setPhone] = useState(defaultPhone || '');
   const [network, setNetwork] = useState(() => guessNetwork(defaultPhone));
   const [otp, setOtp] = useState('');
@@ -23,6 +23,13 @@ export default function SubscriptionMomoPanel({ params, amountLabel, defaultPhon
   const [busy, setBusy] = useState(false);
   const timer = useRef(null);
   const since = useRef(Date.now());
+
+  // Test mode: Moolre's sandbox code 123456 only works for its test numbers, so start with one
+  // (only while the number is still the pre-filled one).
+  useEffect(() => {
+    if (!testMode) return;
+    if (phone === (defaultPhone || '')) { setPhone(SANDBOX_TEST_NUMBER); setNetwork('MTN'); }
+  }, [testMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const finish = (ref) => { clearTimeout(timer.current); savePending(''); setReference(''); onApplied?.(ref); };
 
@@ -73,6 +80,7 @@ export default function SubscriptionMomoPanel({ params, amountLabel, defaultPhon
 
   return (
     <div className="mt-4 space-y-3 rounded-xl border border-primary-100 bg-primary-50/40 p-4 text-left">
+      {testMode && <SandboxBanner />}
       <p className="flex items-center justify-between gap-2 text-sm font-bold text-text">
         <span className="flex items-center gap-2"><Smartphone size={16} className="text-primary-600" /> Pay with mobile money</span>
         {amountLabel && <span className="text-primary-700">{amountLabel}</span>}
