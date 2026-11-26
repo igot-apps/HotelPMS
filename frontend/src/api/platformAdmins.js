@@ -10,6 +10,7 @@ export const verifyPlatformEmail = (token) => api.post('/auth/platform/verify-em
 
 // Signed-in Super Admin.
 export const getPlatformAdmins = () => api.get('/platform/admins');
+export const getPlatformPaymentStatus = () => api.get('/platform/admins/payment-status');
 export const getPlatformAdminActivity = () => api.get('/platform/admins/activity');
 export const getMyPlatformAccount = () => api.get('/platform/admins/me');
 export const invitePlatformAdmin = (data) => api.post('/platform/admins', data);

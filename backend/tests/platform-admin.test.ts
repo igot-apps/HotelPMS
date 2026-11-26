@@ -11,7 +11,7 @@ jest.mock('../src/shared/utils/prisma', () => {
   const user = { findFirst: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), update: jest.fn(), deleteMany: jest.fn<any>().mockResolvedValue({ count: 1 }), updateMany: jest.fn(), create: jest.fn(), count: jest.fn() };
   const auditLog = { create: jest.fn(), findMany: jest.fn() };
   const tx = { user, auditLog, $executeRaw: jest.fn() };
-  return { prisma: { user, auditLog, role: { upsert: jest.fn<any>().mockResolvedValue({ roleId: 9 }) }, $transaction: jest.fn((fn: any) => fn(tx)), tx } };
+  return { prisma: { user, auditLog, property: { count: jest.fn<any>().mockResolvedValue(2) }, role: { upsert: jest.fn<any>().mockResolvedValue({ roleId: 9 }) }, $transaction: jest.fn((fn: any) => fn(tx)), tx } };
 });
 jest.mock('../src/shared/utils/password', () => ({
   hashPassword: jest.fn<any>().mockResolvedValue('hashed'),
@@ -220,4 +220,17 @@ test('only inactive, never-used administrator records can be removed, and remova
   await service.removeUnusedAdmin(1, 14);
   expect(db.user.deleteMany.mock.calls[0][0].where).toMatchObject({ userId: 14, isActive: false, lastLoginAt: null, isPlatformAdmin: true, propertyId: null });
   expect(db.auditLog.create.mock.calls[0][0].data).toMatchObject({ action: 'PlatformAdminRemoved', entityId: 14, newData: { email: 'typo@example.com' } });
+});
+
+test('payment status reports live vs sandbox and whether platform keys are set, never the keys', async () => {
+  const saved = { ...process.env };
+  try {
+    Object.assign(process.env, { MOOLRE_ENV: 'live', MOOLRE_USER: 'u', MOOLRE_PUBKEY: 'secret-pub', MOOLRE_ACCOUNT: '10203048395', MOOLRE_WEBHOOK_SECRET: 'w' });
+    const live = await service.getPlatformPaymentStatus();
+    expect(live).toEqual({ moolreMode: 'live', platformWalletConfigured: true, platformAccountHint: '****8395', platformWebhookSecretConfigured: true, hotelsWithOwnKeys: 2 });
+    expect(JSON.stringify(live)).not.toContain('secret-pub');
+
+    process.env.MOOLRE_ENV = 'sandbox'; delete process.env.MOOLRE_PUBKEY;
+    expect(await service.getPlatformPaymentStatus()).toMatchObject({ moolreMode: 'sandbox', platformWalletConfigured: false, platformAccountHint: null });
+  } finally { process.env = saved; }
 });

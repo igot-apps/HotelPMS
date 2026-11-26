@@ -83,6 +83,9 @@ const targetId = (req: Request) => {
 platformAdminRoutes.get('/', async (_req, res) => {
   try { return res.json({ success: true, data: await service.listAdmins() }); } catch (error) { return fail(res, error, 'Could not load administrators.'); }
 });
+platformAdminRoutes.get('/payment-status', async (_req, res) => {
+  try { return res.json({ success: true, data: await service.getPlatformPaymentStatus() }); } catch (error) { return fail(res, error, 'Could not load payment status.'); }
+});
 platformAdminRoutes.get('/activity', async (_req, res) => {
   try { return res.json({ success: true, data: await service.listActivity() }); } catch (error) { return fail(res, error, 'Could not load activity.'); }
 });

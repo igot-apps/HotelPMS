@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Building2, Eye, EyeOff, LoaderCircle, LogOut, ShieldCheck, UserCog, Users } from 'lucide-react';
 import BrandMark from '../components/ui/BrandMark';
 import toast from 'react-hot-toast';
-import { platformLogin } from '../api/platformAdmins';
+import { getPlatformPaymentStatus, platformLogin } from '../api/platformAdmins';
 import PlatformPropertiesPage from './PlatformPropertiesPage';
 import PlatformAdminsPage from './PlatformAdminsPage';
 import PlatformAccountPage from './PlatformAccountPage';
@@ -15,6 +15,26 @@ const TABS = [
   { id: 'admins', label: 'Administrators', icon: Users },
   { id: 'account', label: 'My account', icon: UserCog },
 ];
+
+/** Always-visible indicator of whether Moolre payments are live (real money) or sandbox (test). */
+function PaymentModeBadge() {
+  const { data, isError } = useQuery({ queryKey: ['platform-payment-status'], queryFn: async () => (await getPlatformPaymentStatus()).data.data, staleTime: 60_000 });
+  if (isError) return <span className="rounded-full bg-secondary-100 px-3 py-1 text-xs font-semibold text-text-muted">Payments: status unavailable</span>;
+  if (!data) return null;
+  const live = data.moolreMode === 'live';
+  const details = [
+    live ? 'Live Moolre: real money is charged.' : 'Moolre sandbox: test payments only, no real money moves.',
+    data.platformWalletConfigured ? `Platform wallet ${data.platformAccountHint}${data.platformWebhookSecretConfigured ? '' : ' (no webhook secret)'}.` : 'Platform wallet keys are not set.',
+    `${data.hotelsWithOwnKeys} hotel(s) use their own Moolre keys, also in ${live ? 'live' : 'sandbox'} mode.`,
+  ].join(' ');
+  return (
+    <span title={details} aria-label={details} className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${live ? 'bg-success-50 text-success-700 ring-1 ring-success-200' : 'bg-warning-50 text-warning-800 ring-1 ring-warning-200'}`}>
+      <span className={`h-2 w-2 rounded-full ${live ? 'bg-success-600' : 'bg-warning-500'}`} />
+      {live ? 'Moolre LIVE' : 'Moolre TEST (sandbox)'}
+      {!data.platformWalletConfigured && <span className="font-semibold text-danger-700">· platform keys missing</span>}
+    </span>
+  );
+}
 
 export default function SuperAdminPage() {
   // Separate from the hotel staff session (useAuthStore), so both can be open in one browser.
@@ -61,6 +81,7 @@ export default function SuperAdminPage() {
               <span><strong className="block text-sm font-bold sm:text-base">HideOut24 Platform</strong><span className="text-xs text-text-muted">Super administrator</span></span>
             </div>
             <div className="flex items-center gap-3">
+              <PaymentModeBadge />
               <span className="hidden text-right sm:block"><strong className="block text-sm">{user.fullName}</strong><span className="text-xs text-text-muted">{user.email || 'Platform administrator'}</span></span>
               <button onClick={handleLogout} className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-secondary-50"><LogOut size={16} /> <span className="hidden sm:inline">Sign out</span></button>
             </div>

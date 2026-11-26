@@ -5,6 +5,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypt
 import { prisma } from '../../shared/utils/prisma';
 import { comparePassword, hashPassword } from '../../shared/utils/password';
 import { issueSession } from '../auth/auth.service';
+import { moolreMode, platformMoolreConfig } from '../payment/moolre.client';
 import {
   deliverPlatformEmailChange, deliverPlatformEmailChangedNotice, deliverPlatformInvitation, deliverPlatformPasswordReset,
 } from '../../shared/utils/platformEmail';
@@ -351,4 +352,19 @@ async function sendSafely(send: () => Promise<void>) {
     console.error('Platform admin email delivery failed', error instanceof Error ? error.message : error);
     return false;
   }
+}
+
+// ---------------------------------------------------------------- platform payment status
+
+/** Whether payments run against live Moolre or the sandbox. MOOLRE_ENV applies to every wallet. */
+export async function getPlatformPaymentStatus() {
+  const platform = platformMoolreConfig();
+  const hotelsWithOwnKeys = await prisma.property.count({ where: { moolreUsername: { not: null }, moolrePublicKey: { not: null }, moolreAccountNumber: { not: null } } });
+  return {
+    moolreMode: moolreMode(),
+    platformWalletConfigured: Boolean(platform),
+    platformAccountHint: platform ? `****${platform.account.slice(-4)}` : null,
+    platformWebhookSecretConfigured: Boolean(platform?.webhookSecret),
+    hotelsWithOwnKeys,
+  };
 }
