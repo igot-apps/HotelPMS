@@ -48,7 +48,12 @@ export default function PlatformAccountPage() {
         <button disabled={name === null || saveName.isPending} className={button}>Save name</button>
       </form>
 
-      <form className={card} onSubmit={(e) => {
+      {account.isDefault ? (
+        <section className={card}>
+          <h2 className="font-semibold">Sign-in email</h2>
+          <p className="text-sm text-text-muted"><strong>{account.email}</strong> is the default administrator. It cannot be deactivated and its email cannot be changed. If you lose access, use “Forgot your password?” on the sign-in page.</p>
+        </section>
+      ) : <form className={card} onSubmit={(e) => {
         e.preventDefault(); setEmError('');
         changeEmail.mutate();
       }}>
@@ -59,7 +64,7 @@ export default function PlatformAccountPage() {
         <label className="block text-sm font-medium">Current password<input required type="password" autoComplete="current-password" value={em.current} onChange={(e) => setEm({ ...em, current: e.target.value })} className={input} /></label>
         {emError && <p role="alert" className="text-sm text-danger-600">{emError}</p>}
         <button disabled={changeEmail.isPending} className={button}>{changeEmail.isPending ? 'Sending…' : 'Send confirmation link'}</button>
-      </form>
+      </form>}
 
       <form className={card} onSubmit={(e) => {
         e.preventDefault(); setPwError('');

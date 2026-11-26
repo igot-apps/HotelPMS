@@ -76,14 +76,14 @@ export default function PlatformAdminsPage({ currentUserId }) {
               const self = admin.userId === currentUserId;
               return (
                 <tr key={admin.userId} className="border-t border-border">
-                  <td className="p-3 font-medium">{admin.fullName}{self && <span className="ml-2 text-xs text-text-muted">(you)</span>}</td>
+                  <td className="p-3 font-medium">{admin.fullName}{admin.isDefault && <span className="ml-2 rounded-full bg-primary-50 px-2 py-0.5 text-xs font-semibold text-primary-700">Default</span>}{self && <span className="ml-2 text-xs text-text-muted">(you)</span>}</td>
                   <td className="p-3">{admin.email || <span className="text-warning-700">No email yet</span>}</td>
                   <td className="p-3"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${s.cls}`}>{s.label}</span></td>
                   <td className="p-3 text-text-muted">{when(admin.lastLoginAt)}</td>
                   <td className="p-3">
                     <div className="flex justify-end gap-2">
                       {admin.invitationPending && admin.isActive && <button onClick={() => confirmAndRun('resend', admin)} disabled={act.isPending} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold"><Mail size={14} /> Resend invite</button>}
-                      {admin.isActive && !self && <button onClick={() => confirmAndRun('deactivate', admin)} disabled={act.isPending} className="inline-flex items-center gap-1 rounded-lg border border-danger-200 px-2 py-1 text-xs font-semibold text-danger-700"><PowerOff size={14} /> {admin.invitationPending ? 'Revoke' : 'Deactivate'}</button>}
+                      {admin.isActive && !self && !admin.isDefault && <button onClick={() => confirmAndRun('deactivate', admin)} disabled={act.isPending} className="inline-flex items-center gap-1 rounded-lg border border-danger-200 px-2 py-1 text-xs font-semibold text-danger-700"><PowerOff size={14} /> {admin.invitationPending ? 'Revoke' : 'Deactivate'}</button>}
                       {!admin.isActive && <button onClick={() => confirmAndRun('reactivate', admin)} disabled={act.isPending} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold"><Power size={14} /> Reactivate</button>}
                     </div>
                   </td>

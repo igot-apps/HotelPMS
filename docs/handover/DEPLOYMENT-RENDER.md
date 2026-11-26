@@ -34,6 +34,8 @@ unrelated old projects — ignore them.
   `RENDER_CUSTOM_DOMAIN_LIMIT` — adding hotel custom domains to the frontend service
 - `PLATFORM_ADMIN_NAME`, `PLATFORM_ADMIN_PHONE`, `PLATFORM_ADMIN_INITIAL_PASSWORD` — only for
   `npm run prisma:bootstrap-platform-admin`
+- `PLATFORM_DEFAULT_ADMIN_EMAIL` — the default Super Admin. It can never be deactivated and its email
+  cannot be changed; regain access with "Forgot password" (or the recovery script below).
 - `PLATFORM_EMAIL_TOKEN_SECRET` (optional) — signs Super Admin email-change links; falls back to `JWT_SECRET`.
   Super Admin invite/reset/verify emails use `RESEND_API_KEY` + `RESEND_FROM_EMAIL` (or `STAFF_EMAIL_MODE=simulation`).
 

@@ -28,6 +28,13 @@ export const PLATFORM = { isPlatformAdmin: true, propertyId: null } as const;
 /** Active admins: pending invitations do not count. */
 const ACTIVE = { ...PLATFORM, isActive: true, invitationPending: false } as const;
 
+/**
+ * The default (owner) administrator, set by PLATFORM_DEFAULT_ADMIN_EMAIL. It can never be deactivated
+ * and its email cannot be changed; if access is lost, use "Forgot password" or the recovery script.
+ */
+export const defaultAdminEmail = () => process.env.PLATFORM_DEFAULT_ADMIN_EMAIL?.trim().toLowerCase() || null;
+const isDefaultAdmin = (email: string | null | undefined) => Boolean(email && defaultAdminEmail() && email.toLowerCase() === defaultAdminEmail());
+
 export function normalizeEmail(value: unknown): string {
   if (typeof value !== 'string') throw new PlatformAdminError('Enter a valid email address.');
   const email = value.trim().toLowerCase();
@@ -77,13 +84,14 @@ export async function platformLogin(identifier: unknown, password: unknown) {
 const adminFields = { userId: true, fullName: true, email: true, phone: true, isActive: true, invitationPending: true, invitationExpiresAt: true, lastLoginAt: true, createdAt: true } as const;
 
 export async function listAdmins() {
-  return prisma.user.findMany({ where: PLATFORM, select: adminFields, orderBy: [{ isActive: 'desc' }, { fullName: 'asc' }] });
+  const admins = await prisma.user.findMany({ where: PLATFORM, select: adminFields, orderBy: [{ isActive: 'desc' }, { fullName: 'asc' }] });
+  return admins.map((admin: any) => ({ ...admin, isDefault: isDefaultAdmin(admin.email) }));
 }
 
 export async function getMe(userId: number) {
   const me = await prisma.user.findFirst({ where: { ...PLATFORM, userId }, select: adminFields });
   if (!me) throw new PlatformAdminError('Account not found.', 404);
-  return me;
+  return { ...me, isDefault: isDefaultAdmin(me.email) };
 }
 
 export async function listActivity() {
@@ -156,8 +164,9 @@ export async function deactivateAdmin(actorId: number, targetId: number) {
   if (actorId === targetId) throw new PlatformAdminError('You cannot deactivate your own account.');
   await prisma.$transaction(async (tx: any) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${LAST_ADMIN_LOCK})`;
-    const target = await tx.user.findFirst({ where: { ...PLATFORM, userId: targetId }, select: { isActive: true, invitationPending: true } });
+    const target = await tx.user.findFirst({ where: { ...PLATFORM, userId: targetId }, select: { isActive: true, invitationPending: true, email: true } });
     if (!target) throw new PlatformAdminError('Administrator not found.', 404);
+    if (isDefaultAdmin(target.email)) throw new PlatformAdminError('The default administrator cannot be deactivated.', 403);
     if (!target.isActive) throw new PlatformAdminError('This administrator is already inactive.');
     if (!target.invitationPending) {
       const othersActive = await tx.user.count({ where: { ...ACTIVE, userId: { not: targetId } } });
@@ -241,6 +250,7 @@ export async function requestEmailChange(userId: number, currentPassword: unknow
   const email = normalizeEmail(newEmailInput);
   const me = await verifyCurrentPassword(userId, currentPassword);
   if (me.email === email) throw new PlatformAdminError('That is already your email address.');
+  if (isDefaultAdmin(me.email)) throw new PlatformAdminError('The default administrator’s email cannot be changed.', 403);
   if (await prisma.user.findUnique({ where: { email }, select: { userId: true } })) throw new PlatformAdminError('That email is already used by another account.');
   const token = createEmailChangeToken({ u: userId, e: email, o: me.email || null, s: me.sessionVersion || null, x: Date.now() + EMAIL_CHANGE_MS });
   await audit(userId, userId, 'PlatformAdminEmailChangeRequested', { newEmail: email });
@@ -249,6 +259,7 @@ export async function requestEmailChange(userId: number, currentPassword: unknow
 
 export async function confirmEmailChange(token: unknown) {
   const payload = readEmailChangeToken(token);
+  if (isDefaultAdmin(payload.o)) throw new PlatformAdminError('The default administrator’s email cannot be changed.', 403);
   if (await prisma.user.findFirst({ where: { email: payload.e, userId: { not: payload.u } }, select: { userId: true } })) {
     throw new PlatformAdminError('That email is already used by another account.');
   }

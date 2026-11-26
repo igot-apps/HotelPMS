@@ -160,3 +160,23 @@ test('tampered or expired email-change links are rejected', async () => {
   expect(body).toBeTruthy();
   expect(db.user.updateMany).not.toHaveBeenCalled();
 });
+
+// ---------- default administrator
+test('the default administrator cannot be deactivated or have its email changed', async () => {
+  process.env.PLATFORM_DEFAULT_ADMIN_EMAIL = ' Boss@Example.com ';
+  try {
+    db.user.findFirst.mockResolvedValue({ isActive: true, invitationPending: false, email: 'boss@example.com' });
+    db.user.count.mockResolvedValue(5);
+    await expect(service.deactivateAdmin(2, 1)).rejects.toThrow('default administrator cannot be deactivated');
+    expect(db.user.update).not.toHaveBeenCalled();
+
+    db.user.findFirst.mockResolvedValue(admin);
+    await expect(service.requestEmailChange(1, 'correct-password', 'other@example.com')).rejects.toThrow('cannot be changed');
+    const token = service.createEmailChangeToken({ u: 1, e: 'other@example.com', o: 'boss@example.com', s: 'v1', x: Date.now() + 60_000 });
+    await expect(service.confirmEmailChange(token)).rejects.toThrow('cannot be changed');
+    expect(db.user.updateMany).not.toHaveBeenCalled();
+
+    db.user.findMany.mockResolvedValue([{ userId: 1, email: 'boss@example.com' }, { userId: 2, email: 'x@example.com' }]);
+    expect((await service.listAdmins()).map((a: any) => a.isDefault)).toEqual([true, false]);
+  } finally { delete process.env.PLATFORM_DEFAULT_ADMIN_EMAIL; }
+});
