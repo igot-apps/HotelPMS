@@ -1,7 +1,8 @@
 //pms login
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
+import { staffHome } from '../components/auth/RedirectIfSignedIn';
 import { SHOW_DISCOVER } from '../lib/platformConfig';
 import { useAuthStore } from '../store/authStore';
 import { loginUser } from '../api/auth'; // Ensure this matches your API file
@@ -16,6 +17,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const login = useAuthStore((state) => state.login);
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const hotelName = searchParams.get('hotel')?.trim().slice(0, 120);
   
   const [formData, setFormData] = useState({ username: '', password: '' });
@@ -30,7 +32,11 @@ export default function LoginPage() {
       login(user, { accessToken, refreshToken }, user.permissions); 
       
       toast.success(`Welcome back, ${user.fullName}!`);
-      navigate(user.role === 'Housekeeper' ? '/housekeeping' : '/dashboard');
+      // Back to the page that asked them to sign in (if it is a staff page they can use), else their home page.
+      const from = location.state?.from;
+      const back = from?.pathname && !/^\/(login|hotel\/login|staff|superadmin|public)/.test(from.pathname) && user.role !== 'Housekeeper'
+        ? `${from.pathname}${from.search || ''}${from.hash || ''}` : null;
+      navigate(back || staffHome(user.role), { replace: true });
     },
     onError: (error) => {
       toast.error(error.response?.data?.message || 'Invalid username or password.');

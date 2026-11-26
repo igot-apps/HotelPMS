@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast';
 import AppLayout from './components/layout/AppLayout';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import GuestProtectedRoute from './components/auth/GuestProtectedRoute';
+import RedirectIfSignedIn from './components/auth/RedirectIfSignedIn';
 
 // Property Registration and PMS Public Pages
 import LoginPage from './pages/LoginPage';
@@ -94,11 +95,11 @@ function App() {
         {/* 🌟 PUBLIC ROUTES (No login required)       */}
         {/* ========================================== */}
         <Route path="/" element={SHOW_DISCOVER ? <DiscoverPage /> : <Navigate to="/login" replace />} />
-        <Route path="/login" element={<LoginPage />} />
+        <Route path="/login" element={<RedirectIfSignedIn><LoginPage /></RedirectIfSignedIn>} />
         <Route path="/staff" element={<Navigate to="/login" replace />} />
         <Route path="/staff/setup" element={<StaffSetupPage />} />
         <Route path="/staff/reset-password" element={<StaffPasswordResetPage />} />
-        <Route path="/hotel/login" element={<LoginPage />} />
+        <Route path="/hotel/login" element={<RedirectIfSignedIn><LoginPage /></RedirectIfSignedIn>} />
         <Route path="/for-hotels" element={<ForHotelsPage />} />
         <Route path="/superadmin" element={<SuperAdminPage />} />
         <Route path="/superadmin/setup" element={<PlatformAccountLinkPage mode="setup" />} />
@@ -111,10 +112,10 @@ function App() {
         
         {/* 🌟 Guest Booking Flow */}
         <Route path="/public/:propertyCode" element={<PublicHotelPage />} />
-        <Route path="/public/:propertyCode/auth" element={<GuestAuthPage />} />
+        <Route path="/public/:propertyCode/auth" element={<RedirectIfSignedIn as="guest"><GuestAuthPage /></RedirectIfSignedIn>} />
         <Route path="/public/:propertyCode/book/:roomTypeId" element={<PublicCheckoutPage />} />
         <Route path="/public/:propertyCode/booking-success" element={<PublicBookingSuccessPage />} />
-        <Route path="/public/auth" element={<PublicAuthPage />} />
+        <Route path="/public/auth" element={<RedirectIfSignedIn as="guest"><PublicAuthPage /></RedirectIfSignedIn>} />
 
         {/* ========================================== */}
         {/* 🔒 PROTECTED ROUTES (Wrapped in Layout)    */}
