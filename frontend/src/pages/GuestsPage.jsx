@@ -166,7 +166,6 @@ export default function GuestsPage() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {guest.phone && <Link to={`/bookings?new=1&guest=${encodeURIComponent(guest.phone)}`} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-primary-700 hover:bg-primary-50" aria-label={`New booking for ${guest.fullName}`}><Plus size={14} /> Book</Link>}
                         {isOnlineGuest ? (
                           <span className="text-xs text-text-muted">Guest-managed profile</span>
                         ) : (

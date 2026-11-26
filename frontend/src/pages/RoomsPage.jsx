@@ -109,6 +109,12 @@ export default function RoomsPage() {
     dirty: rooms.filter(r => r.housekeepingStatus?.toUpperCase() === 'DIRTY').length,
   };
 
+  // Tapping a stat box shows those rooms and brings the list into view (useful on phones).
+  const showRooms = (id) => {
+    setFilter(id);
+    requestAnimationFrame(() => document.getElementById('room-filters')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
+
   const filters = [
     { id: 'all', label: 'All Rooms', count: stats.total, icon: LayoutGrid },
     { id: 'ready', label: 'Ready', count: stats.ready, icon: CheckCircle2 },
@@ -132,10 +138,10 @@ export default function RoomsPage() {
 
       {/* Quick Stats Dashboard */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatBox label="Total Rooms" value={stats.total} color="secondary" />
-        <StatBox label="Ready" value={stats.ready} color="success" />
-        <StatBox label="Occupied" value={stats.occupied} color="primary" />
-        <StatBox label="Needs Cleaning" value={stats.dirty} color="warning" />
+        <StatBox label="Total Rooms" value={stats.total} color="secondary" active={filter === 'all'} onClick={() => showRooms('all')} />
+        <StatBox label="Ready" value={stats.ready} color="success" active={filter === 'ready'} onClick={() => showRooms('ready')} />
+        <StatBox label="Occupied" value={stats.occupied} color="primary" active={filter === 'OCCUPIED'} onClick={() => showRooms('OCCUPIED')} />
+        <StatBox label="Needs Cleaning" value={stats.dirty} color="warning" active={filter === 'dirty'} onClick={() => showRooms('dirty')} />
       </div>
 
       <div className="relative max-w-md">
@@ -144,7 +150,7 @@ export default function RoomsPage() {
       </div>
 
       {/* Modern Filter Bar */}
-      <div className="bg-surface p-1.5 rounded-xl border border-border shadow-sm inline-flex flex-wrap gap-1.5">
+      <div id="room-filters" className="scroll-mt-4 bg-surface p-1.5 rounded-xl border border-border shadow-sm inline-flex flex-wrap gap-1.5">
         {filters.map(f => (
           <button
             key={f.id}
@@ -214,7 +220,7 @@ export default function RoomsPage() {
 }
 
 // Reusable Mini Stat Box Component
-function StatBox({ label, value, color }) {
+function StatBox({ label, value, color, active, onClick }) {
   const colorMap = {
     secondary: 'bg-secondary-50 text-secondary-700',
     success: 'bg-success-50 text-success-700',
@@ -223,14 +229,20 @@ function StatBox({ label, value, color }) {
   };
 
   return (
-    <div className="bg-surface p-5 rounded-2xl border border-border shadow-sm">
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      aria-label={`Show ${label.toLowerCase()}: ${value}`}
+      className={`group w-full text-left bg-surface p-5 rounded-2xl border shadow-sm transition hover:border-primary-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 active:scale-[0.98] ${active ? 'border-primary-500 ring-2 ring-primary-500/20' : 'border-border'}`}
+    >
       <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">{label}</p>
       <div className="flex items-end justify-between mt-2">
-        <h3 className="text-3xl font-bold text-text">{value}</h3>
+        <span className="text-3xl font-bold text-text">{value}</span>
         <span className={`text-xs font-bold px-2 py-1 rounded-lg ${colorMap[color]}`}>
-          {label}
+          {active ? 'Showing' : 'View'}
         </span>
       </div>
-    </div>
+    </button>
   );
 }
