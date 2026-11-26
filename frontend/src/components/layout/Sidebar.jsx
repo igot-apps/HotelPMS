@@ -79,8 +79,8 @@ export default function Sidebar({ isOpen, onClose }) {
           >
             <item.icon size={20} />
             <span className="flex-1">{item.label}</span>
-            {item.to === '/dashboard' && overdueCheckouts > 0 && <span aria-label={`${overdueCheckouts} overstays`} title="Overstays" className="rounded-full bg-danger-100 px-2 py-0.5 text-xs font-bold text-danger-800">{overdueCheckouts > 99 ? '99+' : overdueCheckouts}</span>}
-            {item.to === '/refunds' && (refunds.isError ? <span title="Could not refresh refunds" className="rounded bg-amber-100 px-2 text-xs text-amber-900">!</span> : refunds.data?.ready > 0 && <span aria-label={`${refunds.data.ready} approved refunds ready to return`} className="rounded-full bg-primary-100 px-2 py-0.5 text-xs font-bold text-primary-900">{refunds.data.ready > 99 ? '99+' : refunds.data.ready}</span>)}
+            {item.to === '/dashboard' && overdueCheckouts > 0 && <span aria-label={`${overdueCheckouts} overstays`} title="Overstays" className="min-w-6 rounded-full bg-danger-600 px-2 py-0.5 text-center text-xs font-bold text-white shadow-sm ring-2 ring-white/30">{overdueCheckouts > 99 ? '99+' : overdueCheckouts}</span>}
+            {item.to === '/refunds' && (refunds.isError ? <span title="Could not refresh refunds" className="rounded bg-amber-100 px-2 text-xs text-amber-900">!</span> : refunds.data?.ready > 0 && <span aria-label={`${refunds.data.ready} approved refunds ready to return`} className="min-w-6 rounded-full bg-white px-2 py-0.5 text-center text-xs font-bold text-primary-800 shadow-sm">{refunds.data.ready > 99 ? '99+' : refunds.data.ready}</span>)}
             
             {/* 🌟 Premium UX: Pulsing red dot if trial is expiring in 3 days or less */}
             {item.to === '/billing' && user?.subscriptionStatus === 'Trial' && daysLeft <= 3 && (
