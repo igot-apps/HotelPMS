@@ -54,7 +54,8 @@ export const authenticate = async (
       res.status(401).json({ success: false, code: 'STAFF_SESSION_EXPIRED', message: 'Your password changed. Please sign in again.' });
       return;
     }
-    if (account.role?.roleName === 'Housekeeper' && !req.originalUrl.startsWith('/api/housekeeping/') && !req.originalUrl.startsWith('/api/auth/')) {
+    // Housekeepers: their screen, sign-in, and notifications on their own devices only.
+    if (account.role?.roleName === 'Housekeeper' && !['/api/housekeeping/', '/api/auth/', '/api/push/'].some(prefix => req.originalUrl.startsWith(prefix))) {
       res.status(403).json({ success: false, message: 'This account can access Housekeeping only.' });
       return;
     }

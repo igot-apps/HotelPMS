@@ -224,7 +224,7 @@ export const updateRoomStatus = async (
   roomId: number,
   operationalStatus: any,
   housekeepingStatus?: any,
-  extra: { maintenanceReason?: string | null } = {},
+  extra: { maintenanceReason?: string | null; cleaningStartedById?: null; cleaningStartedAt?: null } = {},
 ) => {
   const data: any = { operationalStatus, ...extra };
   if (housekeepingStatus) data.housekeepingStatus = housekeepingStatus;

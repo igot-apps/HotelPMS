@@ -1,6 +1,7 @@
 import { atProperty } from '../../shared/utils/property-access';
 import { prisma } from '../../shared/utils/prisma';
 import { recordSimulatedSms } from '../notifications/simulated-sms.service';
+import { notifyRoomsNeedCleaning } from '../notifications/housekeeping-alerts';
 import { canCorrect } from './correction-policy';
 import { occupantDetails, confirmOccupant } from './occupant.service';
 import { netPaid } from './refund.service';
@@ -23,10 +24,22 @@ const reasonText = (value: unknown) => {
 // Retry serialization conflicts; never partially commit a correction.
 async function atomic<T>(work: (tx: any) => Promise<T>): Promise<T> {
   for (let attempt = 0; ; attempt++) {
-    try { return await prisma.$transaction(work, { isolationLevel: 'Serializable', timeout: 15000 }); }
+    try {
+      let released: number[] = [];
+      const result = await prisma.$transaction(async tx => {
+        const value = await work(tx);
+        released = releasedRooms.get(tx) || [];
+        return value;
+      }, { isolationLevel: 'Serializable', timeout: 15000 });
+      // Only after the change is saved: tell housekeepers which rooms now need cleaning.
+      if (released.length) void notifyRoomsNeedCleaning([...new Set(released)]);
+      return result;
+    }
     catch (error: any) { if ((error.code !== 'P2034' && error.meta?.code !== '40001') || attempt >= 2) throw error; }
   }
 }
+// Rooms set to "needs cleaning" inside a transaction, announced once it commits.
+const releasedRooms = new WeakMap<object, number[]>();
 async function booking(tx: any, id: string, actor: Actor) {
   const rows = await tx.$queryRaw`SELECT "reservationId" FROM reservations WHERE "reservationId" = ${id} AND "propertyId" = ${actor.propertyId} FOR UPDATE`;
   if (!rows.length) throw new Error('Reservation not found for this hotel.');
@@ -161,7 +174,10 @@ async function derive(tx: any, id: string) {
 async function releaseOccupiedRoom(tx: any, stay: any) {
   if (stay.roomId === null || stay.status !== 'CheckedIn') return;
   const other = await tx.reservationRoom.findFirst({ where: { roomId: stay.roomId, reservationRoomId: { not: stay.reservationRoomId }, status: 'CheckedIn' } });
-  if (!other) await tx.room.update({ where: { roomId: stay.roomId }, data: { operationalStatus: 'Available', housekeepingStatus: 'Dirty' } });
+  if (!other) {
+    await tx.room.update({ where: { roomId: stay.roomId }, data: { operationalStatus: 'Available', housekeepingStatus: 'Dirty', cleaningStartedById: null, cleaningStartedAt: null } });
+    releasedRooms.set(tx, [...(releasedRooms.get(tx) || []), stay.roomId]);
+  }
 }
 function balanceApproval(res: any, user: any, overrideReason?: unknown) {
   if (res.totalAmount === null || !Number.isFinite(Number(res.totalAmount)) || Number(res.totalAmount) < 0) throw new Error('The reservation total must be reconciled before checkout.');

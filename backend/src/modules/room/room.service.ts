@@ -3,6 +3,7 @@ import { prisma } from '../../shared/utils/prisma';
 import { hotelDate } from '../reports/daily-overview.service';
 import { expireUnarrivedStays } from '../reservation/recovery.service';
 import { assertCapacity } from '../payment/subscription-access';
+import { notifyMaintenanceResolved } from '../notifications/housekeeping-alerts';
 
 const isDeactivated = (room: { operationalStatus: string; maintenanceReason: string | null }) =>
   room.operationalStatus === 'Maintenance' && room.maintenanceReason === 'Room deactivated';
@@ -120,6 +121,7 @@ export const updateRoomStatus = async (
   operationalStatus: string,
   housekeepingStatus?: string,
   maintenanceReason?: unknown,
+  actor?: { userId: number; propertyId: number },
 ) => {
   const room = await roomRepository.findRoomById(roomId);
   if (!room) throw new Error('Room not found');
@@ -137,8 +139,16 @@ export const updateRoomStatus = async (
       throw new Error(`Room ${room.roomNumber} is occupied by ${occupant}. Check the guest out before setting the room to maintenance.`);
     }
   }
-  
-  return roomRepository.updateRoomStatus(roomId, operationalStatus, housekeepingStatus, reasonUpdate);
+
+  const stillWaiting = operationalStatus === 'Available' && (housekeepingStatus || room.housekeepingStatus) === 'Dirty';
+  const updated = await roomRepository.updateRoomStatus(roomId, operationalStatus, housekeepingStatus, { ...reasonUpdate, ...(stillWaiting ? {} : { cleaningStartedById: null, cleaningStartedAt: null }) });
+  // Same Activity Log entry as the housekeeping screen, so every cleaning change is traceable.
+  if (actor && housekeepingStatus && housekeepingStatus !== room.housekeepingStatus) {
+    await prisma.auditLog.create({ data: { propertyId: room.propertyId, userId: actor.userId, entityType: 'Room', action: 'HousekeepingStatusChanged', oldData: { roomId, status: room.housekeepingStatus }, newData: { roomId, propertyId: room.propertyId, status: housekeepingStatus } } })
+      .catch((error: any) => console.warn('Could not record cleaning status change', { roomId, error: error?.message }));
+  }
+  if (room.operationalStatus === 'Maintenance' && operationalStatus === 'Available') void notifyMaintenanceResolved(roomId);
+  return updated;
 };
 
 // 🌟 SOFT DELETE: Deactivates the room

@@ -18,6 +18,7 @@ import platformPropertyRoutes from './modules/property/platformProperty.routes';
 import platformSubscriptionRoutes from './modules/payment/platform-subscription.routes';
 import roomRoutes from './modules/room/room.routes';
 import housekeepingRoutes from './modules/housekeeping/housekeeping.routes';
+import roomIssueRoutes from './modules/housekeeping/room-issues.routes';
 import notificationsRoutes from './modules/notifications/notifications.routes';
 import guestRoutes from './modules/guest/guest.routes';
 import reservationRoutes from './modules/reservation/reservation.routes';
@@ -33,6 +34,7 @@ import publicAuthRoutes from './modules/public/public-auth.routes';
 import testClockRoutes from './shared/test-clock.routes';
 import pushRoutes from './modules/notifications/push.routes';
 import { notifyOverstays } from './modules/notifications/push-events';
+import { runHousekeepingAlerts } from './modules/notifications/housekeeping-alerts';
 import { expireOnlineHolds } from './modules/reservation/online-hold.service';
 import { expireUnarrivedStays } from './modules/reservation/recovery.service';
 import { activateReadyWebsiteDomains } from './modules/property/domain-auto-activation.service';
@@ -102,6 +104,7 @@ app.use('/api/platform/subscription-settings', platformSubscriptionRoutes);
 app.use('/api/platform/admins', platformAdminRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/housekeeping', housekeepingRoutes);
+app.use('/api/room-issues', roomIssueRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/guests', guestRoutes);
@@ -144,6 +147,9 @@ if (require.main === module) {
   // Push notifications for guests past checkout (no-op unless VAPID keys are set).
   const checkOverstays = () => notifyOverstays().catch(() => console.warn('Could not check overstays for notifications.'));
   setInterval(checkOverstays, 5 * 60 * 1000).unref();
+  // Housekeepers: urgent rooms (guest arriving today) and the morning checkout/check-in summary.
+  const checkHousekeeping = () => runHousekeepingAlerts().catch(() => console.warn('Could not check housekeeping notifications.'));
+  setInterval(checkHousekeeping, 5 * 60 * 1000).unref();
   const remindManagers = () => sendSubscriptionReminders().catch(() => console.warn('Could not check subscription reminders.'));
   void remindManagers();
   setInterval(remindManagers, 30 * 60 * 1000).unref();

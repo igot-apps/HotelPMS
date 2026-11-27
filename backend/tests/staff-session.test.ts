@@ -22,6 +22,7 @@ let actions = 0;
 app.all('/action', authenticate, (_req, res) => { actions++; res.json({ success: true }); });
 app.get('/api/rooms', authenticate, (_req, res) => res.json({ success: true }));
 app.get('/api/housekeeping/rooms', authenticate, (_req, res) => res.json({ success: true }));
+app.get('/api/push/preferences', authenticate, (_req, res) => res.json({ success: true }));
 
 beforeEach(() => {
   jest.clearAllMocks(); actions = 0;
@@ -47,6 +48,7 @@ test('housekeeper access is limited to housekeeping and account endpoints', asyn
   db.user.findUnique.mockResolvedValue({ isActive: true, propertyId: 5, role: { roleName: 'Housekeeper' } });
   expect((await request(app).get('/api/rooms').auth(accessToken, { type: 'bearer' })).status).toBe(403);
   expect((await request(app).get('/api/housekeeping/rooms').auth(accessToken, { type: 'bearer' })).status).toBe(200);
+  expect((await request(app).get('/api/push/preferences').auth(accessToken, { type: 'bearer' })).status).toBe(200);
 });
 
 test('deleted and transferred accounts are rejected', async () => {

@@ -23,6 +23,7 @@ const LABELS: Record<string, string> = {
   CorrectionRequested: 'Correction requested', CorrectionRequestApproved: 'Request approved', CorrectionRequestRejected: 'Request rejected',
   RefundRequested: 'Refund requested', RefundCompleted: 'Refund paid out', RefundSimulated: 'Refund (simulation)', SimulatedRefundSettled: 'Refund simulation settled',
   CashCountRecorded: 'Cash count recorded', CashCountIssueRecorded: 'Pending cash count reported', HousekeepingStatusChanged: 'Room cleaning status changed', HousekeepingSettingChanged: 'Housekeeping setting changed',
+  CleaningStarted: 'Cleaning started', CleaningReleased: 'Cleaning released', RoomIssueReported: 'Room issue reported', RoomIssueResolved: 'Room issue resolved',
   CorrectionPermissionsChanged: 'Staff permissions changed', OnlineRoomPermissionChanged: 'Online room permission changed',
   RefundSimulationSettingChanged: 'Refund simulation setting changed', SmsSimulationSettingChanged: 'SMS simulation setting changed',
   PropertyDeactivated: 'Hotel deactivated', PropertyReactivated: 'Hotel reactivated',
@@ -31,7 +32,7 @@ const LABELS: Record<string, string> = {
 
 export const kindOf = (action: string): Kind => {
   if (action.startsWith('Correction') || action === 'CreditCheckoutApproved') return 'corrections';
-  if (['CheckedIn', 'CheckedOut', 'GuestMarkedOut', 'GuestMarkedReturned', 'DepartureVerified', 'RoomNoShow', 'ReservationNoShow', 'HousekeepingStatusChanged'].includes(action)) return 'stays';
+  if (['CheckedIn', 'CheckedOut', 'GuestMarkedOut', 'GuestMarkedReturned', 'DepartureVerified', 'RoomNoShow', 'ReservationNoShow', 'HousekeepingStatusChanged', 'CleaningStarted', 'CleaningReleased', 'RoomIssueReported', 'RoomIssueResolved'].includes(action)) return 'stays';
   if (['BookingCreated', 'ReservationCancelled'].includes(action)) return 'bookings';
   if (action.startsWith('Refund') || action.startsWith('SimulatedRefund') || ['PaymentReceived', 'CashCountRecorded'].includes(action)) return 'money';
   return 'settings';
@@ -55,6 +56,7 @@ function detailOf(action: string, data: any): string {
   if (action === 'CorrectionPermissionsChanged') parts.push(`Allowed: ${(data?.permissions || []).join(', ') || 'none'}`);
   if (data?.enabled != null) parts.push(data.enabled ? 'Turned on' : 'Turned off');
   if (reason && !['No reason given', 'Normal room lifecycle transition'].includes(reason)) parts.push(`Reason: ${reason}`);
+  if ((action === 'RoomIssueReported' || action === 'RoomIssueResolved') && data?.category) parts.push(`${data.category}${data.description ? `: ${data.description}` : ''}${data.roomUnsuitable ? ' · may be unsuitable for guests' : ''}`);
   if (data?.note) parts.push(`Note: ${data.note}`);
   return parts.filter(Boolean).join(' · ');
 }

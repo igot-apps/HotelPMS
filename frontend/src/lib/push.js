@@ -64,3 +64,7 @@ export function disablePushOnSignOut() {
 }
 
 export const sendTestPush = () => api.post('/push/test', {}, quiet);
+
+/** Which alerts this person receives (housekeepers choose; other roles get an empty list). */
+export const getAlertPreferences = () => api.get('/push/preferences', quiet);
+export const setAlertPreference = (key, enabled) => api.patch('/push/preferences', { key, enabled }, quiet);

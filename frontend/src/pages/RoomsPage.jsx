@@ -5,6 +5,7 @@ import { getRooms, updateRoomStatus, getOnlineRoomAccess, setRoomOnlineBooking }
 import { MaintenanceReasonDialog } from '../components/rooms/MaintenanceReason';
 import { useAuthStore } from '../store/authStore';
 import RoomCard from '../components/rooms/RoomCard';
+import RoomIssuesPanel from '../components/rooms/RoomIssuesPanel';
 import { BedDouble, AlertCircle, CheckCircle2, Wrench, Sparkles, LayoutGrid, Search, Settings } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import RequirePermission from '../components/RequirePermission';
@@ -135,6 +136,8 @@ export default function RoomsPage() {
           <Link to="/room-management" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-primary-700 hover:bg-primary-50"><Settings size={16} /> Edit rooms & prices</Link>
         </RequirePermission>
       </div>
+
+      <RoomIssuesPanel />
 
       {/* Quick Stats Dashboard */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
