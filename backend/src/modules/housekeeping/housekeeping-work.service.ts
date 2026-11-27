@@ -22,7 +22,9 @@ async function housekeepingOn(tx: any, propertyId: number) {
   if (!property?.housekeepingEnabled) throw fail('Housekeeping is off for this property.', 403);
 }
 
-const roomSelect = { roomId: true, roomNumber: true, operationalStatus: true, housekeepingStatus: true, cleaningStartedById: true, cleaningStartedAt: true, cleaningStartedBy: { select: { fullName: true } } };
+const roomSelect = { roomId: true, roomNumber: true, updatedAt: true, operationalStatus: true, housekeepingStatus: true, cleaningStartedById: true, cleaningStartedAt: true, cleaningStartedBy: { select: { fullName: true } } };
+
+// Starting or releasing keeps the room's updatedAt, which orders rooms by how long they have waited.
 
 /** A cleaner takes a room that needs cleaning. Only one person at a time. */
 export async function startCleaning(actor: Actor, roomId: number) {
@@ -34,7 +36,7 @@ export async function startCleaning(actor: Actor, roomId: number) {
     if (room.cleaningStartedById === actor.userId) return room;
     if (room.cleaningStartedById) throw fail(`${room.cleaningStartedBy?.fullName || 'Someone'} is already cleaning room ${room.roomNumber}.`, 409);
     const startedAt = new Date();
-    const changed = await tx.room.updateMany({ where: { roomId, propertyId: actor.propertyId, operationalStatus: 'Available', housekeepingStatus: 'Dirty', cleaningStartedById: null }, data: { cleaningStartedById: actor.userId, cleaningStartedAt: startedAt } });
+    const changed = await tx.room.updateMany({ where: { roomId, propertyId: actor.propertyId, operationalStatus: 'Available', housekeepingStatus: 'Dirty', cleaningStartedById: null }, data: { cleaningStartedById: actor.userId, cleaningStartedAt: startedAt, updatedAt: room.updatedAt } });
     if (!changed.count) throw fail('Someone else just started this room. Refresh the list.', 409);
     await tx.auditLog.create({ data: { propertyId: actor.propertyId, userId: actor.userId, entityType: 'Room', action: 'CleaningStarted', oldData: { roomId }, newData: { roomId, roomNumber: room.roomNumber, startedAt: startedAt.toISOString() } } });
     return tx.room.findUnique({ where: { roomId }, select: roomSelect });
@@ -50,7 +52,7 @@ export async function releaseCleaning(actor: Actor, roomId: number) {
     if (!room) throw fail('Room not found.', 404);
     if (!room.cleaningStartedById) return room;
     if (room.cleaningStartedById !== actor.userId && me.isHousekeeper) throw fail(`Only ${room.cleaningStartedBy?.fullName || 'the person cleaning it'} or reception can release room ${room.roomNumber}.`, 403);
-    const changed = await tx.room.updateMany({ where: { roomId, cleaningStartedById: room.cleaningStartedById }, data: CLEAR });
+    const changed = await tx.room.updateMany({ where: { roomId, cleaningStartedById: room.cleaningStartedById }, data: { ...CLEAR, updatedAt: room.updatedAt } });
     if (!changed.count) throw fail('Room status changed. Refresh the list and try again.', 409);
     await tx.auditLog.create({ data: { propertyId: actor.propertyId, userId: actor.userId, entityType: 'Room', action: 'CleaningReleased',
       oldData: { roomId, cleaningStartedById: room.cleaningStartedById, startedAt: room.cleaningStartedAt?.toISOString() || null },
