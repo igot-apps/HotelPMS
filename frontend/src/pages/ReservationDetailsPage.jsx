@@ -272,7 +272,7 @@ export default function ReservationDetailsPage() {
             <div className="mt-2"><ReservationPaymentStatus reservation={resData} compact /></div>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex flex-wrap items-center gap-3">
           {/* 🌟 UPDATED: Professional Status Badge */}
           <span className={`px-3 py-1.5 rounded-lg text-sm font-bold ${
             resData.status === 'InHouse' ? 'bg-success-50 text-success-700' :
@@ -293,12 +293,12 @@ export default function ReservationDetailsPage() {
             </button>
           )}
 
-          {/* Print Options Dropdown */}
-          <div className="relative group">
+          {/* Print Options Dropdown. Phones: the menu spans the row under the buttons, so it never runs off-screen. */}
+          <div className="sm:relative">
             <button onClick={() => setIsPrintMenuOpen(open => !open)} aria-expanded={isPrintMenuOpen} aria-label="Print options" className="inline-flex items-center gap-2 px-4 py-2 bg-surface border border-border text-text text-sm font-semibold rounded-lg hover:bg-secondary-50 transition">
               <Printer size={16} /> Print <ChevronDown size={14} />
             </button>
-            <div className={`absolute left-0 sm:left-auto sm:right-0 mt-2 w-56 bg-surface border border-border rounded-lg shadow-lg transition-all z-50 ${isPrintMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
+            <div className={`absolute left-0 right-0 sm:left-auto sm:right-0 mt-2 sm:w-56 bg-surface border border-border rounded-lg shadow-lg transition-all z-50 ${isPrintMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
               <button
                 onClick={() => { setIsReceiptOpen(true); setIsPrintMenuOpen(false); }}
                 className="w-full text-left px-4 py-3 text-sm text-text hover:bg-secondary-50 transition flex flex-col border-b border-border"
