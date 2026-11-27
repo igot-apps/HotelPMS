@@ -33,6 +33,7 @@ import publicAuthRoutes from './modules/public/public-auth.routes';
 import testClockRoutes from './shared/test-clock.routes';
 import pushRoutes from './modules/notifications/push.routes';
 import { notifyOverstays } from './modules/notifications/push-events';
+import { runHousekeepingAlerts } from './modules/notifications/housekeeping-alerts';
 import { expireOnlineHolds } from './modules/reservation/online-hold.service';
 import { expireUnarrivedStays } from './modules/reservation/recovery.service';
 import { activateReadyWebsiteDomains } from './modules/property/domain-auto-activation.service';
@@ -144,6 +145,9 @@ if (require.main === module) {
   // Push notifications for guests past checkout (no-op unless VAPID keys are set).
   const checkOverstays = () => notifyOverstays().catch(() => console.warn('Could not check overstays for notifications.'));
   setInterval(checkOverstays, 5 * 60 * 1000).unref();
+  // Housekeepers: urgent rooms (guest arriving today) and the morning checkout/check-in summary.
+  const checkHousekeeping = () => runHousekeepingAlerts().catch(() => console.warn('Could not check housekeeping notifications.'));
+  setInterval(checkHousekeeping, 5 * 60 * 1000).unref();
   const remindManagers = () => sendSubscriptionReminders().catch(() => console.warn('Could not check subscription reminders.'));
   void remindManagers();
   setInterval(remindManagers, 30 * 60 * 1000).unref();

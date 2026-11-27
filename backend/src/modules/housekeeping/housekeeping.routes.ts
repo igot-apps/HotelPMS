@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate, requirePermission, AuthRequest } from '../../shared/middleware/auth.middleware';
 import { prisma } from '../../shared/utils/prisma';
+import { getHousekeepingOverview } from './housekeeping-overview.service';
 
 const router = Router();
 router.use(authenticate, requirePermission('CanManageHousekeeping'));
@@ -18,7 +19,17 @@ router.get('/rooms', async (req: AuthRequest, res) => {
   } catch { return res.status(500).json({ success: false, message: 'Could not load rooms. Please try again.' }); }
 });
 
-router.patch('/rooms/:id', async (req: AuthRequest, res) => {
+// Cleaner dashboard: rooms in priority order and the next 7 days of expected checkouts/check-ins.
+router.get('/overview', async (req: AuthRequest, res) => {
+  try {
+    return res.json({ success: true, data: await getHousekeepingOverview(req.user!.propertyId) });
+  } catch (error: any) {
+    if (error?.statusCode === 403) return res.status(403).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: 'Could not load housekeeping. Please try again.' });
+  }
+});
+
+router.patch('/rooms/:id',async (req: AuthRequest, res) => {
   const propertyId = req.user!.propertyId;
   const roomId = Number(req.params.id);
   const status = req.body?.status;

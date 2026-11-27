@@ -2,6 +2,10 @@ import webpush from 'web-push';
 import { prisma } from '../../shared/utils/prisma';
 import { atProperty } from '../../shared/utils/property-access';
 
+/** Alerts are on unless the person switched that one off (notificationPreferences: {"alertKey": false}). */
+export const wantsAlert = (preferences: unknown, alert: string) =>
+  !(preferences && typeof preferences === 'object' && (preferences as Record<string, unknown>)[alert] === false);
+
 /**
  * Web Push for hotel staff devices (installed iPhone app, Android, desktop browsers).
  * Needs VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY and VAPID_SUBJECT; without them push is simply off.
@@ -82,7 +86,7 @@ async function firstTime(key: string) {
  * Notify active staff of a hotel who hold one of `roles` and turned notifications on.
  * `excludeUserId`: the person who did the action (they already know). `onceKey`: send at most once ever.
  */
-export async function notifyStaff(propertyId: number, roles: StaffRole[], payload: PushPayload, options: { excludeUserId?: number; onceKey?: string } = {}) {
+export async function notifyStaff(propertyId: number, roles: StaffRole[], payload: PushPayload, options: { excludeUserId?: number; onceKey?: string; alert?: string } = {}) {
   try {
     if (!pushConfigured() || !propertyId || !roles.length) return 0;
     const subscriptions = await prisma.pushSubscription.findMany({
@@ -94,13 +98,15 @@ export async function notifyStaff(propertyId: number, roles: StaffRole[], payloa
           ...(options.excludeUserId ? { NOT: { userId: options.excludeUserId } } : {}),
         },
       },
-      select: { subscriptionId: true, endpoint: true, p256dh: true, auth: true },
+      select: { subscriptionId: true, endpoint: true, p256dh: true, auth: true, user: { select: { notificationPreferences: true } } },
     });
-    if (!subscriptions.length) return 0;
+    // `alert`: skip people who switched this kind of notification off.
+    const wanted = options.alert ? subscriptions.filter(sub => wantsAlert(sub.user.notificationPreferences, options.alert!)) : subscriptions;
+    if (!wanted.length) return 0;
     if (options.onceKey && !(await firstTime(options.onceKey))) return 0;
     const property = await prisma.property.findUnique({ where: { propertyId }, select: { propertyName: true } });
     const title = property?.propertyName ? `${payload.title} · ${property.propertyName}` : payload.title;
-    return await deliver(subscriptions, { ...payload, title });
+    return await deliver(wanted, { ...payload, title });
   } catch (error) {
     console.warn('Could not send push notifications', { propertyId, error: error instanceof Error ? error.message : error });
     return 0;

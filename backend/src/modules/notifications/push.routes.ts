@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { authenticate, AuthRequest } from '../../shared/middleware/auth.middleware';
 import { notifyUser, pushPublicKey, removeSubscription, saveSubscription } from './push.service';
+import { getAlertPreferences, setAlertPreference } from './housekeeping-alerts';
 
 const router = Router();
 router.use(authenticate);
@@ -29,6 +30,15 @@ router.post('/test', async (req: AuthRequest, res: Response) => {
     const sent = await notifyUser(req.user!.userId, { title: 'HideOut24', body: 'Notifications are working on this device.', url: '/profile', tag: 'test' });
     return res.json({ success: true, data: { sent } });
   } catch (error) { return fail(res, error); }
+});
+
+// Which notifications this person receives (only housekeepers have choices for now).
+router.get('/preferences', async (req: AuthRequest, res: Response) => {
+  try { return res.json({ success: true, data: await getAlertPreferences(req.user!.userId) }); } catch (error) { return fail(res, error); }
+});
+
+router.patch('/preferences', async (req: AuthRequest, res: Response) => {
+  try { return res.json({ success: true, data: await setAlertPreference(req.user!.userId, req.body?.key, req.body?.enabled) }); } catch (error) { return fail(res, error); }
 });
 
 export default router;

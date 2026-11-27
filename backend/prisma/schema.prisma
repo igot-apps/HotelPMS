@@ -215,6 +215,7 @@ model User {
   isPlatformAdmin   Boolean   @default(false)
   isActive          Boolean   @default(true)
   lastPropertyId    Int?      // property opened at next sign-in (multi-property owners)
+  notificationPreferences Json? // push alerts this person switched off, e.g. {"checkinSummary": false}; missing = on
   lastLoginAt       DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
