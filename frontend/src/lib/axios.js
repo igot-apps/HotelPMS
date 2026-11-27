@@ -82,11 +82,60 @@ api.interceptors.request.use(
 );
 
 // ==========================================
+// 2a. RENEW AN EXPIRED SIGN-IN (refresh token)
+// ==========================================
+// The access token is short-lived; the refresh token lasts much longer. When a staff request fails only
+// because the access token expired, get a new one once and repeat the request, so staff are not sent to
+// the sign-in page every time they come back to the app. Requests that fail together share one renewal.
+let renewing = null;
+const renewAccessToken = () => {
+  if (!renewing) {
+    const { refreshToken } = useAuthStore.getState();
+    renewing = axios.post(`${api.defaults.baseURL}/auth/refresh-token`, { refreshToken }, { timeout: 30000 })
+      .then(({ data }) => {
+        const accessToken = data?.data?.accessToken;
+        if (!accessToken) throw new Error('No access token');
+        // Only replace the session this renewal was for (not a newer sign-in made meanwhile).
+        if (useAuthStore.getState().refreshToken === refreshToken) useAuthStore.setState({ accessToken });
+        return accessToken;
+      })
+      .finally(() => { renewing = null; });
+  }
+  return renewing;
+};
+const canRenew = (error) => {
+  const { config, response } = error;
+  if (!config || config._renewed || response?.status !== 401 || response.data?.code) return false;
+  const path = new URL(config.url || '', config.baseURL || window.location.origin).pathname;
+  if (path.startsWith('/public/') || isPlatformApiPath(path) || path.startsWith('/auth/login') || path.startsWith('/auth/refresh-token')) return false;
+  const { accessToken, refreshToken } = useAuthStore.getState();
+  return Boolean(accessToken && refreshToken && config.headers?.Authorization === `Bearer ${accessToken}`);
+};
+
+// ==========================================
 // 2. RESPONSE INTERCEPTOR (Global Error Handler)
 // ==========================================
 api.interceptors.response.use(
+  undefined,
+  (error) => {
+    if (!canRenew(error)) return Promise.reject(error);
+    return renewAccessToken().then(
+      (accessToken) => {
+        error.config._renewed = true;
+        error.config.headers.Authorization = `Bearer ${accessToken}`;
+        return api.request(error.config);
+      },
+      // Renewal refused (password changed, account removed, refresh expired): fall through to sign-out.
+      () => { error.config._renewed = true; return Promise.reject(error); },
+    );
+  },
+);
+api.interceptors.response.use(
   (response) => { markReachable(); recordServerTime(response.headers?.date, response.config?.sentAt); return response; }, // 2xx: note the server's time, return it
   (error) => {
+    // A renewed request that failed was already reported once on its own way through.
+    if (error?._reported) return Promise.reject(error);
+    if (error && typeof error === 'object') error._reported = true;
     if (error.response) {
       markReachable();
       recordServerTime(error.response.headers?.date, error.config?.sentAt);
