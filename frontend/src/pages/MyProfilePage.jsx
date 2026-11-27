@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Eye, EyeOff, KeyRound, Mail, UserRound } from 'lucide-react';
+import { ChevronDown, Eye, EyeOff, KeyRound, Mail, UserRound } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { changeMyPassword, getMe, requestStaffPasswordReset } from '../api/auth';
 import { useAuthStore } from '../store/authStore';
@@ -27,12 +27,15 @@ export default function MyProfilePage() {
   const [pw, setPw] = useState({ current: '', next: '', confirm: '' });
   const [show, setShow] = useState(false);
   const [error, setError] = useState('');
+  const [pwOpen, setPwOpen] = useState(false); // closed until the user asks to change it
+  const togglePw = () => { setPwOpen((open) => !open); setPw({ current: '', next: '', confirm: '' }); setError(''); setShow(false); };
   const change = useMutation({
     mutationFn: () => changeMyPassword(pw.current, pw.next),
     onSuccess: (res) => {
       const { accessToken, refreshToken } = res.data.data;
       useAuthStore.setState({ accessToken, refreshToken });
       setPw({ current: '', next: '', confirm: '' });
+      setPwOpen(false);
       toast.success('Password changed. Other devices were signed out.');
     },
     onError: (err) => setError(err.response?.data?.message || 'Could not change your password. Try again.'),
@@ -78,7 +81,13 @@ export default function MyProfilePage() {
       </section>
 
       <form onSubmit={submit} className={card} aria-labelledby="change-password">
-        <h2 id="change-password" className="flex items-center gap-2 font-bold text-text"><KeyRound size={18} className="text-primary-600" /> Change password</h2>
+        <h2 id="change-password" className="font-bold text-text">
+          <button type="button" onClick={togglePw} aria-expanded={pwOpen} aria-controls="change-password-fields" className="flex min-h-11 w-full items-center gap-2 text-left">
+            <KeyRound size={18} className="text-primary-600" /> <span className="flex-1">Change password</span>
+            <ChevronDown size={18} className={`text-text-muted transition-transform ${pwOpen ? 'rotate-180' : ''}`} />
+          </button>
+        </h2>
+        {pwOpen && <div id="change-password-fields" className="space-y-4">
         <label className="block text-sm font-medium text-text">Current password
           <input type={show ? 'text' : 'password'} autoComplete="current-password" required value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} className={input} />
         </label>
@@ -96,6 +105,7 @@ export default function MyProfilePage() {
           {change.isPending ? 'Saving…' : 'Change password'}
         </button>
         <p className="text-xs text-text-muted">After changing it, you stay signed in here and are signed out on your other devices.</p>
+        </div>}
       </form>
 
       <NotificationsCard role={user.role} cardClassName={card} />
