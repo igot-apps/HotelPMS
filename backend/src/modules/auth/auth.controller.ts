@@ -199,3 +199,13 @@ export const addProperty = async (req: AuthRequest, res: Response) => {
     return res.status(error?.statusCode || 400).json({ success: false, message: error?.message || 'Could not add the property.' });
   }
 };
+
+// Owners: delete a branch they added that has never been subscribed.
+export const deleteBranch = async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await authService.deleteOwnedBranch(req.user!.userId, Number(req.params.id), req.user!.propertyId || 0);
+    return res.json({ success: true, message: `${result.propertyName} was deleted.`, data: result });
+  } catch (error: any) {
+    return res.status(error?.statusCode || 400).json({ success: false, message: error?.message || 'Could not delete the property.' });
+  }
+};

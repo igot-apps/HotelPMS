@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getProperties, updateProperty } from '../api/properties';
 import PropertyModal from '../components/catalog/PropertyModal';
-import { Search, Edit2, Building2, AlertCircle, MapPin, Clock, Plus, ArrowRight, Loader2 } from 'lucide-react';
+import { Search, Edit2, Building2, AlertCircle, MapPin, Clock, Plus, ArrowRight, Loader2, Trash2 } from 'lucide-react';
+import { deleteBranch } from '../api/auth';
 import { useAuthStore } from '../store/authStore';
 import AddPropertyDialog from '../components/layout/AddPropertyDialog';
 import { openProperty } from '../components/layout/PropertySwitcher';
@@ -22,6 +23,20 @@ export default function PropertiesPage() {
   const [adding, setAdding] = useState(false);
   const [opening, setOpening] = useState(null);
   const open = (propertyId, path) => { setOpening(propertyId); openProperty(propertyId, queryClient, path).catch(() => setOpening(null)); };
+  const [deleting, setDeleting] = useState(null);
+  const [deleteError, setDeleteError] = useState('');
+  const removeBranch = async (p) => {
+    if (!window.confirm(`Delete ${p.propertyName}? This removes the property and everything in it. It cannot be undone.`)) return;
+    setDeleting(p.propertyId); setDeleteError('');
+    try {
+      await deleteBranch(p.propertyId);
+      // Reload this session so the property list no longer shows the deleted branch.
+      await openProperty(user.propertyId, queryClient, '/properties');
+    } catch (err) {
+      setDeleteError(err?.response?.data?.message || 'Could not delete the property.');
+      setDeleting(null);
+    }
+  };
 
   // 1. Fetch Properties
   const { data, isLoading, error } = useQuery({
@@ -98,14 +113,23 @@ export default function PropertiesPage() {
                   {current ? (
                     <span className="shrink-0 rounded-full bg-primary-600 px-2 py-0.5 text-xs font-semibold text-text-inverted">Current</span>
                   ) : (
+                    <span className="shrink-0 flex items-center gap-1">
+                    {p.canDelete && (
+                      <button type="button" disabled={deleting !== null || opening !== null} onClick={() => removeBranch(p)} title="Delete property (never subscribed)" aria-label={`Delete ${p.propertyName}`} className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-lg border border-border text-danger-600 hover:border-danger-500 disabled:opacity-60">
+                        {deleting === p.propertyId ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                      </button>
+                    )}
                     <button type="button" disabled={opening !== null} onClick={() => open(p.propertyId)} className="shrink-0 min-h-11 inline-flex items-center gap-1 rounded-lg border border-border px-3 text-sm font-semibold text-primary-700 hover:border-primary-500 disabled:opacity-60">
                       {opening === p.propertyId ? <Loader2 size={14} className="animate-spin" /> : <>Open <ArrowRight size={14} /></>}
                     </button>
+                    </span>
                   )}
                 </li>
               );
             })}
           </ul>
+          {deleteError && <p role="alert" className="mt-2 text-sm text-danger-600">{deleteError}</p>}
+          {myProperties.some((p) => p.canDelete) && <p className="mt-2 text-xs text-text-muted">A property you added can be deleted only while it has never been subscribed.</p>}
         </section>
       )}
       {adding && <AddPropertyDialog onClose={() => setAdding(false)} onAdded={(property) => open(property.propertyId, '/billing')} />}

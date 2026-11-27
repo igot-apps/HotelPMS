@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import {  refreshToken, login, getMe, logout, registerHotel, switchProperty, addProperty } from './auth.controller';
+import {  refreshToken, login, getMe, logout, registerHotel, switchProperty, addProperty, deleteBranch } from './auth.controller';
 import { authenticate } from '../../shared/middleware/auth.middleware';
 import { changeStaffPassword, requestStaffPasswordReset, resetStaffPassword } from './password-reset.service';
 import { issueSession } from './auth.service';
@@ -69,6 +69,7 @@ router.post('/change-password', authenticate, async (req: AuthRequest, res) => {
 });
  router.post('/switch-property', authenticate, switchProperty);
  router.post('/properties', authenticate, addProperty);
+ router.delete('/properties/:id', authenticate, deleteBranch);
 
 
 export default router;

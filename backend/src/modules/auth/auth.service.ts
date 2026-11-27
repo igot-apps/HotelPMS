@@ -161,6 +161,7 @@ async function buildSessionUser(user: any, propertyId: number) {
     : null;
   const properties = user.propertyId ? await listAccessibleProperties(prisma, user.userId) : [];
   const active = properties.find((p: any) => p.propertyId === propertyId);
+  const deletable = new Set(properties.some((p: any) => p.isOwner) ? await deletableBranchIds(user.userId) : []);
   return {
     userId: user.userId,
     fullName: user.fullName,
@@ -180,6 +181,7 @@ async function buildSessionUser(user: any, propertyId: number) {
     properties: properties.map((p: any) => ({
       propertyId: p.propertyId, propertyName: p.propertyName, city: p.city, isOwner: p.isOwner,
       isActive: p.isActive && p.status === 'Active', expired: getSubscriptionState(p).expired,
+      canDelete: p.propertyId !== propertyId && deletable.has(p.propertyId),
     })),
     permissions,
   };
@@ -313,6 +315,44 @@ export const addOwnedProperty = async (userId: number, data: NewPropertyInput) =
     return created;
   });
   return { propertyId: property.propertyId, propertyName: property.propertyName, propertyCode: property.propertyCode };
+};
+
+/**
+ * Branches this owner can delete: ones they added with "Add property" (not the
+ * registered hotel) that have never had a subscription payment go through.
+ */
+async function deletableBranchIds(userId: number): Promise<number[]> {
+  const added = await prisma.auditLog.findMany({ where: { userId, action: 'PropertyAdded', entityType: 'Property' }, select: { entityId: true } });
+  const ids = added.map((a: any) => a.entityId).filter((id: any) => Number.isInteger(id));
+  if (!ids.length) return [];
+  const rows = await prisma.property.findMany({
+    where: {
+      propertyId: { in: ids },
+      memberships: { some: { userId, isOwner: true } },
+      subscriptionPayments: { none: { status: { in: ['Completed', 'Processing'] } } },
+    },
+    select: { propertyId: true },
+  });
+  return rows.map((r: any) => r.propertyId);
+}
+
+/** An owner deletes a branch they added, only if it was never subscribed. */
+export const deleteOwnedBranch = async (userId: number, propertyId: number, currentPropertyId: number) => {
+  const fail = (message: string, statusCode = 400) => { throw Object.assign(new Error(message), { statusCode }); };
+  if (!Number.isInteger(propertyId) || propertyId <= 0) fail('Choose a property.');
+  if (propertyId === currentPropertyId) fail('Open another property first, then delete this one.');
+  if (!(await deletableBranchIds(userId)).includes(propertyId)) {
+    const paid = await prisma.subscriptionPayment.findFirst({ where: { propertyId, status: { in: ['Completed', 'Processing'] } }, select: { subscriptionPaymentId: true } }).catch(() => null);
+    fail(paid ? 'This property has a subscription and cannot be deleted.' : 'You can only delete a property you added yourself.', 403);
+  }
+  const property = await prisma.property.findUnique({ where: { propertyId }, select: { propertyName: true, propertyCode: true } });
+  if (!property) fail('Property not found.', 404);
+  const { permanentlyDeleteProperty } = await import('../property/property.repository');
+  await permanentlyDeleteProperty(propertyId, property!.propertyCode);
+  await prisma.user.updateMany({ where: { lastPropertyId: propertyId }, data: { lastPropertyId: null } });
+  // Kept at the owner's current property so the deletion stays traceable.
+  await prisma.auditLog.create({ data: { propertyId: currentPropertyId || null, userId, action: 'PropertyDeleted', entityType: 'Property', entityId: propertyId, oldData: { propertyId, propertyName: property!.propertyName, propertyCode: property!.propertyCode } } }).catch(() => {});
+  return { propertyId, propertyName: property!.propertyName };
 };
 
 // ==========================================

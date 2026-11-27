@@ -78,9 +78,10 @@ export const authenticate = async (
   const propertyId = req.user.propertyId;
   
   // Let expired properties start a renewal payment; other writes remain locked.
-  // Owners can always leave an expired property or add another (that one has its own subscription).
+  // Owners can always leave an expired property, add another (that one has its own subscription) or delete an unsubscribed branch.
   const isSubscriptionPaymentInitialization = req.originalUrl === '/api/payments/initialize' || req.originalUrl === '/api/payments/otp'
-    || req.originalUrl === '/api/auth/switch-property' || req.originalUrl === '/api/auth/properties';
+    || req.originalUrl === '/api/auth/switch-property' || req.originalUrl === '/api/auth/properties'
+    || (req.method === 'DELETE' && /^\/api\/auth\/properties\/\d+$/.test(req.originalUrl));
   // Only block WRITE requests (POST, PUT, DELETE, PATCH). Allow GET (reading) so they can see the billing page.
   const isPlatformAdminRoute = req.originalUrl.startsWith('/api/platform/');
   if (req.method !== 'GET' && !isSubscriptionPaymentInitialization && !isPlatformAdminRoute && propertyId && propertyId !== 0) {
