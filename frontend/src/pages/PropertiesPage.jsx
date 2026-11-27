@@ -8,6 +8,7 @@ import { Search, Edit2, Building2, AlertCircle, MapPin, Clock, Plus, ArrowRight,
 import { deleteBranch } from '../api/auth';
 import { useAuthStore } from '../store/authStore';
 import AddPropertyDialog from '../components/layout/AddPropertyDialog';
+import DeleteBranchDialog from '../components/layout/DeleteBranchDialog';
 import { openProperty } from '../components/layout/PropertySwitcher';
 
 export default function PropertiesPage() {
@@ -25,8 +26,9 @@ export default function PropertiesPage() {
   const open = (propertyId, path) => { setOpening(propertyId); openProperty(propertyId, queryClient, path).catch(() => setOpening(null)); };
   const [deleting, setDeleting] = useState(null);
   const [deleteError, setDeleteError] = useState('');
-  const removeBranch = async (p) => {
-    if (!window.confirm(`Delete ${p.propertyName}? This removes the property and everything in it. It cannot be undone.`)) return;
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const removeBranch = async () => {
+    const p = confirmDelete;
     setDeleting(p.propertyId); setDeleteError('');
     try {
       await deleteBranch(p.propertyId);
@@ -115,7 +117,7 @@ export default function PropertiesPage() {
                   ) : (
                     <span className="shrink-0 flex items-center gap-1">
                     {p.canDelete && (
-                      <button type="button" disabled={deleting !== null || opening !== null} onClick={() => removeBranch(p)} title="Delete property (never subscribed)" aria-label={`Delete ${p.propertyName}`} className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-lg border border-border text-danger-600 hover:border-danger-500 disabled:opacity-60">
+                      <button type="button" disabled={deleting !== null || opening !== null} onClick={() => { setDeleteError(''); setConfirmDelete(p); }} title="Delete property (never subscribed)" aria-label={`Delete ${p.propertyName}`} className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-lg border border-border text-danger-600 hover:border-danger-500 disabled:opacity-60">
                         {deleting === p.propertyId ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                       </button>
                     )}
@@ -128,10 +130,10 @@ export default function PropertiesPage() {
               );
             })}
           </ul>
-          {deleteError && <p role="alert" className="mt-2 text-sm text-danger-600">{deleteError}</p>}
           {myProperties.some((p) => p.canDelete) && <p className="mt-2 text-xs text-text-muted">A property you added can be deleted only while it has never been subscribed.</p>}
         </section>
       )}
+      {confirmDelete && <DeleteBranchDialog property={confirmDelete} deleting={deleting !== null} error={deleteError} onCancel={() => setConfirmDelete(null)} onConfirm={removeBranch} />}
       {adding && <AddPropertyDialog onClose={() => setAdding(false)} onAdded={(property) => open(property.propertyId, '/billing')} />}
 
       {/* Toolbar */}
