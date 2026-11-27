@@ -35,10 +35,13 @@ export default function RoomIssuesPanel() {
           <li key={issue.issueId} className="rounded-lg border border-border bg-surface p-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="font-semibold text-text">Room {issue.roomNumber} · {issue.category}
-                  {issue.roomUnsuitable && <span className="ml-2 rounded-full bg-danger-50 px-2 py-0.5 text-xs font-semibold text-danger-700">May be unsuitable for guests</span>}
-                  {issue.roomOperationalStatus === 'Maintenance' && <span className="ml-2 rounded-full bg-secondary-100 px-2 py-0.5 text-xs font-semibold text-secondary-700">In maintenance</span>}
-                </p>
+                <p className="font-semibold text-text">Room {issue.roomNumber} · {issue.category}</p>
+                {(issue.roomUnsuitable || issue.roomOperationalStatus === 'Maintenance') && (
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {issue.roomUnsuitable && <span className="whitespace-nowrap rounded-full bg-danger-50 px-2 py-0.5 text-xs font-semibold text-danger-700">May be unsuitable for guests</span>}
+                    {issue.roomOperationalStatus === 'Maintenance' && <span className="whitespace-nowrap rounded-full bg-secondary-100 px-2 py-0.5 text-xs font-semibold text-secondary-700">In maintenance</span>}
+                  </div>
+                )}
                 <p className="mt-0.5 break-words text-sm text-text">{issue.description}</p>
                 <p className="mt-0.5 text-xs text-text-muted">{issue.reportedBy ? `${issue.reportedBy} · ` : ''}{when(issue.createdAt)}</p>
               </div>
@@ -47,10 +50,10 @@ export default function RoomIssuesPanel() {
               )}
             </div>
             {resolving === issue.issueId && (
-              <form className="mt-3 flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); mutation.mutate({ issueId: issue.issueId, note }); }}>
+              <form className="mt-3 flex flex-wrap gap-2 sm:flex-nowrap" onSubmit={(event) => { event.preventDefault(); mutation.mutate({ issueId: issue.issueId, note }); }}>
                 <label htmlFor={`issue-note-${issue.issueId}`} className="sr-only">What was done (optional)</label>
-                <input id={`issue-note-${issue.issueId}`} value={note} onChange={(event) => setNote(event.target.value)} maxLength={300} placeholder="What was done? (optional)" className="min-h-10 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 text-base text-text" />
-                <button type="submit" disabled={mutation.isPending} className="min-h-10 rounded-lg bg-primary-600 px-4 text-sm font-semibold text-white disabled:opacity-50">{mutation.isPending ? 'Saving…' : 'Mark resolved'}</button>
+                <input id={`issue-note-${issue.issueId}`} value={note} onChange={(event) => setNote(event.target.value)} maxLength={300} placeholder="What was done? (optional)" className="min-h-10 w-full min-w-0 rounded-lg border border-border bg-background px-3 text-base text-text sm:flex-1" />
+                <button type="submit" disabled={mutation.isPending} className="min-h-10 flex-1 rounded-lg sm:flex-none bg-primary-600 px-4 text-sm font-semibold text-white disabled:opacity-50">{mutation.isPending ? 'Saving…' : 'Mark resolved'}</button>
                 <button type="button" onClick={() => setResolving(null)} className="min-h-10 rounded-lg border border-border px-3 text-sm font-semibold text-text">Cancel</button>
               </form>
             )}
