@@ -27,11 +27,11 @@ export default function PropertiesPage() {
   const [deleting, setDeleting] = useState(null);
   const [deleteError, setDeleteError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
-  const removeBranch = async () => {
+  const removeBranch = async (typedName) => {
     const p = confirmDelete;
     setDeleting(p.propertyId); setDeleteError('');
     try {
-      await deleteBranch(p.propertyId);
+      await deleteBranch(p.propertyId, typedName);
       // Reload this session so the property list no longer shows the deleted branch.
       await openProperty(user.propertyId, queryClient, '/properties');
     } catch (err) {

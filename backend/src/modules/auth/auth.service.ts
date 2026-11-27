@@ -337,7 +337,7 @@ async function deletableBranchIds(userId: number): Promise<number[]> {
 }
 
 /** An owner deletes a branch they added, only if it was never subscribed. */
-export const deleteOwnedBranch = async (userId: number, propertyId: number, currentPropertyId: number) => {
+export const deleteOwnedBranch = async (userId: number, propertyId: number, currentPropertyId: number, confirmName?: string) => {
   const fail = (message: string, statusCode = 400) => { throw Object.assign(new Error(message), { statusCode }); };
   if (!Number.isInteger(propertyId) || propertyId <= 0) fail('Choose a property.');
   if (propertyId === currentPropertyId) fail('Open another property first, then delete this one.');
@@ -347,6 +347,8 @@ export const deleteOwnedBranch = async (userId: number, propertyId: number, curr
   }
   const property = await prisma.property.findUnique({ where: { propertyId }, select: { propertyName: true, propertyCode: true } });
   if (!property) fail('Property not found.', 404);
+  const norm = (v: unknown) => String(v || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  if (norm(confirmName) !== norm(property!.propertyName)) fail(`Type ${property!.propertyName} exactly to confirm.`);
   const { permanentlyDeleteProperty } = await import('../property/property.repository');
   await permanentlyDeleteProperty(propertyId, property!.propertyCode);
   await prisma.user.updateMany({ where: { lastPropertyId: propertyId }, data: { lastPropertyId: null } });

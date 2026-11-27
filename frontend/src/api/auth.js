@@ -29,6 +29,6 @@ export const switchProperty = (propertyId) => api.post('/auth/switch-property', 
 // Owners: add another property to the same account.
 export const addProperty = (data) => api.post('/auth/properties', data);
 // Owners: delete a branch they added that was never subscribed.
-export const deleteBranch = (propertyId) => api.delete(`/auth/properties/${propertyId}`, { skipErrorToast: true });
+export const deleteBranch = (propertyId, confirmName) => api.delete(`/auth/properties/${propertyId}`, { data: { confirmName }, skipErrorToast: true });
 // Signed-in staff: change own password (errors shown on the form). Returns fresh tokens for this device.
 export const changeMyPassword = (currentPassword, newPassword) => api.post('/auth/change-password', { currentPassword, newPassword }, { skipErrorToast: true });

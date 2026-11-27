@@ -24,7 +24,7 @@ beforeEach(() => {
 
 test('an owner deletes a branch they added that was never subscribed', async () => {
   db.property.findMany.mockResolvedValue([{ propertyId: 2 }]);
-  await expect(deleteOwnedBranch(7, 2, 1)).resolves.toEqual({ propertyId: 2, propertyName: 'Branch' });
+  await expect(deleteOwnedBranch(7, 2, 1, '  branch ')).resolves.toEqual({ propertyId: 2, propertyName: 'Branch' });
   expect(permanentlyDeleteProperty).toHaveBeenCalledWith(2, 'branch');
   // The query only allows owned branches with no completed or processing subscription payment.
   const where = db.property.findMany.mock.calls[0][0].where;
@@ -48,5 +48,12 @@ test('the registered hotel (not added as a branch) cannot be deleted', async () 
 
 test('the property the owner is working in cannot be deleted', async () => {
   await expect(deleteOwnedBranch(7, 2, 2)).rejects.toThrow('Open another property first');
+  expect(permanentlyDeleteProperty).not.toHaveBeenCalled();
+});
+
+test('the owner must type the property name to delete it', async () => {
+  db.property.findMany.mockResolvedValue([{ propertyId: 2 }]);
+  await expect(deleteOwnedBranch(7, 2, 1)).rejects.toThrow('Type Branch exactly');
+  await expect(deleteOwnedBranch(7, 2, 1, 'Other')).rejects.toThrow('Type Branch exactly');
   expect(permanentlyDeleteProperty).not.toHaveBeenCalled();
 });
