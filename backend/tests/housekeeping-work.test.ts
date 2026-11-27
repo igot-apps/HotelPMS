@@ -16,7 +16,8 @@ jest.mock('../src/modules/notifications/push.service', () => ({ notifyStaffLater
 import { releaseCleaning, reportIssue, resolveIssue, startCleaning } from '../src/modules/housekeeping/housekeeping-work.service';
 
 const actor = { userId: 9, propertyId: 3 };
-const waiting = (extra: any = {}) => ({ roomId: 7, roomNumber: '104', operationalStatus: 'Available', housekeepingStatus: 'Dirty', cleaningStartedById: null, cleaningStartedAt: null, cleaningStartedBy: null, ...extra });
+const waitingSince = new Date('2026-11-27T05:00:00Z');
+const waiting = (extra: any = {}) => ({ roomId: 7, roomNumber: '104', updatedAt: waitingSince, operationalStatus: 'Available', housekeepingStatus: 'Dirty', cleaningStartedById: null, cleaningStartedAt: null, cleaningStartedBy: null, ...extra });
 const role = (roleName: string) => db.user.findUnique.mockResolvedValue({ fullName: 'Ama', role: { roleName } });
 
 beforeEach(() => {
@@ -32,7 +33,7 @@ beforeEach(() => {
 test('a cleaner starts a room waiting for cleaning; it is recorded', async () => {
   db.room.findFirst.mockResolvedValue(waiting());
   await startCleaning(actor, 7);
-  expect(db.room.updateMany).toHaveBeenCalledWith({ where: { roomId: 7, propertyId: 3, operationalStatus: 'Available', housekeepingStatus: 'Dirty', cleaningStartedById: null }, data: { cleaningStartedById: 9, cleaningStartedAt: expect.any(Date) } });
+  expect(db.room.updateMany).toHaveBeenCalledWith({ where: { roomId: 7, propertyId: 3, operationalStatus: 'Available', housekeepingStatus: 'Dirty', cleaningStartedById: null }, data: { cleaningStartedById: 9, cleaningStartedAt: expect.any(Date), updatedAt: waitingSince } });
   expect(db.auditLog.create).toHaveBeenCalledWith({ data: expect.objectContaining({ action: 'CleaningStarted', userId: 9, newData: expect.objectContaining({ roomNumber: '104' }) }) });
 });
 
@@ -56,7 +57,7 @@ test('only the cleaner (or reception/manager) can release a room', async () => {
   await expect(releaseCleaning(actor, 7)).rejects.toMatchObject({ statusCode: 403 });
   role('Receptionist');
   await releaseCleaning(actor, 7);
-  expect(db.room.updateMany).toHaveBeenCalledWith({ where: { roomId: 7, cleaningStartedById: 4 }, data: { cleaningStartedById: null, cleaningStartedAt: null } });
+  expect(db.room.updateMany).toHaveBeenCalledWith({ where: { roomId: 7, cleaningStartedById: 4 }, data: { cleaningStartedById: null, cleaningStartedAt: null, updatedAt: waitingSince } });
   expect(db.auditLog.create).toHaveBeenCalledWith({ data: expect.objectContaining({ action: 'CleaningReleased', newData: expect.objectContaining({ note: 'Released for Kofi' }) }) });
 });
 
