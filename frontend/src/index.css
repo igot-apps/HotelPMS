@@ -37,6 +37,30 @@ html.app-shell #main-content { overscroll-behavior-y: contain; -webkit-overflow-
   }
 }
 
+/* Pop-up messages never catch taps on touch screens: a tap on the top bar or a button under a
+   message reaches that button. (Desktop keeps hover-to-pause on messages.) */
+@media (hover: none) and (pointer: coarse) {
+  [data-rht-toaster], [data-rht-toaster] * { pointer-events: none !important; }
+}
+/* Phones: messages appear just below the top bar instead of on top of it. */
+@media screen and (max-width: 767px) {
+  [data-rht-toaster] { top: calc(env(safe-area-inset-top) + 72px) !important; }
+}
+
+/* Touch feedback: buttons and links dim briefly while pressed (touch screens only). */
+@media (hover: none) and (pointer: coarse) {
+  button:not(:disabled):active, a[href]:active, [role="button"]:not([aria-disabled="true"]):active, summary:active {
+    opacity: 0.7;
+    transition: opacity 0s;
+  }
+}
+
+/* Phones: dialog and menu backgrounds keep their dark tint but skip the blur, which is slow to draw on
+   many phones and delays the dialog's first taps. Desktop keeps the blur. */
+@media screen and (max-width: 767px) {
+  .fixed.inset-0[class*="backdrop-blur"] { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+}
+
 .grid > * { min-width: 0; }
 input, select, textarea { max-width: 100%; }
 /* iOS date controls have an intrinsic width; allow them to shrink inside the search grid. */

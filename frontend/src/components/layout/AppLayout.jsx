@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import PageLoading from '../ui/PageLoading';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
@@ -6,6 +7,8 @@ import MobileTabBar from './MobileTabBar';
 import BackButton from '../ui/BackButton';
 import ClockNotice from './ClockNotice';
 import TestClockBar from './TestClockBar';
+import ConnectionBanner from './ConnectionBanner';
+import UpdatePrompt from './UpdatePrompt';
 import api from '../../lib/axios';
 import { useAuthStore } from '../../store/authStore';
 
@@ -83,12 +86,14 @@ export default function AppLayout() {
       {/* Main Content Area */}
       <div className="min-h-0 min-w-0 flex-1 flex flex-col overflow-hidden ml-0 md:ml-64">
         <Topbar onMenuClick={toggleSidebar} isMenuOpen={isSidebarOpen} />
+        <ConnectionBanner />
+        <UpdatePrompt />
         <main id="main-content" className="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:p-4 md:p-8" inert={isSidebarOpen ? true : undefined}>
           {/* Mobile back button on every page except the home page (and pages that have their own). */}
           {showBack && <div className="mb-3 md:hidden"><BackButton mobileOnly fallback={home} label="Back" /></div>}
           <TestClockBar />
           <ClockNotice />
-          <Outlet />
+          <Suspense fallback={<PageLoading />}><Outlet /></Suspense>
         </main>
         <MobileTabBar onMore={toggleSidebar} isMenuOpen={isSidebarOpen} />
       </div>

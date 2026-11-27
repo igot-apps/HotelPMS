@@ -1,5 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  // Hover styles apply only on devices that can hover (mouse/trackpad). On phones and tablets a tap no
+  // longer leaves a button stuck in its hover colour or needs a second tap.
+  future: { hoverOnlyWhenSupported: true },
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",

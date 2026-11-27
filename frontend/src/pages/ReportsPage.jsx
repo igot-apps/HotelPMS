@@ -30,6 +30,7 @@ export default function ReportsPage() {
   const monthStart = `${defaultToday().slice(0, 8)}01`;
   const [pickedStart, setStartDate] = useState(null);
   const [pickedEnd, setEndDate] = useState(null);
+  const [pickedBar, setPickedBar] = useState(null); // tapped chart bar shows its figure (phones have no hover)
   const startDate = pickedStart ?? monthStart;
   const endDate = pickedEnd ?? addDays(`${addDays(monthStart, 31).slice(0, 8)}01`, -1);
 
@@ -155,9 +156,9 @@ const currentPropertyName = user?.propertyName || 'All Properties';
                   const heightPercent = (day.total / maxRev) * 100;
                   const isToday = day.date === defaultToday();
                   return (
-                    <div key={idx} className="flex-1 min-w-[12px] flex flex-col items-center group relative h-full justify-end">
+                    <div key={idx} className="flex-1 min-w-[12px] flex flex-col items-center group relative h-full justify-end" tabIndex={0} aria-label={`${day.date}: ${day.total.toFixed(2)} GHS`} onClick={() => setPickedBar((current) => (current === day.date ? null : day.date))}>
                       {/* Tooltip */}
-                      <div className="absolute bottom-full mb-2 hidden group-hover:block bg-text text-surface text-xs font-bold py-1 px-2 rounded shadow-lg z-10 whitespace-nowrap">
+                      <div className={`pointer-events-none absolute bottom-full mb-2 group-hover:block group-focus:block ${pickedBar === day.date ? 'block' : 'hidden'} bg-text text-surface text-xs font-bold py-1 px-2 rounded shadow-lg z-10 whitespace-nowrap`}>
                         {day.date}: {day.total.toFixed(2)} GHS
                       </div>
                       <div 

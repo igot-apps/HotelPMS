@@ -402,7 +402,7 @@ export default function PropertyModal({ isOpen, onClose, onSubmit, isLoading, in
                     <div key={`${index}-${image.slice(0, 32)}`} className="group relative aspect-[4/3] overflow-hidden rounded-xl border border-white bg-white shadow-sm">
                       <img src={image} alt={`Property photo ${index + 1}`} className="h-full w-full object-cover" />
                       {formData.coverImage === image && <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-xs font-semibold text-emerald-800 shadow"><Star size={12} fill="currentColor" /> Cover photo</span>}
-                      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/75 to-transparent p-2 pt-8 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
+                      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/75 to-transparent p-2 pt-8 opacity-100 transition [@media(hover:hover)_and_(min-width:640px)]:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100">
                         {formData.coverImage !== image ? <button type="button" onClick={() => setCoverImage(image)} className="rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-text shadow hover:bg-emerald-50">Set as cover</button> : <span className="px-2 text-xs font-medium text-white">Main photo</span>}
                         <button type="button" onClick={() => removeGalleryImage(image)} aria-label="Remove photo" className="rounded-lg bg-white/95 p-2 text-red-600 shadow hover:bg-red-50"><Trash2 size={15} /></button>
                       </div>

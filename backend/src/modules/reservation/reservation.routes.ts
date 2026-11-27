@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate, requirePermission } from '../../shared/middleware/auth.middleware';
+import { idempotency } from '../../shared/middleware/idempotency';
 import * as reservationController from './reservation.controller';
 import * as recovery from './recovery.service';
 import * as approvals from './correction-approval.service';
@@ -15,6 +16,7 @@ const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
+router.use(idempotency); // a save sent twice (lost reply on a weak signal) is only done once
 
 const actor = (req: AuthRequest) => ({ userId: req.user!.userId, propertyId: req.user!.propertyId });
 // Checkout reminders (due soon / due / overdue) and departure verification

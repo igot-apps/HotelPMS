@@ -11,6 +11,7 @@ import ManagerDashboard from '../components/dashboard/ManagerDashboard';
 import RefundSummary from '../components/reservations/RefundSummary';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import useManualRefresh from '../hooks/useManualRefresh';
 import { getOperationalOverview } from '../api/dashboard';
 import { getProperties } from '../api/properties';
 import { useAuthStore } from '../store/authStore';
@@ -107,11 +108,12 @@ export default function DashboardPage() {
   const { data: properties = [] } = useQuery({ queryKey: ['properties'], enabled: !user?.propertyId,
     queryFn: async () => (await getProperties()).data.data || [],
   });
-  const { data, isLoading, error, refetch, isFetching } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['operationalOverview', propertyId], enabled: Boolean(propertyId),
     queryFn: async () => (await getOperationalOverview({ propertyId })).data.data,
     refetchInterval: 60000,
   });
+  const [refresh, refreshing] = useManualRefresh(refetch);
   const timeZone = data?.timeZone || 'Africa/Accra';
   const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', hourCycle: 'h23' }).format(serverNow() ?? new Date()));
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
@@ -133,7 +135,7 @@ export default function DashboardPage() {
       <div className="min-w-0"><p className="mb-1 text-sm font-semibold text-primary-700">{propertyName || 'Hotel dashboard'}</p><h1 className="text-2xl font-bold text-text">{greeting}, {user?.fullName?.split(' ')[0] || 'Team'}</h1><p className="mt-2 text-sm text-text-muted">{today} · {timeZone} · {managerView ? 'How the business is doing' : 'Your front desk at a glance'}</p></div>
       <div className="flex flex-wrap gap-2">
         {!user?.propertyId && <select aria-label="Select hotel" className="min-w-0 rounded-lg border border-border bg-surface p-2 text-text" value={propertyId} onChange={e => setPropertyId(e.target.value)}><option value="">Select a hotel</option>{properties.map(p => <option key={p.propertyId} value={p.propertyId}>{p.propertyName}</option>)}</select>}
-        <button disabled={isFetching || !propertyId} onClick={() => refetch()} className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-text disabled:opacity-50"><RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />Refresh</button>
+        <button disabled={refreshing || !propertyId} aria-busy={refreshing} onClick={refresh} className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-text disabled:opacity-50"><RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />Refresh</button>
       </div>
     </header>
     {user?.propertyId && ['Manager', 'Receptionist'].includes(user?.role) && <BookingSearch />}

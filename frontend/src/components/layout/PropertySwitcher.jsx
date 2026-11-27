@@ -29,9 +29,9 @@ export default function PropertySwitcher() {
     if (!open) return undefined;
     const away = (event) => { if (menu.current && !menu.current.contains(event.target)) setOpen(false); };
     const escape = (event) => { if (event.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', away);
+    document.addEventListener('pointerdown', away);
     document.addEventListener('keydown', escape);
-    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', escape); };
+    return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', escape); };
   }, [open]);
 
   const badge = (

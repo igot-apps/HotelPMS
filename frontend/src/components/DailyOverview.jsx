@@ -1,6 +1,7 @@
 import ResponsiveTable from './ui/ResponsiveTable';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import useManualRefresh from '../hooks/useManualRefresh';
 import { Link } from 'react-router-dom';
 import api from '../lib/axios';
 import CashReconciliation from './reports/CashReconciliation';
@@ -11,17 +12,18 @@ const actionName = action => action.replace(/^Correction:/, '').replace(/-/g, ' 
 export default function DailyOverview({ initialDate = '' }) {
   const [date, setDate] = useState(initialDate);
   const [staff, setStaff] = useState('');
-  const { data, isPending, error, refetch, isFetching } = useQuery({
+  const { data, isPending, error, refetch } = useQuery({
     queryKey: ['dailyOverview', date],
     queryFn: async () => (await api.get('/reports/daily', { params: date ? { date } : {} })).data.data,
     refetchInterval: 60000,
   });
+  const [refresh, refreshing] = useManualRefresh(refetch);
   const field = 'rounded-lg border border-border bg-background px-3 py-2 text-sm text-text';
   const time = value => new Date(value).toLocaleTimeString('en-GH', { timeZone: data.timeZone, hour: '2-digit', minute: '2-digit' });
   return <section id="daily-overview" className="scroll-mt-4 space-y-5 rounded-xl border border-border bg-surface p-5 text-text">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 className="text-xl font-bold">Daily overview</h2><p className="mt-1 text-sm text-text-muted">Collections and hotel activity · {data?.timeZone || 'Hotel local time'}</p></div>
-      <div className="flex flex-wrap gap-2"><input aria-label="Daily overview date" type="date" value={date || data?.date || ''} onChange={e => { setDate(e.target.value); setStaff(''); }} className={field} /><button className={field} onClick={() => { setDate(''); setStaff(''); refetch(); }}>Today</button><button disabled={isFetching} onClick={() => refetch()} className={field}>{isFetching ? 'Refreshing…' : 'Refresh'}</button></div>
+      <div className="flex flex-wrap gap-2"><input aria-label="Daily overview date" type="date" value={date || data?.date || ''} onChange={e => { setDate(e.target.value); setStaff(''); }} className={field} /><button className={field} onClick={() => { setDate(''); setStaff(''); refetch(); }}>Today</button><button disabled={refreshing} aria-busy={refreshing} onClick={refresh} className={field}>{refreshing ? 'Refreshing…' : 'Refresh'}</button></div>
     </div>
     {isPending && <p role="status">Loading daily overview…</p>}
     {error && <p role="alert" className="text-danger-700">{error.response?.data?.message || 'Could not load the daily overview. Try Refresh.'}</p>}

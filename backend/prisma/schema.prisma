@@ -816,3 +816,24 @@ model PushNotice {
 
   @@map("push_notices")
 }
+
+// ============================================================
+// IDEMPOTENCY (a save sent twice — e.g. after a lost reply on a weak signal — is done only once)
+// ============================================================
+model IdempotencyRecord {
+  recordId       Int      @id @default(autoincrement())
+  scope          String   @db.VarChar(80)
+  key            String   @db.VarChar(100)
+  method         String   @db.VarChar(10)
+  path           String   @db.VarChar(300)
+  requestHash    String   @db.VarChar(64)
+  state          String   @db.VarChar(20)
+  responseStatus Int?
+  responseBody   Json?
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+
+  @@unique([scope, key])
+  @@index([expiresAt])
+  @@map("idempotency_records")
+}

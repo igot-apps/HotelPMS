@@ -1,17 +1,16 @@
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
+import { printWithFallback } from '../../lib/printReceipt';
+import PrintUnavailableNotice from './PrintUnavailableNotice';
 import { X, Printer } from 'lucide-react';
 import { formatPaymentMethod } from '../../utils/payment';
 import { serverNow } from '../../lib/serverClock';
 
 export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
+  const [printUnavailable, setPrintUnavailable] = useState(false);
   if (!isOpen || !reservation) return null;
 
-  const handlePrint = () => {
-    // Small timeout ensures the DOM is fully ready before triggering the print dialog
-    setTimeout(() => {
-      window.print();
-    }, 100);
-  };
+  // Prints as before; if a phone never opens its print screen, offer Share instead.
+  const handlePrint = () => { setPrintUnavailable(false); printWithFallback(() => setPrintUnavailable(true)); };
 
   const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const formatCurrency = (val) => parseFloat(val || 0).toFixed(2);
@@ -37,17 +36,19 @@ export default function ReceiptModal({ isOpen, onClose, reservation, stats }) {
       <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col print-modal-wrapper">
         
         {/* Screen-only Header (Hidden when printing) */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 print:hidden">
-          <h2 className="text-lg font-bold text-gray-800">Guest Folio / Receipt</h2>
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 p-4 border-b border-gray-200 print:hidden">
+          <h2 className="min-w-0 text-lg font-bold text-gray-800">Guest Folio / Receipt</h2>
+          <div className="ml-auto flex items-center gap-2">
             <button onClick={handlePrint} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-semibold rounded-lg hover:bg-primary-700 transition">
               <Printer size={16} /> Print / Save as PDF
             </button>
-            <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition">
+            <button aria-label="Close receipt" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition">
               <X size={20} />
             </button>
           </div>
         </div>
+
+        {printUnavailable && <PrintUnavailableNotice contentId="print-receipt-content" title="Guest receipt" />}
 
         {/* Scrollable Area */}
         <div className="flex-1 overflow-y-auto p-8 print-scroll-area">

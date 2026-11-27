@@ -491,14 +491,15 @@ function NowChip({ to, onClick, icon: Icon, text, tone }) {
 }
 
 function DailyBars({ days }) {
+  const [picked, setPicked] = useState(null); // tapped bar shows its figure (phones have no hover)
   const max = Math.max(...days.map((d) => d.total), 1);
   if (!days.length || days.every((d) => !d.total)) return <p className="text-sm text-text-muted">No money collected in this period.</p>;
   return (
     <div className="flex h-36 items-end gap-1 overflow-x-auto pb-6">
       {days.map((day) => (
-        <div key={day.date} className="group relative flex h-full min-w-[10px] flex-1 flex-col items-center justify-end" tabIndex={0} aria-label={`${day.date}: ${cash(day.total)}`}>
-          <div className="w-full rounded-t bg-primary-500 transition group-hover:bg-primary-700 group-focus:bg-primary-700" style={{ height: `${Math.max(day.total > 0 ? 3 : 0, (Math.max(0, day.total) / max) * 100)}%` }} />
-          <span className="pointer-events-none absolute -top-7 z-10 hidden whitespace-nowrap rounded bg-text px-2 py-1 text-xs text-surface group-hover:block group-focus:block">{day.date}: {cash(day.total)}</span>
+        <div key={day.date} className="group relative flex h-full min-w-[10px] flex-1 flex-col items-center justify-end" tabIndex={0} aria-label={`${day.date}: ${cash(day.total)}`} onClick={() => setPicked((current) => (current === day.date ? null : day.date))}>
+          <div className="w-full rounded-t bg-primary-500 transition group-hover:bg-primary-700 group-focus:bg-primary-700 ${picked === day.date ? 'bg-primary-700' : ''}" style={{ height: `${Math.max(day.total > 0 ? 3 : 0, (Math.max(0, day.total) / max) * 100)}%` }} />
+          <span className={`pointer-events-none absolute -top-7 z-10 whitespace-nowrap rounded bg-text px-2 py-1 text-xs text-surface group-hover:block group-focus:block ${picked === day.date ? 'block' : 'hidden'}`}>{day.date}: {cash(day.total)}</span>
           {days.length <= 31 && <span className="absolute -bottom-5 text-[10px] text-text-muted">{Number(String(day.date).slice(8, 10))}</span>}
         </div>
       ))}
