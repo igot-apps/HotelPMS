@@ -396,9 +396,10 @@ function DeparturesDetail({ data, query = '' }) {
             <PhoneLine phone={res.phone} />
             <p className="mt-0.5 text-sm text-text-muted">{res.expectedCheckoutAt ? `By ${formatTime(new Date(res.expectedCheckoutAt))}` : ''}{res.minutesLate > 0 ? ` · ${formatDuration(res.minutesLate * 60000)} late` : ''}</p>
             <p className={`text-sm ${res.balanceDue > 0 ? 'font-semibold text-danger-700' : 'text-text-muted'}`}>{res.balanceDue > 0 ? `Owes: ${cash(res.balanceDue)}` : 'Paid in full'}</p>
-            <ul className="mt-2 space-y-1">
+            {/* Each room on its own coloured line, so staff can count the rooms behind the overstay badge. */}
+            <ul className="mt-2 space-y-1.5">
               {res.rooms.map((r) => (
-                <li key={r.reservationRoomId} className="text-sm text-text-muted">Room {r.roomNumber || '—'} {r.reservationRoomId === data.departures.waiting.find(w => w.reservationRoomId === r.reservationRoomId)?.actualCheckIn ? '(checked in)' : 'awaiting check-out'}{r.phone && r.phone !== res.phone ? ` · ${r.phone}` : ''}</li>
+                <li key={r.reservationRoomId} className={`rounded-md border-l-4 px-2.5 py-1.5 text-sm ${overdue ? 'border-danger-500 bg-danger-100 text-danger-800' : 'border-warning-500 bg-warning-50 text-warning-800'}`}><span className="font-bold">Room {r.roomNumber || '—'}</span> {r.reservationRoomId === data.departures.waiting.find(w => w.reservationRoomId === r.reservationRoomId)?.actualCheckIn ? '(checked in)' : 'awaiting check-out'}{r.phone && r.phone !== res.phone ? ` · ${r.phone}` : ''}</li>
               ))}
             </ul>
             <div className="mt-2 flex flex-wrap gap-2">
