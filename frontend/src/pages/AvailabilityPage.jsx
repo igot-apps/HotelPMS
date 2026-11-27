@@ -170,7 +170,7 @@ export default function AvailabilityPage() {
   }, 0);
 
   return (
-    <div className="space-y-6 pb-44 sm:pb-28"> {/* Space for the mobile booking action bar. */}
+    <div className="space-y-6 md:pb-28"> {/* Desktop: space for the pinned booking bar. Phones: the bar sits in the page above the bottom navigation, so it never covers it. */}
       
       {/* Header */}
       <div>
@@ -373,7 +373,7 @@ export default function AvailabilityPage() {
       {/* 🚨 SINGLE GLOBAL ACTION BAR                */}
       {/* ========================================== */}
       {hasSearched && availableRooms.length > 0 && (
-        <div className="fixed bottom-0 left-0 md:left-64 right-0 bg-surface border-t border-border shadow-2xl z-30 p-3 sm:p-4 pb-[max(12px,env(safe-area-inset-bottom))] flex flex-col sm:flex-row gap-3 sm:items-center justify-between backdrop-blur-md bg-surface/95">
+        <div className="sticky bottom-[calc(-2rem-env(safe-area-inset-bottom))] sm:-bottom-4 -mx-3 sm:-mx-4 md:mx-0 md:fixed md:bottom-0 md:left-64 md:right-0 bg-surface border-t border-border shadow-2xl z-30 p-3 sm:p-4 md:pb-[max(12px,env(safe-area-inset-bottom))] flex flex-col sm:flex-row gap-3 sm:items-center justify-between backdrop-blur-md bg-surface/95">
           <div className="min-w-0 flex items-center gap-3">
             <div className="p-2 rounded-full bg-primary-100 text-primary-600">
               <ShoppingCart size={20} />
