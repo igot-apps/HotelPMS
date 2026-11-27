@@ -28,11 +28,12 @@ const LABELS: Record<string, string> = {
   RefundSimulationSettingChanged: 'Refund simulation setting changed', SmsSimulationSettingChanged: 'SMS simulation setting changed',
   PropertyDeactivated: 'Hotel deactivated', PropertyReactivated: 'Hotel reactivated',
   BookingCreated: 'Booking created', PaymentReceived: 'Payment received',
+  RoomMaintenanceStarted: 'Room put in maintenance', RoomMaintenanceEnded: 'Room back from maintenance', RoomMaintenanceUpdated: 'Maintenance reason changed',
 };
 
 export const kindOf = (action: string): Kind => {
   if (action.startsWith('Correction') || action === 'CreditCheckoutApproved') return 'corrections';
-  if (['CheckedIn', 'CheckedOut', 'GuestMarkedOut', 'GuestMarkedReturned', 'DepartureVerified', 'RoomNoShow', 'ReservationNoShow', 'HousekeepingStatusChanged', 'CleaningStarted', 'CleaningReleased', 'RoomIssueReported', 'RoomIssueResolved'].includes(action)) return 'stays';
+  if (['CheckedIn', 'CheckedOut', 'GuestMarkedOut', 'GuestMarkedReturned', 'DepartureVerified', 'RoomNoShow', 'ReservationNoShow', 'HousekeepingStatusChanged', 'CleaningStarted', 'CleaningReleased', 'RoomIssueReported', 'RoomIssueResolved', 'RoomMaintenanceStarted', 'RoomMaintenanceEnded', 'RoomMaintenanceUpdated'].includes(action)) return 'stays';
   if (['BookingCreated', 'ReservationCancelled'].includes(action)) return 'bookings';
   if (action.startsWith('Refund') || action.startsWith('SimulatedRefund') || ['PaymentReceived', 'CashCountRecorded'].includes(action)) return 'money';
   return 'settings';
@@ -42,11 +43,20 @@ const reservationIdOf = (data: any): string | null =>
   data?.reservationId ?? data?.value?.reservationId ?? data?.value?.reservation?.reservationId ?? data?.value?.result?.reservationId ?? null;
 
 // A short plain-language detail for the row (the full record stays in the database).
-function detailOf(action: string, data: any): string {
+const roomNumberOf = (data: any): string | null => data?.roomNumber ?? data?.value?.roomNumberSnapshot ?? null;
+const roomIdOf = (data: any): number | null => {
+  const id = data?.roomId ?? data?.value?.roomId;
+  return Number.isInteger(id) ? id : null;
+};
+
+function detailOf(action: string, data: any, roomNumber?: string | null): string {
   const parts: string[] = [];
   const reason = data?.reason ?? data?.value?.result?.reason ?? data?.value?.reason;
   if (action === 'DepartureVerified') parts.push({ present: 'Guest still in the room', departed: 'Guest has left', unlocated: 'Guest cannot be found' }[data?.result as string] || String(data?.result || ''));
-  if (data?.roomNumber) parts.push(`Room ${data.roomNumber}`);
+  if (action === 'BookingCreated' && data?.source) parts.push(String(data.source));
+  const room = roomNumberOf(data) ?? roomNumber;
+  if (room) parts.push(`Room ${room}`);
+  if (data?.roomNumbers?.length) parts.push(`${data.roomNumbers.length > 1 ? 'Rooms' : 'Room'} ${data.roomNumbers.join(', ')}`);
   if (data?.value?.rooms?.length) parts.push(data.value.rooms.join(', '));
   const late = Number(data?.value?.lateMinutes || 0);
   if (late > 0) parts.push(`${late >= 1440 ? `${Math.floor(late / 1440)}d ` : ''}${late >= 60 ? `${Math.floor((late % 1440) / 60)}h ` : ''}${late % 60}m late`);
@@ -54,6 +64,7 @@ function detailOf(action: string, data: any): string {
   if (action === 'CashCountRecorded') parts.push(`Counted GHS ${Number(data.counted || 0).toFixed(2)} · expected GHS ${Number(data.expected || 0).toFixed(2)}`);
   if (action === 'HousekeepingStatusChanged' && data?.status) parts.push(`Now ${data.status === 'Dirty' ? 'needs cleaning' : data.status.toLowerCase()}`);
   if (action === 'CorrectionPermissionsChanged') parts.push(`Allowed: ${(data?.permissions || []).join(', ') || 'none'}`);
+  if (action === 'RoomMaintenanceEnded') parts.push(`Now ${String(data?.status || 'available').toLowerCase()}${data?.endedReason ? ` · was: ${data.endedReason}` : ''}`);
   if (data?.enabled != null) parts.push(data.enabled ? 'Turned on' : 'Turned off');
   if (reason && !['No reason given', 'Normal room lifecycle transition'].includes(reason)) parts.push(`Reason: ${reason}`);
   if ((action === 'RoomIssueReported' || action === 'RoomIssueResolved') && data?.category) parts.push(`${data.category}${data.description ? `: ${data.description}` : ''}${data.roomUnsuitable ? ' · may be unsuitable for guests' : ''}`);
@@ -92,10 +103,16 @@ export async function getActivityLog(userId: number, propertyId: number, query: 
     !kind || kind === 'money' ? prisma.payment.findMany({ where: { reservation: { propertyId }, receivedBy: { in: who }, paymentDate: range }, select: { paymentId: true, reservationId: true, receivedBy: true, paymentDate: true, amount: true, paymentMethod: true, status: true }, take: 5000 }) : [],
   ]);
 
+  // Older audit rows only stored the room id; look the room number up so every row says which room.
+  const missingRoomIds = [...new Set(logs.filter(log => !roomNumberOf(log.newData)).map(log => roomIdOf(log.newData)).filter((id): id is number => id !== null))];
+  const roomNumberById = new Map((missingRoomIds.length ? await prisma.room.findMany({ where: { roomId: { in: missingRoomIds }, propertyId }, select: { roomId: true, roomNumber: true } }) : []).map(r => [r.roomId, r.roomNumber]));
+  // Bookings made since creation is audited carry the amount at booking time; older ones only have today's total.
+  const auditedBookings = new Set(logs.filter(log => log.action === 'BookingCreated').map(log => reservationIdOf(log.newData)));
+
   type Row = { id: string; at: Date; userId: number | null; action: string; detail: string; reservationId: string | null };
   let rows: Row[] = [
-    ...logs.map(log => ({ id: `a${log.auditLogId}`, at: log.createdAt, userId: log.userId, action: log.action, detail: detailOf(log.action, log.newData), reservationId: reservationIdOf(log.newData) })),
-    ...bookings.map(b => ({ id: `b${b.reservationId}`, at: b.createdAt, userId: b.staffId, action: 'BookingCreated', detail: `${b.source} · GHS ${Number(b.totalAmount || 0).toFixed(2)}`, reservationId: b.reservationId })),
+    ...logs.map(log => ({ id: `a${log.auditLogId}`, at: log.createdAt, userId: log.userId, action: log.action, detail: detailOf(log.action, log.newData, roomNumberById.get(roomIdOf(log.newData) as number)), reservationId: reservationIdOf(log.newData) })),
+    ...bookings.filter(b => !auditedBookings.has(b.reservationId)).map(b => ({ id: `b${b.reservationId}`, at: b.createdAt, userId: b.staffId, action: 'BookingCreated', detail: `${b.source} · total now GHS ${Number(b.totalAmount || 0).toFixed(2)}`, reservationId: b.reservationId })),
     ...payments.map(p => ({ id: `p${p.paymentId}`, at: p.paymentDate, userId: p.receivedBy, action: 'PaymentReceived', detail: `GHS ${Number(p.amount).toFixed(2)} · ${p.paymentMethod}${p.status !== 'Completed' ? ` · now ${p.status.toLowerCase()}` : ''}`, reservationId: p.reservationId })),
   ];
   if (kind) rows = rows.filter(row => kindOf(row.action) === kind);

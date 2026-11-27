@@ -1,7 +1,7 @@
 import { beforeEach, expect, jest, test } from '@jest/globals';
 
 const mock = () => jest.fn<(...args: any[]) => any>();
-const db: any = { user: { findFirst: mock(), findMany: mock() }, auditLog: { findMany: mock() }, reservation: { findMany: mock() }, payment: { findMany: mock() } };
+const db: any = { user: { findFirst: mock(), findMany: mock() }, auditLog: { findMany: mock() }, reservation: { findMany: mock() }, payment: { findMany: mock() }, room: { findMany: mock() } };
 jest.mock('../src/shared/utils/prisma', () => ({ get prisma() { return db; } }));
 import { getActivityLog } from '../src/modules/reports/activity-log.service';
 
@@ -37,4 +37,24 @@ test('filters by type and staff member', async () => {
 test('only the manager can see it', async () => {
   db.user.findFirst.mockResolvedValue({ userId: 2, role: { roleName: 'Receptionist' }, property: {} });
   await expect(getActivityLog(2, 4, {})).rejects.toMatchObject({ statusCode: 403 });
+});
+
+test('says which room, shows maintenance, and keeps the amount at booking time', async () => {
+  db.auditLog.findMany.mockResolvedValue([
+    { auditLogId: 20, userId: 2, action: 'HousekeepingStatusChanged', createdAt: new Date('2026-11-20T13:00:00Z'), newData: { roomId: 55, status: 'Clean' } },
+    { auditLogId: 21, userId: 2, action: 'CheckedIn', createdAt: new Date('2026-11-20T12:00:00Z'), newData: { reservationId: 'R1', reason: 'Normal room lifecycle transition', value: { roomId: 56, roomNumberSnapshot: '104' } } },
+    { auditLogId: 22, userId: 1, action: 'RoomMaintenanceStarted', createdAt: new Date('2026-11-20T11:00:00Z'), newData: { roomId: 57, roomNumber: '201', status: 'Maintenance', reason: 'Air conditioning repair' } },
+    { auditLogId: 23, userId: 1, action: 'RoomMaintenanceEnded', createdAt: new Date('2026-11-20T10:30:00Z'), newData: { roomId: 57, roomNumber: '201', status: 'Available', endedReason: 'Air conditioning repair' } },
+    { auditLogId: 24, userId: 2, action: 'BookingCreated', createdAt: new Date('2026-11-20T09:00:00Z'), newData: { reservationId: 'R1', source: 'WalkIn', amount: 600, roomNumbers: ['103', '104'] } },
+  ]);
+  db.room.findMany.mockResolvedValue([{ roomId: 55, roomNumber: '101' }]);
+  const log = await getActivityLog(1, 4, { from: '2026-11-20', to: '2026-11-20' });
+  const byAction = Object.fromEntries(log.items.map((i: any) => [i.action, i]));
+  expect(byAction.HousekeepingStatusChanged.detail).toBe('Room 101 · Now clean');
+  expect(byAction.CheckedIn.detail).toBe('Room 104');
+  expect(byAction.RoomMaintenanceStarted).toMatchObject({ label: 'Room put in maintenance', kind: 'stays', detail: 'Room 201 · Reason: Air conditioning repair' });
+  expect(byAction.RoomMaintenanceEnded.detail).toBe('Room 201 · Now available · was: Air conditioning repair');
+  // The audited creation (600) replaces the row built from today's booking total (300 in the mock).
+  expect(log.items.filter((i: any) => i.action === 'BookingCreated').map((i: any) => i.detail)).toEqual(['WalkIn · Rooms 103, 104 · GHS 600.00']);
+  expect(db.room.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { roomId: { in: [55] }, propertyId: 4 } }));
 });

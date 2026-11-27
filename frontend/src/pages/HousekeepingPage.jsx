@@ -79,7 +79,7 @@ function ReportSheet({ room, categories, onClose, onSubmit, busy }) {
   const ready = category && description.trim().length >= 3;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="report-title">
-      <form onSubmit={event => { event.preventDefault(); if (ready) onSubmit({ category, description: description.trim(), roomUnsuitable: unsuitable }); }} className={`${card} max-h-[90vh] w-full max-w-md overflow-y-auto p-5 shadow-xl`}>
+      <form onSubmit={event => { event.preventDefault(); if (ready) onSubmit({ category, description: description.trim(), roomUnsuitable: unsuitable }); }} className={`${card} max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto p-5 shadow-xl`}>
         <h2 id="report-title" className="text-lg font-bold text-text">Report an issue · Room {room.roomNumber}</h2>
         <fieldset className="mt-4"><legend className="text-sm font-semibold text-text">What kind of issue?</legend>
           <div className="mt-2 grid grid-cols-2 gap-2">{categories.map(item => <label key={item} className={`flex min-h-11 cursor-pointer items-center rounded-lg border px-3 text-sm font-medium ${category === item ? 'border-primary-500 bg-primary-50 text-primary-800' : 'border-border text-text'}`}><input type="radio" name="issue-category" value={item} checked={category === item} onChange={() => setCategory(item)} className="sr-only" />{item}</label>)}</div>

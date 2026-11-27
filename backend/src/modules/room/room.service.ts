@@ -92,7 +92,7 @@ export const getAvailableRooms = async (
   );
 };
 
-export const updateRoom = async (roomId: number, data: any) => {
+export const updateRoom = async (roomId: number, data: any, actor?: { userId: number; propertyId: number }) => {
   if (data.housekeepingStatus === 'OutOfService') {
     data.operationalStatus = 'Maintenance';
   }
@@ -101,9 +101,32 @@ export const updateRoom = async (roomId: number, data: any) => {
   if (!room) throw new Error('Room not found');
   const { maintenanceReason, isOnlineBookable: _ignored, ...fields } = data;
   await assertRoomReactivation(room, fields.operationalStatus, fields.roomTypeId ? Number(fields.roomTypeId) : undefined);
-  Object.assign(fields, maintenanceReasonUpdate(room.operationalStatus, fields.operationalStatus, maintenanceReason));
+  const reasonUpdate = maintenanceReasonUpdate(room.operationalStatus, fields.operationalStatus, maintenanceReason);
+  Object.assign(fields, reasonUpdate);
 
-  return roomRepository.updateRoom(roomId, fields);
+  const updated = await roomRepository.updateRoom(roomId, fields);
+  await recordMaintenanceChange(room, fields.operationalStatus, reasonUpdate.maintenanceReason, actor);
+  return updated;
+};
+
+// Every maintenance start, end or reason change goes to the Activity Log, so the manager sees who did it and why.
+const recordMaintenanceChange = async (
+  room: { roomId: number; roomNumber: string; propertyId: number; operationalStatus: string; maintenanceReason?: string | null },
+  nextStatus: string | undefined,
+  nextReason: string | null | undefined,
+  actor?: { userId: number; propertyId: number },
+) => {
+  if (!actor || !nextStatus) return;
+  const was = room.operationalStatus === 'Maintenance';
+  const now = nextStatus === 'Maintenance';
+  const action = !was && now ? 'RoomMaintenanceStarted'
+    : was && !now ? 'RoomMaintenanceEnded'
+    : was && now && nextReason && nextReason !== room.maintenanceReason ? 'RoomMaintenanceUpdated' : null;
+  if (!action) return;
+  await prisma.auditLog.create({ data: { propertyId: room.propertyId, userId: actor.userId, entityType: 'Room', entityId: room.roomId, action,
+    oldData: { roomId: room.roomId, roomNumber: room.roomNumber, status: room.operationalStatus, maintenanceReason: room.maintenanceReason ?? null },
+    newData: { roomId: room.roomId, roomNumber: room.roomNumber, propertyId: room.propertyId, status: nextStatus, ...(now ? { reason: nextReason ?? room.maintenanceReason ?? null } : { endedReason: room.maintenanceReason ?? null }) },
+  } }).catch((error: any) => console.warn('Could not record maintenance change', { roomId: room.roomId, error: error?.message }));
 };
 
 // Entering maintenance needs a reason; leaving it clears the reason.
@@ -144,9 +167,10 @@ export const updateRoomStatus = async (
   const updated = await roomRepository.updateRoomStatus(roomId, operationalStatus, housekeepingStatus, { ...reasonUpdate, ...(stillWaiting ? {} : { cleaningStartedById: null, cleaningStartedAt: null }) });
   // Same Activity Log entry as the housekeeping screen, so every cleaning change is traceable.
   if (actor && housekeepingStatus && housekeepingStatus !== room.housekeepingStatus) {
-    await prisma.auditLog.create({ data: { propertyId: room.propertyId, userId: actor.userId, entityType: 'Room', action: 'HousekeepingStatusChanged', oldData: { roomId, status: room.housekeepingStatus }, newData: { roomId, propertyId: room.propertyId, status: housekeepingStatus } } })
+    await prisma.auditLog.create({ data: { propertyId: room.propertyId, userId: actor.userId, entityType: 'Room', action: 'HousekeepingStatusChanged', oldData: { roomId, status: room.housekeepingStatus }, newData: { roomId, roomNumber: room.roomNumber, propertyId: room.propertyId, status: housekeepingStatus } } })
       .catch((error: any) => console.warn('Could not record cleaning status change', { roomId, error: error?.message }));
   }
+  await recordMaintenanceChange(room, operationalStatus, reasonUpdate.maintenanceReason, actor);
   if (room.operationalStatus === 'Maintenance' && operationalStatus === 'Available') void notifyMaintenanceResolved(roomId);
   return updated;
 };

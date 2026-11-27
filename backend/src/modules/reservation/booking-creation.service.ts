@@ -49,7 +49,7 @@ export async function createHotelReservation(input: any, online = false): Promis
         }
         const nights = (to.getTime() - from.getTime()) / 86400000;
         const subtotal = allocations.reduce((sum, r) => sum + r.agreedPricePerNight * nights, 0);
-        return tx.reservation.create({ data: {
+        const created = await tx.reservation.create({ data: {
           propertyId: property.propertyId, propertyGuestId: input.propertyGuestId ? Number(input.propertyGuestId) : null,
           platformGuestId: input.propertyGuestId ? null : Number(input.platformGuestId), staffId: input.staffId,
           source: online ? 'Website' : input.source || 'WalkIn', checkInDate: from, checkOutDate: to, status: online ? 'Pending' : 'Confirmed', notes: input.notes || '',
@@ -58,6 +58,10 @@ export async function createHotelReservation(input: any, online = false): Promis
           amountPaid: 0, confirmationCode: `RES-${randomUUID().slice(0, 12).toUpperCase()}`,
           reservationRooms: { create: allocations },
         }, include: { reservationRooms: { include: { room: { include: { roomType: true } } } }, propertyGuest: true, platformGuest: { select: { fullName: true, phone: true, email: true } } } });
+        // Keep the amount as it was when booked; the booking total can change later (extensions, moves).
+        if (input.staffId) await tx.auditLog.create({ data: { propertyId: property.propertyId, userId: input.staffId, entityType: 'Reservation', action: 'BookingCreated',
+          newData: { reservationId: created.reservationId, source: created.source, amount: Number(created.totalAmount || 0), roomNumbers: allocations.map(r => r.roomNumberSnapshot) } } });
+        return created;
       }, { isolationLevel: 'Serializable', timeout: 15000 });
       return reservation;
     } catch (error: any) { if ((error.code !== 'P2034' && error.meta?.code !== '40001') || attempt >= 2) throw error; }

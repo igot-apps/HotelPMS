@@ -51,7 +51,7 @@ router.patch('/rooms/:id',async (req: AuthRequest, res) => {
       }
       const changed = await tx.room.updateMany({ where: { roomId, propertyId, operationalStatus: 'Available', housekeepingStatus: room.housekeepingStatus, cleaningStartedById: room.cleaningStartedById }, data: { housekeepingStatus: status, ...clearCleaning() } });
       if (!changed.count) throw new Error('Room status changed. Refresh the list and try again.');
-      await tx.auditLog.create({ data: { propertyId: propertyId, userId: req.user!.userId, entityType: 'Room', action: 'HousekeepingStatusChanged', oldData: { roomId, status: room.housekeepingStatus }, newData: { roomId, propertyId, status, ...(room.cleaningStartedAt ? { cleaningStartedAt: room.cleaningStartedAt.toISOString(), cleaningStartedById: room.cleaningStartedById } : {}) } } });
+      await tx.auditLog.create({ data: { propertyId: propertyId, userId: req.user!.userId, entityType: 'Room', action: 'HousekeepingStatusChanged', oldData: { roomId, status: room.housekeepingStatus }, newData: { roomId, roomNumber: room.roomNumber, propertyId, status, ...(room.cleaningStartedAt ? { cleaningStartedAt: room.cleaningStartedAt.toISOString(), cleaningStartedById: room.cleaningStartedById } : {}) } } });
       return tx.room.findUnique({ where: { roomId } });
     });
     return res.json({ success: true, data: updated });

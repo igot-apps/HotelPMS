@@ -95,7 +95,7 @@ test('reception changing cleaning status is recorded in the activity log', async
   db.room.update.mockResolvedValue({ roomId: 10, housekeepingStatus: 'Dirty' });
   db.auditLog.create.mockResolvedValue({});
   await updateRoomStatus(10, 'Available', 'Dirty', undefined, { userId: 7, propertyId: 3 });
-  expect(db.auditLog.create).toHaveBeenCalledWith({ data: expect.objectContaining({ userId: 7, propertyId: 3, action: 'HousekeepingStatusChanged', oldData: { roomId: 10, status: 'Clean' }, newData: { roomId: 10, propertyId: 3, status: 'Dirty' } }) });
+  expect(db.auditLog.create).toHaveBeenCalledWith({ data: expect.objectContaining({ userId: 7, propertyId: 3, action: 'HousekeepingStatusChanged', oldData: { roomId: 10, status: 'Clean' }, newData: { roomId: 10, roomNumber: '102', propertyId: 3, status: 'Dirty' } }) });
 });
 
 test('no log entry when the cleaning status does not change', async () => {
@@ -103,4 +103,19 @@ test('no log entry when the cleaning status does not change', async () => {
   db.room.update.mockResolvedValue({ roomId: 10 });
   await updateRoomStatus(10, 'Available', 'Clean', undefined, { userId: 7, propertyId: 3 });
   expect(db.auditLog.create).not.toHaveBeenCalled();
+});
+
+test('maintenance on and off is recorded in the activity log', async () => {
+  db.room.findUnique.mockResolvedValue({ roomId: 10, propertyId: 3, roomNumber: '201', operationalStatus: 'Available', housekeepingStatus: 'Clean', maintenanceReason: null, roomType: { isActive: true } });
+  db.room.update.mockResolvedValue({ roomId: 10 });
+  db.auditLog.create.mockResolvedValue({});
+  await updateRoomStatus(10, 'Maintenance', undefined, 'Air conditioning repair', { userId: 7, propertyId: 3 });
+  expect(db.auditLog.create).toHaveBeenCalledWith({ data: expect.objectContaining({ userId: 7, action: 'RoomMaintenanceStarted', newData: expect.objectContaining({ roomNumber: '201', status: 'Maintenance', reason: 'Air conditioning repair' }) }) });
+
+  jest.clearAllMocks();
+  db.room.findUnique.mockResolvedValue({ roomId: 10, propertyId: 3, roomNumber: '201', operationalStatus: 'Maintenance', housekeepingStatus: 'Clean', maintenanceReason: 'Air conditioning repair', roomType: { isActive: true } });
+  db.room.update.mockResolvedValue({ roomId: 10 });
+  db.auditLog.create.mockResolvedValue({});
+  await updateRoomStatus(10, 'Available', undefined, undefined, { userId: 7, propertyId: 3 });
+  expect(db.auditLog.create).toHaveBeenCalledWith({ data: expect.objectContaining({ action: 'RoomMaintenanceEnded', newData: expect.objectContaining({ roomNumber: '201', status: 'Available', endedReason: 'Air conditioning repair' }) }) });
 });
