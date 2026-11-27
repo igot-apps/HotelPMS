@@ -25,7 +25,7 @@ export default function PropertiesPage() {
 
   // 1. Fetch Properties
   const { data, isLoading, error } = useQuery({
-    queryKey: ['properties'],
+    queryKey: ['properties', 'page'],
     queryFn: () => getProperties({ limit: 50 }).then(res => res.data),
   });
 
