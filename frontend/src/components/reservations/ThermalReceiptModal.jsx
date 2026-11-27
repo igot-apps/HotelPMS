@@ -1,14 +1,17 @@
+import { useState } from 'react';
 import { X, Printer } from 'lucide-react';
+import { printWithFallback } from '../../lib/printReceipt';
+import PrintUnavailableNotice from './PrintUnavailableNotice';
 import { formatPaymentMethod } from '../../utils/payment';
 import { serverNow } from '../../lib/serverClock';
 
 const MAX_PAYMENT_LINES = 3;
 export default function ThermalReceiptModal({ isOpen, onClose, reservation, stats }) {
+  const [printUnavailable, setPrintUnavailable] = useState(false);
   if (!isOpen || !reservation) return null;
 
-  const handlePrint = () => {
-    setTimeout(() => window.print(), 100);
-  };
+  // Prints as before; if a phone never opens its print screen, offer Share instead.
+  const handlePrint = () => { setPrintUnavailable(false); printWithFallback(() => setPrintUnavailable(true)); };
 
   const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const formatTime = (dateStr) => new Date(dateStr).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -38,17 +41,19 @@ export default function ThermalReceiptModal({ isOpen, onClose, reservation, stat
       <div className="bg-white w-full max-w-sm rounded-2xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col thermal-modal-wrapper">
         
         {/* Screen-only Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 print:hidden">
-          <h2 className="text-lg font-bold text-gray-800">Thermal Receipt (80mm)</h2>
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 p-4 border-b border-gray-200 print:hidden">
+          <h2 className="min-w-0 text-lg font-bold text-gray-800">Thermal Receipt (80mm)</h2>
+          <div className="ml-auto flex items-center gap-2">
             <button onClick={handlePrint} className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-600 text-white text-xs font-semibold rounded-lg hover:bg-primary-700 transition">
               <Printer size={14} /> Print
             </button>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition">
+            <button aria-label="Close receipt" onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition">
               <X size={18} />
             </button>
           </div>
         </div>
+
+        {printUnavailable && <PrintUnavailableNotice contentId="thermal-receipt-content" title="Guest receipt" />}
 
         {/* Scrollable Area */}
         <div className="flex-1 overflow-y-auto p-4 bg-gray-100 thermal-scroll-area">

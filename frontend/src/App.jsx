@@ -1,5 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Suspense, useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
+import { lazyPage, preloadWhenIdle } from './lib/lazyPage';
+import { useAuthStore } from './store/authStore';
+import PageLoading from './components/ui/PageLoading';
 import AppLayout from './components/layout/AppLayout';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import GuestProtectedRoute from './components/auth/GuestProtectedRoute';
@@ -7,43 +11,43 @@ import RedirectIfSignedIn from './components/auth/RedirectIfSignedIn';
 
 // Property Registration and PMS Public Pages
 import LoginPage from './pages/LoginPage';
-import StaffSetupPage from './pages/StaffSetupPage';
-import StaffPasswordResetPage from './pages/StaffPasswordResetPage';
-import HotelRegistrationWizard from './pages/HotelRegistrationWizard';
-import DiscoverPage from './pages/DiscoverPage'; // 🌟 NEW: Main Public Homepage
-import ForHotelsPage from './pages/ForHotelsPage';
+const StaffSetupPage = lazyPage(() => import('./pages/StaffSetupPage'));
+const StaffPasswordResetPage = lazyPage(() => import('./pages/StaffPasswordResetPage'));
+const HotelRegistrationWizard = lazyPage(() => import('./pages/HotelRegistrationWizard'));
+const DiscoverPage = lazyPage(() => import('./pages/DiscoverPage')); // 🌟 NEW: Main Public Homepage
+const ForHotelsPage = lazyPage(() => import('./pages/ForHotelsPage'));
 
 // 🌟 Public Website Pages (Guest Booking Flow)
-import PublicHotelPage from './pages/PublicHotelPage';
-import GuestAuthPage from './pages/GuestAuthPage';
-import PublicCheckoutPage from './pages/PublicCheckoutPage';
-import PublicBookingSuccessPage from './pages/PublicBookingSuccessPage';
-import PublicAuthPage from './pages/PublicAuthPage';
-import PublicReservationsPage from './pages/PublicReservationsPage';
+const PublicHotelPage = lazyPage(() => import('./pages/PublicHotelPage'));
+const GuestAuthPage = lazyPage(() => import('./pages/GuestAuthPage'));
+const PublicCheckoutPage = lazyPage(() => import('./pages/PublicCheckoutPage'));
+const PublicBookingSuccessPage = lazyPage(() => import('./pages/PublicBookingSuccessPage'));
+const PublicAuthPage = lazyPage(() => import('./pages/PublicAuthPage'));
+const PublicReservationsPage = lazyPage(() => import('./pages/PublicReservationsPage'));
 import HotelWebsiteGate from './components/public/HotelWebsiteGate';
 import { SHOW_DISCOVER } from './lib/platformConfig';
 
 
 // Protected Pages (Staff PMS)
 import DashboardPage from './pages/DashboardPage';
-import ReportsPage from './pages/ReportsPage';
-import ActivityLogPage from './pages/ActivityLogPage';
-import RefundsPage from './pages/RefundsPage';
-import RoomsPage from './pages/RoomsPage';
-import HousekeepingPage from './pages/HousekeepingPage';
-import GuestsPage from './pages/GuestsPage';
-import ReservationsPage from './pages/ReservationsPage';
-import PropertiesPage from './pages/PropertiesPage';
-import ReservationDetailsPage from './pages/ReservationDetailsPage';
-import CalendarPage from './pages/CalendarPage';
-import AvailabilityPage from './pages/AvailabilityPage';
-import RoomManagementPage from './pages/RoomManagementPage';
-import UsersPage from './pages/UsersPage';
-import BillingPage from './pages/BillingPage';
-import MyProfilePage from './pages/MyProfilePage';
-import GuestProfilePage from './pages/GuestProfilePage';
-import SuperAdminPage from './pages/SuperAdminPage';
-import PlatformAccountLinkPage from './pages/PlatformAccountLinkPage';
+const ReportsPage = lazyPage(() => import('./pages/ReportsPage'));
+const ActivityLogPage = lazyPage(() => import('./pages/ActivityLogPage'));
+const RefundsPage = lazyPage(() => import('./pages/RefundsPage'));
+const RoomsPage = lazyPage(() => import('./pages/RoomsPage'));
+const HousekeepingPage = lazyPage(() => import('./pages/HousekeepingPage'));
+const GuestsPage = lazyPage(() => import('./pages/GuestsPage'));
+const ReservationsPage = lazyPage(() => import('./pages/ReservationsPage'));
+const PropertiesPage = lazyPage(() => import('./pages/PropertiesPage'));
+const ReservationDetailsPage = lazyPage(() => import('./pages/ReservationDetailsPage'));
+const CalendarPage = lazyPage(() => import('./pages/CalendarPage'));
+const AvailabilityPage = lazyPage(() => import('./pages/AvailabilityPage'));
+const RoomManagementPage = lazyPage(() => import('./pages/RoomManagementPage'));
+const UsersPage = lazyPage(() => import('./pages/UsersPage'));
+const BillingPage = lazyPage(() => import('./pages/BillingPage'));
+const MyProfilePage = lazyPage(() => import('./pages/MyProfilePage'));
+const GuestProfilePage = lazyPage(() => import('./pages/GuestProfilePage'));
+const SuperAdminPage = lazyPage(() => import('./pages/SuperAdminPage'));
+const PlatformAccountLinkPage = lazyPage(() => import('./pages/PlatformAccountLinkPage'));
 
 function LegacyBookingRedirect() {
   const location = useLocation();
@@ -51,6 +55,8 @@ function LegacyBookingRedirect() {
 }
 
 function App() {
+  // The pages staff open most from the bottom bar load in the background, so the first tap is instant.
+  useEffect(() => { if (useAuthStore.getState().accessToken) preloadWhenIdle([ReservationsPage, ReservationDetailsPage, RoomsPage, GuestsPage]); }, []);
   return (
     <BrowserRouter>
       <HotelWebsiteGate>
@@ -90,6 +96,7 @@ function App() {
         }}
       />
 
+      <Suspense fallback={<PageLoading fullScreen />}>
       <Routes>
         {/* ========================================== */}
         {/* 🌟 PUBLIC ROUTES (No login required)       */}
@@ -149,6 +156,7 @@ function App() {
         {/* ========================================== */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
       </HotelWebsiteGate>
     </BrowserRouter>
   );

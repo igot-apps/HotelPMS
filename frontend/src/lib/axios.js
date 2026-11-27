@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore'; // Adjust path if your store is elsewhere
 import { usePlatformAuthStore, isPlatformApiPath } from '../store/platformAuthStore';
 import { recordServerTime, setResync } from './serverClock';
+import { markReachable, markUnreachable, trackSave } from './connectionStatus';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000/api',
@@ -12,6 +13,48 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// ==========================================
+// 0. SAVES: ONE AT A TIME, SAFE TO RETRY
+// ==========================================
+// A save (POST/PUT/PATCH/DELETE) carries an Idempotency-Key. The same save tapped twice while the first
+// is still on its way shares the first one's reply instead of being sent again. If a save gets no reply
+// at all (weak signal, timeout), its key is kept for a while: when staff send the same save again, the
+// server recognises it and returns the original result instead of charging or booking twice.
+// Nothing is ever retried automatically.
+const UNCERTAIN_KEY_MS = 30 * 60 * 1000;
+const inFlightSaves = new Map(); // fingerprint -> promise of the reply
+const uncertainKeys = new Map(); // fingerprint -> { key, until }
+const isSave = (method) => !['get', 'head', 'options'].includes(String(method || 'get').toLowerCase());
+const newKey = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`);
+// Only JSON bodies (or none) can be compared; uploads are never merged with one another.
+const fingerprintOf = (config) => (config.data == null || typeof config.data === 'string')
+  ? `${String(config.method).toUpperCase()} ${new URL(config.url || '', config.baseURL || window.location.origin).href} ${config.data ?? ''}`
+  : null;
+
+const sendRequest = axios.getAdapter(api.defaults.adapter);
+api.defaults.adapter = (config) => {
+  if (!isSave(config.method)) return sendRequest(config);
+  const fingerprint = fingerprintOf(config);
+  if (fingerprint && inFlightSaves.has(fingerprint)) return inFlightSaves.get(fingerprint);
+  if (fingerprint && !config.headers.get?.('Idempotency-Key')) {
+    const kept = uncertainKeys.get(fingerprint);
+    config.headers.set('Idempotency-Key', kept && kept.until > Date.now() ? kept.key : newKey());
+  }
+  const finished = trackSave();
+  const reply = sendRequest(config).then(
+    (response) => { if (fingerprint) uncertainKeys.delete(fingerprint); return response; },
+    (error) => {
+      if (fingerprint) {
+        if (error.response) uncertainKeys.delete(fingerprint);
+        else uncertainKeys.set(fingerprint, { key: config.headers.get?.('Idempotency-Key'), until: Date.now() + UNCERTAIN_KEY_MS });
+      }
+      throw error;
+    },
+  ).finally(() => { finished(); if (fingerprint) inFlightSaves.delete(fingerprint); });
+  if (fingerprint) inFlightSaves.set(fingerprint, reply);
+  return reply;
+};
 
 // ==========================================
 // 1. REQUEST INTERCEPTOR (Attach Token)
@@ -42,9 +85,10 @@ api.interceptors.request.use(
 // 2. RESPONSE INTERCEPTOR (Global Error Handler)
 // ==========================================
 api.interceptors.response.use(
-  (response) => { recordServerTime(response.headers?.date, response.config?.sentAt); return response; }, // 2xx: note the server's time, return it
+  (response) => { markReachable(); recordServerTime(response.headers?.date, response.config?.sentAt); return response; }, // 2xx: note the server's time, return it
   (error) => {
     if (error.response) {
+      markReachable();
       recordServerTime(error.response.headers?.date, error.config?.sentAt);
       // The request was made and the server responded with a status code out of 2xx
       const { status, data } = error.response;
@@ -120,7 +164,21 @@ api.interceptors.response.use(
       // The request was made but no response was received (Network Error / Offline)
       console.error('[Network Error]:', error.request);
       const timedOut = error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT';
-      if (!error.config?.skipErrorToast) toast.error(timedOut ? 'The server is taking too long to respond. Please try again.' : 'Network error. Please check your internet connection.');
+      if (axios.isCancel(error)) return Promise.reject(error);
+      markUnreachable();
+      if (isSave(error.config?.method)) {
+        // The save may or may not have reached the server. Say so plainly; sending the same save again is
+        // safe (it carries the same key), but staff should look first.
+        error.uncertain = true;
+        if (!error.config?.skipErrorToast) toast.error(timedOut
+          ? 'No reply from the server. This may or may not have been saved — check before trying again.'
+          : 'Connection lost. This may or may not have been saved — check before trying again.', { duration: 8000 });
+      }
+      // Loading data: the connection strip at the top explains it and the page updates when it is back.
+      else if (!document.documentElement.classList.contains('app-shell') && !error.config?.skipErrorToast) {
+        // Public and sign-in pages have no connection strip: keep the message they always showed.
+        toast.error(timedOut ? 'The server is taking too long to respond. Please try again.' : 'Network error. Please check your internet connection.');
+      }
       
     } else {
       // Something happened in setting up the request that triggered an Error

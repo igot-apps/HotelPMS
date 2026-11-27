@@ -1,4 +1,5 @@
 import { atProperty } from '../../shared/utils/property-access';
+import { idempotency } from '../../shared/middleware/idempotency';
    import { Router } from 'express';
    import { authenticate, AuthRequest } from '../../shared/middleware/auth.middleware';
    import { prisma } from '../../shared/utils/prisma';
@@ -14,6 +15,7 @@ import { atProperty } from '../../shared/utils/property-access';
 
    const router = Router();
    router.use(authenticate);
+   router.use(idempotency); // cash counts are saved once even if sent twice
    router.get('/overview', dashboardController.getOperationalOverview);
    // Today's key figures with the rows behind each one (front desk staff of the user's hotel).
    router.get('/glance', async (req: AuthRequest, res) => {

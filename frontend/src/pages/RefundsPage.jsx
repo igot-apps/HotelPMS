@@ -2,6 +2,7 @@ import { SkeletonCards } from '../components/ui/Skeleton';
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams, Navigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import useManualRefresh from '../hooks/useManualRefresh';
 import { Undo2, ArrowRight, RefreshCw } from 'lucide-react';
 import api from '../lib/axios';
 import { useAuthStore } from '../store/authStore';
@@ -20,11 +21,12 @@ export default function RefundsPage() {
   const [selectedRefund, setSelectedRefund] = useState(null);
   useEffect(() => { const timer = setTimeout(() => { setDebounced(search.trim()); setPage(1); }, 250); return () => clearTimeout(timer); }, [search]);
   const allowed = ['Manager', 'Receptionist'].includes(user?.role);
-  const query = useQuery({ queryKey: ['refunds', 'inbox', user?.propertyId, user?.userId, status, debounced, page], enabled: allowed, queryFn: async () => (await api.get('/reservations/refund-inbox', { params: { status, search: debounced, page, limit: 20 } })).data.data, refetchInterval: 15000 });
+  const query = useQuery({ queryKey: ['refunds', 'inbox', user?.propertyId, user?.userId, status, debounced, page], enabled: allowed, queryFn: async () => (await api.get('/reservations/refund-inbox', { params: { status, search: debounced, page, limit: 20 } })).data.data, refetchInterval: 30000 });
+  const [refresh, refreshing] = useManualRefresh(query.refetch);
   if (!allowed) return <Navigate to="/dashboard" replace />;
   const counts = query.data?.counts;
   const pagination = query.data?.pagination;
-  return <div className="min-w-0 space-y-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="flex items-center gap-2 text-2xl font-bold text-text"><Undo2 size={25} />Refunds</h1><p className="mt-1 text-sm text-text-muted">Every refund recorded at your hotel. To refund a guest, open the booking and use Refunds.</p></div><button onClick={() => query.refetch()} disabled={query.isFetching} className="flex min-h-11 items-center gap-2 rounded-lg border border-border bg-surface px-3 text-sm text-text disabled:opacity-50"><RefreshCw size={16} />Refresh</button></div>
+  return <div className="min-w-0 space-y-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="flex items-center gap-2 text-2xl font-bold text-text"><Undo2 size={25} />Refunds</h1><p className="mt-1 text-sm text-text-muted">Every refund recorded at your hotel. To refund a guest, open the booking and use Refunds.</p></div><button onClick={refresh} disabled={refreshing} aria-busy={refreshing} className="flex min-h-11 items-center gap-2 rounded-lg border border-border bg-surface px-3 text-sm text-text disabled:opacity-50"><RefreshCw size={16} />Refresh</button></div>
     <div role="tablist" aria-label="Refund status" className="flex flex-wrap gap-2">{tabs.filter(([key,, count]) => key === 'History' || key === status || counts?.[count] > 0).map(([key,label,count]) => <button key={key} role="tab" aria-selected={status === key} onClick={() => { setPage(1); setParams({ status: key }); }} className={`min-h-11 rounded-lg border px-3 py-2 text-sm font-semibold ${status === key ? 'border-primary-600 bg-primary-600 text-white' : 'border-border bg-surface text-text'}`}>{label}{counts && ` (${counts[count]})`}</button>)}</div>
     <label className="block text-sm font-medium text-text">Find a refund<input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Guest name or booking code" className="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-border bg-surface p-3" /></label>
     {query.isError && <p role="alert" className="rounded-lg border border-danger-200 bg-danger-50 p-4 text-sm text-danger-700">Could not load refunds. <button onClick={() => query.refetch()} className="min-h-11 underline">Try again</button></p>}

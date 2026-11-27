@@ -4,6 +4,7 @@ import * as subscriptionService from './subscription.service';
 import { processMoolreWebhook } from './moolre-webhook.service';
 import { moolreMode } from './moolre.client';
 import { authenticate, AuthRequest, requirePermission } from '../../shared/middleware/auth.middleware';
+import { idempotency } from '../../shared/middleware/idempotency';
 import { prisma } from '../../shared/utils/prisma';
 
 const router = Router();
@@ -23,7 +24,7 @@ router.post('/webhooks/moolre', async (req: any, res: Response) => {
 
 // Subscription billing routes are authenticated and always use the property
 // attached to the signed-in user, never a propertyId supplied by the browser.
-const billing = [authenticate, requirePermission('CanManageBilling')];
+const billing = [authenticate, requirePermission('CanManageBilling'), idempotency];
 const sendError = (res: Response, error: any) =>
   res.status(error.statusCode || 400).json({ success: false, message: error.message, code: error.code });
 
@@ -75,7 +76,7 @@ router.get('/verify/:reference', ...billing, async (req: AuthRequest, res: Respo
 // ============================================================
 // RECORD A NEW PAYMENT
 // ============================================================
-router.use(authenticate, requirePermission('CanProcessPayments'));
+router.use(authenticate, requirePermission('CanProcessPayments'), idempotency);
 
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {

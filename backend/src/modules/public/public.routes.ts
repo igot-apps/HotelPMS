@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { Prisma } from '../../generated/prisma';
 import { prisma } from '../../shared/utils/prisma';
+import { idempotency } from '../../shared/middleware/idempotency';
 import jwt from 'jsonwebtoken'; // Ensure this is imported at the top of the file
 import { verifyGuestPayment } from '../payment/guest-payment.service';
 import { initializeGuestPayment, checkGuestPaymentStatus, submitGuestPaymentOtp } from '../payment/guest-payment-attempt.service';
@@ -317,7 +318,7 @@ const checkOnlineBookingEnabled = async (propertyCode: string) => {
 // 🌟 6. GET GUEST RESERVATIONS (Paginated)
 // ⚠️ MUST BE PLACED BEFORE ANY /:propertyCode ROUTES!
 // ============================================================
-router.post('/reservations/:reservationId/cancel', requireBookingGuest, async (req: any, res: Response) => {
+router.post('/reservations/:reservationId/cancel', requireBookingGuest, idempotency, async (req: any, res: Response) => {
   try {
     const data = await cancelGuestReservation(req.params.reservationId, req.bookingGuest.guestId, req.body.reason, req.guestPropertyId);
     return res.json({ success: true, data });
@@ -484,7 +485,7 @@ router.get('/:propertyCode/room-types', async (req: any, res: Response) => {
 // ============================================================
 // 3. CREATE A PUBLIC WEB RESERVATION
 // ============================================================
-router.post('/:propertyCode/reservations', requireBookingGuest, async (req: any, res: Response) => {
+router.post('/:propertyCode/reservations', requireBookingGuest, idempotency, async (req: any, res: Response) => {
   try {
     const property = await checkOnlineBookingEnabled(req.params.propertyCode);
     const reservation = await createHotelReservation({ propertyId: property.propertyId, platformGuestId: req.bookingGuest.guestId, roomTypeId: req.body.roomTypeId, checkInDate: req.body.checkInDate, checkOutDate: req.body.checkOutDate, notes: req.body.notes, source: 'Website' }, true);
@@ -498,7 +499,7 @@ router.post('/:propertyCode/reservations', requireBookingGuest, async (req: any,
 // ============================================================
 // 4. INITIALIZE GUEST PAYMENT
 // ============================================================
-router.post('/:propertyCode/payments/initialize', requireBookingGuest, async (req: any, res: Response) => {
+router.post('/:propertyCode/payments/initialize', requireBookingGuest, idempotency, async (req: any, res: Response) => {
   try {
     if (typeof req.body.reservationId !== 'string') return res.status(400).json({ success: false, message: 'Reservation ID is required.' });
     return res.json({ success: true, data: await initializeGuestPayment(
@@ -510,7 +511,7 @@ router.post('/:propertyCode/payments/initialize', requireBookingGuest, async (re
 });
 
 // The guest types the SMS code Moolre sent; this verifies the phone and sends the payment prompt.
-router.post('/:propertyCode/payments/otp', requireBookingGuest, async (req: any, res: Response) => {
+router.post('/:propertyCode/payments/otp', requireBookingGuest, idempotency, async (req: any, res: Response) => {
   try {
     if (typeof req.body.reservationId !== 'string') return res.status(400).json({ success: false, message: 'Reservation ID is required.' });
     return res.json({ success: true, data: await submitGuestPaymentOtp(req.params.propertyCode, req.body.reservationId, req.bookingGuest, req.body.otp) });

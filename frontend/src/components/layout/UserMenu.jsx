@@ -17,9 +17,9 @@ export default function UserMenu() {
     if (!open) return undefined;
     const outside = (event) => { if (!ref.current?.contains(event.target)) setOpen(false); };
     const escape = (event) => { if (event.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', outside);
+    document.addEventListener('pointerdown', outside);
     document.addEventListener('keydown', escape);
-    return () => { document.removeEventListener('mousedown', outside); document.removeEventListener('keydown', escape); };
+    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
   }, [open]);
 
   const signOut = async () => { setOpen(false); await disablePushOnSignOut(); logout(); navigate('/login'); };
