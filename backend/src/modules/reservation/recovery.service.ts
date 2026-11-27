@@ -175,7 +175,7 @@ async function releaseOccupiedRoom(tx: any, stay: any) {
   if (stay.roomId === null || stay.status !== 'CheckedIn') return;
   const other = await tx.reservationRoom.findFirst({ where: { roomId: stay.roomId, reservationRoomId: { not: stay.reservationRoomId }, status: 'CheckedIn' } });
   if (!other) {
-    await tx.room.update({ where: { roomId: stay.roomId }, data: { operationalStatus: 'Available', housekeepingStatus: 'Dirty' } });
+    await tx.room.update({ where: { roomId: stay.roomId }, data: { operationalStatus: 'Available', housekeepingStatus: 'Dirty', cleaningStartedById: null, cleaningStartedAt: null } });
     releasedRooms.set(tx, [...(releasedRooms.get(tx) || []), stay.roomId]);
   }
 }

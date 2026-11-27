@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import useManualRefresh from '../hooks/useManualRefresh';
-import { Sparkles, CheckCircle2, Wrench, BedDouble, RefreshCw, LogOut, LogIn, CalendarDays, Info } from 'lucide-react';
+import { Sparkles, CheckCircle2, Wrench, BedDouble, RefreshCw, LogOut, LogIn, CalendarDays, Info, AlertTriangle, Timer } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getHousekeepingOverview, setCleaningStatus } from '../api/housekeeping';
+import { getHousekeepingOverview, setCleaningStatus, startCleaning, releaseCleaning, reportRoomIssue } from '../api/housekeeping';
 import { useAuthStore } from '../store/authStore';
 
 const tabs = [
@@ -39,6 +39,7 @@ const clock = (time) => {
   if (!Number.isFinite(h)) return '';
   return `${((h + 11) % 12) + 1}:${String(m || 0).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
 };
+const timeOf = (iso) => new Intl.DateTimeFormat('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(iso));
 const roomTitle = (row) => (row.roomNumber ? `Room ${row.roomNumber}` : 'Room not assigned yet');
 
 function roomDetail(room, data) {
@@ -70,7 +71,33 @@ function ConfirmSheet({ room, onConfirm, onCancel, busy }) {
   );
 }
 
-function RoomsView({ data, tab, setTab, onMark, pendingRoomId, setView }) {
+function ReportSheet({ room, categories, onClose, onSubmit, busy }) {
+  const [category, setCategory] = useState('');
+  const [description, setDescription] = useState('');
+  const [unsuitable, setUnsuitable] = useState(false);
+  if (!room) return null;
+  const ready = category && description.trim().length >= 3;
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="report-title">
+      <form onSubmit={event => { event.preventDefault(); if (ready) onSubmit({ category, description: description.trim(), roomUnsuitable: unsuitable }); }} className={`${card} max-h-[90vh] w-full max-w-md overflow-y-auto p-5 shadow-xl`}>
+        <h2 id="report-title" className="text-lg font-bold text-text">Report an issue · Room {room.roomNumber}</h2>
+        <fieldset className="mt-4"><legend className="text-sm font-semibold text-text">What kind of issue?</legend>
+          <div className="mt-2 grid grid-cols-2 gap-2">{categories.map(item => <label key={item} className={`flex min-h-11 cursor-pointer items-center rounded-lg border px-3 text-sm font-medium ${category === item ? 'border-primary-500 bg-primary-50 text-primary-800' : 'border-border text-text'}`}><input type="radio" name="issue-category" value={item} checked={category === item} onChange={() => setCategory(item)} className="sr-only" />{item}</label>)}</div>
+        </fieldset>
+        <label htmlFor="issue-description" className="mt-4 block text-sm font-semibold text-text">Describe it</label>
+        <textarea id="issue-description" value={description} onChange={event => setDescription(event.target.value)} maxLength={500} rows={3} placeholder="e.g. Bathroom tap is leaking" className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text" />
+        <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-2 text-sm text-text"><input type="checkbox" checked={unsuitable} onChange={event => setUnsuitable(event.target.checked)} className="h-5 w-5 accent-primary-600" /> Room may be unsuitable for guests</label>
+        <p className="mt-1 text-xs text-text-muted">Reception is told and decides whether the room needs maintenance.</p>
+        <div className="mt-5 flex gap-2">
+          <button type="button" onClick={onClose} className="min-h-11 flex-1 rounded-lg border border-border px-4 text-sm font-semibold text-text">Cancel</button>
+          <button type="submit" disabled={!ready || busy} aria-busy={busy} className="min-h-11 flex-1 rounded-lg bg-primary-600 px-4 text-sm font-semibold text-white disabled:opacity-50">{busy ? 'Sending…' : 'Submit report'}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function RoomsView({ data, tab, setTab, onMark, onWork, onReport, pendingRoomId, setView, userId }) {
   const counts = Object.fromEntries(tabs.map(item => [item.id, data.rooms.filter(room => room.group === item.id).length]));
   const visible = data.rooms.filter(room => room.group === tab);
   const [today, tomorrow] = data.days;
@@ -94,8 +121,18 @@ function RoomsView({ data, tab, setTab, onMark, pendingRoomId, setView }) {
               <span className={`${badge} ${tag.className}`}>{tag.label}</span>
             </div>
             <p className="mt-2 text-sm text-text">{roomDetail(room, data)}</p>
-            {room.group === 'needs' && <button type="button" onClick={() => onMark(room, 'Clean')} disabled={busy} aria-busy={busy} className="mt-4 min-h-11 w-full rounded-lg bg-primary-600 px-4 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50">{busy ? 'Saving…' : 'Mark ready'}</button>}
+            {room.cleaning && <p className={`mt-2 flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold ${room.cleaning.userId === userId ? 'bg-primary-50 text-primary-800' : 'bg-secondary-100 text-secondary-700'}`}><Timer size={15} className="shrink-0" />{room.cleaning.userId === userId ? 'You are cleaning this room' : `${room.cleaning.name} is cleaning`}{room.cleaning.startedAt ? ` · since ${timeOf(room.cleaning.startedAt)}` : ''}</p>}
+            {room.issues?.length > 0 && <ul className="mt-2 space-y-1">{room.issues.slice(0, 2).map(issue => <li key={issue.issueId} className={`flex items-start gap-1.5 text-sm ${issue.roomUnsuitable ? 'text-danger-700' : 'text-warning-800'}`}><AlertTriangle size={14} className="mt-0.5 shrink-0" /><span className="min-w-0 break-words">{issue.category}: {issue.description}</span></li>)}{room.issues.length > 2 && <li className="text-xs text-text-muted">+{room.issues.length - 2} more open issue(s)</li>}</ul>}
+            {room.group === 'needs' && !room.cleaning && <div className="mt-4 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => onWork(room, 'start')} disabled={busy} aria-busy={busy} className="min-h-11 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50">{busy ? 'Saving…' : 'Start cleaning'}</button>
+              <button type="button" onClick={() => onMark(room, 'Clean')} disabled={busy} className="min-h-11 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50 disabled:opacity-50">Mark ready</button>
+            </div>}
+            {room.group === 'needs' && room.cleaning?.userId === userId && <div className="mt-4 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => onMark(room, 'Clean')} disabled={busy} aria-busy={busy} className="min-h-11 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50">{busy ? 'Saving…' : 'Mark ready'}</button>
+              <button type="button" onClick={() => onWork(room, 'release')} disabled={busy} className="min-h-11 rounded-lg border border-border px-3 text-sm font-semibold text-text hover:bg-secondary-50 disabled:opacity-50">Can&apos;t finish</button>
+            </div>}
             {room.group === 'ready' && <button type="button" onClick={() => onMark(room, 'Dirty')} disabled={busy} aria-busy={busy} className="mt-4 min-h-11 w-full rounded-lg border border-border px-4 text-sm font-semibold text-text hover:bg-secondary-50 disabled:opacity-50">{busy ? 'Saving…' : 'Mark needs cleaning'}</button>}
+            <button type="button" onClick={() => onReport(room)} className="mt-2 inline-flex min-h-10 items-center gap-1.5 text-sm font-semibold text-primary-700"><AlertTriangle size={14} /> Report an issue</button>
           </article>;
         })}</div>}
     </section>
@@ -140,6 +177,7 @@ function ScheduleView({ data, range, setRange }) {
 export default function HousekeepingPage() {
   const [tab, setTab] = useState('needs');
   const [confirmRoom, setConfirmRoom] = useState(null);
+  const [reportRoom, setReportRoom] = useState(null);
   const [params, setParams] = useSearchParams();
   const view = params.get('view') === 'schedule' ? 'schedule' : 'rooms';
   const range = ranges.some(item => item.id === params.get('range')) ? params.get('range') : 'today';
@@ -154,7 +192,17 @@ export default function HousekeepingPage() {
     onSuccess: () => { setConfirmRoom(null); queryClient.invalidateQueries({ queryKey }); queryClient.invalidateQueries({ queryKey: ['rooms', user?.propertyId] }); toast.success('Room status updated.'); },
     onError: err => { setConfirmRoom(null); toast.error(err.response?.data?.message || 'Could not update room.'); queryClient.invalidateQueries({ queryKey }); },
   });
-  const pendingRoomId = mutation.isPending ? mutation.variables?.roomId : null;
+  const work = useMutation({
+    mutationFn: ({ roomId, action }) => (action === 'start' ? startCleaning(roomId) : releaseCleaning(roomId)),
+    onSuccess: (_res, { action }) => { queryClient.invalidateQueries({ queryKey }); toast.success(action === 'start' ? 'Cleaning started. Others can see you have this room.' : 'Room is back in the cleaning list.'); },
+    onError: err => { toast.error(err.response?.data?.message || 'Could not update room.'); queryClient.invalidateQueries({ queryKey }); },
+  });
+  const report = useMutation({
+    mutationFn: ({ roomId, issue }) => reportRoomIssue(roomId, issue),
+    onSuccess: () => { setReportRoom(null); queryClient.invalidateQueries({ queryKey }); toast.success('Issue reported. Reception has been told.'); },
+    onError: err => toast.error(err.response?.data?.message || 'Could not send the report.'),
+  });
+  const pendingRoomId = mutation.isPending ? mutation.variables?.roomId : work.isPending ? work.variables?.roomId : null;
   const onMark = (room, status) => (status === 'Dirty' ? setConfirmRoom(room) : mutation.mutate({ roomId: room.roomId, status }));
 
   return <div className="mx-auto max-w-6xl space-y-5">
@@ -167,8 +215,9 @@ export default function HousekeepingPage() {
       {error ? <div role="alert" className="rounded-xl border border-danger-200 bg-danger-50 p-5 text-sm text-danger-700">Could not load housekeeping. Please refresh.</div>
         : isPending ? <div className={`${card} p-8 text-center text-text-muted`}>Loading rooms…</div>
           : view === 'schedule' ? <ScheduleView data={data} range={range} setRange={next => setView('schedule', next)} />
-            : <RoomsView data={data} tab={tab} setTab={setTab} onMark={onMark} pendingRoomId={pendingRoomId} setView={setView} />}
+            : <RoomsView data={data} tab={tab} setTab={setTab} onMark={onMark} onWork={(room, action) => work.mutate({ roomId: room.roomId, action })} onReport={setReportRoom} pendingRoomId={pendingRoomId} setView={setView} userId={user?.userId} />}
     </>}
+    <ReportSheet key={reportRoom?.roomId || 'none'} room={reportRoom} categories={data?.issueCategories || []} busy={report.isPending} onClose={() => setReportRoom(null)} onSubmit={issue => report.mutate({ roomId: reportRoom.roomId, issue })} />
     <ConfirmSheet room={confirmRoom} busy={mutation.isPending} onCancel={() => setConfirmRoom(null)} onConfirm={() => mutation.mutate({ roomId: confirmRoom.roomId, status: 'Dirty' })} />
   </div>;
 }

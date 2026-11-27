@@ -53,7 +53,7 @@ describe('A: fully paid guest', () => {
     const { tx } = fixture(400, receptionist());
     await transitionStay(5, 'CheckedOut', actor, {});
     expect(lastAudit(tx).action).toBe('CheckedOut');
-    expect(tx.room.update).toHaveBeenCalledWith({ where: { roomId: 9 }, data: { operationalStatus: 'Available', housekeepingStatus: 'Dirty' } });
+    expect(tx.room.update).toHaveBeenCalledWith({ where: { roomId: 9 }, data: { operationalStatus: 'Available', housekeepingStatus: 'Dirty', cleaningStartedById: null, cleaningStartedAt: null } });
     expectMoneyUntouched(tx);
   });
   test('a reason sent by mistake does not label a paid checkout as money owed', async () => {
@@ -80,7 +80,7 @@ describe('B and D: guest still owes money', () => {
     await transitionStay(5, 'CheckedOut', actor, { overrideReason: 'Guest promised to pay later.' });
     expect(tx.reservationRoom.update.mock.calls[0][0].data).toMatchObject({ status: 'CheckedOut' });
     expect(tx.reservationRoom.update.mock.calls[0][0].data.actualCheckOut).toBeInstanceOf(Date);
-    expect(tx.room.update).toHaveBeenCalledWith({ where: { roomId: 9 }, data: { operationalStatus: 'Available', housekeepingStatus: 'Dirty' } });
+    expect(tx.room.update).toHaveBeenCalledWith({ where: { roomId: 9 }, data: { operationalStatus: 'Available', housekeepingStatus: 'Dirty', cleaningStartedById: null, cleaningStartedAt: null } });
     expectMoneyUntouched(tx);
     const audit = lastAudit(tx);
     expect(audit).toMatchObject({ action: 'CreditCheckoutApproved', userId: 1 });
@@ -101,7 +101,7 @@ describe('multi-room booking: balance belongs to the booking', () => {
     const audit = lastAudit(tx);
     expect(audit.action).toBe('CheckedOut');
     expect(audit.newData.value).toMatchObject({ partialCheckout: true, bookingBalance: 250 });
-    expect(tx.room.update).toHaveBeenCalledWith({ where: { roomId: 9 }, data: { operationalStatus: 'Available', housekeepingStatus: 'Dirty' } });
+    expect(tx.room.update).toHaveBeenCalledWith({ where: { roomId: 9 }, data: { operationalStatus: 'Available', housekeepingStatus: 'Dirty', cleaningStartedById: null, cleaningStartedAt: null } });
     expectMoneyUntouched(tx);
   });
   test('the last checked-in room still needs the reason when money is owed', async () => {

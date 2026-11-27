@@ -140,7 +140,8 @@ export const updateRoomStatus = async (
     }
   }
 
-  const updated = await roomRepository.updateRoomStatus(roomId, operationalStatus, housekeepingStatus, reasonUpdate);
+  const stillWaiting = operationalStatus === 'Available' && (housekeepingStatus || room.housekeepingStatus) === 'Dirty';
+  const updated = await roomRepository.updateRoomStatus(roomId, operationalStatus, housekeepingStatus, { ...reasonUpdate, ...(stillWaiting ? {} : { cleaningStartedById: null, cleaningStartedAt: null }) });
   // Same Activity Log entry as the housekeeping screen, so every cleaning change is traceable.
   if (actor && housekeepingStatus && housekeepingStatus !== room.housekeepingStatus) {
     await prisma.auditLog.create({ data: { propertyId: room.propertyId, userId: actor.userId, entityType: 'Room', action: 'HousekeepingStatusChanged', oldData: { roomId, status: room.housekeepingStatus }, newData: { roomId, propertyId: room.propertyId, status: housekeepingStatus } } })

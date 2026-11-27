@@ -5,8 +5,8 @@ import toast from 'react-hot-toast';
 import { disablePush, enablePush, getAlertPreferences, pushState, sendTestPush, setAlertPreference } from '../../lib/push';
 
 const WHAT_YOU_GET = {
-  Manager: ['New online bookings and online payments', 'Refunds recorded by staff', 'Cash count problems', 'Overstays that need attention', 'Your plan about to expire'],
-  Receptionist: ['New online bookings and online payments', 'Guests past checkout time'],
+  Manager: ['New online bookings and online payments', 'Refunds recorded by staff', 'Cash count problems', 'Overstays that need attention', 'Room issues reported by housekeeping', 'Your plan about to expire'],
+  Receptionist: ['New online bookings and online payments', 'Guests past checkout time', 'Room issues reported by housekeeping'],
   Housekeeper: [], // chosen one by one below
 };
 

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate, requirePermission, AuthRequest } from '../../shared/middleware/auth.middleware';
 import { prisma } from '../../shared/utils/prisma';
 import { getHousekeepingOverview } from './housekeeping-overview.service';
+import { clearCleaning, ISSUE_CATEGORIES, releaseCleaning, reportIssue, startCleaning } from './housekeeping-work.service';
 
 const router = Router();
 router.use(authenticate, requirePermission('CanManageHousekeeping'));
@@ -35,21 +36,42 @@ router.patch('/rooms/:id',async (req: AuthRequest, res) => {
   const status = req.body?.status;
   if (!Number.isSafeInteger(roomId) || roomId < 1 || !['Clean', 'Dirty'].includes(status)) return res.status(400).json({ success: false, message: 'Choose a valid room and status.' });
   try {
+    const actorRole = await prisma.user.findUnique({ where: { userId: req.user!.userId }, select: { role: { select: { roleName: true } } } });
     const updated = await prisma.$transaction(async tx => {
       const property = await tx.property.findUnique({ where: { propertyId }, select: { housekeepingEnabled: true } });
       if (!property?.housekeepingEnabled) throw new Error('Housekeeping is off for this property.');
-      const room = await tx.room.findFirst({ where: { roomId, propertyId }, select: { roomId: true, roomNumber: true, operationalStatus: true, housekeepingStatus: true } });
+      const room = await tx.room.findFirst({ where: { roomId, propertyId }, select: { roomId: true, roomNumber: true, operationalStatus: true, housekeepingStatus: true, cleaningStartedById: true, cleaningStartedAt: true, cleaningStartedBy: { select: { fullName: true } } } });
       if (!room) throw new Error('Room not found.');
       if (room.operationalStatus === 'Maintenance') throw new Error('Return this room from maintenance before changing its cleaning status.');
       if (room.operationalStatus === 'Occupied') throw new Error('This room is occupied. Ask the front desk to check the guest out first.');
       if (room.housekeepingStatus === status) return room;
-      const changed = await tx.room.updateMany({ where: { roomId, propertyId, operationalStatus: 'Available', housekeepingStatus: room.housekeepingStatus }, data: { housekeepingStatus: status } });
+      // A cleaner cannot finish a room someone else is cleaning; reception and managers can.
+      if (room.cleaningStartedById && room.cleaningStartedById !== req.user!.userId && actorRole?.role.roleName === 'Housekeeper') {
+        throw new Error(`${room.cleaningStartedBy?.fullName || 'Someone else'} is cleaning room ${room.roomNumber}.`);
+      }
+      const changed = await tx.room.updateMany({ where: { roomId, propertyId, operationalStatus: 'Available', housekeepingStatus: room.housekeepingStatus, cleaningStartedById: room.cleaningStartedById }, data: { housekeepingStatus: status, ...clearCleaning() } });
       if (!changed.count) throw new Error('Room status changed. Refresh the list and try again.');
-      await tx.auditLog.create({ data: { propertyId: propertyId, userId: req.user!.userId, entityType: 'Room', action: 'HousekeepingStatusChanged', oldData: { roomId, status: room.housekeepingStatus }, newData: { roomId, propertyId, status } } });
+      await tx.auditLog.create({ data: { propertyId: propertyId, userId: req.user!.userId, entityType: 'Room', action: 'HousekeepingStatusChanged', oldData: { roomId, status: room.housekeepingStatus }, newData: { roomId, propertyId, status, ...(room.cleaningStartedAt ? { cleaningStartedAt: room.cleaningStartedAt.toISOString(), cleaningStartedById: room.cleaningStartedById } : {}) } } });
       return tx.room.findUnique({ where: { roomId } });
     });
     return res.json({ success: true, data: updated });
   } catch (error: any) { return res.status(400).json({ success: false, message: error.message }); }
 });
+
+const handle = (work: (req: AuthRequest) => Promise<unknown>) => async (req: AuthRequest, res: any) => {
+  try { return res.json({ success: true, data: await work(req) }); }
+  catch (error: any) { return res.status(error?.statusCode || 400).json({ success: false, message: error?.statusCode ? error.message : 'Could not update the room. Please try again.' }); }
+};
+const roomIdOf = (req: AuthRequest) => {
+  const roomId = Number(req.params.id);
+  if (!Number.isSafeInteger(roomId) || roomId < 1) throw Object.assign(new Error('Choose a valid room.'), { statusCode: 400 });
+  return roomId;
+};
+const actorOf = (req: AuthRequest) => ({ userId: req.user!.userId, propertyId: req.user!.propertyId });
+
+router.post('/rooms/:id/start', handle(req => startCleaning(actorOf(req), roomIdOf(req))));
+router.post('/rooms/:id/release', handle(req => releaseCleaning(actorOf(req), roomIdOf(req))));
+router.post('/rooms/:id/issues', handle(req => reportIssue(actorOf(req), roomIdOf(req), req.body)));
+router.get('/issue-categories', (_req, res) => res.json({ success: true, data: ISSUE_CATEGORIES }));
 
 export default router;

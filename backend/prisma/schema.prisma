@@ -236,6 +236,9 @@ model User {
   cashCountIssuesRecorded CashCountIssue[] @relation("cashCountIssueRecorder")
   memberships       PropertyMembership[]
   pushSubscriptions PushSubscription[]
+  roomsBeingCleaned Room[] @relation("roomCleaningStartedBy")
+  roomIssuesReported RoomIssue[] @relation("roomIssueReporter")
+  roomIssuesResolved RoomIssue[] @relation("roomIssueResolver")
 
   @@map("users")
 }
@@ -421,12 +424,16 @@ model Room {
   maintenanceReason    String?   @db.VarChar(200)
   isOnlineBookable     Boolean   @default(true)
   notes                String?   @db.Text
+  cleaningStartedById  Int?      // housekeeper cleaning the room now (cleared when ready, released or the room changes)
+  cleaningStartedAt    DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
   property             Property  @relation(fields: [propertyId], references: [propertyId], onDelete: Cascade)
   roomType             RoomType  @relation(fields: [roomTypeId], references: [roomTypeId])
   reservationRooms     ReservationRoom[]
+  cleaningStartedBy    User?     @relation("roomCleaningStartedBy", fields: [cleaningStartedById], references: [userId], onDelete: SetNull)
+  issues               RoomIssue[]
 
   @@unique([propertyId, roomNumber])
   @@map("rooms")
@@ -837,4 +844,28 @@ model IdempotencyRecord {
   @@unique([scope, key])
   @@index([expiresAt])
   @@map("idempotency_records")
+}
+
+// Problems found in a room (usually by housekeeping). Reception/managers decide what to do and resolve them.
+model RoomIssue {
+  issueId        Int       @id @default(autoincrement())
+  propertyId     Int
+  roomId         Int
+  category       String    @db.VarChar(30)
+  description    String    @db.VarChar(500)
+  roomUnsuitable Boolean   @default(false)
+  status         String    @default("Open") @db.VarChar(20) // Open | Resolved
+  reportedById   Int?
+  resolvedById   Int?
+  resolutionNote String?   @db.VarChar(300)
+  createdAt      DateTime  @default(now())
+  resolvedAt     DateTime?
+
+  room           Room      @relation(fields: [roomId], references: [roomId], onDelete: Cascade)
+  reportedBy     User?     @relation("roomIssueReporter", fields: [reportedById], references: [userId], onDelete: SetNull)
+  resolvedBy     User?     @relation("roomIssueResolver", fields: [resolvedById], references: [userId], onDelete: SetNull)
+
+  @@index([propertyId, status])
+  @@index([roomId])
+  @@map("room_issues")
 }

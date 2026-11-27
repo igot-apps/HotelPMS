@@ -1,5 +1,6 @@
 import { prisma } from '../../shared/utils/prisma';
 import { hotelDate } from '../reports/daily-overview.service';
+import { ISSUE_CATEGORIES } from './housekeeping-work.service';
 
 /**
  * Cleaner view: rooms in priority order plus expected checkouts and check-ins for the next 7 days.
@@ -28,7 +29,9 @@ export function cleaningPriority(nextArrival: string | null, today: string) {
   return 'normal';
 }
 
-type RoomRow = { roomId: number; roomNumber: string; floor: number | null; operationalStatus: string; housekeepingStatus: string; maintenanceReason?: string | null; updatedAt: Date; roomType?: { typeName: string } | null };
+type RoomRow = { roomId: number; roomNumber: string; floor: number | null; operationalStatus: string; housekeepingStatus: string; maintenanceReason?: string | null; updatedAt: Date; roomType?: { typeName: string } | null;
+  cleaningStartedById?: number | null; cleaningStartedAt?: Date | null; cleaningStartedBy?: { fullName: string } | null;
+  issues?: { issueId: number; category: string; description: string; roomUnsuitable: boolean; createdAt: Date }[] };
 type StayRow = { reservationRoomId: number; roomId: number | null; status: string; checkInDate: Date; checkOutDate: Date; roomNumberSnapshot?: string | null; roomTypeNameSnapshot?: string | null; room?: { roomNumber: string } | null; roomType?: { typeName: string } | null };
 
 export function buildHousekeepingOverview(rooms: RoomRow[], stays: StayRow[], today: string) {
@@ -62,6 +65,9 @@ export function buildHousekeepingOverview(rooms: RoomRow[], stays: StayRow[], to
       group, priority: group === 'needs' ? cleaningPriority(nextArrival, today) : null,
       nextArrivalDate: nextArrival, departureDate: departure, departureLate: Boolean(departure && departure < today),
       waitingSince: group === 'needs' ? room.updatedAt.toISOString() : null,
+      // Only a room still waiting for cleaning can be "in progress".
+      cleaning: group === 'needs' && room.cleaningStartedById ? { userId: room.cleaningStartedById, name: room.cleaningStartedBy?.fullName || 'Someone', startedAt: room.cleaningStartedAt?.toISOString() || null } : null,
+      issues: (room.issues || []).map(issue => ({ issueId: issue.issueId, category: issue.category, description: issue.description, roomUnsuitable: issue.roomUnsuitable, createdAt: issue.createdAt.toISOString() })),
     };
   });
   roomRows.sort((a, b) => {
@@ -106,6 +112,8 @@ export async function getHousekeepingOverview(propertyId: number, now = new Date
     prisma.room.findMany({ where: { propertyId }, orderBy: { roomNumber: 'asc' }, select: {
       roomId: true, roomNumber: true, floor: true, operationalStatus: true, housekeepingStatus: true, maintenanceReason: true, updatedAt: true,
       roomType: { select: { typeName: true } },
+      cleaningStartedById: true, cleaningStartedAt: true, cleaningStartedBy: { select: { fullName: true } },
+      issues: { where: { status: 'Open' }, orderBy: { createdAt: 'desc' }, select: { issueId: true, category: true, description: true, roomUnsuitable: true, createdAt: true } },
     } }),
     prisma.reservationRoom.findMany({
       where: { reservation: { propertyId, status: { in: ACTIVE } }, OR: [{ status: 'CheckedIn' }, { status: 'Reserved', checkInDate: { lt: end } }] },
@@ -115,5 +123,5 @@ export async function getHousekeepingOverview(propertyId: number, now = new Date
       },
     }),
   ]);
-  return { date: today, checkInTime: property.checkInTime, checkOutTime: property.checkOutTime, ...buildHousekeepingOverview(rooms as RoomRow[], stays as StayRow[], today) };
+  return { date: today, checkInTime: property.checkInTime, checkOutTime: property.checkOutTime, issueCategories: ISSUE_CATEGORIES, ...buildHousekeepingOverview(rooms as RoomRow[], stays as StayRow[], today) };
 }

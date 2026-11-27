@@ -75,7 +75,7 @@ describe('forgotten checkout (record actual departure)', () => {
       status: 'CheckedOut', actualCheckOut: new Date('2026-11-10T10:00:00Z'), checkOutDate: day('2026-11-10'), originalCheckOutDate: day('2026-11-13'),
     }) });
     expect(tx.reservation.update).toHaveBeenCalledWith({ where: { reservationId: 'R1' }, data: expect.objectContaining({ totalAmount: 100, refundDue: 300, refundStatus: 'Pending' }) });
-    expect(tx.room.update).toHaveBeenCalledWith({ where: { roomId: 9 }, data: { operationalStatus: 'Available', housekeepingStatus: 'Dirty' } });
+    expect(tx.room.update).toHaveBeenCalledWith({ where: { roomId: 9 }, data: { operationalStatus: 'Available', housekeepingStatus: 'Dirty', cleaningStartedById: null, cleaningStartedAt: null } });
     expect(tx.auditLog.create).toHaveBeenCalledWith({ data: expect.objectContaining({ action: 'Correction:record-departure' }) });
   });
 
