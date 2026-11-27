@@ -24,7 +24,7 @@ html.app-shell, html.app-shell body {
   overscroll-behavior: none;
 }
 html.app-shell #root { height: 100%; }
-html.app-shell #main-content { overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; }
+html.app-shell #main-content { overscroll-behavior-y: contain; }
 
 /* Opened from the Home Screen: no rubber-band bounce of the whole page, and
    buttons/navigation don't get selected or show the long-press callout. */
