@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { AlarmClock, Phone, X } from 'lucide-react';
 import useCheckoutAlerts from '../../hooks/useCheckoutAlerts';
 import { formatDuration, formatTime } from '../../lib/stayTiming';
-import RecordDepartureDialog from './RecordDepartureDialog';
 import { bookingLink } from '../../lib/bookingLink';
 
 const STATE = {
@@ -54,7 +53,6 @@ const verificationLine = (verification) => (
 export default function CheckoutAlerts() {
   const { data, isError } = useCheckoutAlerts();
   const [verifying, setVerifying] = useState(null);
-  const [recording, setRecording] = useState(null);
   if (isError) return <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Could not refresh checkout reminders.</p>;
   if (!data?.alerts?.length) return null;
   const groups = groupByReservation(data.alerts);
@@ -107,14 +105,13 @@ export default function CheckoutAlerts() {
           );
         })}
       </ul>
-      {verifying && <VerifyDepartureDialog alert={verifying} onClose={() => setVerifying(null)} onRecordEarlier={() => { setRecording(verifying); setVerifying(null); }} />}
-      {recording && <RecordDepartureDialog stay={recording} onClose={() => setRecording(null)} />}
+      {verifying && <VerifyDepartureDialog alert={verifying} onClose={() => setVerifying(null)} />}
     </section>
   );
 }
 
 // Past checkout time: call the guest if needed, then act. Each action is recorded by its own flow (Activity Log).
-function VerifyDepartureDialog({ alert, onClose, onRecordEarlier }) {
+function VerifyDepartureDialog({ alert, onClose }) {
   const action = (to, title, text, primary = false) => (
     <Link to={to} onClick={onClose} className={`block rounded-lg border p-3 text-sm ${primary ? 'border-primary-500 bg-primary-50/60' : 'border-border'}`}>
       <span className="block font-semibold text-text">{title}</span><span className="text-text-muted">{text}</span>
@@ -134,9 +131,6 @@ function VerifyDepartureDialog({ alert, onClose, onRecordEarlier }) {
         <div className="space-y-2">
           {action(`${bookingLink(alert, 'extend')}&back=dashboard`, 'Extend stay', 'The guest is staying longer.', true)}
           {action(`${bookingLink(alert, 'checkout')}&back=dashboard`, 'Check out now', 'The guest has left or is leaving now. The room is freed.')}
-          <button type="button" onClick={onRecordEarlier} className="block w-full rounded-lg border border-border p-3 text-left text-sm">
-            <span className="block font-semibold text-text">Guest left earlier</span><span className="text-text-muted">Record the day they actually left.</span>
-          </button>
         </div>
         <div className="flex justify-end"><button type="button" onClick={onClose} className="min-h-11 rounded-lg border border-border px-4 py-2 text-sm text-text">Cancel</button></div>
       </div>

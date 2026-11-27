@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { roomStatusLabel } from '../../lib/statusLabels';
-import { LogIn, LogOut, Loader2, Clock, Pencil, History, CalendarMinus, AlertCircle } from 'lucide-react';
+import { LogIn, LogOut, Loader2, Clock, Pencil, CalendarMinus, AlertCircle } from 'lucide-react';
 import { expectedCheckoutAt, formatDuration, formatTime } from '../../lib/stayTiming';
 import { serverNow } from '../../lib/serverClock';
 
@@ -13,7 +13,6 @@ export default function RoomCard({
   onCheckOut, 
   onExtend,
   onEditOccupant,
-  onRecordDeparture,
   onShorten,
 }) {
   const roomStatus = rr.status || 'Reserved';
@@ -67,16 +66,6 @@ export default function RoomCard({
               className="inline-flex min-h-11 flex-1 sm:flex-initial items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-warning-300 text-warning-800 hover:bg-warning-50 transition disabled:opacity-50"
             >
               <CalendarMinus size={14} /> Shorten
-            </button>
-          )}
-          {onRecordDeparture && (
-            <button
-              disabled={isThisRoomBusy}
-              onClick={() => onRecordDeparture(rr)}
-              title="Use when the guest left earlier but checkout was not recorded"
-              className="inline-flex min-h-11 flex-1 sm:flex-initial items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-border text-text hover:bg-secondary-50 transition disabled:opacity-50"
-            >
-              <History size={14} /> Record departure
             </button>
           )}
         </div>

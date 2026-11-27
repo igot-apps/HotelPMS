@@ -134,32 +134,6 @@ export function repriceDeparture(res: any, selected: any[], date: Date, penaltyP
   return { revised, totalAmount, credit, penaltyKept: money(kept * scale) };
 }
 
-export const DEPARTURE_EVIDENCE = ['key-returned', 'room-found-empty', 'guest-confirmed', 'security-record', 'other'];
-
-// What the app already knows about a claimed departure time. Only records that place the guest
-// in the room afterwards are contradictions; housekeeping or payments afterwards are information.
-async function departureSignals(tx: any, stay: any, departedAt: Date) {
-  const contradictions: string[] = [];
-  const information: string[] = [];
-  const at = (value: Date) => value.toISOString();
-  if (stay.guestOutAt) information.push(`Guest was marked out of the room at ${at(stay.guestOutAt)}.`);
-  if (stay.guestReturnedAt && stay.guestReturnedAt > departedAt) contradictions.push(`Guest was marked as returned to the room at ${at(stay.guestReturnedAt)}.`);
-  const checks = await tx.auditLog.findMany({ where: { entityType: 'Reservation', action: 'DepartureVerified', newData: { path: ['reservationRoomId'], equals: stay.reservationRoomId } }, orderBy: { createdAt: 'asc' }, include: { user: { select: { fullName: true } } } });
-  for (const check of checks) {
-    const data: any = check.newData;
-    const who = check.user?.fullName || 'staff';
-    if (data.result === 'present' && check.createdAt > departedAt) contradictions.push(`${who} confirmed the guest was still in the room at ${at(check.createdAt)}.`);
-    else information.push(`${who} recorded "${data.result === 'present' ? 'still in room' : data.result === 'departed' ? 'guest has left' : 'guest could not be found'}" at ${at(check.createdAt)}${data.note ? ` — ${data.note}` : ''}.`);
-  }
-  if (stay.roomId) {
-    const housekeeping = await tx.auditLog.count({ where: { entityType: 'Room', action: 'HousekeepingStatusChanged', newData: { path: ['roomId'], equals: stay.roomId }, createdAt: { gt: departedAt } } });
-    if (housekeeping) information.push(`${housekeeping} room status change(s) were recorded after this time (not proof the guest was present).`);
-  }
-  const payments = await tx.payment.count({ where: { reservationId: stay.reservationId, paymentDate: { gt: departedAt } } });
-  if (payments) information.push(`${payments} payment(s) were recorded on the booking after this time (not proof the guest was present).`);
-  return { contradictions, information };
-}
-
 async function derive(tx: any, id: string) {
   const rooms = await tx.reservationRoom.findMany({ where: { reservationId: id } });
   // Expired rooms (stored as 'NoShow': the guest never arrived before the departure date) do not keep the
@@ -347,7 +321,7 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
     if (!canCorrect(user, input.action) && !(requestPreview && input.preview === true && user.role.roleName === 'Receptionist')) throw new Error('Manager approval is required for this correction.');
     const multi = ['undo-checkin', 'undo-checkout', 'correct-date', 'credit-checkout'].includes(input.action);
     let selected: any[] = [];
-    if (multi || input.action === 'transfer' || input.action === 'record-departure') {
+    if (multi || input.action === 'transfer') {
       const ids = input.stayIds !== undefined ? input.stayIds : [Number(input.stayId)];
       if (!Array.isArray(ids) || !ids.length || ids.length > res.reservationRooms.length || ids.some((value: any) => !Number.isSafeInteger(value) || value < 1) || new Set(ids).size !== ids.length || (!multi && ids.length !== 1)) throw new Error('Select valid room stays for this action. Transfers require one room at a time.');
       selected = ids.map((value: number) => res.reservationRooms.find((room: any) => room.reservationRoomId === value));
@@ -455,49 +429,6 @@ export async function correctBookingInTransaction(tx: any, id: string, actor: Ac
       for (const stay of selected) await tx.reservationRoom.update({ where: { reservationRoomId: stay.reservationRoomId }, data: { checkOutDate: date, originalCheckOutDate: stay.originalCheckOutDate || stay.checkOutDate, earlyDeparturePenalty: revised.find((r: any) => r.reservationRoomId === stay.reservationRoomId).earlyDeparturePenalty } });
       const latest = new Date(Math.max(...revised.map((r: any) => r.checkOutDate.getTime())));
       await tx.reservation.update({ where: { reservationId: id }, data: { checkOutDate: latest, totalAmount, refundDue: credit, refundStatus: credit > 0 ? 'Pending' : 'None' } });
-    } else if (input.action === 'record-departure') {
-      // Forgotten checkout: record when the guest actually left. Nights are calendar nights:
-      // the departure day ends the stay, nights before it stay charged, nothing is added.
-      if (selected.length !== 1 || stay.status !== 'CheckedIn' || res.status !== 'InHouse') throw new Error('Choose one checked-in room to record its actual departure.');
-      const departedAt = new Date(input.departedAt);
-      if (typeof input.departedAt !== 'string' || Number.isNaN(departedAt.getTime())) throw new Error('Enter when the guest actually left.');
-      if (departedAt.getTime() > Date.now() + 300000) throw new Error('The departure time cannot be in the future.');
-      if (stay.actualCheckIn && departedAt < stay.actualCheckIn) throw new Error('The departure time cannot be before the guest checked in.');
-      if (!DEPARTURE_EVIDENCE.includes(input.evidenceType)) throw new Error('Choose the evidence that shows when the guest left.');
-      const evidenceNote = typeof input.evidenceNote === 'string' ? input.evidenceNote.trim().replace(/\s+/g, ' ') : '';
-      if (evidenceNote.length < 10 || evidenceNote.length > 500) throw new Error('Explain the evidence (10 to 500 characters): what was seen, by whom, and when.');
-      const hotel = await tx.property.findUnique({ where: { propertyId: actor.propertyId }, select: { timezone: true } });
-      const departureDay = new Date(`${hotelDate(departedAt, hotel?.timezone || 'Africa/Accra')}T00:00:00.000Z`);
-      const firstNightEnds = new Date(stay.checkInDate.getTime() + 86400000);
-      const date = new Date(Math.min(Math.max(departureDay.getTime(), firstNightEnds.getTime()), stay.checkOutDate.getTime()));
-      const signals = await departureSignals(tx, stay, departedAt);
-      const contradictionNote = typeof input.contradictionNote === 'string' ? input.contradictionNote.trim() : '';
-      const shortened = date < stay.checkOutDate;
-      const priced = shortened ? repriceDeparture(res, selected, date) : null;
-      Object.assign(result, {
-        departedAt: departedAt.toISOString(), newCheckOutDate: date.toISOString().slice(0, 10), scheduledCheckOutDate: stay.checkOutDate.toISOString().slice(0, 10),
-        nightsCharged: Math.round((date.getTime() - stay.checkInDate.getTime()) / 86400000),
-        oldTotal: money(res.totalAmount), newTotal: priced ? priced.totalAmount : money(res.totalAmount), credit: priced ? priced.credit : 0,
-        balanceDue: Math.max(0, money((priced ? priced.totalAmount : Number(res.totalAmount)) - Number(res.amountPaid))),
-        evidenceType: input.evidenceType, evidenceNote, contradictions: signals.contradictions, information: signals.information,
-        ...(contradictionNote ? { contradictionNote } : {}),
-        message: shortened
-          ? 'Record the actual departure, check the guest out and end the stay on the departure day. Nights before that day stay charged; any overpayment becomes a refund to review.'
-          : 'Record the actual departure and check the guest out. The guest left on or after the booked departure day, so charges are unchanged and no night is added.',
-      });
-      if (preview) return result;
-      // Conflicting records do not block it: they are kept with the correction (Activity Log), and the evidence explains the date.
-      await lockRooms(tx, [stay.roomId].filter(roomId => roomId !== null));
-      await releaseOccupiedRoom(tx, stay);
-      await tx.reservationRoom.update({ where: { reservationRoomId: stay.reservationRoomId }, data: {
-        status: 'CheckedOut', actualCheckOut: departedAt, guestPresenceStatus: 'InRoom', guestOutAt: null, expectedReturnAt: null,
-        ...(shortened ? { checkOutDate: date, originalCheckOutDate: stay.originalCheckOutDate || stay.checkOutDate } : {}),
-      } });
-      if (priced) {
-        const latest = new Date(Math.max(...priced.revised.map((r: any) => r.checkOutDate.getTime())));
-        await tx.reservation.update({ where: { reservationId: id }, data: { checkOutDate: latest, totalAmount: priced.totalAmount, refundDue: priced.credit, refundStatus: priced.credit > 0 ? 'Pending' : 'None' } });
-      }
-      await derive(tx, id);
     } else if (input.action === 'transfer') {
       if (!stay || stay.status !== 'CheckedIn' || res.status !== 'InHouse') throw new Error('Only a checked-in guest can be transferred.');
       const targetId = Number(input.targetRoomId);

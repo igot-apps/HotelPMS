@@ -8,7 +8,6 @@ export const CORRECTION_ACTIONS = [
   { action: 'correct-date', label: 'Correct departure date and charges', delegatable: false },
   { action: 'correct-payment', label: 'Correct or void a manual payment', delegatable: false },
   { action: 'credit-checkout', label: 'Checkout with outstanding balance', delegatable: false },
-  { action: 'record-departure', label: 'Record actual departure (forgotten checkout)', delegatable: false },
 ];
 // No operational correction needs a manager; staff apply them directly with a reason (audited).
 export const MANAGER_ONLY_ACTIONS: string[] = [];

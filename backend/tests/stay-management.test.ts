@@ -36,7 +36,6 @@ function fixture(overrides: any = {}) {
   };
   return { stay, res, tx };
 }
-const departure = (departedAt: string, extra: any = {}) => ({ action: 'record-departure', stayIds: [5], departedAt, evidenceType: 'key-returned', evidenceNote: 'Key card handed back at reception by the guest.', reason: 'Checkout was not recorded when the guest left.', ...extra });
 
 beforeEach(() => { jest.clearAllMocks(); });
 afterEach(() => { jest.useRealTimers(); });
@@ -64,70 +63,6 @@ describe('room transfer readiness', () => {
   });
 });
 
-describe('forgotten checkout (record actual departure)', () => {
-  test('ends the stay on the departure day, keeps consumed nights and turns the rest into a refund', async () => {
-    const { tx } = fixture();
-    const preview = await correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-10T10:00:00Z'), preview: true });
-    expect(preview).toMatchObject({ newCheckOutDate: '2026-11-10', nightsCharged: 1, oldTotal: 400, newTotal: 100, credit: 300, contradictions: [] });
-
-    await correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-10T10:00:00Z'), expectedVersion: preview.version });
-    expect(tx.reservationRoom.update).toHaveBeenCalledWith({ where: { reservationRoomId: 5 }, data: expect.objectContaining({
-      status: 'CheckedOut', actualCheckOut: new Date('2026-11-10T10:00:00Z'), checkOutDate: day('2026-11-10'), originalCheckOutDate: day('2026-11-13'),
-    }) });
-    expect(tx.reservation.update).toHaveBeenCalledWith({ where: { reservationId: 'R1' }, data: expect.objectContaining({ totalAmount: 100, refundDue: 300, refundStatus: 'Pending' }) });
-    expect(tx.room.update).toHaveBeenCalledWith({ where: { roomId: 9 }, data: { operationalStatus: 'Available', housekeepingStatus: 'Dirty', cleaningStartedById: null, cleaningStartedAt: null } });
-    expect(tx.auditLog.create).toHaveBeenCalledWith({ data: expect.objectContaining({ action: 'Correction:record-departure' }) });
-  });
-
-  test('crossing midnight does not consume another night (Monday 23:00 in, Tuesday 02:00 out = 1 night)', async () => {
-    const { tx } = fixture();
-    const preview = await correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-10T02:00:00Z'), preview: true });
-    expect(preview).toMatchObject({ newCheckOutDate: '2026-11-10', nightsCharged: 1 });
-  });
-
-  test('the first night stays consumed even if the guest left the same evening', async () => {
-    const { tx } = fixture();
-    const preview = await correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-09T23:30:00Z'), preview: true });
-    expect(preview).toMatchObject({ newCheckOutDate: '2026-11-10', nightsCharged: 1 });
-  });
-
-  test('a late recorded departure never adds nights or charges', async () => {
-    jest.useFakeTimers({ now: new Date('2026-11-16T09:00:00Z'), doNotFake: ['nextTick', 'setImmediate'] });
-    const { tx } = fixture();
-    const preview = await correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-14T15:00:00Z'), preview: true });
-    expect(preview).toMatchObject({ newCheckOutDate: '2026-11-13', nightsCharged: 4, newTotal: 400, credit: 0 });
-    await correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-14T15:00:00Z'), expectedVersion: preview.version });
-    expect(tx.reservation.update.mock.calls.some((call: any) => 'totalAmount' in call[0].data)).toBe(false);
-  });
-
-  test('only records placing the guest in the room afterwards are contradictions', async () => {
-    const { tx } = fixture({ stay: { guestReturnedAt: new Date('2026-11-11T18:00:00Z') }, housekeeping: 2, payments: 1 });
-    const preview = await correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-10T10:00:00Z'), preview: true });
-    expect(preview.contradictions).toHaveLength(1);
-    expect(preview.information.join(' ')).toMatch(/not proof/);
-    // Recorded with the correction, but no extra explanation is asked for.
-    await expect(correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-10T10:00:00Z'), expectedVersion: preview.version })).resolves.toMatchObject({ applied: true, contradictions: preview.contradictions });
-  });
-
-  test('housekeeping or payments after the claimed departure alone do not block it', async () => {
-    const { tx } = fixture({ housekeeping: 3, payments: 2 });
-    const preview = await correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-10T10:00:00Z'), preview: true });
-    expect(preview.contradictions).toEqual([]);
-  });
-
-  test('a receptionist records the actual departure directly', async () => {
-    const { tx } = fixture({ user: receptionist });
-    await expect(correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-10T10:00:00Z'), preview: true }, true)).resolves.toMatchObject({ nightsCharged: 1 });
-    await expect(correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-10T10:00:00Z'), expectedVersion: 'x' })).rejects.not.toThrow('Manager approval');
-  });
-
-  test('evidence and a valid time are required', async () => {
-    const { tx } = fixture();
-    await expect(correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-10T10:00:00Z', { evidenceType: '' }), preview: true })).rejects.toThrow('evidence');
-    await expect(correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-10T10:00:00Z', { evidenceNote: 'short' }), preview: true })).rejects.toThrow('Explain the evidence');
-    await expect(correctBookingInTransaction(tx, 'R1', actor, { ...departure('2026-11-09T20:00:00Z'), preview: true })).rejects.toThrow('before the guest checked in');
-  });
-});
 
 describe('normal and late checkout', () => {
   test('records how late the guest left and the note, without changing charges', async () => {

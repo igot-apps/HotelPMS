@@ -12,7 +12,7 @@ test('active receptionists can apply room and financial corrections, including r
   expect(canCorrect(user, 'undo-checkout')).toBe(true);
   expect(canCorrect(user, 'correct-payment')).toBe(true);
   expect(canCorrect(user, 'credit-checkout')).toBe(true);
-  expect(canCorrect(user, 'record-departure')).toBe(true);
+  expect(canCorrect(user, 'record-departure')).toBe(false);
   expect(canCorrect({ ...user, correctionPermissions: [] }, 'undo-checkin')).toBe(true);
 });
 test('deactivated staff and unknown roles cannot correct; managers can perform known actions', () => {

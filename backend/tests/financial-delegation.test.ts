@@ -7,9 +7,9 @@ const manager = { userId: 1, isActive: true, role: { roleName: 'Manager' } };
 
 test('no correction needs a manager; receptionists refund and record departures directly', () => {
   expect(canCorrect(receptionist, 'refund')).toBe(true);
-  expect(canCorrect(receptionist, 'record-departure')).toBe(true);
+  expect(canCorrect(receptionist, 'record-departure')).toBe(false);
   for (const action of ['correct-date', 'credit-checkout', 'correct-payment', 'undo-checkin', 'undo-checkout', 'restore', 'transfer']) expect(canCorrect(receptionist, action)).toBe(true);
-  expect(canCorrect(manager, 'record-departure')).toBe(true);
+  expect(canCorrect(manager, 'record-departure')).toBe(false);
 });
 
 test('receptionists extend, shorten and check out with a balance without limits', () => {

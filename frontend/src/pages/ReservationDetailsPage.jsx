@@ -35,7 +35,6 @@ import { useAuthStore } from '../store/authStore';
 import { expectedCheckoutAt, formatDuration, formatTime } from '../lib/stayTiming';
 import { serverNow } from '../lib/serverClock';
 import useCheckoutAlerts from '../hooks/useCheckoutAlerts';
-import RecordDepartureDialog from '../components/reservations/RecordDepartureDialog';
 
 export default function ReservationDetailsPage() {
   useServerClock(); // re-render when server time arrives or is lost
@@ -59,7 +58,6 @@ export default function ReservationDetailsPage() {
   const [isPrintMenuOpen, setIsPrintMenuOpen] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [extendRoom, setExtendRoom] = useState(null);
-  const [recordingDeparture, setRecordingDeparture] = useState(null);
   // Overstays come from the same list as the dashboard, sidebar badge and phone alerts.
   const checkoutAlerts = useCheckoutAlerts();
   const overstayByRoom = Object.fromEntries((checkoutAlerts.data?.alerts || []).filter((a) => a.state === 'overdue' && a.reservationId === id).map((a) => [a.reservationRoomId, a]));
@@ -357,10 +355,7 @@ export default function ReservationDetailsPage() {
                   <div role="alert" className="mt-2 rounded-lg border border-danger-200 bg-danger-50 p-3 text-sm text-danger-800">
                     <p className="flex items-center gap-1.5 font-bold"><AlarmClock size={16} aria-hidden="true" /> Overstayed · {formatDuration(overstay.minutesLate * 60000)} past checkout</p>
                     <p className="mt-0.5">Checkout was {new Date(overstay.expectedCheckoutAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} at {formatTime(new Date(overstay.expectedCheckoutAt), resData.property?.timezone)}. Check whether the guest is staying or has left.</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {callPhone && <a href={`tel:${callPhone.replace(/[^\d+]/g, '')}`} className={`${btn} border border-danger-200 bg-surface text-danger-800 hover:bg-danger-50`}><Phone size={14} aria-hidden="true" /> Call {callPhone}</a>}
-                      <button type="button" onClick={() => setRecordingDeparture(overstay)} className={`${btn} border border-danger-200 bg-surface text-danger-800 hover:bg-danger-50`}>Guest left earlier</button>
-                    </div>
+                    {callPhone && <div className="mt-2 flex flex-wrap gap-2"><a href={`tel:${callPhone.replace(/[^\d+]/g, '')}`} className={`${btn} border border-danger-200 bg-surface text-danger-800 hover:bg-danger-50`}><Phone size={14} aria-hidden="true" /> Call {callPhone}</a></div>}
                   </div>
                 )}
                 {rr.status === 'NoShow' && <p className="mt-1 text-xs font-semibold text-orange-700">Expired: the guest did not arrive before the departure date. Create a new booking if they come.</p>}
@@ -461,7 +456,6 @@ export default function ReservationDetailsPage() {
       {moveRoom && <MoveRoomDialog room={moveRoom} reservation={resData} onClose={() => setMoveRoom(null)} />}
       {occupantDialog && <RoomOccupantDialog key={`${occupantDialog.room.reservationRoomId}-${occupantDialog.mode}`} {...occupantDialog} busy={roomActionMutation.isPending || occupantMutation.isPending} onClose={() => setOccupantDialog(null)} onSubmit={(details) => occupantDialog.mode === 'checkin' ? roomActionMutation.mutateAsync({ roomId: occupantDialog.room.reservationRoomId, status: 'CheckedIn', ...details }) : occupantMutation.mutateAsync({ roomId: occupantDialog.room.reservationRoomId, ...details })} />}
       {earlyCheckout && <EarlyCheckoutDialog key={earlyCheckout.room.reservationRoomId} {...earlyCheckout} onClose={() => setEarlyCheckout(null)} onCheckOut={async () => { await completeCheckout(earlyCheckout.room); setEarlyCheckout(null); }} />}
-      {recordingDeparture && <RecordDepartureDialog stay={recordingDeparture} onClose={() => setRecordingDeparture(null)} />}
       {owingCheckout && <CheckoutOwingDialog key={owingCheckout.room.reservationRoomId} roomNumber={owingCheckout.room.room?.roomNumber || owingCheckout.room.roomNumberSnapshot} guestName={owingCheckout.room.occupantName || resData.guestNameSnapshot || resData.propertyGuest?.fullName || 'Guest'} code={resData.confirmationCode} balanceDue={owingCheckout.balanceDue} lateText={owingCheckout.lateText} onClose={() => setOwingCheckout(null)} onTakePayment={() => { setOwingCheckout(null); openPanel('payments'); }} onCheckOut={async (overrideReason, departureNote) => { await completeCheckout(owingCheckout.room, { overrideReason, departureNote }); toast.success(`Checked out. GHS ${Number(owingCheckout.balanceDue).toFixed(2)} is still owed.`); setOwingCheckout(null); }} />}
       {presenceDialog && (
         <div className="mobile-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="presence-dialog-title">
